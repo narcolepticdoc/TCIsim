@@ -1,0 +1,17 @@
+{
+  "name": "TCI Simulator",
+  "short_name": "TCI Sim",
+  "description": "Target Controlled Infusion simulator — Propofol Eleveld 2.1",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080b10",
+  "theme_color": "#080b10",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='24' fill='%23080b10'/><text x='96' y='130' font-size='100' text-anchor='middle' fill='%234ac9ff'>∫</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
