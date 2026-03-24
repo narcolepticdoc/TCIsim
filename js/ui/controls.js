@@ -1,92 +1,83 @@
 /**
- * controls.js — Playback Controls
+ * controls.js — Case & Pump Controls
  * 
- * Manages the Start/Pause/Resume button and playback state.
- * Delegates to timer.js for actual time tracking.
- * Notifies app.js of state changes via callbacks.
+ * Clinical semantics:
+ * - "Start" begins the case. The timer starts and never stops.
+ *   Time is always running because time is always running.
+ * - "Pause Pump" sets the infusion rate to zero for the selected drug.
+ *   The timer keeps running. This is equivalent to the clinician
+ *   pressing pause on the physical pump.
+ * - "Resume Pump" is not automatic — the clinician must set a new
+ *   rate or target via the keypad.
  */
 
 const $ = id => document.getElementById(id);
 
-let playbackState = 'stopped'; // 'stopped' | 'running' | 'paused'
+let caseStarted = false;
 let timer = null;
-let onStateChange = null; // callback: (newState, oldState) => void
+let onCaseStart = null;   // callback: () => void
+let onPumpPause = null;   // callback: (drugId) => void
 
 /**
  * Initialize controls.
  * @param {Object} opts
  * @param {Object} opts.timer - timer module
- * @param {Function} [opts.onStateChange] - called on playback state change
+ * @param {Function} [opts.onCaseStart] - called when case begins
+ * @param {Function} [opts.onPumpPause] - called when pump is paused
  */
 export function init(opts = {}) {
   timer = opts.timer;
-  onStateChange = opts.onStateChange || null;
+  onCaseStart = opts.onCaseStart || null;
+  onPumpPause = opts.onPumpPause || null;
 
   const btn = $('btn-pause');
-  if (btn) btn.addEventListener('click', togglePause);
+  if (btn) btn.addEventListener('click', handleButton);
 }
 
-export function togglePause() {
-  const oldState = playbackState;
-
-  if (playbackState === 'stopped') {
-    playbackState = 'running';
+function handleButton() {
+  if (!caseStarted) {
+    // Start the case — timer begins, never stops
+    caseStarted = true;
     timer.start();
-  } else if (playbackState === 'paused') {
-    playbackState = 'running';
-    timer.resume();
+    updateButton();
+    if (onCaseStart) onCaseStart();
   } else {
-    playbackState = 'paused';
-    timer.pause();
+    // Pause the pump — timer keeps running
+    if (onPumpPause) onPumpPause();
   }
-
-  updateButton();
-  if (onStateChange) onStateChange(playbackState, oldState);
 }
 
-export function getState() { return playbackState; }
+export function isCaseStarted() { return caseStarted; }
 
-export function stop() {
-  const oldState = playbackState;
-  playbackState = 'stopped';
-  timer.reset();
+/**
+ * Ensure the case is started (auto-start if not yet).
+ * Called by keypad confirm — setting a target should start the case.
+ * @returns {boolean} true if case was just started
+ */
+export function ensureStarted() {
+  if (caseStarted) return false;
+  caseStarted = true;
+  timer.start();
   updateButton();
-  if (onStateChange) onStateChange(playbackState, oldState);
+  if (onCaseStart) onCaseStart();
+  return true;
 }
 
 export function reset() {
-  playbackState = 'stopped';
+  caseStarted = false;
   timer.reset();
   updateButton();
-}
-
-/**
- * Ensure playback is running (auto-start if stopped/paused).
- * Used by keypad confirm — setting a target should start the sim.
- * @returns {boolean} true if state changed
- */
-export function ensureRunning() {
-  if (playbackState === 'running') return false;
-  const oldState = playbackState;
-  playbackState = 'running';
-  timer.start();
-  updateButton();
-  if (onStateChange) onStateChange(playbackState, oldState);
-  return true;
 }
 
 function updateButton() {
   const btn = $('btn-pause');
   if (!btn) return;
 
-  if (playbackState === 'running') {
-    btn.textContent = 'Pause';
-    btn.className = 'btn-ctrl btn-ctrl-pause is-running';
-  } else if (playbackState === 'paused') {
-    btn.textContent = 'Resume';
-    btn.className = 'btn-ctrl btn-ctrl-pause is-stopped';
-  } else {
+  if (!caseStarted) {
     btn.textContent = 'Start';
     btn.className = 'btn-ctrl btn-ctrl-pause is-stopped';
+  } else {
+    btn.textContent = 'Pause Pump';
+    btn.className = 'btn-ctrl btn-ctrl-pause is-running';
   }
 }

@@ -424,7 +424,7 @@
     function updateDrugPanel(){
       $('propofol-ce').textContent=currentCe.toFixed(2);
       $('propofol-target-disp').textContent=simMode==='target'&&currentCeTarget>0?'→ '+currentCeTarget.toFixed(1):'';
-      const cs=window.__tciSim?window.__tciSim.controls.getState():'stopped';
+      const cs=window.__tciSim&&window.__tciSim.controls.isCaseStarted()?'running':'stopped';
       if(simMode==='none'||cs==='stopped'){$('propofol-status').textContent='Stopped';$('propofol-status').className='drug-status stopped';$('propofol-rate').textContent=''}
       else if(cs==='paused'){$('propofol-status').textContent='Paused';$('propofol-status').className='drug-status paused'}
       else if(simMode==='manual'){$('propofol-status').textContent='Manual';$('propofol-status').className='drug-status manual';$('propofol-rate').textContent='Rate: '+(currentRate*60/10).toFixed(1)+' mL/h'}
@@ -447,7 +447,7 @@
       const app=window.__tciSim;if(!app)return;
       const p=app.model.getPatient();if(!p)return;
       const wkg=p.weight,drug=getDrugDef(),conc=drug.concentration;
-      app.controls.ensureRunning();
+      app.controls.ensureStarted();
       if(kpType==='target'){
         currentCeTarget=v;simMode='target';
         app.addAnnotation('Target set: '+v.toFixed(1)+' μg/mL');

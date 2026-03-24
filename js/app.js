@@ -121,15 +121,17 @@ function boot() {
     },
   });
 
-  // Initialize controls (pause/resume/start)
+  // Initialize controls (start case / pause pump)
   controls.init({
     timer,
-    onStateChange(newState, oldState) {
-      addAnnotation(
-        newState === 'running' && oldState === 'stopped' ? 'Simulation started' :
-        newState === 'running' ? 'Resumed' :
-        newState === 'paused' ? 'Paused' : ''
-      );
+    onCaseStart() {
+      addAnnotation('Case started');
+    },
+    onPumpPause() {
+      // Pause pump = set rate to zero at current time
+      const t = timer.getElapsedMinutes();
+      model.addPause(model.primaryDrug, t, 'Pump paused');
+      addAnnotation('Pump paused');
     },
   });
 
