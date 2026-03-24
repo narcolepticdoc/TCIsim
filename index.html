@@ -284,7 +284,7 @@
     </div>
     <div class="sim-main">
       <div class="drug-panel">
-        <div class="drug-card active" id="drug-propofol" onclick="selectDrug('propofol')">
+        <div class="drug-card active" id="drug-propofol">
           <div class="drug-name">Propofol</div>
           <div class="drug-model">Eleveld 2.1 · 10 mg/mL</div>
           <div class="drug-ce-row">
@@ -315,9 +315,9 @@
     <!-- Controls -->
     <div class="sim-controls">
       <div class="mode-label no-mode" id="mode-label">NO MODE</div>
-      <button class="btn-ctrl btn-ctrl-target" id="btn-target" onclick="showKeypadModal('target')">Set Target</button>
-      <button class="btn-ctrl btn-ctrl-rate" id="btn-rate" onclick="showKeypadModal('rate')">Manual Rate</button>
-      <button class="btn-ctrl btn-ctrl-bolus" id="btn-bolus" onclick="showKeypadModal('bolus')">Add Bolus</button>
+      <button class="btn-ctrl btn-ctrl-target" id="btn-target">Set Target</button>
+      <button class="btn-ctrl btn-ctrl-rate" id="btn-rate">Manual Rate</button>
+      <button class="btn-ctrl btn-ctrl-bolus" id="btn-bolus">Add Bolus</button>
       <button class="btn-ctrl btn-ctrl-pause is-stopped" id="btn-pause">Start</button>
     </div>
   </div>
@@ -344,16 +344,16 @@
           <div class="keypad-conversion" id="keypad-conversion"></div>
         </div>
         <div class="keypad-right">
-          <div class="key" onclick="kp('7')">7</div><div class="key" onclick="kp('8')">8</div><div class="key" onclick="kp('9')">9</div>
-          <div class="key" onclick="kp('4')">4</div><div class="key" onclick="kp('5')">5</div><div class="key" onclick="kp('6')">6</div>
-          <div class="key" onclick="kp('1')">1</div><div class="key" onclick="kp('2')">2</div><div class="key" onclick="kp('3')">3</div>
-          <div class="key key-action" onclick="kp('C')">C</div><div class="key" onclick="kp('0')">0</div><div class="key" onclick="kp('.')">.</div>
-          <div class="key key-action key-wide" onclick="kp('⌫')">⌫</div><div class="key key-action" onclick="kp('OK')">OK</div>
+          <div class="key">7</div><div class="key">8</div><div class="key">9</div>
+          <div class="key">4</div><div class="key">5</div><div class="key">6</div>
+          <div class="key">1</div><div class="key">2</div><div class="key">3</div>
+          <div class="key key-action">C</div><div class="key">0</div><div class="key">.</div>
+          <div class="key key-action key-wide">⌫</div><div class="key key-action">OK</div>
         </div>
       </div>
       <div class="modal-actions">
-        <button class="modal-btn-cancel" onclick="closeModal('modal-keypad')">Cancel</button>
-        <button id="keypad-confirm-btn" class="modal-btn-confirm-target" onclick="keypadConfirm()">Set Target</button>
+        <button class="modal-btn-cancel" id="keypad-cancel-btn">Cancel</button>
+        <button id="keypad-confirm-btn" class="modal-btn-confirm-target">Set Target</button>
       </div>
     </div>
   </div>
@@ -370,6 +370,8 @@
         // Test each file in the chain
         var files = [
           'js/util/math.js',
+          'js/util/constants.js',
+          'js/util/units.js',
           'js/pk/eleveld.js',
           'js/pk/engine.js',
           'js/pk/pd.js',
@@ -380,6 +382,8 @@
           'js/ui/setup.js',
           'js/ui/timer.js',
           'js/ui/controls.js',
+          'js/ui/keypad.js',
+          'js/ui/mode.js',
           'js/app.js'
         ];
         var results = [];
@@ -410,63 +414,6 @@
     }, 2000);
   </script>
 
-  <!-- TEMPORARY SHIM: Keypad + drug panel + mode UI.
-       Step 3 will migrate these to keypad.js, mode.js, drug-panel.js. -->
-  <script>
-    let currentCeTarget=0,currentCe=0,currentRate=0;
-    let simMode='none',selectedDrug='propofol';
-    let kpBuffer='',kpType='target',kpUnit='';
-    const $=id=>document.getElementById(id);
-    function savePref(k,v){try{localStorage.setItem(k,v)}catch(e){}}
 
-    /* Drug panel (Step 3 will migrate) */
-    function selectDrug(d){selectedDrug=d;document.querySelectorAll('.drug-card').forEach(c=>c.classList.remove('active'));$('drug-'+d).classList.add('active')}
-    function updateDrugPanel(){
-      $('propofol-ce').textContent=currentCe.toFixed(2);
-      $('propofol-target-disp').textContent=simMode==='target'&&currentCeTarget>0?'→ '+currentCeTarget.toFixed(1):'';
-      const cs=window.__tciSim&&window.__tciSim.controls.isCaseStarted()?'running':'stopped';
-      if(simMode==='none'||cs==='stopped'){$('propofol-status').textContent='Stopped';$('propofol-status').className='drug-status stopped';$('propofol-rate').textContent=''}
-      else if(cs==='paused'){$('propofol-status').textContent='Paused';$('propofol-status').className='drug-status paused'}
-      else if(simMode==='manual'){$('propofol-status').textContent='Manual';$('propofol-status').className='drug-status manual';$('propofol-rate').textContent='Rate: '+(currentRate*60/10).toFixed(1)+' mL/h'}
-      else if(simMode==='target'){const s=currentRate>100?'Bolus':'Infusing';$('propofol-status').textContent=s;$('propofol-status').className='drug-status '+(s==='Bolus'?'bolus':'infusing');$('propofol-rate').textContent='Rate: '+(currentRate*60/10).toFixed(1)+' mL/h'}
-    }
-    function updateModeUI(){const ml=$('mode-label'),bt=$('btn-target');bt.classList.remove('active-mode');$('btn-rate').classList.remove('active-mode');$('btn-bolus').classList.remove('active-mode');if(simMode==='target'){ml.textContent='TARGET';ml.className='mode-label target-mode';bt.textContent='Change Target';bt.classList.add('active-mode')}else if(simMode==='manual'){ml.textContent='MANUAL';ml.className='mode-label manual-mode';bt.textContent='Set Target';$('btn-rate').classList.add('active-mode');$('btn-bolus').classList.add('active-mode')}else{ml.textContent='NO MODE';ml.className='mode-label no-mode';bt.textContent='Set Target'}}
-
-    /* Keypad (Step 3 will migrate) */
-    const DRUG_DEFS={propofol:{name:'Propofol',concentration:10,target:{units:['μg/mL']},rate:{units:['mL/h','mcg/kg/min'],prefKey:'tci-pref-rateUnit-propofol',defaultUnit:'mL/h'},bolus:{units:['mcg/kg','mL'],prefKey:'tci-pref-bolusUnit-propofol',defaultUnit:'mcg/kg'}}};
-    function getDrugDef(){return DRUG_DEFS[selectedDrug]||DRUG_DEFS.propofol}
-    const KP_TITLES={target:'Set Ce Target',rate:'Set Manual Rate',bolus:'Add Bolus'};
-    const KP_CONFIRM={target:{label:'Set Target',cls:'modal-btn-confirm-target'},rate:{label:'Set Rate',cls:'modal-btn-confirm-rate'},bolus:{label:'Give Bolus',cls:'modal-btn-confirm-bolus'}};
-    function showKeypadModal(type){kpType=type;kpBuffer='';const drug=getDrugDef();const unitCfg=drug[type]||{units:['μg/mL']};let title=KP_TITLES[type];if(type==='target'&&simMode==='target'&&currentCeTarget>0)title='Change Ce Target';$('keypad-title').textContent=title;if(unitCfg.prefKey){try{const s=localStorage.getItem(unitCfg.prefKey);kpUnit=s&&unitCfg.units.includes(s)?s:unitCfg.defaultUnit||unitCfg.units[0]}catch(e){kpUnit=unitCfg.defaultUnit||unitCfg.units[0]}}else kpUnit=unitCfg.units[0];const uc=$('keypad-units');uc.innerHTML=unitCfg.units.map(u=>`<button class="${u===kpUnit?'active':''}" onclick="setKpUnit('${u}')">${u}</button>`).join('');uc.style.display='flex';const cc=KP_CONFIRM[type];$('keypad-confirm-btn').textContent=cc.label;$('keypad-confirm-btn').className=cc.cls;if(type==='target'&&simMode==='target'&&currentCeTarget>0)kpBuffer=currentCeTarget.toString();updateKpDisplay();$('modal-keypad').classList.add('open')}
-    function setKpUnit(u){kpUnit=u;const drug=getDrugDef(),unitCfg=drug[kpType];if(unitCfg&&unitCfg.prefKey)savePref(unitCfg.prefKey,u);document.querySelectorAll('#keypad-units button').forEach(b=>b.classList.toggle('active',b.textContent===u));updateKpDisplay()}
-    function kp(k){if(k==='C'){kpBuffer=''}else if(k==='⌫'){kpBuffer=kpBuffer.slice(0,-1)}else if(k==='OK'){keypadConfirm();return}else if(k==='.'){if(!kpBuffer.includes('.'))kpBuffer+=kpBuffer?'.':'0.'}else{if(kpBuffer.length<8)kpBuffer+=k}updateKpDisplay()}
-    function updateKpDisplay(){const el=$('keypad-value');el.textContent=kpBuffer||'0';el.classList.toggle('empty',!kpBuffer);const cv=$('keypad-conversion');const v=parseFloat(kpBuffer);const p=window.__tciSim&&window.__tciSim.model?window.__tciSim.model.getPatient():null;if(isNaN(v)||v<=0||!p){cv.textContent='';return}const wkg=p.weight,drug=getDrugDef(),conc=drug.concentration;if(kpType==='rate'){if(kpUnit==='mL/h'){cv.textContent=`= ${(v*conc/60/wkg*1000).toFixed(1)} mcg/kg/min`}else if(kpUnit==='mcg/kg/min'){cv.textContent=`= ${(v*wkg/1000*60/conc).toFixed(1)} mL/h`}else cv.textContent=''}else if(kpType==='bolus'){if(kpUnit==='mcg/kg'){const mg=v*wkg/1000;cv.textContent=`= ${mg.toFixed(1)} mg · ${(mg/conc).toFixed(1)} mL`}else if(kpUnit==='mL'){const mg=v*conc;cv.textContent=`= ${mg.toFixed(0)} mg · ${(mg/wkg*1000).toFixed(1)} mcg/kg`}else cv.textContent=''}else{cv.textContent=''}}
-    function keypadConfirm(){
-      const v=parseFloat(kpBuffer);if(isNaN(v)||v<0)return;
-      closeModal('modal-keypad');
-      const app=window.__tciSim;if(!app)return;
-      const p=app.model.getPatient();if(!p)return;
-      const wkg=p.weight,drug=getDrugDef(),conc=drug.concentration;
-      app.controls.ensureStarted();
-      if(kpType==='target'){
-        currentCeTarget=v;simMode='target';
-        app.addAnnotation('Target set: '+v.toFixed(1)+' μg/mL');
-      }else if(kpType==='rate'){
-        let mgMin;
-        if(kpUnit==='mL/h'){mgMin=v*conc/60}else if(kpUnit==='mcg/kg/min'){mgMin=v*wkg/1000}else mgMin=0;
-        currentRate=mgMin;simMode='manual';currentCeTarget=0;
-        app.addAnnotation('Manual rate: '+(mgMin*60/conc).toFixed(1)+' mL/h ('+(mgMin/wkg*1000).toFixed(1)+' mcg/kg/min)');
-      }else if(kpType==='bolus'){
-        let mg;
-        if(kpUnit==='mcg/kg'){mg=v*wkg/1000}else if(kpUnit==='mL'){mg=v*conc}else mg=0;
-        if(simMode!=='target')simMode='manual';
-        app.addAnnotation('Bolus: '+mg.toFixed(1)+' mg ('+(mg/wkg*1000).toFixed(1)+' mcg/kg · '+(mg/conc).toFixed(1)+' mL)');
-      }
-      updateModeUI();updateDrugPanel();
-    }
-
-    /* Modals */
-    function closeModal(id){$(id).classList.remove('open')}
-  </script>
 </body>
 </html>
