@@ -4,20 +4,22 @@
  * Creates the simulation model, initializes UI modules, manages
  * screen navigation. This replaces the inline <script> in index.html.
  * 
- * Phase 2, Step 1: Setup screen wired to model.
- * Subsequent steps will add timer, keypad, drug panel, chart.
+ * Phase 2, Steps 1-3: Setup, timer, controls, keypad, mode wired.
  */
 
 import { createModel } from './sim/simulation.js';
 import * as setup from './ui/setup.js';
 import * as timer from './ui/timer.js';
 import * as controls from './ui/controls.js';
+import * as keypad from './ui/keypad.js';
+import * as mode from './ui/mode.js';
 
 const $ = id => document.getElementById(id);
 
 // ---- Application State ----
 let model = null;
 let confirmedPatient = null;
+let selectedDrug = 'propofol';
 let annotations = []; // mode transitions, editorial actions
 
 // ---- Screen Navigation ----
@@ -41,6 +43,7 @@ function initSimScreen(patient) {
 
   // Reset modules
   controls.reset();
+  mode.reset();
   annotations = [];
 
   // Reset sim screen state
@@ -53,11 +56,6 @@ function initSimScreen(patient) {
   $('propofol-status').textContent = 'Stopped';
   $('propofol-status').className = 'drug-status stopped';
   $('propofol-rate').textContent = '';
-
-  // Mode UI defaults (will be driven by mode.js in Step 3)
-  $('mode-label').textContent = 'NO MODE';
-  $('mode-label').className = 'mode-label no-mode';
-  $('btn-target').textContent = 'Set Target';
 }
 
 // ---- Annotations ----
@@ -94,6 +92,7 @@ function handleNewCase() {
 
   // Reset UI modules
   controls.reset();
+  mode.reset();
   setup.reset();
   showScreen('setup-screen');
 }
@@ -132,7 +131,65 @@ function boot() {
       const t = timer.getElapsedMinutes();
       model.addPause(model.primaryDrug, t, 'Pump paused');
       addAnnotation('Pump paused');
+      // Pause drops out of TCI
+      if (mode.get(selectedDrug) === 'tci') {
+        model.clearAfter(selectedDrug, t);
+        mode.set(selectedDrug, 'manual', 'Pump paused');
+      }
     },
+  });
+
+  // Initialize mode tracking
+  mode.init({
+    onModeChange(drugId, newMode, oldMode, detail) {
+      if (detail) addAnnotation(detail);
+    },
+  });
+
+  // Initialize keypad
+  keypad.init({
+    getPatient: () => model ? model.getPatient() : null,
+    getMode: () => mode.get(selectedDrug),
+    getCeTarget: () => mode.getCeTarget(selectedDrug),
+    onConfirm(type, canonicalValue, displayText) {
+      controls.ensureStarted();
+      const t = timer.getElapsedMinutes();
+
+      if (type === 'ceTarget') {
+        // TCI target
+        mode.setCeTarget(selectedDrug, canonicalValue);
+        model.planTCI(selectedDrug, t, canonicalValue);
+        mode.set(selectedDrug, 'tci', `TCI target Ce=${canonicalValue.toFixed(1)} μg/mL`);
+      } else if (type === 'rate') {
+        // Manual rate — drops out of TCI
+        if (mode.get(selectedDrug) === 'tci') {
+          model.clearAfter(selectedDrug, t);
+        }
+        model.addRate(selectedDrug, t, canonicalValue, `Rate ${displayText}`);
+        mode.set(selectedDrug, 'manual', `Manual rate: ${displayText}`);
+      } else if (type === 'bolus') {
+        // Bolus — if in TCI, clear forward plan first, then bolus
+        if (mode.get(selectedDrug) === 'tci') {
+          model.clearAfter(selectedDrug, t);
+          mode.set(selectedDrug, 'manual', 'Dropped out of TCI — manual bolus');
+        } else if (mode.get(selectedDrug) === 'none') {
+          mode.set(selectedDrug, 'manual');
+        }
+        model.addBolus(selectedDrug, t, canonicalValue, `Bolus ${displayText}`);
+        addAnnotation(`Bolus: ${displayText}`);
+      }
+    },
+  });
+
+  // Wire drug card selection
+  document.querySelectorAll('.drug-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const drugId = card.id.replace('drug-', '');
+      selectedDrug = drugId;
+      keypad.setDrug(drugId);
+      document.querySelectorAll('.drug-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+    });
   });
 
   // Wire new case dialog
