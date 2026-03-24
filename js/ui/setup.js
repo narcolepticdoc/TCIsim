@@ -30,7 +30,7 @@ export function init(opts = {}) {
   restoreUnits();
 
   // Wire input listeners for live validation and derived values
-  ['input-age', 'input-height', 'input-weight', 'input-sex'].forEach(id => {
+  ['input-age', 'input-height', 'input-weight'].forEach(id => {
     const el = $(id);
     if (el) {
       el.addEventListener('input', () => {
@@ -41,6 +41,17 @@ export function init(opts = {}) {
       });
     }
   });
+
+  // Select fires 'change', not 'input'
+  const sexEl = $('input-sex');
+  if (sexEl) {
+    sexEl.addEventListener('change', () => {
+      updatePreviews();
+      updateDerived();
+      const row = sexEl.closest('.form-row');
+      if (row) row.classList.remove('error');
+    });
+  }
 
   // Wire unit toggle buttons
   const btnMetric = $('btn-metric');
@@ -126,24 +137,29 @@ function updatePreviews() {
 // ---- Derived values (BMI, FFM, Ce50) ----
 
 function updateDerived() {
-  const a = parseInt($('input-age').value);
-  const s = $('input-sex').value;
-  const h = getHeightCm();
-  const w = getWeightKg();
+  try {
+    const a = parseInt($('input-age').value);
+    const s = $('input-sex').value;
+    const h = getHeightCm();
+    const w = getWeightKg();
 
-  if (!isNaN(a) && a > 0 && s && !isNaN(h) && h > 30 && !isNaN(w) && w > 0) {
-    const male = s === 'male';
-    const bmi = w / Math.pow(h / 100, 2);
-    const ffm = fatFreeMass(w, h, a, male);
+    if (!isNaN(a) && a > 0 && s && !isNaN(h) && h > 30 && !isNaN(w) && w > 0) {
+      const male = s === 'male';
+      const bmi = w / Math.pow(h / 100, 2);
+      const ffm = fatFreeMass(w, h, a, male);
 
-    // Use the real Eleveld params to get Ce50 (not the old inline formula)
-    const params = calcEleveldParams({ age: a, weight: w, height: h, male, opioid: false });
+      // Use the real Eleveld params to get Ce50 (not the old inline formula)
+      const params = calcEleveldParams({ age: a, weight: w, height: h, male, opioid: false });
 
-    $('derived-bmi').textContent = bmi.toFixed(1);
-    $('derived-ffm').textContent = ffm.toFixed(1) + ' kg';
-    $('derived-ce50').textContent = params.Ce50.toFixed(2) + ' μg/mL';
-    $('derived-bar').style.display = 'flex';
-  } else {
+      $('derived-bmi').textContent = bmi.toFixed(1);
+      $('derived-ffm').textContent = ffm.toFixed(1) + ' kg';
+      $('derived-ce50').textContent = params.Ce50.toFixed(2) + ' μg/mL';
+      $('derived-bar').style.display = 'flex';
+    } else {
+      $('derived-bar').style.display = 'none';
+    }
+  } catch (err) {
+    console.error('[TCI Sim] updateDerived error:', err);
     $('derived-bar').style.display = 'none';
   }
 }
@@ -195,17 +211,21 @@ function validate() {
 // ---- Confirm ----
 
 function confirmPatient() {
-  if (!validate()) return;
+  try {
+    if (!validate()) return;
 
-  const patient = {
-    age: parseInt($('input-age').value),
-    weight: Math.round(getWeightKg() * 10) / 10,
-    height: Math.round(getHeightCm() * 10) / 10,
-    male: $('input-sex').value === 'male',
-    opioid: false,
-  };
+    const patient = {
+      age: parseInt($('input-age').value),
+      weight: Math.round(getWeightKg() * 10) / 10,
+      height: Math.round(getHeightCm() * 10) / 10,
+      male: $('input-sex').value === 'male',
+      opioid: false,
+    };
 
-  if (onConfirm) onConfirm(patient);
+    if (onConfirm) onConfirm(patient);
+  } catch (err) {
+    console.error('[TCI Sim] confirmPatient error:', err);
+  }
 }
 
 /**
