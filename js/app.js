@@ -13,6 +13,7 @@ import * as timer from './ui/timer.js';
 import * as controls from './ui/controls.js';
 import * as keypad from './ui/keypad.js';
 import * as mode from './ui/mode.js';
+import * as drugPanel from './ui/drug-panel.js';
 
 const $ = id => document.getElementById(id);
 
@@ -49,13 +50,6 @@ function initSimScreen(patient) {
   // Reset sim screen state
   $('history-list').innerHTML = '';
   $('history-empty').style.display = 'block';
-
-  // Drug panel defaults (will be driven by model in Step 4)
-  $('propofol-ce').textContent = '0.00';
-  $('propofol-target-disp').textContent = '';
-  $('propofol-status').textContent = 'Stopped';
-  $('propofol-status').className = 'drug-status stopped';
-  $('propofol-rate').textContent = '';
 }
 
 // ---- Annotations ----
@@ -190,6 +184,15 @@ function boot() {
       document.querySelectorAll('.drug-card').forEach(c => c.classList.remove('active'));
       card.classList.add('active');
     });
+  });
+
+  // Initialize drug panel (live readout)
+  drugPanel.init({
+    model,
+    timer,
+    getMode: () => mode.get(selectedDrug),
+    getCeTarget: () => mode.getCeTarget(selectedDrug),
+    getDrugId: () => selectedDrug,
   });
 
   // Wire new case dialog

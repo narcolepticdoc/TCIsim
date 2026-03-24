@@ -1,0 +1,148 @@
+/**
+ * drug-panel.js — Drug Panel Live Display
+ * 
+ * Updates the drug card with live values from the model:
+ * Ce, Cp, rate, BIS, status. Runs on requestAnimationFrame
+ * when the case is started.
+ */
+
+import { fromCanonical, formatValue } from '../util/units.js';
+import { DRUG_DEFS } from '../util/constants.js';
+
+const $ = id => document.getElementById(id);
+
+let model = null;
+let timer = null;
+let getMode = null;       // () => mode string
+let getCeTarget = null;   // () => Ce target number
+let getDrugId = null;     // () => selected drug id
+let rafId = null;
+
+/**
+ * Initialize the drug panel.
+ * @param {Object} opts
+ * @param {Object} opts.model - simulation model
+ * @param {Object} opts.timer - timer module
+ * @param {Function} opts.getMode - () => current mode for selected drug
+ * @param {Function} opts.getCeTarget - () => current Ce target
+ * @param {Function} opts.getDrugId - () => selected drug id
+ */
+export function init(opts = {}) {
+  model = opts.model;
+  timer = opts.timer;
+  getMode = opts.getMode || (() => 'none');
+  getCeTarget = opts.getCeTarget || (() => 0);
+  getDrugId = opts.getDrugId || (() => 'propofol');
+
+  // Start the animation loop
+  loop();
+}
+
+/**
+ * Stop the animation loop (for cleanup).
+ */
+export function stop() {
+  if (rafId) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
+}
+
+function loop() {
+  update();
+  rafId = requestAnimationFrame(loop);
+}
+
+function update() {
+  if (!model || !timer) return;
+
+  const drugId = getDrugId();
+  const t = timer.getElapsedMinutes();
+  const m = getMode();
+  const ceTarget = getCeTarget();
+  const caseStarted = timer.isRunning() || t > 0;
+
+  // Query model for live concentrations
+  let Cp = 0, Ce = 0, rate = 0, bis = null;
+  if (caseStarted && t > 0) {
+    try {
+      const conc = model.getConcentrationsAt(drugId, t);
+      Cp = conc.Cp;
+      Ce = conc.Ce;
+      rate = conc.rate; // mg/min from model
+
+      bis = model.predictBIS(drugId, t);
+    } catch (e) {
+      // Model may not have events yet
+    }
+  }
+
+  // ---- Update DOM ----
+
+  // Ce display
+  const ceEl = $(drugId + '-ce');
+  if (ceEl) ceEl.textContent = Ce.toFixed(2);
+
+  // Target display
+  const targetEl = $(drugId + '-target-disp');
+  if (targetEl) {
+    targetEl.textContent = (m === 'tci' && ceTarget > 0)
+      ? '→ ' + ceTarget.toFixed(1)
+      : '';
+  }
+
+  // Rate display — convert from mg/min to preferred display unit
+  const rateEl = $(drugId + '-rate');
+  if (rateEl) {
+    if (rate > 0 && caseStarted) {
+      try {
+        const ctx = { weightKg: model.getPatient().weight };
+        const conc = DRUG_DEFS[drugId]?.concentration || 10;
+        const mlh = rate * 60 / conc;
+        rateEl.textContent = `Rate: ${mlh.toFixed(1)} mL/h`;
+      } catch (e) {
+        rateEl.textContent = `Rate: ${rate.toFixed(2)} mg/min`;
+      }
+    } else {
+      rateEl.textContent = '';
+    }
+  }
+
+  // Status display
+  const statusEl = $(drugId + '-status');
+  if (statusEl) {
+    if (!caseStarted || m === 'none') {
+      statusEl.textContent = 'Stopped';
+      statusEl.className = 'drug-status stopped';
+    } else if (m === 'tci') {
+      // Check if we're in a high-rate phase (bolus delivery) or steady infusion
+      const isBolusPhase = rate > 50; // crude heuristic
+      statusEl.textContent = isBolusPhase ? 'Bolus' : 'Infusing';
+      statusEl.className = 'drug-status ' + (isBolusPhase ? 'bolus' : 'infusing');
+    } else if (m === 'manual') {
+      if (rate === 0) {
+        statusEl.textContent = 'Paused';
+        statusEl.className = 'drug-status paused';
+      } else {
+        statusEl.textContent = 'Manual';
+        statusEl.className = 'drug-status manual';
+      }
+    } else {
+      statusEl.textContent = m;
+      statusEl.className = 'drug-status';
+    }
+  }
+
+  // BIS display (if element exists)
+  const bisEl = $(drugId + '-bis');
+  if (bisEl && bis !== null) {
+    bisEl.textContent = bis.toFixed(0);
+  }
+}
+
+/**
+ * Force an immediate update (after a model mutation).
+ */
+export function forceUpdate() {
+  update();
+}
