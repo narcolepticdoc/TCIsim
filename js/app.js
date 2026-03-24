@@ -181,11 +181,12 @@ function closeModal(id) {
 }
 
 function setView(v) {
+  // Tab buttons
   $('view-chart').classList.toggle('active', v === 'chart');
   $('view-history').classList.toggle('active', v === 'history');
-  document.querySelectorAll('.content-tab').forEach((t, i) => {
-    t.classList.toggle('active', i === (v === 'chart' ? 0 : 1));
-  });
+  // Content panels
+  $('panel-chart').classList.toggle('active', v === 'chart');
+  $('panel-history').classList.toggle('active', v === 'history');
 }
 
 // ---- Expose for shim compatibility and debugging ----
