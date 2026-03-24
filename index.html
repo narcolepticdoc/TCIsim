@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0a0f1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>TCI Sim</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg-deep:#060a12;--bg-card:#111827;--bg-input:#1a2234;--bg-hover:#1f2b3f;
+      --border-subtle:#1e293b;--border-focus:#3b82f6;
+      --text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#475569;--text-accent:#60a5fa;
+      --blue:#3b82f6;--blue-dim:#1e40af;--red:#ef4444;--green:#22c55e;
+      --amber:#f59e0b;--cyan:#06b6d4;--purple:#8b5cf6;
+      --font-display:'Outfit',sans-serif;--font-mono:'DM Mono',monospace;
+      --radius-sm:6px;--radius-md:10px;--radius-lg:16px;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;width:100%;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-display);-webkit-font-smoothing:antialiased;overflow:hidden}
+    .screen{display:none;width:100%;height:100%}.screen.active{display:flex}
+
+    /* Portrait overlay */
+    #portrait-overlay{display:none;position:fixed;inset:0;z-index:9999;background:var(--bg-deep);flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:32px}
+    #portrait-overlay .rotate-icon{width:56px;height:56px;color:var(--text-muted);animation:rotateHint 2s ease-in-out infinite}
+    #portrait-overlay .rotate-msg{font-size:17px;font-weight:500;color:var(--text-secondary)}
+    #portrait-overlay .rotate-sub{font-size:13px;color:var(--text-muted)}
+    @keyframes rotateHint{0%,100%{transform:rotate(0)}25%{transform:rotate(-20deg)}75%{transform:rotate(90deg)}}
+    @media(orientation:portrait){#portrait-overlay{display:flex}}
+
+    /* ==== SETUP SCREEN ==== */
+    #setup-screen{flex-direction:row;align-items:stretch;overflow:hidden}
+    .setup-brand{width:220px;min-width:180px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 16px;gap:10px;background:var(--bg-card);border-right:1px solid var(--border-subtle)}
+    .setup-brand h1{font-family:var(--font-mono);font-weight:500;font-size:24px;letter-spacing:3px;text-transform:uppercase}
+    .setup-brand h1 span{color:var(--blue)}
+    .setup-brand .subtitle{font-size:11px;color:var(--text-muted);letter-spacing:.4px;text-align:center}
+    .setup-brand .model-tag{display:inline-block;padding:2px 9px;font-family:var(--font-mono);font-size:10px;color:var(--amber);border:1px solid var(--amber);border-radius:99px;opacity:.8}
+    .setup-brand .disclaimer{font-size:9px;color:var(--text-muted);text-align:center;line-height:1.5;margin-top:auto}
+    .setup-form{flex:1;display:flex;flex-direction:column;padding:14px 20px;gap:10px;overflow-y:auto;min-width:0}
+    .setup-toprow{display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+    .setup-toprow .card-title{font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px}
+    .unit-toggle{display:flex;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);overflow:hidden}
+    .unit-toggle button{background:none;border:none;color:var(--text-muted);font-family:var(--font-mono);font-size:11px;padding:4px 11px;cursor:pointer;transition:all .15s}
+    .unit-toggle button.active{background:var(--blue-dim);color:var(--text-primary)}
+    .unit-toggle button:hover:not(.active){color:var(--text-secondary);background:var(--bg-hover)}
+    .input-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;flex-shrink:0}
+    .form-row{display:flex;flex-direction:column;gap:2px}
+    .form-row label{font-size:11px;color:var(--text-secondary);font-weight:500}
+    .form-row label .unit-hint{color:var(--text-muted);font-weight:400}
+    .form-row input[type="number"],.form-row select{width:100%;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:15px;padding:7px 10px;outline:none;transition:border-color .15s;-moz-appearance:textfield}
+    .form-row input[type="number"]::-webkit-inner-spin-button,.form-row input[type="number"]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+    .form-row input:focus,.form-row select:focus{border-color:var(--border-focus)}
+    .form-row select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+    .form-row select option{background:var(--bg-card);color:var(--text-primary)}
+    .metric-preview{font-family:var(--font-mono);font-size:11px;color:var(--cyan);min-height:15px;transition:opacity .15s}
+    .metric-preview.hidden{opacity:0}
+    .form-row.error input,.form-row.error select{border-color:var(--red)}
+    .error-msg{font-size:10px;color:var(--red);min-height:13px}
+    .derived-bar{display:flex;gap:10px;padding:7px 12px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border-subtle);flex-shrink:0}
+    .derived-item{display:flex;flex-direction:column;flex:1}
+    .derived-item .d-label{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
+    .derived-item .d-value{font-family:var(--font-mono);font-size:13px;color:var(--text-accent);font-weight:500}
+    .btn-confirm{width:100%;padding:10px;background:var(--blue);border:none;border-radius:var(--radius-md);color:#fff;font-family:var(--font-display);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;flex-shrink:0}
+    .btn-confirm:hover{background:#2563eb}
+    @media(max-height:380px){.setup-brand{width:160px;min-width:140px;padding:12px 10px;gap:6px}.setup-brand h1{font-size:20px}.setup-form{padding:8px 14px;gap:6px}.input-grid{gap:5px 10px}.form-row input[type="number"],.form-row select{padding:5px 8px;font-size:14px}.form-row label{font-size:10px}.btn-confirm{padding:8px;font-size:13px}.derived-bar{padding:5px 8px}.derived-item .d-value{font-size:12px}}
+    @media(min-width:900px){.setup-form{max-width:540px}}
+
+    /* ==== SIM SCREEN ==== */
+    #sim-screen{flex-direction:column}
+    .sim-topbar{display:flex;align-items:center;gap:10px;padding:0 12px;background:var(--bg-card);border-bottom:1px solid var(--border-subtle);height:34px;flex-shrink:0}
+    .sim-topbar .app-name{font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:2px;color:var(--text-muted)}
+    .sim-topbar .app-name span{color:var(--blue)}
+    .patient-summary{display:flex;gap:8px;font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);margin-left:8px}
+    .patient-summary .ps-val{color:var(--text-primary)}
+    .topbar-spacer{flex:1}
+    .elapsed-timer{font-family:var(--font-mono);font-size:16px;font-weight:500;color:var(--green);letter-spacing:1px}
+    .btn-new-case{background:none;border:1px solid #7f1d1d;color:#fca5a5;font-family:var(--font-mono);font-size:10px;padding:3px 9px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;margin-left:8px}
+    .btn-new-case:hover{border-color:var(--red);color:var(--text-primary);background:rgba(239,68,68,.1)}
+
+    .sim-main{flex:1;display:flex;overflow:hidden;min-height:0}
+
+    /* Drug panel */
+    .drug-panel{width:210px;min-width:170px;flex-shrink:0;display:flex;flex-direction:column;gap:1px;background:var(--border-subtle);border-right:1px solid var(--border-subtle);overflow-y:auto}
+    .drug-card{background:var(--bg-card);padding:9px 11px;cursor:pointer;transition:background .15s;display:flex;flex-direction:column;gap:4px}
+    .drug-card:hover{background:var(--bg-hover)}
+    .drug-card.active{background:var(--bg-input);border-left:3px solid var(--blue)}
+    .drug-card.disabled{opacity:.3;cursor:default;pointer-events:none}
+    .drug-card .drug-name{font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--text-primary);text-transform:uppercase;letter-spacing:.5px}
+    .drug-card .drug-model{font-size:9px;color:var(--text-muted)}
+    .drug-card .drug-ce-row{display:flex;align-items:baseline;gap:6px;margin-top:1px}
+    .drug-card .ce-label{font-size:10px;color:var(--text-muted)}
+    .drug-card .ce-current{font-family:var(--font-mono);font-size:18px;font-weight:500;color:var(--cyan)}
+    .drug-card .ce-target-display{font-family:var(--font-mono);font-size:11px;color:var(--amber)}
+    .drug-card .drug-status{font-size:10px;font-weight:500}
+    .drug-card .drug-status.infusing{color:var(--green)}
+    .drug-card .drug-status.paused{color:var(--amber)}
+    .drug-card .drug-status.stopped{color:var(--text-muted)}
+    .drug-card .drug-status.bolus{color:var(--red)}
+    .drug-card .drug-status.manual{color:var(--purple)}
+    .drug-card .drug-rate{font-family:var(--font-mono);font-size:11px;color:var(--text-secondary)}
+    .drug-card .step-bar-wrap{height:3px;background:var(--bg-deep);border-radius:2px;overflow:hidden;margin-top:1px}
+    .drug-card .step-bar{height:100%;background:var(--blue);border-radius:2px;transition:width .5s linear}
+
+    /* Content area */
+    .sim-content{flex:1;display:flex;flex-direction:column;min-width:0}
+
+    /* Tabs on top of chart */
+    .content-tabs{display:flex;background:var(--bg-card);border-bottom:1px solid var(--border-subtle);flex-shrink:0}
+    .content-tab{background:none;border:none;padding:7px 18px;font-family:var(--font-mono);font-size:11px;font-weight:500;color:var(--text-muted);cursor:pointer;position:relative;transition:color .15s}
+    .content-tab:hover{color:var(--text-secondary)}
+    .content-tab.active{color:var(--text-primary)}
+    .content-tab.active::after{content:'';position:absolute;bottom:0;left:8px;right:8px;height:2px;background:var(--blue);border-radius:1px}
+
+    .content-view{display:none;flex:1;min-height:0}
+    .content-view.active{display:flex;flex-direction:column}
+    .chart-area{flex:1;display:flex;align-items:center;justify-content:center;background:var(--bg-deep)}
+    .chart-placeholder{text-align:center;color:var(--text-muted);font-size:13px}
+    .chart-placeholder .ph-icon{font-size:28px;margin-bottom:6px;opacity:.4}
+    .history-area{flex:1;overflow-y:auto;padding:8px 12px}
+    .history-area .history-empty{text-align:center;color:var(--text-muted);font-size:12px;padding-top:30px}
+    .history-list{display:flex;flex-direction:column;gap:1px}
+    .history-row{display:flex;align-items:center;gap:10px;padding:6px 9px;background:var(--bg-card);border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:11px}
+    .history-row .h-step{color:var(--text-muted);min-width:22px;text-align:right}
+    .history-row .h-desc{flex:1;color:var(--text-primary)}
+    .history-row .h-time{color:var(--text-muted);min-width:48px;text-align:right}
+
+    /* Control bar — below chart */
+    .sim-controls{display:flex;align-items:center;gap:5px;padding:6px 10px;background:var(--bg-card);border-top:1px solid var(--border-subtle);flex-shrink:0}
+    .ctrl-group{display:flex;flex-direction:column;align-items:center;gap:2px;position:relative}
+    .ctrl-group .mode-indicator{height:2px;width:100%;border-radius:1px;position:absolute;bottom:-4px;left:0;transition:background .2s}
+    .ctrl-group.mode-active .mode-indicator{background:var(--amber)}
+    .ctrl-group.mode-manual .mode-indicator{background:var(--purple)}
+
+    .btn-ctrl{padding:8px 16px;border:none;border-radius:var(--radius-sm);font-family:var(--font-display);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;letter-spacing:.3px;white-space:nowrap}
+    .btn-ctrl:active{transform:scale(.97)}
+    .btn-ctrl-target{background:var(--amber);color:#000}
+    .btn-ctrl-target:hover{background:#d97706}
+    .btn-ctrl-target.active-mode{box-shadow:0 0 0 2px var(--amber);background:#d97706}
+    .btn-ctrl-rate{background:var(--purple);color:#fff}
+    .btn-ctrl-rate:hover{background:#7c3aed}
+    .btn-ctrl-rate.active-mode{box-shadow:0 0 0 2px var(--purple);background:#7c3aed}
+    .btn-ctrl-bolus{background:#6d28d9;color:#fff}
+    .btn-ctrl-bolus:hover{background:#5b21b6}
+    .btn-ctrl-bolus.active-mode{box-shadow:0 0 0 2px var(--purple)}
+    .btn-ctrl-pause{background:var(--blue);color:#fff;margin-left:auto}
+    .btn-ctrl-pause:hover{background:#2563eb}
+    .btn-ctrl-pause.is-running{background:var(--blue)}
+    .btn-ctrl-pause.is-stopped{background:var(--green)}
+    .btn-ctrl-pause.is-stopped:hover{background:#16a34a}
+
+    /* Mode label */
+    .mode-label{font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:3px;margin-right:6px;letter-spacing:.5px;flex-shrink:0}
+    .mode-label.target-mode{background:rgba(245,158,11,.15);color:var(--amber)}
+    .mode-label.manual-mode{background:rgba(139,92,246,.15);color:var(--purple)}
+    .mode-label.no-mode{background:var(--bg-input);color:var(--text-muted)}
+
+    /* Responsive short */
+    @media(max-height:380px){
+      .sim-topbar{height:28px}.elapsed-timer{font-size:14px}
+      .timer-wall-hint{font-size:8px}
+      .drug-panel{width:170px;min-width:140px}.drug-card{padding:6px 8px;gap:2px}.drug-card .drug-name{font-size:11px}.drug-card .ce-current{font-size:15px}
+      .content-tab{padding:5px 12px;font-size:10px}
+      .sim-controls{padding:4px 8px;gap:3px}.btn-ctrl{padding:6px 10px;font-size:11px}
+    }
+
+    /* Timer wrap & popover */
+    .timer-wrap{position:relative;display:flex;flex-direction:column;align-items:flex-end}
+    .elapsed-timer{font-family:var(--font-mono);font-size:16px;font-weight:500;color:var(--green);letter-spacing:1px;cursor:pointer;padding:2px 6px;border-radius:var(--radius-sm);transition:background .15s}
+    .elapsed-timer:hover{background:rgba(34,197,94,.08)}
+    .timer-wall-hint{font-family:var(--font-mono);font-size:9px;color:var(--text-muted);text-align:right;min-height:12px}
+    .timer-popover{display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:12px 14px;z-index:100;width:220px;box-shadow:0 8px 24px rgba(0,0,0,.4);flex-direction:column;gap:8px}
+    .timer-popover.open{display:flex}
+    .tp-title{font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px}
+    .tp-row{display:flex;gap:8px;align-items:center}
+    .tp-time-input{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:16px;padding:6px 10px;outline:none;width:100%;color-scheme:dark}
+    .tp-time-input:focus{border-color:var(--border-focus)}
+    .tp-info{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);min-height:14px}
+    .tp-actions{display:flex;gap:6px;justify-content:flex-end}
+    .tp-btn{background:var(--blue);border:none;border-radius:var(--radius-sm);color:#fff;font-family:var(--font-display);font-size:12px;font-weight:600;padding:5px 14px;cursor:pointer;transition:all .15s}
+    .tp-btn:hover{background:#2563eb}
+    .tp-btn-dim{background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border-subtle)}
+    .tp-btn-dim:hover{background:var(--bg-hover);color:var(--text-primary)}
+
+    /* ==== MODAL ==== */
+    .modal-overlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.6);align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+    .modal-overlay.open{display:flex}
+    .modal-box{background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:20px;max-width:400px;width:92%}
+    .modal-box h3{font-size:15px;font-weight:600;margin-bottom:6px;text-align:center}
+    .modal-box p{font-size:12px;color:var(--text-secondary);margin-bottom:14px;text-align:center;line-height:1.4}
+
+    /* Keypad modal — wider */
+    .modal-keypad{max-width:480px}
+    .keypad-layout{display:flex;gap:14px;margin-bottom:14px}
+    .keypad-left{flex:1;display:flex;flex-direction:column;gap:8px}
+    .keypad-display{background:var(--bg-deep);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:10px 12px;text-align:right;font-family:var(--font-mono);font-size:28px;color:var(--text-primary);min-height:50px;display:flex;align-items:center;justify-content:flex-end;letter-spacing:1px;overflow:hidden}
+    .keypad-display.empty{color:var(--text-muted)}
+    .keypad-unit-toggle{display:flex;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);overflow:hidden}
+    .keypad-unit-toggle button{flex:1;background:none;border:none;color:var(--text-muted);font-family:var(--font-mono);font-size:11px;padding:5px 6px;cursor:pointer;transition:all .15s}
+    .keypad-unit-toggle button.active{background:var(--blue-dim);color:var(--text-primary)}
+    .keypad-unit-toggle button:hover:not(.active){background:var(--bg-hover);color:var(--text-secondary)}
+    .keypad-conversion{font-family:var(--font-mono);font-size:11px;color:var(--cyan);min-height:16px}
+
+    .keypad-right{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:160px;flex-shrink:0}
+    .key{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:18px;padding:10px 0;text-align:center;cursor:pointer;transition:all .1s;user-select:none;-webkit-user-select:none}
+    .key:hover{background:var(--bg-hover)}
+    .key:active{background:var(--blue-dim);transform:scale(.95)}
+    .key-wide{grid-column:span 2}
+    .key-action{background:var(--bg-hover);color:var(--text-secondary);font-size:13px}
+    .key-action:hover{background:var(--bg-input)}
+
+    .modal-actions{display:flex;gap:10px;justify-content:center}
+    .modal-actions button{padding:9px 22px;border:none;border-radius:var(--radius-sm);font-family:var(--font-display);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+    .modal-btn-cancel{background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border-subtle)}
+    .modal-btn-cancel:hover{background:var(--bg-hover);color:var(--text-primary)}
+    .modal-btn-confirm-target{background:var(--amber);color:#000}
+    .modal-btn-confirm-target:hover{background:#d97706}
+    .modal-btn-confirm-rate{background:var(--purple);color:#fff}
+    .modal-btn-confirm-rate:hover{background:#7c3aed}
+    .modal-btn-confirm-bolus{background:#6d28d9;color:#fff}
+    .modal-btn-confirm-bolus:hover{background:#5b21b6}
+    .modal-btn-danger{background:var(--red);color:#fff}
+    .modal-btn-danger:hover{background:#dc2626}
+
+    /* ==== ANIMATIONS ==== */
+    @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+    .setup-brand{animation:fadeIn .3s ease both}
+    .setup-form>*{animation:fadeIn .25s ease both}
+    .setup-form>*:nth-child(1){animation-delay:.04s}
+    .setup-form>*:nth-child(2){animation-delay:.08s}
+    .setup-form>*:nth-child(3){animation-delay:.12s}
+    .setup-form>*:nth-child(4){animation-delay:.16s}
+  </style>
+</head>
+<body>
+  <div id="portrait-overlay">
+    <svg class="rotate-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M12 18h.01"/><path d="M2 12l2-2 2 2"/></svg>
+    <div class="rotate-msg">Rotate to landscape</div>
+    <div class="rotate-sub">TCI Sim is designed for landscape orientation</div>
+  </div>
+
+  <!-- =========== SETUP SCREEN =========== -->
+  <div id="setup-screen" class="screen active">
+    <div class="setup-brand"><h1>TCI <span>Sim</span></h1><div class="subtitle">Target-Controlled Infusion Simulator</div><div class="model-tag">Eleveld 2018 Propofol</div><div class="disclaimer">Simulation only — not a medical device.<br>Do not use to guide clinical drug administration.</div></div>
+    <div class="setup-form">
+      <div class="setup-toprow"><span class="card-title">Patient Demographics</span><div class="unit-toggle"><button id="btn-metric" class="active">Metric</button><button id="btn-imperial">Imperial</button></div></div>
+      <div class="input-grid">
+        <div class="form-row" id="row-age"><label for="input-age">Age <span class="unit-hint">(years)</span></label><input type="number" id="input-age" min="1" max="100" step="1" placeholder="35" inputmode="numeric"><div class="error-msg" id="err-age"></div></div>
+        <div class="form-row" id="row-sex"><label for="input-sex">Sex</label><select id="input-sex"><option value="" disabled selected>Select</option><option value="male">Male</option><option value="female">Female</option></select><div class="error-msg" id="err-sex"></div></div>
+        <div class="form-row" id="row-height"><label for="input-height">Height <span class="unit-hint" id="hint-height">(cm)</span></label><input type="number" id="input-height" min="30" max="250" step="0.1" placeholder="170" inputmode="decimal"><div class="metric-preview hidden" id="preview-height"></div><div class="error-msg" id="err-height"></div></div>
+        <div class="form-row" id="row-weight"><label for="input-weight">Weight <span class="unit-hint" id="hint-weight">(kg)</span></label><input type="number" id="input-weight" min="1" max="300" step="0.1" placeholder="70" inputmode="decimal"><div class="metric-preview hidden" id="preview-weight"></div><div class="error-msg" id="err-weight"></div></div>
+      </div>
+      <div class="derived-bar" id="derived-bar" style="display:none"><div class="derived-item"><span class="d-label">BMI</span><span class="d-value" id="derived-bmi">—</span></div><div class="derived-item"><span class="d-label">FFM</span><span class="d-value" id="derived-ffm">—</span></div><div class="derived-item"><span class="d-label">Ce50</span><span class="d-value" id="derived-ce50">—</span></div></div>
+      <button class="btn-confirm" id="btn-confirm">Confirm Patient</button>
+    </div>
+  </div>
+
+  <!-- =========== SIM SCREEN =========== -->
+  <div id="sim-screen" class="screen">
+    <div class="sim-topbar">
+      <div class="app-name">TCI <span>Sim</span></div>
+      <div class="patient-summary" id="patient-summary"></div>
+      <div class="topbar-spacer"></div>
+      <div class="timer-wrap" id="timer-wrap">
+        <div class="elapsed-timer" id="elapsed-timer">000:00</div>
+        <div class="timer-wall-hint" id="timer-wall-hint"></div>
+        <div class="timer-popover" id="timer-popover">
+          <div class="tp-title">Simulation start time</div>
+          <div class="tp-row">
+            <input type="time" id="input-start-time" class="tp-time-input" step="60">
+          </div>
+          <div class="tp-info" id="tp-info"></div>
+          <div class="tp-actions">
+            <button class="tp-btn" id="tp-btn-apply">Apply</button>
+            <button class="tp-btn tp-btn-dim" id="tp-btn-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <button class="btn-new-case" id="btn-new-case">New Case</button>
+    </div>
+    <div class="sim-main">
+      <div class="drug-panel">
+        <div class="drug-card active" id="drug-propofol" onclick="selectDrug('propofol')">
+          <div class="drug-name">Propofol</div>
+          <div class="drug-model">Eleveld 2.1 · 10 mg/mL</div>
+          <div class="drug-ce-row">
+            <span class="ce-label">Ce</span>
+            <span class="ce-current" id="propofol-ce">0.00</span>
+            <span class="ce-target-display" id="propofol-target-disp"></span>
+          </div>
+          <div class="drug-status stopped" id="propofol-status">Stopped</div>
+          <div class="drug-rate" id="propofol-rate"></div>
+          <div class="step-bar-wrap"><div class="step-bar" id="propofol-bar" style="width:0%"></div></div>
+        </div>
+        <div class="drug-card disabled"><div class="drug-name">Fentanyl</div><div class="drug-model">Coming soon</div></div>
+        <div class="drug-card disabled"><div class="drug-name">Ketamine</div><div class="drug-model">Coming soon</div></div>
+      </div>
+      <div class="sim-content">
+        <div class="content-tabs">
+          <button class="content-tab active" id="view-chart">Chart</button>
+          <button class="content-tab" id="view-history">History</button>
+        </div>
+        <div class="content-view active" id="view-chart">
+          <div class="chart-area"><div class="chart-placeholder"><div class="ph-icon">📈</div><div>Set a target or rate to begin</div></div></div>
+        </div>
+        <div class="content-view" id="view-history">
+          <div class="history-area"><div class="history-empty" id="history-empty">No events yet.</div><div class="history-list" id="history-list"></div></div>
+        </div>
+      </div>
+    </div>
+    <!-- Controls -->
+    <div class="sim-controls">
+      <div class="mode-label no-mode" id="mode-label">NO MODE</div>
+      <button class="btn-ctrl btn-ctrl-target" id="btn-target" onclick="showKeypadModal('target')">Set Target</button>
+      <button class="btn-ctrl btn-ctrl-rate" id="btn-rate" onclick="showKeypadModal('rate')">Manual Rate</button>
+      <button class="btn-ctrl btn-ctrl-bolus" id="btn-bolus" onclick="showKeypadModal('bolus')">Add Bolus</button>
+      <button class="btn-ctrl btn-ctrl-pause is-stopped" id="btn-pause">Start</button>
+    </div>
+  </div>
+
+  <!-- =========== NEW CASE MODAL =========== -->
+  <div class="modal-overlay" id="modal-new-case">
+    <div class="modal-box">
+      <h3>End Current Simulation?</h3>
+      <p>This will discard all simulation data and return to patient setup. This cannot be undone.</p>
+      <div class="modal-actions"><button class="modal-btn-cancel" id="btn-new-case-cancel">Cancel</button><button class="modal-btn-danger" id="btn-new-case-confirm">End &amp; New Case</button></div>
+    </div>
+  </div>
+
+  <!-- =========== KEYPAD MODAL (shared for target / rate / bolus) =========== -->
+  <div class="modal-overlay" id="modal-keypad">
+    <div class="modal-box modal-keypad">
+      <h3 id="keypad-title">Set Target</h3>
+      <div class="keypad-layout">
+        <div class="keypad-left">
+          <div class="keypad-display" id="keypad-display">
+            <span id="keypad-value" class="empty"></span>
+          </div>
+          <div class="keypad-unit-toggle" id="keypad-units"></div>
+          <div class="keypad-conversion" id="keypad-conversion"></div>
+        </div>
+        <div class="keypad-right">
+          <div class="key" onclick="kp('7')">7</div><div class="key" onclick="kp('8')">8</div><div class="key" onclick="kp('9')">9</div>
+          <div class="key" onclick="kp('4')">4</div><div class="key" onclick="kp('5')">5</div><div class="key" onclick="kp('6')">6</div>
+          <div class="key" onclick="kp('1')">1</div><div class="key" onclick="kp('2')">2</div><div class="key" onclick="kp('3')">3</div>
+          <div class="key key-action" onclick="kp('C')">C</div><div class="key" onclick="kp('0')">0</div><div class="key" onclick="kp('.')">.</div>
+          <div class="key key-action key-wide" onclick="kp('⌫')">⌫</div><div class="key key-action" onclick="kp('OK')">OK</div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" onclick="closeModal('modal-keypad')">Cancel</button>
+        <button id="keypad-confirm-btn" class="modal-btn-confirm-target" onclick="keypadConfirm()">Set Target</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App entry point (ES module) -->
+  <script type="module" src="js/app.js"></script>
+
+  <!-- Module load diagnostic -->
+  <script>
+    window.__tciSimLoaded = false;
+    setTimeout(function() {
+      if (!window.__tciSimLoaded) {
+        console.error('[TCI Sim] Module failed to load. Testing individual imports...');
+        // Test each file in the chain
+        var files = [
+          'js/util/math.js',
+          'js/pk/eleveld.js',
+          'js/pk/engine.js',
+          'js/pk/pd.js',
+          'js/pk/decay-predictor.js',
+          'js/sim/events.js',
+          'js/sim/tci-planner.js',
+          'js/sim/simulation.js',
+          'js/ui/setup.js',
+          'js/ui/timer.js',
+          'js/ui/controls.js',
+          'js/app.js'
+        ];
+        var results = [];
+        var done = 0;
+        files.forEach(function(f) {
+          fetch(f).then(function(r) {
+            results.push(f + ': ' + r.status + ' ' + (r.headers.get('content-type') || 'no-type'));
+            if (++done === files.length) showResults();
+          }).catch(function(e) {
+            results.push(f + ': FETCH ERROR ' + e.message);
+            if (++done === files.length) showResults();
+          });
+        });
+        function showResults() {
+          console.log('[TCI Sim] File check:\n' + results.join('\n'));
+          var bar = document.getElementById('derived-bar');
+          if (bar) {
+            bar.style.display = 'flex';
+            var missing = results.filter(function(r) { return r.indexOf(': 200') === -1; });
+            if (missing.length > 0) {
+              bar.innerHTML = '<div style="color:#ef4444;font-size:11px;padding:4px">Missing files: ' + missing.map(function(r) { return r.split(':')[0]; }).join(', ') + '. Check deployment.</div>';
+            } else {
+              bar.innerHTML = '<div style="color:#ef4444;font-size:11px;padding:4px">All files present but module failed. Check browser console for syntax/runtime errors.</div>';
+            }
+          }
+        }
+      }
+    }, 2000);
+  </script>
+
+  <!-- TEMPORARY SHIM: Keypad + drug panel + mode UI.
+       Step 3 will migrate these to keypad.js, mode.js, drug-panel.js. -->
+  <script>
+    let currentCeTarget=0,currentCe=0,currentRate=0;
+    let simMode='none',selectedDrug='propofol';
+    let kpBuffer='',kpType='target',kpUnit='';
+    const $=id=>document.getElementById(id);
+    function savePref(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+
+    /* Drug panel (Step 3 will migrate) */
+    function selectDrug(d){selectedDrug=d;document.querySelectorAll('.drug-card').forEach(c=>c.classList.remove('active'));$('drug-'+d).classList.add('active')}
+    function updateDrugPanel(){
+      $('propofol-ce').textContent=currentCe.toFixed(2);
+      $('propofol-target-disp').textContent=simMode==='target'&&currentCeTarget>0?'→ '+currentCeTarget.toFixed(1):'';
+      const cs=window.__tciSim?window.__tciSim.controls.getState():'stopped';
+      if(simMode==='none'||cs==='stopped'){$('propofol-status').textContent='Stopped';$('propofol-status').className='drug-status stopped';$('propofol-rate').textContent=''}
+      else if(cs==='paused'){$('propofol-status').textContent='Paused';$('propofol-status').className='drug-status paused'}
+      else if(simMode==='manual'){$('propofol-status').textContent='Manual';$('propofol-status').className='drug-status manual';$('propofol-rate').textContent='Rate: '+(currentRate*60/10).toFixed(1)+' mL/h'}
+      else if(simMode==='target'){const s=currentRate>100?'Bolus':'Infusing';$('propofol-status').textContent=s;$('propofol-status').className='drug-status '+(s==='Bolus'?'bolus':'infusing');$('propofol-rate').textContent='Rate: '+(currentRate*60/10).toFixed(1)+' mL/h'}
+    }
+    function updateModeUI(){const ml=$('mode-label'),bt=$('btn-target');bt.classList.remove('active-mode');$('btn-rate').classList.remove('active-mode');$('btn-bolus').classList.remove('active-mode');if(simMode==='target'){ml.textContent='TARGET';ml.className='mode-label target-mode';bt.textContent='Change Target';bt.classList.add('active-mode')}else if(simMode==='manual'){ml.textContent='MANUAL';ml.className='mode-label manual-mode';bt.textContent='Set Target';$('btn-rate').classList.add('active-mode');$('btn-bolus').classList.add('active-mode')}else{ml.textContent='NO MODE';ml.className='mode-label no-mode';bt.textContent='Set Target'}}
+
+    /* Keypad (Step 3 will migrate) */
+    const DRUG_DEFS={propofol:{name:'Propofol',concentration:10,target:{units:['μg/mL']},rate:{units:['mL/h','mcg/kg/min'],prefKey:'tci-pref-rateUnit-propofol',defaultUnit:'mL/h'},bolus:{units:['mcg/kg','mL'],prefKey:'tci-pref-bolusUnit-propofol',defaultUnit:'mcg/kg'}}};
+    function getDrugDef(){return DRUG_DEFS[selectedDrug]||DRUG_DEFS.propofol}
+    const KP_TITLES={target:'Set Ce Target',rate:'Set Manual Rate',bolus:'Add Bolus'};
+    const KP_CONFIRM={target:{label:'Set Target',cls:'modal-btn-confirm-target'},rate:{label:'Set Rate',cls:'modal-btn-confirm-rate'},bolus:{label:'Give Bolus',cls:'modal-btn-confirm-bolus'}};
+    function showKeypadModal(type){kpType=type;kpBuffer='';const drug=getDrugDef();const unitCfg=drug[type]||{units:['μg/mL']};let title=KP_TITLES[type];if(type==='target'&&simMode==='target'&&currentCeTarget>0)title='Change Ce Target';$('keypad-title').textContent=title;if(unitCfg.prefKey){try{const s=localStorage.getItem(unitCfg.prefKey);kpUnit=s&&unitCfg.units.includes(s)?s:unitCfg.defaultUnit||unitCfg.units[0]}catch(e){kpUnit=unitCfg.defaultUnit||unitCfg.units[0]}}else kpUnit=unitCfg.units[0];const uc=$('keypad-units');uc.innerHTML=unitCfg.units.map(u=>`<button class="${u===kpUnit?'active':''}" onclick="setKpUnit('${u}')">${u}</button>`).join('');uc.style.display='flex';const cc=KP_CONFIRM[type];$('keypad-confirm-btn').textContent=cc.label;$('keypad-confirm-btn').className=cc.cls;if(type==='target'&&simMode==='target'&&currentCeTarget>0)kpBuffer=currentCeTarget.toString();updateKpDisplay();$('modal-keypad').classList.add('open')}
+    function setKpUnit(u){kpUnit=u;const drug=getDrugDef(),unitCfg=drug[kpType];if(unitCfg&&unitCfg.prefKey)savePref(unitCfg.prefKey,u);document.querySelectorAll('#keypad-units button').forEach(b=>b.classList.toggle('active',b.textContent===u));updateKpDisplay()}
+    function kp(k){if(k==='C'){kpBuffer=''}else if(k==='⌫'){kpBuffer=kpBuffer.slice(0,-1)}else if(k==='OK'){keypadConfirm();return}else if(k==='.'){if(!kpBuffer.includes('.'))kpBuffer+=kpBuffer?'.':'0.'}else{if(kpBuffer.length<8)kpBuffer+=k}updateKpDisplay()}
+    function updateKpDisplay(){const el=$('keypad-value');el.textContent=kpBuffer||'0';el.classList.toggle('empty',!kpBuffer);const cv=$('keypad-conversion');const v=parseFloat(kpBuffer);const p=window.__tciSim&&window.__tciSim.model?window.__tciSim.model.getPatient():null;if(isNaN(v)||v<=0||!p){cv.textContent='';return}const wkg=p.weight,drug=getDrugDef(),conc=drug.concentration;if(kpType==='rate'){if(kpUnit==='mL/h'){cv.textContent=`= ${(v*conc/60/wkg*1000).toFixed(1)} mcg/kg/min`}else if(kpUnit==='mcg/kg/min'){cv.textContent=`= ${(v*wkg/1000*60/conc).toFixed(1)} mL/h`}else cv.textContent=''}else if(kpType==='bolus'){if(kpUnit==='mcg/kg'){const mg=v*wkg/1000;cv.textContent=`= ${mg.toFixed(1)} mg · ${(mg/conc).toFixed(1)} mL`}else if(kpUnit==='mL'){const mg=v*conc;cv.textContent=`= ${mg.toFixed(0)} mg · ${(mg/wkg*1000).toFixed(1)} mcg/kg`}else cv.textContent=''}else{cv.textContent=''}}
+    function keypadConfirm(){
+      const v=parseFloat(kpBuffer);if(isNaN(v)||v<0)return;
+      closeModal('modal-keypad');
+      const app=window.__tciSim;if(!app)return;
+      const p=app.model.getPatient();if(!p)return;
+      const wkg=p.weight,drug=getDrugDef(),conc=drug.concentration;
+      app.controls.ensureRunning();
+      if(kpType==='target'){
+        currentCeTarget=v;simMode='target';
+        app.addAnnotation('Target set: '+v.toFixed(1)+' μg/mL');
+      }else if(kpType==='rate'){
+        let mgMin;
+        if(kpUnit==='mL/h'){mgMin=v*conc/60}else if(kpUnit==='mcg/kg/min'){mgMin=v*wkg/1000}else mgMin=0;
+        currentRate=mgMin;simMode='manual';currentCeTarget=0;
+        app.addAnnotation('Manual rate: '+(mgMin*60/conc).toFixed(1)+' mL/h ('+(mgMin/wkg*1000).toFixed(1)+' mcg/kg/min)');
+      }else if(kpType==='bolus'){
+        let mg;
+        if(kpUnit==='mcg/kg'){mg=v*wkg/1000}else if(kpUnit==='mL'){mg=v*conc}else mg=0;
+        if(simMode!=='target')simMode='manual';
+        app.addAnnotation('Bolus: '+mg.toFixed(1)+' mg ('+(mg/wkg*1000).toFixed(1)+' mcg/kg · '+(mg/conc).toFixed(1)+' mL)');
+      }
+      updateModeUI();updateDrugPanel();
+    }
+
+    /* Modals */
+    function closeModal(id){$(id).classList.remove('open')}
+  </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "TCI Sim",
+  "short_name": "TCI Sim",
+  "description": "Clinical TCI simulation — Eleveld propofol model",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#060a12",
+  "theme_color": "#0a0f1a",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
