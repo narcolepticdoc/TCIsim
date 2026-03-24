@@ -2,21 +2,117 @@
  * constants.js — Drug properties, unit conversions, and display constants
  */
 
-export const APP_VERSION = '0.1.0.0';
+export const APP_VERSION = '0.4.0';
+
+// ---- Drug definitions ----
+
+export const DRUG_DEFS = {
+  propofol: {
+    name: 'Propofol',
+    concentration: 10,        // mg/mL (1% propofol)
+    color: '#0099ff',
+    maxRate: 200,              // mg/min clinical max
+  },
+  fentanyl: {
+    name: 'Fentanyl',
+    concentration: 0.05,      // mg/mL (50 mcg/mL)
+    color: '#ff6b35',
+    maxRate: 0.01,             // mg/min
+  },
+  remifentanil: {
+    name: 'Remifentanil',
+    concentration: 0.05,      // mg/mL (50 mcg/mL typical reconstitution)
+    color: '#f7b801',
+    maxRate: 0.05,             // mg/min
+  },
+  ketamine: {
+    name: 'Ketamine',
+    concentration: 10,        // mg/mL (typical 1%)
+    color: '#a855f7',
+    maxRate: 10,               // mg/min
+  },
+};
+
+// ---- Per-drug, per-task unit configuration ----
+// canonical = what the engine uses (mg, mg/min, mcg/mL)
+// allowed = what the keypad can display
+
+export const DRUG_TASK_UNITS = {
+  propofol: {
+    bolus: {
+      canonical: 'mg',
+      allowed: ['mg', 'mcg/kg', 'mL'],
+    },
+    rate: {
+      canonical: 'mg/min',
+      allowed: ['mL/h', 'mcg/kg/min', 'mg/min'],
+      defaultDisplay: 'mL/h',
+      prefKey: 'tci-pref-rateUnit-propofol',
+    },
+    ceTarget: {
+      canonical: 'mcg/mL',
+      allowed: ['mcg/mL'],
+    },
+  },
+  fentanyl: {
+    bolus: {
+      canonical: 'mg',
+      allowed: ['mcg', 'mcg/kg', 'mL'],
+    },
+    rate: {
+      canonical: 'mg/min',
+      allowed: ['mcg/kg/min', 'mcg/h', 'mL/h'],
+      defaultDisplay: 'mcg/kg/min',
+      prefKey: 'tci-pref-rateUnit-fentanyl',
+    },
+    ceTarget: {
+      canonical: 'mcg/mL',
+      allowed: ['ng/mL'],
+    },
+  },
+  remifentanil: {
+    bolus: {
+      canonical: 'mg',
+      allowed: ['mcg', 'mcg/kg'],
+    },
+    rate: {
+      canonical: 'mg/min',
+      allowed: ['mcg/kg/min', 'mL/h'],
+      defaultDisplay: 'mcg/kg/min',
+      prefKey: 'tci-pref-rateUnit-remifentanil',
+    },
+    ceTarget: {
+      canonical: 'mcg/mL',
+      allowed: ['ng/mL'],
+    },
+  },
+  ketamine: {
+    bolus: {
+      canonical: 'mg',
+      allowed: ['mg', 'mg/kg', 'mL'],
+    },
+    rate: {
+      canonical: 'mg/min',
+      allowed: ['mg/kg/h', 'mL/h', 'mg/min'],
+      defaultDisplay: 'mg/kg/h',
+      prefKey: 'tci-pref-rateUnit-ketamine',
+    },
+  },
+};
+
+// ---- Legacy propofol config (kept for backward compatibility) ----
 
 export const PROPOFOL = {
   name: 'Propofol',
-  concentration: 10,        // mg/mL (1% propofol = 10 mg/mL)
-  maxInfusionRate: 1200,    // mL/h (clinical max)
-  maxInfusionRateMgMin: 200,// mg/min (= 1200 mL/h ÷ 60 × 10)
+  concentration: 10,
+  maxInfusionRate: 1200,
+  maxInfusionRateMgMin: 200,
   unit: 'μg/mL',
   doseUnit: 'mg',
   rateUnit: 'mL/h',
-  
-  // Standard target ranges
-  inductionCe: { min: 3.0, max: 6.0 },  // μg/mL typical induction
-  maintenanceCe: { min: 2.0, max: 4.0 }, // μg/mL typical maintenance
-  sedationCe: { min: 1.0, max: 2.5 },    // μg/mL sedation
+  inductionCe: { min: 3.0, max: 6.0 },
+  maintenanceCe: { min: 2.0, max: 4.0 },
+  sedationCe: { min: 1.0, max: 2.5 },
 };
 
 export const BIS = {
@@ -24,60 +120,48 @@ export const BIS = {
   sedation: { min: 60, max: 85 },
   generalAnaesthesia: { min: 40, max: 60 },
   deep: { min: 0, max: 40 },
-  targetBand: { min: 40, max: 60 },       // Standard clinical target
+  targetBand: { min: 40, max: 60 },
 };
 
 export const SIM = {
-  dt: 1 / 60,              // 1 second in minutes
-  tciInterval: 10 / 60,    // 10 seconds in minutes
+  dt: 1 / 60,
+  tciInterval: 10 / 60,
   chartUpdateHz: 1,
-  maxSimTime: 480,          // 8 hours in minutes
+  maxSimTime: 480,
 };
 
-/** Color tokens for concentration curves */
 export const COLORS = {
-  cp: '#3b82f6',     // Blue — plasma
-  ce: '#ef4444',     // Red — effect-site
-  c2: '#9ca3af',     // Grey — fast peripheral
-  c3: '#6b7280',     // Dark grey — slow peripheral
-  bis: '#22c55e',    // Green — BIS
-  bisWarn: '#f59e0b', // Amber — BIS outside target
-  rate: '#8b5cf6',   // Purple — infusion rate
-  target: '#f97316',  // Orange — target line
-  dose: '#06b6d4',   // Cyan — cumulative dose
+  cp: '#3b82f6',
+  ce: '#ef4444',
+  c2: '#9ca3af',
+  c3: '#6b7280',
+  bis: '#22c55e',
+  bisWarn: '#f59e0b',
+  rate: '#8b5cf6',
+  target: '#f97316',
+  dose: '#06b6d4',
 };
 
-/** Unit conversion helpers */
+/** Legacy unit conversion helpers (kept for backward compatibility) */
 export const UNITS = {
-  /** mg/min → mL/h for given drug concentration (mg/mL) */
   mgMinToMLh(mgMin, concMgMl = PROPOFOL.concentration) {
     return (mgMin / concMgMl) * 60;
   },
-  
-  /** mL/h → mg/min */
   mlhToMgMin(mlh, concMgMl = PROPOFOL.concentration) {
     return (mlh * concMgMl) / 60;
   },
-  
-  /** mg/min → mg/kg/h */
   mgMinToMgKgH(mgMin, weightKg) {
     return (mgMin * 60) / weightKg;
   },
-  
-  /** mg → mg/kg */
   mgToMgKg(mg, weightKg) {
     return mg / weightKg;
   },
-  
-  /** minutes → "H:MM:SS" */
   formatDuration(minutes) {
     const totalSec = Math.round(minutes * 60);
     const h = Math.floor(totalSec / 3600);
     const m = Math.floor((totalSec % 3600) / 60);
     const s = totalSec % 60;
-    if (h > 0) {
-      return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    }
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     return `${m}:${String(s).padStart(2, '0')}`;
   },
 };
