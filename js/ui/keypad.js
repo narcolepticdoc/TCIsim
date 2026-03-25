@@ -122,7 +122,6 @@ function close() {
 function handleKey(k) {
   if (k === 'C') { buffer = ''; }
   else if (k === '⌫') { buffer = buffer.slice(0, -1); }
-  else if (k === 'OK') { confirm(); return; }
   else if (k === '.') { if (!buffer.includes('.')) buffer += buffer ? '.' : '0.'; }
   else { if (buffer.length < 8) buffer += k; }
   updateDisplay();

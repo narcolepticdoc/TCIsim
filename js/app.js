@@ -16,6 +16,7 @@ import * as mode from './ui/mode.js';
 import * as drugPanel from './ui/drug-panel.js';
 import { createChart } from './ui/chart.js';
 import { ceForBIS } from './pk/pd.js';
+import * as persist from './ui/persist.js';
 
 const $ = id => document.getElementById(id);
 
@@ -113,10 +114,10 @@ function refreshChart() {
   if (!chart || !model) return;
   const t = timer.getElapsedMinutes();
 
-  // Compute end time: furthest event + 60 min decay buffer, minimum 60 min
+  // Compute end time: furthest event + 120 min decay buffer, minimum 120 min
   const events = model.getEvents(selectedDrug);
   const lastEventTime = events.length > 0 ? events[events.length - 1].time : 0;
-  const endTime = Math.max(60, t + 60, lastEventTime + 60);
+  const endTime = Math.max(120, t + 120, lastEventTime + 120);
 
   const curve = model.computeCurve(selectedDrug, 0, endTime, 10 / 60);
   chart.setCurveData(curve);
@@ -129,6 +130,46 @@ function refreshChart() {
   const m = mode.get(selectedDrug);
   const ce = mode.getCeTarget(selectedDrug);
   chart.setTargetLine(m === 'tci' && ce > 0 ? ce : null);
+
+  // Auto-save state
+  saveState();
+}
+
+// ---- Persistence ----
+
+function saveState() {
+  if (!model || !confirmedPatient) return;
+
+  // Collect events for all drugs (strip snapshot — Float64Array won't serialize)
+  const eventsByDrug = {};
+  for (const drugId of ['propofol']) { // extend for multi-drug
+    eventsByDrug[drugId] = model.getEvents(drugId).map(evt => ({
+      drug: evt.drug,
+      time: evt.time,
+      type: evt.type,
+      value: evt.value,
+      source: evt.source,
+      annotation: evt.annotation,
+    }));
+  }
+
+  // Collect mode state
+  const modes = {};
+  const ceTargets = {};
+  for (const drugId of ['propofol']) {
+    modes[drugId] = mode.get(drugId);
+    ceTargets[drugId] = mode.getCeTarget(drugId);
+  }
+
+  persist.saveCase({
+    patient: confirmedPatient,
+    events: eventsByDrug,
+    wallClockStart: timer.getWallClock() ? new Date(timer.getWallClock().getTime() - timer.getElapsedMs()).toISOString() : null,
+    modes,
+    ceTargets,
+    annotations,
+    primaryDrug: selectedDrug,
+  });
 }
 
 /**
@@ -171,11 +212,107 @@ function handleNewCase() {
   showScreen('setup-screen');
 }
 
+// ---- Restore Case ----
+
+function restoreCase() {
+  const saved = persist.loadCase();
+  if (!saved || !saved.patient) return;
+
+  try {
+    // Reset model and set patient
+    model.reset();
+    model.setPatient(saved.patient);
+    confirmedPatient = saved.patient;
+
+    // Replay saved events (skip system-generated rate-restore events)
+    if (saved.events) {
+      for (const [drugId, drugEvents] of Object.entries(saved.events)) {
+        for (const evt of drugEvents) {
+          // Skip system events (rate restores after bolus) — addBolus generates these
+          if (evt.source === 'system') continue;
+          if (evt.type === 'rate') {
+            model.addRate(drugId, evt.time, evt.value, evt.annotation || '');
+          } else if (evt.type === 'bolus') {
+            model.addBolus(drugId, evt.time, evt.value, evt.annotation || '');
+          } else if (evt.type === 'pause') {
+            model.addPause(drugId, evt.time, evt.annotation || '');
+          }
+        }
+      }
+    }
+
+    // Initialize sim screen
+    initSimScreen(saved.patient);
+    showScreen('sim-screen');
+
+    // Restore wall clock / timer
+    if (saved.wallClockStart) {
+      const startDate = new Date(saved.wallClockStart);
+      timer.setWallClockStart(startDate);
+    }
+
+    // Restore modes
+    if (saved.modes) {
+      for (const [drugId, m] of Object.entries(saved.modes)) {
+        mode.set(drugId, m);
+      }
+    }
+    if (saved.ceTargets) {
+      for (const [drugId, ce] of Object.entries(saved.ceTargets)) {
+        if (ce > 0) mode.setCeTarget(drugId, ce);
+      }
+    }
+
+    // Restore annotations
+    if (saved.annotations) {
+      annotations = saved.annotations;
+      const list = $('history-list');
+      const empty = $('history-empty');
+      if (list && empty) {
+        empty.style.display = 'none';
+        list.innerHTML = '';
+        annotations.forEach((a, i) => {
+          const row = document.createElement('div');
+          row.className = 'history-row';
+          row.innerHTML = `<span class="h-step">${i}</span>` +
+            `<span class="h-desc">${a.text}</span>` +
+            `<span class="h-time">${a.time}</span>`;
+          list.appendChild(row);
+        });
+      }
+    }
+
+    // Start the case (timer)
+    controls.ensureStarted();
+
+    // Refresh chart
+    refreshChart();
+
+    addAnnotation('Case restored');
+  } catch (err) {
+    console.error('[TCI Sim] Restore failed:', err);
+    addAnnotation('⚠ Restore failed: ' + err.message);
+  }
+}
+
 // ---- Boot ----
 
 function boot() {
   // Create the model
   model = createModel({ primaryDrug: 'propofol' });
+
+  // Show restore button if saved case exists
+  const btnRestore = $('btn-restore');
+  if (btnRestore) {
+    if (persist.hasSavedCase()) {
+      const summary = persist.getSavedCaseSummary();
+      btnRestore.innerHTML = `Restore Last Case${summary ? `<span class="restore-summary">${summary}</span>` : ''}`;
+      btnRestore.style.display = '';
+      btnRestore.addEventListener('click', restoreCase);
+    } else {
+      btnRestore.style.display = 'none';
+    }
+  }
 
   // Initialize setup screen
   setup.init({
@@ -205,8 +342,13 @@ function boot() {
       addAnnotation('Case started');
     },
     onPumpPause() {
-      // Pause pump = set rate to zero at current time
       const t = timer.getElapsedMinutes();
+      // Guard: don't pause if already paused (rate already 0)
+      try {
+        const conc = model.getConcentrationsAt(selectedDrug, t);
+        if (conc.rate === 0) return; // already paused
+      } catch (e) {}
+
       model.addPause(model.primaryDrug, t, 'Pump paused');
       addAnnotation('Pump paused');
       // Pause drops out of TCI
@@ -231,7 +373,12 @@ function boot() {
     getMode: () => mode.get(selectedDrug),
     getCeTarget: () => mode.getCeTarget(selectedDrug),
     onConfirm(type, canonicalValue, displayText) {
-      controls.ensureStarted();
+      if (!controls.isCaseStarted()) {
+        // Case not started — queue the action but don't execute
+        // User must press Start first
+        addAnnotation(`⚠ Case not started — press Start before ${type === 'ceTarget' ? 'setting target' : type === 'rate' ? 'setting rate' : 'giving bolus'}`);
+        return;
+      }
       const t = timer.getElapsedMinutes();
 
       if (type === 'ceTarget') {

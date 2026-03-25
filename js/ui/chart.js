@@ -254,8 +254,11 @@ export function createChart(canvas, config = {}) {
             wheel: { enabled: false },
             pinch: { enabled: true },
             mode: 'x',
-            onZoomComplete() {
+            onZoomComplete({ chart: c }) {
               autoScroll = false;
+              // Track the plugin's resulting range
+              viewMin = c.scales.x.min;
+              viewMax = c.scales.x.max;
             },
           },
         },
@@ -327,8 +330,13 @@ export function createChart(canvas, config = {}) {
       const range = viewMax - viewMin;
       viewMin = Math.max(0, t - range * 0.3);
       viewMax = viewMin + range;
-      chart.options.scales.x.min = viewMin;
-      chart.options.scales.x.max = viewMax;
+      try {
+        chart.zoomScale('x', { min: viewMin, max: viewMax }, 'none');
+      } catch (e) {
+        // Fallback for older plugin versions
+        chart.options.scales.x.min = viewMin;
+        chart.options.scales.x.max = viewMax;
+      }
     }
 
     chart.update('none');
@@ -362,9 +370,13 @@ export function createChart(canvas, config = {}) {
   function setViewRange(tMin, tMax) {
     viewMin = tMin;
     viewMax = tMax;
-    chart.options.scales.x.min = viewMin;
-    chart.options.scales.x.max = viewMax;
     autoScroll = false;
+    try {
+      chart.zoomScale('x', { min: viewMin, max: viewMax }, 'none');
+    } catch (e) {
+      chart.options.scales.x.min = viewMin;
+      chart.options.scales.x.max = viewMax;
+    }
     chart.update('none');
   }
 
@@ -376,11 +388,15 @@ export function createChart(canvas, config = {}) {
     yMaxManual = null;
     viewMin = 0;
     viewMax = 30;
-    chart.options.scales.x.min = viewMin;
-    chart.options.scales.x.max = viewMax;
     chart.options.scales.y.min = 0;
     delete chart.options.scales.y.max;
-    try { chart.resetZoom(); } catch (e) {}
+    try { chart.resetZoom('none'); } catch (e) {}
+    try {
+      chart.zoomScale('x', { min: 0, max: 30 }, 'none');
+    } catch (e) {
+      chart.options.scales.x.min = 0;
+      chart.options.scales.x.max = 30;
+    }
     chart.update('none');
   }
 
@@ -472,8 +488,12 @@ export function createChart(canvas, config = {}) {
     const range = viewMax - viewMin; // keep current zoom level
     viewMin = Math.max(0, cursorTime - range * 0.3);
     viewMax = viewMin + range;
-    chart.options.scales.x.min = viewMin;
-    chart.options.scales.x.max = viewMax;
+    try {
+      chart.zoomScale('x', { min: viewMin, max: viewMax }, 'none');
+    } catch (e) {
+      chart.options.scales.x.min = viewMin;
+      chart.options.scales.x.max = viewMax;
+    }
     chart.update('none');
   }
 

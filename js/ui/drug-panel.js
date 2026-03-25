@@ -6,7 +6,7 @@
  * when the case is started.
  */
 
-import { fromCanonical, formatValue } from '../util/units.js';
+import { fromCanonical, formatValue, getAllowedUnits, getDefaultUnit, getPrefKey } from '../util/units.js';
 import { DRUG_DEFS } from '../util/constants.js';
 
 const $ = id => document.getElementById(id);
@@ -94,18 +94,29 @@ function update() {
       : '';
   }
 
-  // Rate display — convert from mg/min to preferred display unit
+  // Rate display — convert from mg/min to user's preferred display unit
   const rateEl = $(drugId + '-rate');
   if (rateEl) {
     if (rate > 0 && caseStarted) {
       try {
         const ctx = { weightKg: model.getPatient().weight };
-        const conc = DRUG_DEFS[drugId]?.concentration || 10;
-        const mlh = rate * 60 / conc;
-        rateEl.textContent = `Rate: ${mlh.toFixed(1)} mL/h`;
+        // Get user's preferred rate unit (falls back to default)
+        const prefKey = getPrefKey(drugId, 'rate');
+        let displayUnit = getDefaultUnit(drugId, 'rate');
+        if (prefKey) {
+          try {
+            const saved = localStorage.getItem(prefKey);
+            const allowed = getAllowedUnits(drugId, 'rate');
+            if (saved && allowed.includes(saved)) displayUnit = saved;
+          } catch (e) {}
+        }
+        const displayVal = fromCanonical(rate, displayUnit, drugId, 'rate', ctx);
+        rateEl.textContent = `Rate: ${formatValue(displayVal, displayUnit)} ${displayUnit}`;
       } catch (e) {
         rateEl.textContent = `Rate: ${rate.toFixed(2)} mg/min`;
       }
+    } else if (rate === 0 && caseStarted && m !== 'none') {
+      rateEl.textContent = 'Rate: 0';
     } else {
       rateEl.textContent = '';
     }

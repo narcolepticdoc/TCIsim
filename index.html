@@ -72,6 +72,9 @@
     .derived-item .d-value{font-family:var(--font-mono);font-size:13px;color:var(--text-accent);font-weight:500}
     .btn-confirm{width:100%;padding:10px;background:var(--blue);border:none;border-radius:var(--radius-md);color:#fff;font-family:var(--font-display);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;flex-shrink:0}
     .btn-confirm:hover{background:#2563eb}
+    .btn-restore{width:100%;padding:9px;background:transparent;border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-secondary);font-family:var(--font-display);font-size:12px;cursor:pointer;transition:all .15s;flex-shrink:0}
+    .btn-restore:hover{background:var(--bg-hover);color:var(--text-primary)}
+    .btn-restore .restore-summary{display:block;font-size:10px;color:var(--text-muted);margin-top:2px}
     @media(max-height:380px){.setup-brand{width:160px;min-width:140px;padding:12px 10px;gap:6px}.setup-brand h1{font-size:20px}.setup-form{padding:8px 14px;gap:6px}.input-grid{gap:5px 10px}.form-row input[type="number"],.form-row select{padding:5px 8px;font-size:14px}.form-row label{font-size:10px}.btn-confirm{padding:8px;font-size:13px}.derived-bar{padding:5px 8px}.derived-item .d-value{font-size:12px}}
     @media(min-width:900px){.setup-form{max-width:540px}}
 
@@ -216,13 +219,14 @@
     .keypad-unit-toggle button:hover:not(.active){background:var(--bg-hover);color:var(--text-secondary)}
     .keypad-conversion{font-family:var(--font-mono);font-size:11px;color:var(--cyan);min-height:16px}
 
-    .keypad-right{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:160px;flex-shrink:0}
+    .keypad-right{display:flex;flex-direction:column;gap:6px;width:168px;flex-shrink:0}
+    .keypad-edit-row{display:flex;gap:12px;justify-content:center;margin-bottom:2px}
+    .keypad-edit-row .key{flex:0 0 60px;font-size:13px;padding:8px 0;background:var(--bg-hover);color:var(--text-secondary)}
+    .keypad-numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
     .key{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:18px;padding:10px 0;text-align:center;cursor:pointer;transition:all .1s;user-select:none;-webkit-user-select:none}
     .key:hover{background:var(--bg-hover)}
     .key:active{background:var(--blue-dim);transform:scale(.95)}
     .key-wide{grid-column:span 2}
-    .key-action{background:var(--bg-hover);color:var(--text-secondary);font-size:13px}
-    .key-action:hover{background:var(--bg-input)}
 
     .modal-actions{display:flex;gap:10px;justify-content:center}
     .modal-actions button{padding:9px 22px;border:none;border-radius:var(--radius-sm);font-family:var(--font-display);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
@@ -267,6 +271,7 @@
       </div>
       <div class="derived-bar" id="derived-bar" style="display:none"><div class="derived-item"><span class="d-label">BMI</span><span class="d-value" id="derived-bmi">—</span></div><div class="derived-item"><span class="d-label">FFM</span><span class="d-value" id="derived-ffm">—</span></div><div class="derived-item"><span class="d-label">Ce50</span><span class="d-value" id="derived-ce50">—</span></div></div>
       <button class="btn-confirm" id="btn-confirm">Confirm Patient</button>
+      <button class="btn-restore" id="btn-restore" style="display:none">Restore Last Case</button>
     </div>
   </div>
 
@@ -286,6 +291,7 @@
           </div>
           <div class="tp-info" id="tp-info"></div>
           <div class="tp-actions">
+            <button class="tp-btn" id="tp-btn-now">Now</button>
             <button class="tp-btn" id="tp-btn-apply">Apply</button>
             <button class="tp-btn tp-btn-dim" id="tp-btn-cancel">Cancel</button>
           </div>
@@ -363,11 +369,16 @@
           <div class="keypad-conversion" id="keypad-conversion"></div>
         </div>
         <div class="keypad-right">
-          <div class="key">7</div><div class="key">8</div><div class="key">9</div>
-          <div class="key">4</div><div class="key">5</div><div class="key">6</div>
-          <div class="key">1</div><div class="key">2</div><div class="key">3</div>
-          <div class="key key-action">C</div><div class="key">0</div><div class="key">.</div>
-          <div class="key key-action key-wide">⌫</div><div class="key key-action">OK</div>
+          <div class="keypad-edit-row">
+            <div class="key">C</div>
+            <div class="key">⌫</div>
+          </div>
+          <div class="keypad-numpad">
+            <div class="key">7</div><div class="key">8</div><div class="key">9</div>
+            <div class="key">4</div><div class="key">5</div><div class="key">6</div>
+            <div class="key">1</div><div class="key">2</div><div class="key">3</div>
+            <div class="key key-wide">0</div><div class="key">.</div>
+          </div>
         </div>
       </div>
       <div class="modal-actions">
@@ -405,6 +416,7 @@
           'js/ui/mode.js',
           'js/ui/drug-panel.js',
           'js/ui/chart.js',
+          'js/ui/persist.js',
           'js/app.js'
         ];
         var results = [];

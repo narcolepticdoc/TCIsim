@@ -33,6 +33,9 @@ export function init(opts = {}) {
   const btnApply = $('tp-btn-apply');
   if (btnApply) btnApply.addEventListener('click', applyStartTime);
 
+  const btnNow = $('tp-btn-now');
+  if (btnNow) btnNow.addEventListener('click', applyNow);
+
   const btnCancel = $('tp-btn-cancel');
   if (btnCancel) btnCancel.addEventListener('click', closePopover);
 
@@ -78,6 +81,18 @@ export function reset() {
   renderDisplay();
   updateWallHint();
   closePopover();
+}
+
+/**
+ * Set wall clock start externally (for case restore).
+ * @param {Date} startDate
+ */
+export function setWallClockStart(startDate) {
+  wallClockStart = startDate;
+  elapsedMs = Date.now() - startDate.getTime();
+  if (running) realStartTime = Date.now() - elapsedMs;
+  renderDisplay();
+  updateWallHint();
 }
 
 // ---- Queries ----
@@ -209,4 +224,14 @@ function applyStartTime() {
   closePopover();
 
   return { hours: h, minutes: m }; // caller can log annotation
+}
+
+function applyNow() {
+  wallClockStart = new Date();
+  elapsedMs = 0;
+  if (realStartTime != null) realStartTime = Date.now();
+
+  renderDisplay();
+  updateWallHint();
+  closePopover();
 }
