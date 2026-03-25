@@ -373,13 +373,8 @@ function boot() {
     getMode: () => mode.get(selectedDrug),
     getCeTarget: () => mode.getCeTarget(selectedDrug),
     onConfirm(type, canonicalValue, displayText) {
-      if (!controls.isCaseStarted()) {
-        // Case not started — queue the action but don't execute
-        // User must press Start first
-        addAnnotation(`⚠ Case not started — press Start before ${type === 'ceTarget' ? 'setting target' : type === 'rate' ? 'setting rate' : 'giving bolus'}`);
-        return;
-      }
-      const t = timer.getElapsedMinutes();
+      // If case not started, events queue at t=0 (plan mode)
+      const t = controls.isCaseStarted() ? timer.getElapsedMinutes() : 0;
 
       if (type === 'ceTarget') {
         // TCI target
