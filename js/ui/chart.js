@@ -241,8 +241,7 @@ export function createChart(canvas, config = {}) {
         },
         zoom: {
           limits: {
-            x: { min: 0, minRange: 1 },
-            y: { min: 0, minRange: 0.5 },
+            x: { min: 0 },
           },
           pan: {
             enabled: true,
@@ -252,11 +251,7 @@ export function createChart(canvas, config = {}) {
             },
           },
           zoom: {
-            wheel: {
-              enabled: true,
-              speed: 0.1,
-              modifierKey: null,
-            },
+            wheel: { enabled: false },
             pinch: { enabled: true },
             mode: 'x',
             onZoomComplete() {
@@ -374,8 +369,7 @@ export function createChart(canvas, config = {}) {
   }
 
   /**
-   * Reset view to auto-scroll mode with default range.
-   * Also resets Y axis to auto-scale.
+   * Full reset: default zoom, recenter on current time, auto-scale Y.
    */
   function resetView() {
     autoScroll = true;
@@ -386,7 +380,7 @@ export function createChart(canvas, config = {}) {
     chart.options.scales.x.max = viewMax;
     chart.options.scales.y.min = 0;
     delete chart.options.scales.y.max;
-    chart.resetZoom();
+    try { chart.resetZoom(); } catch (e) {}
     chart.update('none');
   }
 
@@ -413,51 +407,85 @@ export function createChart(canvas, config = {}) {
    * Destroy the chart instance.
    */
   function destroy() {
-    canvas.removeEventListener('wheel', handleYWheel);
+    canvas.removeEventListener('touchstart', handleYTouchStart);
+    canvas.removeEventListener('touchmove', handleYTouchMove);
+    canvas.removeEventListener('touchend', handleYTouchEnd);
     chart.destroy();
   }
 
-  // ---- Custom Y-axis scroll handler ----
-  // Scroll wheel on chart adjusts Y-axis max (scale up/down)
-  // The zoom plugin handles X-axis wheel zoom
-  // We intercept wheel events on the left portion of the chart (Y-axis area)
-  // and use Shift+wheel anywhere for Y scaling
+  // ---- Y-axis finger drag handler ----
+  // Drag up on the Y-axis area (left ~50px) to increase max Y,
+  // drag down to decrease max Y.
 
-  function handleYWheel(e) {
-    // Get chart area boundaries
+  let yDragActive = false;
+  let yDragStartY = 0;
+  let yDragStartMax = 0;
+
+  function handleYTouchStart(e) {
+    if (e.touches.length !== 1) return;
     const chartArea = chart.chartArea;
     if (!chartArea) return;
 
     const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
+    const touchX = e.touches[0].clientX - rect.left;
 
-    // Y-axis scroll: Shift+wheel anywhere, or plain wheel on the Y-axis area
-    const onYAxis = mouseX < chartArea.left + 10;
-    if (!e.shiftKey && !onYAxis) return;
+    // Only activate on the Y-axis area (left edge of chart)
+    if (touchX > chartArea.left + 20) return;
 
+    yDragActive = true;
+    yDragStartY = e.touches[0].clientY;
+    yDragStartMax = chart.options.scales.y.max || chart.options.scales.y.suggestedMax || 10;
+    e.preventDefault();
+  }
+
+  function handleYTouchMove(e) {
+    if (!yDragActive || e.touches.length !== 1) return;
     e.preventDefault();
 
-    const currentMax = chart.options.scales.y.max || chart.options.scales.y.suggestedMax || 10;
-    const delta = e.deltaY > 0 ? 1.15 : 0.87; // scroll down = zoom out (increase max)
-    const newMax = Math.max(1, currentMax * delta);
+    const deltaY = yDragStartY - e.touches[0].clientY; // positive = dragged up
+    const chartArea = chart.chartArea;
+    const chartHeight = chartArea ? (chartArea.bottom - chartArea.top) : 200;
+
+    // Map pixel drag to Y-axis scale: dragging full chart height doubles/halves the range
+    const ratio = deltaY / chartHeight;
+    const newMax = Math.max(1, yDragStartMax * (1 + ratio * 2));
 
     yMaxManual = newMax;
     chart.options.scales.y.max = newMax;
     chart.update('none');
   }
 
-  canvas.addEventListener('wheel', handleYWheel, { passive: false });
+  function handleYTouchEnd(e) {
+    yDragActive = false;
+  }
 
-  // Double-tap / double-click to reset view
+  canvas.addEventListener('touchstart', handleYTouchStart, { passive: false });
+  canvas.addEventListener('touchmove', handleYTouchMove, { passive: false });
+  canvas.addEventListener('touchend', handleYTouchEnd);
+
+  // ---- Double-tap: recenter on current time + re-enable auto-scroll ----
+  // Does NOT reset zoom level — just re-centers the view.
   let lastTap = 0;
+
+  function recenter() {
+    autoScroll = true;
+    const range = viewMax - viewMin; // keep current zoom level
+    viewMin = Math.max(0, cursorTime - range * 0.3);
+    viewMax = viewMin + range;
+    chart.options.scales.x.min = viewMin;
+    chart.options.scales.x.max = viewMax;
+    chart.update('none');
+  }
+
   canvas.addEventListener('dblclick', () => {
-    resetView();
+    recenter();
   });
   canvas.addEventListener('touchend', (e) => {
+    if (yDragActive) return; // don't trigger on Y-axis drag end
     const now = Date.now();
     if (now - lastTap < 300) {
       e.preventDefault();
-      resetView();
+      recenter();
     }
     lastTap = now;
   });
@@ -469,6 +497,7 @@ export function createChart(canvas, config = {}) {
     setTargetLine,
     setViewRange,
     resetView,
+    recenter,
     toggleTooltip,
     setPDModel,
     destroy,
