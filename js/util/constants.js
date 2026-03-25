@@ -12,26 +12,46 @@ export const DRUG_DEFS = {
     concentration: 10,        // mg/mL (1% propofol)
     color: '#0099ff',
     maxRate: 200,              // mg/min clinical max
+    bolusRateMlH: 750,        // mL/h pump bolus delivery rate
   },
   fentanyl: {
     name: 'Fentanyl',
     concentration: 0.05,      // mg/mL (50 mcg/mL)
     color: '#ff6b35',
     maxRate: 0.01,             // mg/min
+    bolusRateMlH: 750,
   },
   remifentanil: {
     name: 'Remifentanil',
     concentration: 0.05,      // mg/mL (50 mcg/mL typical reconstitution)
     color: '#f7b801',
     maxRate: 0.05,             // mg/min
+    bolusRateMlH: 750,
   },
   ketamine: {
     name: 'Ketamine',
     concentration: 10,        // mg/mL (typical 1%)
     color: '#a855f7',
     maxRate: 10,               // mg/min
+    bolusRateMlH: 750,
   },
 };
+
+/**
+ * Compute bolus delivery duration in minutes.
+ * Based on pump max bolus rate and drug concentration.
+ * 
+ * @param {number} doseMg - bolus dose in mg
+ * @param {string} drugId - drug identifier
+ * @returns {number} delivery time in minutes
+ */
+export function bolusDeliveryMinutes(doseMg, drugId) {
+  const drug = DRUG_DEFS[drugId];
+  if (!drug) return 0.05; // fallback
+  const volumeMl = doseMg / drug.concentration;
+  const durationMin = volumeMl / drug.bolusRateMlH * 60;
+  return Math.max(0.05, durationMin); // minimum 3 seconds
+}
 
 // ---- Per-drug, per-task unit configuration ----
 // canonical = what the engine uses (mg, mg/min, mcg/mL)

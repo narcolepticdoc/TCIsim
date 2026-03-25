@@ -16,6 +16,7 @@ import * as mode from './ui/mode.js';
 import * as drugPanel from './ui/drug-panel.js';
 import { createChart } from './ui/chart.js';
 import { ceForBIS } from './pk/pd.js';
+import { bolusDeliveryMinutes } from './util/constants.js';
 import * as persist from './ui/persist.js';
 
 const $ = id => document.getElementById(id);
@@ -25,6 +26,7 @@ let model = null;
 let confirmedPatient = null;
 let selectedDrug = 'propofol';
 let chart = null;
+let preStartClock = 0; // running time for pre-start events (minutes)
 let annotations = []; // mode transitions, editorial actions
 
 // ---- Screen Navigation ----
@@ -49,6 +51,7 @@ function initSimScreen(patient) {
   // Reset modules
   controls.reset();
   mode.reset();
+  preStartClock = 0;
   annotations = [];
 
   // Reset sim screen state
@@ -339,6 +342,7 @@ function boot() {
   controls.init({
     timer,
     onCaseStart() {
+      preStartClock = 0;
       addAnnotation('Case started');
     },
     onPumpPause() {
@@ -373,14 +377,21 @@ function boot() {
     getMode: () => mode.get(selectedDrug),
     getCeTarget: () => mode.getCeTarget(selectedDrug),
     onConfirm(type, canonicalValue, displayText) {
-      // If case not started, events queue at t=0 (plan mode)
-      const t = controls.isCaseStarted() ? timer.getElapsedMinutes() : 0;
+      let t;
+      if (controls.isCaseStarted()) {
+        t = timer.getElapsedMinutes();
+      } else {
+        // Pre-start plan mode: advance clock by execution duration of each action
+        t = preStartClock;
+      }
 
       if (type === 'ceTarget') {
         // TCI target
         mode.setCeTarget(selectedDrug, canonicalValue);
         model.planTCI(selectedDrug, t, canonicalValue);
         mode.set(selectedDrug, 'tci', `TCI target Ce=${canonicalValue.toFixed(1)} μg/mL`);
+        // TCI plan starts immediately, advance by a small offset
+        if (!controls.isCaseStarted()) preStartClock = t + 0.01;
       } else if (type === 'rate') {
         // Manual rate — drops out of TCI
         if (mode.get(selectedDrug) === 'tci') {
@@ -388,6 +399,8 @@ function boot() {
         }
         model.addRate(selectedDrug, t, canonicalValue, `Rate ${displayText}`);
         mode.set(selectedDrug, 'manual', `Manual rate: ${displayText}`);
+        // Rate change is near-instantaneous
+        if (!controls.isCaseStarted()) preStartClock = t + 0.01;
       } else if (type === 'bolus') {
         // Bolus — if in TCI, clear forward plan first, then bolus
         if (mode.get(selectedDrug) === 'tci') {
@@ -398,6 +411,11 @@ function boot() {
         }
         model.addBolus(selectedDrug, t, canonicalValue, `Bolus ${displayText}`);
         addAnnotation(`Bolus: ${displayText}`);
+        // Advance clock by bolus delivery duration
+        if (!controls.isCaseStarted()) {
+          const deliveryMin = bolusDeliveryMinutes(canonicalValue, selectedDrug);
+          preStartClock = t + deliveryMin;
+        }
       }
 
       refreshChart();
