@@ -57,8 +57,10 @@ function initSimScreen(patient) {
   // Reset chart placeholder
   const placeholder = $('chart-placeholder');
   const canvas = $('chart-canvas');
+  const chartControls = $('chart-controls');
   if (placeholder) placeholder.style.display = '';
   if (canvas) canvas.style.display = 'none';
+  if (chartControls) chartControls.style.display = 'none';
 
   // Destroy old chart if exists
   if (chart) { chart.destroy(); chart = null; }
@@ -107,10 +109,18 @@ function addAnnotation(text) {
 function refreshChart() {
   if (!chart || !model) return;
   const t = timer.getElapsedMinutes();
-  // Compute curve from 0 to current time + 30 min lookahead (or at least 30 min)
-  const endTime = Math.max(30, t + 30);
+
+  // Compute end time: furthest event + 60 min decay buffer, minimum 60 min
+  const events = model.getEvents(selectedDrug);
+  const lastEventTime = events.length > 0 ? events[events.length - 1].time : 0;
+  const endTime = Math.max(60, t + 60, lastEventTime + 60);
+
   const curve = model.computeCurve(selectedDrug, 0, endTime, 10 / 60);
   chart.setCurveData(curve);
+
+  // Show chart controls
+  const cc = $('chart-controls');
+  if (cc) cc.style.display = 'flex';
 
   // Update target line
   const m = mode.get(selectedDrug);
@@ -283,6 +293,19 @@ function boot() {
   const btnNewCase = $('btn-new-case');
   if (btnNewCase) btnNewCase.addEventListener('click', () => {
     $('modal-new-case').classList.add('open');
+  });
+
+  // Wire chart controls
+  const btnChartReset = $('btn-chart-reset');
+  if (btnChartReset) btnChartReset.addEventListener('click', () => {
+    if (chart) chart.resetView();
+  });
+  const btnChartTooltip = $('btn-chart-tooltip');
+  if (btnChartTooltip) btnChartTooltip.addEventListener('click', () => {
+    if (chart) {
+      const enabled = chart.toggleTooltip();
+      btnChartTooltip.classList.toggle('active', enabled);
+    }
   });
   const btnNewCaseConfirm = $('btn-new-case-confirm');
   if (btnNewCaseConfirm) btnNewCaseConfirm.addEventListener('click', () => {

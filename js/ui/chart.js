@@ -53,6 +53,7 @@ export function createChart(canvas, config = {}) {
   let viewMin = 0;
   let viewMax = 30;       // default 30-minute view
   let autoScroll = true;
+  let tooltipEnabled = true;
 
   // Build datasets
   const datasets = [];
@@ -210,7 +211,7 @@ export function createChart(canvas, config = {}) {
           labels: { color: '#9ca3af', font: { size: 10 }, boxWidth: 12, padding: 8 },
         },
         tooltip: {
-          enabled: true,
+          enabled: tooltipEnabled,
           backgroundColor: '#1e293bee',
           titleFont: { size: 11 },
           bodyFont: { size: 10 },
@@ -227,16 +228,16 @@ export function createChart(canvas, config = {}) {
         zoom: {
           pan: {
             enabled: true,
-            mode: 'x',
-            onPanComplete({ chart }) {
-              autoScroll = false; // user took control
+            mode: 'xy',
+            onPanComplete() {
+              autoScroll = false;
             },
           },
           zoom: {
             wheel: { enabled: true, speed: 0.1 },
             pinch: { enabled: true },
-            mode: 'x',
-            onZoomComplete({ chart }) {
+            mode: 'xy',
+            onZoomComplete() {
               autoScroll = false;
             },
           },
@@ -340,7 +341,8 @@ export function createChart(canvas, config = {}) {
   }
 
   /**
-   * Reset view to auto-scroll mode.
+   * Reset view to auto-scroll mode with default range.
+   * Also resets Y axis to auto-scale.
    */
   function resetView() {
     autoScroll = true;
@@ -348,7 +350,21 @@ export function createChart(canvas, config = {}) {
     viewMax = 30;
     chart.options.scales.x.min = viewMin;
     chart.options.scales.x.max = viewMax;
+    chart.options.scales.y.min = 0;
+    delete chart.options.scales.y.max; // back to suggestedMax
+    chart.resetZoom();
     chart.update('none');
+  }
+
+  /**
+   * Toggle the hover tooltip on/off.
+   * @returns {boolean} new state
+   */
+  function toggleTooltip() {
+    tooltipEnabled = !tooltipEnabled;
+    chart.options.plugins.tooltip.enabled = tooltipEnabled;
+    chart.update('none');
+    return tooltipEnabled;
   }
 
   /**
@@ -358,6 +374,20 @@ export function createChart(canvas, config = {}) {
     chart.destroy();
   }
 
+  // Double-tap to reset view
+  let lastTap = 0;
+  canvas.addEventListener('dblclick', () => {
+    resetView();
+  });
+  canvas.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTap < 300) {
+      e.preventDefault();
+      resetView();
+    }
+    lastTap = now;
+  });
+
   return {
     setCurveData,
     setCursorTime,
@@ -365,7 +395,9 @@ export function createChart(canvas, config = {}) {
     setTargetLine,
     setViewRange,
     resetView,
+    toggleTooltip,
     destroy,
+    get tooltipEnabled() { return tooltipEnabled; },
     get chart() { return chart; },
   };
 }
