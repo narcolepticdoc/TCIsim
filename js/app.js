@@ -69,6 +69,9 @@ function initSimScreen(patient) {
   if (canvas) {
     try {
       chart = createChart(canvas, { drugId: selectedDrug, showCp: true, showCe: true });
+      // Give chart access to PD model for BIS in tooltips
+      const pd = model.getPDModel(selectedDrug);
+      if (pd) chart.setPDModel(pd);
       computeEffectOverlay();
     } catch (err) {
       console.error('[TCI Sim] Chart creation failed:', err);

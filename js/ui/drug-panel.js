@@ -136,10 +136,14 @@ function update() {
     }
   }
 
-  // BIS display (if element exists)
+  // BIS display
   const bisEl = $(drugId + '-bis');
-  if (bisEl && bis !== null) {
-    bisEl.textContent = bis.toFixed(0);
+  if (bisEl) {
+    if (bis !== null && caseStarted && t > 0) {
+      bisEl.textContent = `BIS: ${bis.toFixed(0)}`;
+    } else {
+      bisEl.textContent = '';
+    }
   }
 
   // Notify app.js for chart cursor update

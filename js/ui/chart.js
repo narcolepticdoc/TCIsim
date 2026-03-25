@@ -157,6 +157,10 @@ export function createChart(canvas, config = {}) {
     return annotations;
   }
 
+  // Store BIS values alongside curve for tooltip lookup
+  let bisValues = []; // parallel array to curve data: bisValues[i] = BIS at curveData[i].time
+  let pdModel = null; // set via setPDModel()
+
   // Create chart instance
   const chart = new Chart(canvas, {
     type: 'line',
@@ -220,23 +224,41 @@ export function createChart(canvas, config = {}) {
               if (items.length > 0) return `t = ${items[0].parsed.x.toFixed(1)} min`;
               return '';
             },
+            afterBody(items) {
+              // Add BIS to tooltip
+              if (items.length > 0 && bisValues.length > 0) {
+                const idx = items[0].dataIndex;
+                if (idx < bisValues.length && bisValues[idx] !== null) {
+                  return `BIS: ${bisValues[idx].toFixed(0)}`;
+                }
+              }
+              return '';
+            },
           },
         },
         annotation: {
           annotations: buildAnnotations(),
         },
         zoom: {
+          limits: {
+            x: { min: 0, minRange: 1 },
+            y: { min: 0, minRange: 0.5 },
+          },
           pan: {
             enabled: true,
-            mode: 'xy',
+            mode: 'x',
             onPanComplete() {
               autoScroll = false;
             },
           },
           zoom: {
-            wheel: { enabled: true, speed: 0.1 },
+            wheel: {
+              enabled: true,
+              speed: 0.1,
+              modifierKey: null,
+            },
             pinch: { enabled: true },
-            mode: 'xy',
+            mode: 'x',
             onZoomComplete() {
               autoScroll = false;
             },
@@ -247,6 +269,8 @@ export function createChart(canvas, config = {}) {
   });
 
   // ---- Public API ----
+
+  let yMaxManual = null; // null = auto-scale, number = user-set
 
   /**
    * Update curve data from model.computeCurve() output.
@@ -270,12 +294,21 @@ export function createChart(canvas, config = {}) {
       dsIdx++;
     }
 
-    // Auto-scale Y axis based on data
-    if (curveData.length > 0) {
+    // Compute BIS for each point (for tooltip)
+    if (pdModel) {
+      bisValues = curveData.map(p => {
+        try { return pdModel.predict(p.Ce); } catch (e) { return null; }
+      });
+    } else {
+      bisValues = [];
+    }
+
+    // Auto-scale Y axis (unless user has manually set it)
+    if (yMaxManual === null && curveData.length > 0) {
       const maxCp = Math.max(...curveData.map(p => p.Cp));
       const maxCe = Math.max(...curveData.map(p => p.Ce));
       const maxConc = Math.max(maxCp, maxCe, targetCe || 0);
-      chart.options.scales.y.suggestedMax = Math.ceil(maxConc * 1.3);
+      chart.options.scales.y.max = Math.ceil(maxConc * 1.3);
     }
 
     // Show the canvas, hide placeholder
@@ -283,7 +316,7 @@ export function createChart(canvas, config = {}) {
     const placeholder = document.getElementById('chart-placeholder');
     if (placeholder) placeholder.style.display = 'none';
 
-    chart.update('none'); // no animation
+    chart.update('none');
   }
 
   /**
@@ -346,12 +379,13 @@ export function createChart(canvas, config = {}) {
    */
   function resetView() {
     autoScroll = true;
+    yMaxManual = null;
     viewMin = 0;
     viewMax = 30;
     chart.options.scales.x.min = viewMin;
     chart.options.scales.x.max = viewMax;
     chart.options.scales.y.min = 0;
-    delete chart.options.scales.y.max; // back to suggestedMax
+    delete chart.options.scales.y.max;
     chart.resetZoom();
     chart.update('none');
   }
@@ -368,13 +402,53 @@ export function createChart(canvas, config = {}) {
   }
 
   /**
+   * Set the PD model for BIS computation in tooltips.
+   * @param {Object|null} pd - PD model with .predict(ce) method
+   */
+  function setPDModel(pd) {
+    pdModel = pd;
+  }
+
+  /**
    * Destroy the chart instance.
    */
   function destroy() {
+    canvas.removeEventListener('wheel', handleYWheel);
     chart.destroy();
   }
 
-  // Double-tap to reset view
+  // ---- Custom Y-axis scroll handler ----
+  // Scroll wheel on chart adjusts Y-axis max (scale up/down)
+  // The zoom plugin handles X-axis wheel zoom
+  // We intercept wheel events on the left portion of the chart (Y-axis area)
+  // and use Shift+wheel anywhere for Y scaling
+
+  function handleYWheel(e) {
+    // Get chart area boundaries
+    const chartArea = chart.chartArea;
+    if (!chartArea) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+
+    // Y-axis scroll: Shift+wheel anywhere, or plain wheel on the Y-axis area
+    const onYAxis = mouseX < chartArea.left + 10;
+    if (!e.shiftKey && !onYAxis) return;
+
+    e.preventDefault();
+
+    const currentMax = chart.options.scales.y.max || chart.options.scales.y.suggestedMax || 10;
+    const delta = e.deltaY > 0 ? 1.15 : 0.87; // scroll down = zoom out (increase max)
+    const newMax = Math.max(1, currentMax * delta);
+
+    yMaxManual = newMax;
+    chart.options.scales.y.max = newMax;
+    chart.update('none');
+  }
+
+  canvas.addEventListener('wheel', handleYWheel, { passive: false });
+
+  // Double-tap / double-click to reset view
   let lastTap = 0;
   canvas.addEventListener('dblclick', () => {
     resetView();
@@ -396,6 +470,7 @@ export function createChart(canvas, config = {}) {
     setViewRange,
     resetView,
     toggleTooltip,
+    setPDModel,
     destroy,
     get tooltipEnabled() { return tooltipEnabled; },
     get chart() { return chart; },
