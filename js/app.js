@@ -65,8 +65,12 @@ function initSimScreen(patient) {
 
   // Create new chart
   if (canvas) {
-    chart = createChart(canvas, { drugId: selectedDrug, showCp: true, showCe: true });
-    computeEffectOverlay();
+    try {
+      chart = createChart(canvas, { drugId: selectedDrug, showCp: true, showCe: true });
+      computeEffectOverlay();
+    } catch (err) {
+      console.error('[TCI Sim] Chart creation failed:', err);
+    }
   }
 }
 
@@ -163,9 +167,13 @@ function boot() {
   // Initialize setup screen
   setup.init({
     onConfirm(patient) {
-      confirmedPatient = patient;
-      model.setPatient(patient);
-      initSimScreen(patient);
+      try {
+        confirmedPatient = patient;
+        model.setPatient(patient);
+        initSimScreen(patient);
+      } catch (err) {
+        console.error('[TCI Sim] onConfirm error:', err);
+      }
       showScreen('sim-screen');
     },
   });

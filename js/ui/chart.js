@@ -19,6 +19,10 @@ import { COLORS } from '../util/constants.js';
 // Chart.js is loaded globally via CDN
 const Chart = window.Chart;
 
+if (!Chart) {
+  console.warn('[TCI Sim] Chart.js not loaded — chart features disabled');
+}
+
 /**
  * Create a TCI chart instance.
  * 
@@ -31,6 +35,10 @@ const Chart = window.Chart;
  * @returns {Object} Chart controller
  */
 export function createChart(canvas, config = {}) {
+  if (!Chart) {
+    console.error('[TCI Sim] Cannot create chart — Chart.js not loaded');
+    return null;
+  }
   const cfg = {
     drugId: 'propofol',
     showCp: true,
