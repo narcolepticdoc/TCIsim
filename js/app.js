@@ -14,6 +14,8 @@ import * as controls from './ui/controls.js';
 import * as keypad from './ui/keypad.js';
 import * as mode from './ui/mode.js';
 import * as drugPanel from './ui/drug-panel.js';
+import { createChart } from './ui/chart.js';
+import { ceForBIS } from './pk/pd.js';
 
 const $ = id => document.getElementById(id);
 
@@ -21,6 +23,7 @@ const $ = id => document.getElementById(id);
 let model = null;
 let confirmedPatient = null;
 let selectedDrug = 'propofol';
+let chart = null;
 let annotations = []; // mode transitions, editorial actions
 
 // ---- Screen Navigation ----
@@ -50,6 +53,21 @@ function initSimScreen(patient) {
   // Reset sim screen state
   $('history-list').innerHTML = '';
   $('history-empty').style.display = 'block';
+
+  // Reset chart placeholder
+  const placeholder = $('chart-placeholder');
+  const canvas = $('chart-canvas');
+  if (placeholder) placeholder.style.display = '';
+  if (canvas) canvas.style.display = 'none';
+
+  // Destroy old chart if exists
+  if (chart) { chart.destroy(); chart = null; }
+
+  // Create new chart
+  if (canvas) {
+    chart = createChart(canvas, { drugId: selectedDrug, showCp: true, showCe: true });
+    computeEffectOverlay();
+  }
 }
 
 // ---- Annotations ----
@@ -76,6 +94,48 @@ function addAnnotation(text) {
   }
 }
 
+// ---- Chart ----
+
+/**
+ * Recompute the curve and refresh the chart.
+ * Called after every model mutation.
+ */
+function refreshChart() {
+  if (!chart || !model) return;
+  const t = timer.getElapsedMinutes();
+  // Compute curve from 0 to current time + 30 min lookahead (or at least 30 min)
+  const endTime = Math.max(30, t + 30);
+  const curve = model.computeCurve(selectedDrug, 0, endTime, 10 / 60);
+  chart.setCurveData(curve);
+
+  // Update target line
+  const m = mode.get(selectedDrug);
+  const ce = mode.getCeTarget(selectedDrug);
+  chart.setTargetLine(m === 'tci' && ce > 0 ? ce : null);
+}
+
+/**
+ * Compute BIS overlay bands from the PD model.
+ * Bands are drawn at Ce levels corresponding to BIS thresholds.
+ */
+function computeEffectOverlay() {
+  if (!chart || !model) return;
+  const pd = model.getPDModel(selectedDrug);
+  if (!pd) { chart.setEffectOverlay([]); return; }
+
+  const params = pd.params;
+  // Use ceForBIS to find Ce values at BIS boundaries
+  const ce85 = ceForBIS(85, params);  // awake/sedation boundary
+  const ce60 = ceForBIS(60, params);  // sedation/GA boundary
+  const ce40 = ceForBIS(40, params);  // GA/deep boundary
+
+  chart.setEffectOverlay([
+    { ceMin: 0, ceMax: ce40, color: '#ef444418', label: 'Deep' },
+    { ceMin: ce40, ceMax: ce60, color: '#22c55e18', label: 'GA 40-60' },
+    { ceMin: ce60, ceMax: ce85, color: '#f59e0b12', label: 'Sedation' },
+  ]);
+}
+
 // ---- New Case ----
 
 function handleNewCase() {
@@ -83,6 +143,9 @@ function handleNewCase() {
   if (model) model.reset();
   confirmedPatient = null;
   annotations = [];
+
+  // Destroy chart
+  if (chart) { chart.destroy(); chart = null; }
 
   // Reset UI modules
   controls.reset();
@@ -130,6 +193,7 @@ function boot() {
         model.clearAfter(selectedDrug, t);
         mode.set(selectedDrug, 'manual', 'Pump paused');
       }
+      refreshChart();
     },
   });
 
@@ -172,6 +236,8 @@ function boot() {
         model.addBolus(selectedDrug, t, canonicalValue, `Bolus ${displayText}`);
         addAnnotation(`Bolus: ${displayText}`);
       }
+
+      refreshChart();
     },
   });
 
@@ -193,6 +259,16 @@ function boot() {
     getMode: () => mode.get(selectedDrug),
     getCeTarget: () => mode.getCeTarget(selectedDrug),
     getDrugId: () => selectedDrug,
+    onFrame(t) {
+      // Update chart cursor — throttled to every 500ms
+      if (chart && t > 0) {
+        const now = Date.now();
+        if (!chart._lastCursorUpdate || now - chart._lastCursorUpdate > 500) {
+          chart._lastCursorUpdate = now;
+          chart.setCursorTime(t);
+        }
+      }
+    },
   });
 
   // Wire new case dialog

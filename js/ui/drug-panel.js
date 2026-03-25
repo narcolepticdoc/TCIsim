@@ -17,6 +17,7 @@ let getMode = null;       // () => mode string
 let getCeTarget = null;   // () => Ce target number
 let getDrugId = null;     // () => selected drug id
 let rafId = null;
+let onFrame = null;        // callback: (elapsedMinutes) => void
 
 /**
  * Initialize the drug panel.
@@ -26,6 +27,7 @@ let rafId = null;
  * @param {Function} opts.getMode - () => current mode for selected drug
  * @param {Function} opts.getCeTarget - () => current Ce target
  * @param {Function} opts.getDrugId - () => selected drug id
+ * @param {Function} [opts.onFrame] - called each rAF with elapsed minutes
  */
 export function init(opts = {}) {
   model = opts.model;
@@ -33,6 +35,7 @@ export function init(opts = {}) {
   getMode = opts.getMode || (() => 'none');
   getCeTarget = opts.getCeTarget || (() => 0);
   getDrugId = opts.getDrugId || (() => 'propofol');
+  onFrame = opts.onFrame || null;
 
   // Start the animation loop
   loop();
@@ -138,6 +141,9 @@ function update() {
   if (bisEl && bis !== null) {
     bisEl.textContent = bis.toFixed(0);
   }
+
+  // Notify app.js for chart cursor update
+  if (onFrame) onFrame(t);
 }
 
 /**
