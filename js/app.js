@@ -29,6 +29,7 @@ let selectedDrug = 'propofol';
 let chart = null;
 let preStartClock = 0; // running time for pre-start events (minutes)
 let annotations = []; // mode transitions, editorial actions
+let lastHistoryDimUpdate = 0; // throttle timestamp for history dimming
 
 // ---- Screen Navigation ----
 
@@ -465,8 +466,8 @@ function boot() {
       // Update history past/future dimming — throttled to every 2s
       {
         const now = Date.now();
-        if (!history._lastDimUpdate || now - history._lastDimUpdate > 2000) {
-          history._lastDimUpdate = now;
+        if (!lastHistoryDimUpdate || now - lastHistoryDimUpdate > 2000) {
+          lastHistoryDimUpdate = now;
           history.updateDimming();
         }
       }
