@@ -19,7 +19,8 @@ let buffer = '';
 let currentType = 'ceTarget';  // 'ceTarget' | 'rate' | 'bolus'
 let currentDrug = 'propofol';
 let currentUnit = 'mcg/mL';
-let onConfirm = null;          // (type, canonicalValue, displayText) => void
+let onConfirm = null;          // (type, canonicalValue, displayText, deliveryMode) => void
+let oneShotConfirm = null;     // one-shot callback for edit mode — overrides onConfirm
 let getPatient = null;         // () => { weight, ... }
 let getMode = null;            // () => mode string
 let getCeTarget = null;        // () => current Ce target
@@ -137,6 +138,7 @@ export function show(type) {
 
 function close() {
   $('modal-keypad').classList.remove('open');
+  oneShotConfirm = null; // clear one-shot if user cancels
 }
 
 function handleKey(k) {
@@ -251,10 +253,25 @@ function confirm(deliveryMode) {
     }
 
     close();
-    if (onConfirm) onConfirm(currentType, canonical.value, displayText, deliveryMode);
+    if (oneShotConfirm) {
+      const cb = oneShotConfirm;
+      oneShotConfirm = null;
+      cb(currentType, canonical.value, displayText, deliveryMode);
+    } else if (onConfirm) {
+      onConfirm(currentType, canonical.value, displayText, deliveryMode);
+    }
   } catch (e) {
     console.error('[TCI Sim] Keypad confirm error:', e);
   }
+}
+
+/**
+ * Set a one-shot confirm callback for edit mode.
+ * Overrides the normal onConfirm for the next confirm only.
+ * Cleared on close if not used.
+ */
+export function setOneShotConfirm(cb) {
+  oneShotConfirm = cb;
 }
 
 /**

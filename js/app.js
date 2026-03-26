@@ -15,6 +15,7 @@ import * as keypad from './ui/keypad.js';
 import * as mode from './ui/mode.js';
 import * as drugPanel from './ui/drug-panel.js';
 import * as history from './ui/history.js';
+import * as eventEditor from './ui/event-editor.js';
 import { createChart } from './ui/chart.js';
 import { ceForBIS } from './pk/pd.js';
 import { bolusDeliveryMinutes } from './util/constants.js';
@@ -478,6 +479,21 @@ function boot() {
     model,
     getElapsedMinutes: () => timer.getElapsedMinutes(),
     getPatient: () => model ? model.getPatient() : { weight: 70 },
+    onEventTap: (evtId) => eventEditor.openActionSheet(evtId),
+  });
+
+  eventEditor.init({
+    model,
+    mode,
+    timer,
+    controls,
+    refreshChart,
+    openKeypadForEdit(type, prefill, callback) {
+      keypad.setOneShotConfirm((t, canonicalValue, displayText, deliveryMode) => {
+        callback(canonicalValue, deliveryMode);
+      });
+      keypad.show(type);
+    },
   });
 
   // Wire new case dialog

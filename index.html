@@ -253,6 +253,26 @@
     .modal-btn-danger{background:var(--red);color:#fff}
     .modal-btn-danger:hover{background:#dc2626}
 
+    .modal-actions-box{max-width:320px}
+    .evt-actions-desc{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);margin:0 0 12px}
+    .evt-actions-list{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+    .evt-action-btn{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-display);font-size:13px;padding:10px 14px;cursor:pointer;text-align:left;transition:all .15s}
+    .evt-action-btn:hover{background:var(--bg-hover)}
+    .evt-action-btn.danger{color:var(--red)}
+    .evt-action-btn.danger:hover{background:rgba(239,68,68,.1)}
+
+    .modal-time-picker{max-width:280px}
+    .time-picker-display{display:flex;align-items:center;justify-content:center;gap:4px;margin:16px 0}
+    .time-input{width:64px;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:24px;text-align:center;padding:8px 4px;-moz-appearance:textfield}
+    .time-input::-webkit-inner-spin-button,.time-input::-webkit-outer-spin-button{-webkit-appearance:none}
+    .time-sep{font-family:var(--font-mono);font-size:24px;color:var(--text-muted)}
+    .time-label{font-family:var(--font-display);font-size:12px;color:var(--text-muted);margin-right:8px}
+
+    .modal-add-event{max-width:320px}
+    .add-evt-type-row{display:flex;gap:6px;margin-bottom:4px}
+    .add-evt-type{flex:1;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-display);font-size:12px;font-weight:600;padding:8px 0;cursor:pointer;text-align:center;transition:all .15s}
+    .add-evt-type.active{background:var(--blue-dim);color:var(--text-primary);border-color:var(--cyan)}
+
     /* ==== ANIMATIONS ==== */
     @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
     .setup-brand{animation:fadeIn .3s ease both}
@@ -350,6 +370,7 @@
         </div>
         <div class="content-view" id="panel-history">
           <div class="history-area"><div class="history-empty" id="history-empty">No events yet.</div><div class="history-list" id="history-list"></div></div>
+          <div style="padding:6px 12px"><button class="evt-action-btn" id="btn-add-event" style="width:100%;text-align:center;font-size:12px">+ Add Event</button></div>
         </div>
       </div>
     </div>
@@ -405,6 +426,66 @@
     </div>
   </div>
 
+  <!-- =========== EVENT ACTION SHEET =========== -->
+  <div class="modal-overlay" id="modal-evt-actions">
+    <div class="modal-box modal-actions-box">
+      <h3 id="evt-actions-title">Event</h3>
+      <p id="evt-actions-desc" class="evt-actions-desc"></p>
+      <div class="evt-actions-list" id="evt-actions-list"></div>
+      <div class="modal-actions"><button class="modal-btn-cancel" id="evt-actions-cancel">Cancel</button></div>
+    </div>
+  </div>
+
+  <!-- =========== TIME PICKER =========== -->
+  <div class="modal-overlay" id="modal-time-picker">
+    <div class="modal-box modal-time-picker">
+      <h3 id="time-picker-title">Set Time</h3>
+      <div class="time-picker-display">
+        <input type="number" id="time-picker-min" class="time-input" min="0" max="999" placeholder="mm">
+        <span class="time-sep">:</span>
+        <input type="number" id="time-picker-sec" class="time-input" min="0" max="59" placeholder="ss">
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="time-picker-cancel">Cancel</button>
+        <button class="modal-btn-confirm-target" id="time-picker-confirm">Set Time</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========== ADD EVENT =========== -->
+  <div class="modal-overlay" id="modal-add-event">
+    <div class="modal-box modal-add-event">
+      <h3>Add Event</h3>
+      <div class="add-evt-type-row">
+        <button class="add-evt-type active" data-type="bolus">Bolus</button>
+        <button class="add-evt-type" data-type="rate">Rate</button>
+        <button class="add-evt-type" data-type="pause">Pause</button>
+      </div>
+      <div class="time-picker-display" style="margin:12px 0">
+        <span class="time-label">Time:</span>
+        <input type="number" id="add-evt-min" class="time-input" min="0" max="999" placeholder="mm">
+        <span class="time-sep">:</span>
+        <input type="number" id="add-evt-sec" class="time-input" min="0" max="59" placeholder="ss">
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="add-evt-cancel">Cancel</button>
+        <button class="modal-btn-confirm-rate" id="add-evt-confirm">Next: Set Value</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========== TCI WARNING =========== -->
+  <div class="modal-overlay" id="modal-tci-warn">
+    <div class="modal-box">
+      <h3>TCI Plan Affected</h3>
+      <p id="tci-warn-text"></p>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="tci-warn-cancel">Cancel</button>
+        <button class="modal-btn-danger" id="tci-warn-confirm">Continue</button>
+      </div>
+    </div>
+  </div>
+
   <!-- App entry point (ES module) -->
   <script type="module" src="js/app.js"></script>
 
@@ -433,6 +514,7 @@
           'js/ui/mode.js',
           'js/ui/drug-panel.js',
           'js/ui/history.js',
+          'js/ui/event-editor.js',
           'js/ui/chart.js',
           'js/ui/persist.js',
           'js/app.js'

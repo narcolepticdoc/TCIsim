@@ -20,6 +20,7 @@ let _model = null;
 let _getElapsedMinutes = null;
 let _getPatient = null;
 let _selectedDrug = 'propofol';
+let _onEventTap = null;
 
 /**
  * Initialize the history module.
@@ -27,11 +28,24 @@ let _selectedDrug = 'propofol';
  * @param {Object} opts.model - simulation model
  * @param {Function} opts.getElapsedMinutes - () => number
  * @param {Function} opts.getPatient - () => patient object
+ * @param {Function} [opts.onEventTap] - (evtId) => void
  */
 export function init(opts) {
   _model = opts.model;
   _getElapsedMinutes = opts.getElapsedMinutes;
   _getPatient = opts.getPatient || (() => ({ weight: 70 }));
+  _onEventTap = opts.onEventTap || null;
+
+  // Delegate click on history list
+  const list = $('history-list');
+  if (list) {
+    list.addEventListener('click', (e) => {
+      const row = e.target.closest('.history-row');
+      if (!row || !_onEventTap) return;
+      const evtId = row.dataset.evtId;
+      if (evtId) _onEventTap(evtId);
+    });
+  }
 }
 
 /**
