@@ -172,7 +172,7 @@ export function render(drugId) {
     }
 
     rows.push(
-      `<div class="history-row ${tc}${dimClass}" data-evt-id="${evt.id}">` +
+      `<div class="history-row ${tc}${dimClass}" data-evt-id="${evt.id}" data-evt-time="${evt.time}">` +
         `<span class="h-time">${fmtTime(evt.time)}</span>` +
         `<span class="h-desc">${desc}</span>` +
       `</div>`
@@ -180,4 +180,20 @@ export function render(drugId) {
   }
 
   list.innerHTML = rows.join('');
+}
+
+/**
+ * Lightweight update: toggle past/future dimming on existing rows.
+ * Call from rAF loop — no DOM rebuild, just class toggles.
+ */
+export function updateDimming() {
+  const list = $('history-list');
+  if (!list) return;
+  const now = _getElapsedMinutes ? _getElapsedMinutes() : Infinity;
+  const rows = list.children;
+  for (let i = 0; i < rows.length; i++) {
+    const t = parseFloat(rows[i].dataset.evtTime);
+    if (isNaN(t)) continue;
+    rows[i].classList.toggle('h-future', t > now);
+  }
 }

@@ -462,6 +462,14 @@ function boot() {
           chart.setCursorTime(t);
         }
       }
+      // Update history past/future dimming — throttled to every 2s
+      {
+        const now = Date.now();
+        if (!history._lastDimUpdate || now - history._lastDimUpdate > 2000) {
+          history._lastDimUpdate = now;
+          history.updateDimming();
+        }
+      }
     },
   });
 
