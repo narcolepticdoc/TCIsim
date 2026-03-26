@@ -104,6 +104,9 @@
     .drug-card .ce-label{font-size:10px;color:var(--text-muted)}
     .drug-card .ce-current{font-family:var(--font-mono);font-size:18px;font-weight:500;color:var(--cyan)}
     .drug-card .ce-target-display{font-family:var(--font-mono);font-size:11px;color:var(--amber)}
+    .drug-card .drug-cp-row{display:flex;align-items:baseline;gap:6px}
+    .drug-card .cp-label{font-size:9px;color:var(--text-muted)}
+    .drug-card .cp-current{font-family:var(--font-mono);font-size:12px;color:#ef4444}
     .drug-card .drug-status{font-size:10px;font-weight:500}
     .drug-card .drug-status.infusing{color:var(--green)}
     .drug-card .drug-status.paused{color:var(--amber)}
@@ -308,6 +311,10 @@
             <span class="ce-label">Ce</span>
             <span class="ce-current" id="propofol-ce">0.00</span>
             <span class="ce-target-display" id="propofol-target-disp"></span>
+          </div>
+          <div class="drug-cp-row">
+            <span class="cp-label">Cp</span>
+            <span class="cp-current" id="propofol-cp">0.00</span>
           </div>
           <div class="drug-status stopped" id="propofol-status">Stopped</div>
           <div class="drug-rate" id="propofol-rate"></div>

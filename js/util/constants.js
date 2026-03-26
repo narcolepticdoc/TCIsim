@@ -151,8 +151,8 @@ export const SIM = {
 };
 
 export const COLORS = {
-  cp: '#3b82f6',
-  ce: '#ef4444',
+  cp: '#ef4444',     // Red — plasma (blood compartment)
+  ce: '#3b82f6',     // Blue — effect-site
   c2: '#9ca3af',
   c3: '#6b7280',
   bis: '#22c55e',

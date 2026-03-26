@@ -86,6 +86,10 @@ function update() {
   const ceEl = $(drugId + '-ce');
   if (ceEl) ceEl.textContent = Ce.toFixed(2);
 
+  // Cp display
+  const cpEl = $(drugId + '-cp');
+  if (cpEl) cpEl.textContent = Cp.toFixed(2);
+
   // Target display
   const targetEl = $(drugId + '-target-disp');
   if (targetEl) {

@@ -12,8 +12,14 @@
  * 
  * Event types:
  *   'rate'  — infusion rate change (value in mg/min)
- *   'bolus' — bolus delivery (value in mg, delivered over 0.05 min)
+ *   'bolus' — bolus delivery (value in mg, delivered over a computed
+ *             duration at the pump's bolus rate or as a rapid push)
  *   'pause' — pump stopped (equivalent to rate = 0)
+ * 
+ * Bolus delivery modes:
+ *   'pump' (default) — delivered at the drug's configured pump bolus
+ *                       rate (e.g. 750 mL/h). Duration depends on dose.
+ *   'push'           — rapid IV push, delivered over ~10 seconds.
  * 
  * Each event stores a snapshot of its drug's engine state, computed
  * during replay. Snapshots are a performance optimization — they
@@ -23,6 +29,8 @@
 
 let _nextId = 1;
 function genId() { return 'evt_' + String(_nextId++).padStart(5, '0'); }
+
+const PUSH_DURATION = 10 / 60; // 10 seconds in minutes
 
 /**
  * Create an event object.
@@ -35,6 +43,7 @@ function createEvent(drug, time, type, value, opts = {}) {
     type,                              // 'rate' | 'bolus' | 'pause'
     value,                             // mg/min for rate, mg for bolus, 0 for pause
     source: opts.source || 'manual',   // 'tci' | 'manual' | 'system'
+    deliveryMode: opts.deliveryMode || 'pump', // 'pump' | 'push' (bolus only)
     annotation: opts.annotation || '', // human-readable context
     snapshot: opts.snapshot || null,    // Float64Array engine state after this event
   };
@@ -45,12 +54,22 @@ function createEvent(drug, time, type, value, opts = {}) {
  */
 export function createEventList() {
   let events = [];
-  const engines = {};  // { drugId: engineInstance }
+  const engines = {};      // { drugId: engineInstance }
+  const drugConfigs = {};  // { drugId: { concentration, bolusRateMlH } }
 
   // ---- Engine registry ----
 
   function registerEngine(drugId, engine) {
     engines[drugId] = engine;
+  }
+
+  /**
+   * Register drug configuration for bolus delivery.
+   * @param {string} drugId
+   * @param {Object} config - { concentration: mg/mL, bolusRateMlH: mL/h }
+   */
+  function registerDrugConfig(drugId, config) {
+    drugConfigs[drugId] = config;
   }
 
   function getEngine(drugId) {
@@ -59,6 +78,40 @@ export function createEventList() {
 
   function getDrugIds() {
     return Object.keys(engines);
+  }
+
+  // ---- Bolus delivery computation ----
+
+  /**
+   * Compute bolus delivery duration and infusion rate for a bolus event.
+   * @param {Object} evt - bolus event
+   * @returns {{ duration: number, rate: number }} duration in minutes, rate in mg/min
+   */
+  function getBolusDelivery(evt) {
+    if (evt.deliveryMode === 'push') {
+      return { duration: PUSH_DURATION, rate: evt.value / PUSH_DURATION };
+    }
+    const cfg = drugConfigs[evt.drug];
+    if (!cfg || !cfg.bolusRateMlH || !cfg.concentration) {
+      // Fallback: 10-second delivery if no config
+      return { duration: PUSH_DURATION, rate: evt.value / PUSH_DURATION };
+    }
+    const volumeMl = evt.value / cfg.concentration;
+    const durationMin = volumeMl / cfg.bolusRateMlH * 60;
+    const duration = Math.max(0.05, durationMin); // minimum 3 seconds
+    return { duration, rate: evt.value / duration };
+  }
+
+  /**
+   * Advance the engine through a bolus event.
+   * @param {Object} engine
+   * @param {Object} evt - bolus event
+   * @returns {number} delivery duration in minutes
+   */
+  function advanceBolus(engine, evt) {
+    const { duration, rate } = getBolusDelivery(evt);
+    engine.advance(duration, rate);
+    return duration;
   }
 
   // ---- Core list operations ----
@@ -200,9 +253,7 @@ export function createEventList() {
       currentTime = evt.time;
 
       if (evt.type === 'bolus') {
-        const bolusRate = evt.value / 0.05;
-        engine.advance(0.05, bolusRate);
-        currentTime += 0.05;
+        currentTime += advanceBolus(engine, evt);
       } else if (evt.type === 'rate') {
         currentRate = evt.value;
       } else if (evt.type === 'pause') {
@@ -251,7 +302,9 @@ export function createEventList() {
       if (!prevEntry.evt.snapshot) { replayDrug(drugId); return; }
       engine.setState(prevEntry.evt.snapshot);
       currentTime = prevEntry.evt.time;
-      if (prevEntry.evt.type === 'bolus') currentTime += 0.05;
+      if (prevEntry.evt.type === 'bolus') {
+        currentTime += getBolusDelivery(prevEntry.evt).duration;
+      }
       currentRate = getActiveRateForDrug(drugId, prevEntry.globalIdx);
     }
 
@@ -262,8 +315,7 @@ export function createEventList() {
       currentTime = evt.time;
 
       if (evt.type === 'bolus') {
-        engine.advance(0.05, evt.value / 0.05);
-        currentTime += 0.05;
+        currentTime += advanceBolus(engine, evt);
       } else if (evt.type === 'rate') {
         currentRate = evt.value;
       } else if (evt.type === 'pause') {
@@ -308,7 +360,9 @@ export function createEventList() {
     // Restore to snapshot
     engine.setState(lastEvt.snapshot);
     let currentTime = lastEvt.time;
-    if (lastEvt.type === 'bolus') currentTime += 0.05;
+    if (lastEvt.type === 'bolus') {
+      currentTime += getBolusDelivery(lastEvt).duration;
+    }
 
     const currentRate = getActiveRateForDrug(drugId, lastGlobalIdx);
     const dt = time - currentTime;
@@ -341,7 +395,7 @@ export function createEventList() {
       const dt = evt.time - currentTime;
       if (dt > 0) engine.advance(dt, currentRate);
       currentTime = evt.time;
-      if (evt.type === 'bolus') { engine.advance(0.05, evt.value / 0.05); currentTime += 0.05; }
+      if (evt.type === 'bolus') { currentTime += advanceBolus(engine, evt); }
       else if (evt.type === 'rate') currentRate = evt.value;
       else if (evt.type === 'pause') currentRate = 0;
       evtPtr++;
@@ -362,7 +416,7 @@ export function createEventList() {
         const dt = evt.time - currentTime;
         if (dt > 0) engine.advance(dt, currentRate);
         currentTime = evt.time;
-        if (evt.type === 'bolus') { engine.advance(0.05, evt.value / 0.05); currentTime += 0.05; }
+        if (evt.type === 'bolus') { currentTime += advanceBolus(engine, evt); }
         else if (evt.type === 'rate') currentRate = evt.value;
         else if (evt.type === 'pause') currentRate = 0;
         evtPtr++;
@@ -426,24 +480,28 @@ export function createEventList() {
 
   /**
    * Add a bolus event.
-   * Inserts a rate-restore event at t+0.05 to preserve the prior rate.
+   * Inserts a rate-restore event after the bolus delivery duration
+   * to preserve the prior infusion rate.
    * 
    * @param {string} drugId
    * @param {number} time
    * @param {number} mg
    * @param {string} [annotation]
+   * @param {Object} [opts] - { deliveryMode: 'pump'|'push' }
    * @returns {Object} the bolus event
    */
-  function addBolus(drugId, time, mg, annotation) {
+  function addBolus(drugId, time, mg, annotation, opts = {}) {
     const priorRate = getRateAtTime(drugId, time);
 
     const bolusEvt = createEvent(drugId, time, 'bolus', mg, {
-      source: 'manual',
+      source: opts.source || 'manual',
+      deliveryMode: opts.deliveryMode || 'pump',
       annotation: annotation || `Bolus ${mg.toFixed(1)} mg`,
     });
     insert(bolusEvt);
 
-    const rateEvt = createEvent(drugId, time + 0.05, 'rate', priorRate, {
+    const { duration } = getBolusDelivery(bolusEvt);
+    const rateEvt = createEvent(drugId, time + duration, 'rate', priorRate, {
       source: 'system',
       annotation: 'Rate restored after bolus',
     });
@@ -553,8 +611,10 @@ export function createEventList() {
   return {
     // Engine registry
     registerEngine,
+    registerDrugConfig,
     getEngine,
     getDrugIds,
+    getBolusDelivery,
 
     // Core operations
     insert,

@@ -27,6 +27,7 @@ import { createPDModel } from '../pk/pd.js';
 import { createEventList } from './events.js';
 import { planTCIScheme } from './tci-planner.js';
 import { predictTroughTime } from '../pk/decay-predictor.js';
+import { DRUG_DEFS } from '../util/constants.js';
 
 /**
  * @typedef {Object} ModelConfig
@@ -60,6 +61,13 @@ export function createModel(config = {}) {
     const engine = createEngine(params);
     eventList.registerEngine(cfg.primaryDrug, engine);
 
+    // Register drug config for bolus delivery computation
+    const drugDef = DRUG_DEFS[cfg.primaryDrug] || { concentration: cfg.concentration, bolusRateMlH: 750 };
+    eventList.registerDrugConfig(cfg.primaryDrug, {
+      concentration: drugDef.concentration || cfg.concentration,
+      bolusRateMlH: drugDef.bolusRateMlH || 750,
+    });
+
     pdModels[cfg.primaryDrug] = createPDModel({
       Ce50: params.Ce50,
       gamma1: params.gamma1,
@@ -87,6 +95,13 @@ export function createModel(config = {}) {
     const newEngine = createEngine(params);
     if (savedState) newEngine.setState(savedState);
     eventList.registerEngine(cfg.primaryDrug, newEngine);
+
+    // Re-register drug config
+    const drugDef = DRUG_DEFS[cfg.primaryDrug] || { concentration: cfg.concentration, bolusRateMlH: 750 };
+    eventList.registerDrugConfig(cfg.primaryDrug, {
+      concentration: drugDef.concentration || cfg.concentration,
+      bolusRateMlH: drugDef.bolusRateMlH || 750,
+    });
 
     pdModels[cfg.primaryDrug] = createPDModel({
       Ce50: params.Ce50,
@@ -118,9 +133,14 @@ export function createModel(config = {}) {
 
   /**
    * Add a bolus event. Preserves prior rate after bolus.
+   * @param {string} drugId
+   * @param {number} time
+   * @param {number} mg
+   * @param {string} [annotation]
+   * @param {Object} [opts] - { deliveryMode: 'pump'|'push' }
    */
-  function addBolus(drugId, time, mg, annotation) {
-    return eventList.addBolus(drugId, time, mg, annotation);
+  function addBolus(drugId, time, mg, annotation, opts) {
+    return eventList.addBolus(drugId, time, mg, annotation, opts);
   }
 
   /**
@@ -150,14 +170,23 @@ export function createModel(config = {}) {
     // Get state at fromTime
     const startState = eventList.getStateAtTime(drugId, fromTime);
 
-    // Generate scheme
-    const scheme = planTCIScheme(engine, startState, fromTime, ceTarget, tciConfig);
+    // Pass drug config to planner for realistic bolus delivery
+    const drugDef = DRUG_DEFS[drugId] || {};
+    const planConfig = {
+      ...tciConfig,
+      bolusConcentration: drugDef.concentration || cfg.concentration,
+      bolusRateMlH: drugDef.bolusRateMlH || 750,
+    };
 
-    // Insert bolus if present
+    // Generate scheme
+    const scheme = planTCIScheme(engine, startState, fromTime, ceTarget, planConfig);
+
+    // Insert bolus if present (TCI boluses always use pump delivery)
     const bolusStep = scheme.find(s => s.type === 'bolus');
     if (bolusStep) {
       eventList.addBolus(drugId, bolusStep.time, bolusStep.value,
-        `TCI bolus for Ce=${ceTarget.toFixed(1)}`);
+        `TCI bolus for Ce=${ceTarget.toFixed(1)}`,
+        { source: 'tci', deliveryMode: 'pump' });
     }
 
     // Insert rate steps

@@ -42,7 +42,21 @@ const DEFAULT_SCHEME_CONFIG = {
   rateSearchIter: 35,       // binary search iterations
   minStepDuration: 3.0,     // minimum 3 minutes per rate step
   rateStablePct: 0.05,      // rate stable if <5% change from previous
+  // Bolus delivery config (set from drug config by simulation.js)
+  bolusConcentration: 10,   // mg/mL
+  bolusRateMlH: 750,        // mL/h pump bolus delivery rate
 };
+
+/**
+ * Compute bolus delivery duration and infusion rate for the planner.
+ * Matches the logic in events.js getBolusDelivery().
+ */
+function plannerBolusDelivery(doseMg, cfg) {
+  const volumeMl = doseMg / cfg.bolusConcentration;
+  const durationMin = volumeMl / cfg.bolusRateMlH * 60;
+  const duration = Math.max(0.05, durationMin);
+  return { duration, rate: doseMg / duration };
+}
 
 /**
  * Generate a clinician-feasible TCI scheme.
@@ -82,9 +96,10 @@ export function planTCIScheme(engine, startState, startTime, ceTarget, config = 
     if (bolusMg > 0) {
       scheme.push({ type: 'bolus', time: simTime, value: bolusMg });
 
-      // Apply the bolus to the engine (delivered over 3 seconds)
-      engine.advance(0.05, bolusMg / 0.05);
-      simTime += 0.05;
+      // Apply the bolus to the engine at the pump's bolus delivery rate
+      const { duration, rate } = plannerBolusDelivery(bolusMg, cfg);
+      engine.advance(duration, rate);
+      simTime += duration;
     }
   }
 
@@ -144,9 +159,10 @@ function calculateLoadingBolus(engine, ceTarget, cfg) {
   for (let i = 0; i < cfg.rateSearchIter; i++) {
     const mid = (lo + hi) / 2;
 
-    // Give bolus and find peak Ce
+    // Give bolus at pump rate and find peak Ce
     engine.setState(saved);
-    engine.advance(0.05, mid / 0.05);
+    const { duration, rate } = plannerBolusDelivery(mid, cfg);
+    engine.advance(duration, rate);
 
     // Scan forward to find peak Ce (no further infusion)
     let peakCe = 0;
