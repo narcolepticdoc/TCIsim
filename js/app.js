@@ -152,6 +152,7 @@ function saveState() {
       type: evt.type,
       value: evt.value,
       source: evt.source,
+      deliveryMode: evt.deliveryMode,
       annotation: evt.annotation,
     }));
   }
@@ -236,7 +237,10 @@ function restoreCase() {
           if (evt.type === 'rate') {
             model.addRate(drugId, evt.time, evt.value, evt.annotation || '');
           } else if (evt.type === 'bolus') {
-            model.addBolus(drugId, evt.time, evt.value, evt.annotation || '');
+            model.addBolus(drugId, evt.time, evt.value, evt.annotation || '', {
+              deliveryMode: evt.deliveryMode || 'pump', // default for old saved cases
+              source: evt.source || 'manual',
+            });
           } else if (evt.type === 'pause') {
             model.addPause(drugId, evt.time, evt.annotation || '');
           }
@@ -376,7 +380,7 @@ function boot() {
     getPatient: () => model ? model.getPatient() : null,
     getMode: () => mode.get(selectedDrug),
     getCeTarget: () => mode.getCeTarget(selectedDrug),
-    onConfirm(type, canonicalValue, displayText) {
+    onConfirm(type, canonicalValue, displayText, deliveryMode) {
       let t;
       if (controls.isCaseStarted()) {
         t = timer.getElapsedMinutes();
@@ -409,11 +413,17 @@ function boot() {
         } else if (mode.get(selectedDrug) === 'none') {
           mode.set(selectedDrug, 'manual');
         }
-        model.addBolus(selectedDrug, t, canonicalValue, `Bolus ${displayText}`);
-        addAnnotation(`Bolus: ${displayText}`);
+        const dm = deliveryMode || 'pump';
+        const label = dm === 'push' ? 'Push bolus' : 'Bolus';
+        model.addBolus(selectedDrug, t, canonicalValue, `${label} ${displayText}`, {
+          deliveryMode: dm,
+        });
+        addAnnotation(`${label}: ${displayText}`);
         // Advance clock by bolus delivery duration
         if (!controls.isCaseStarted()) {
-          const deliveryMin = bolusDeliveryMinutes(canonicalValue, selectedDrug);
+          const deliveryMin = dm === 'push'
+            ? 10 / 60  // 10 seconds
+            : bolusDeliveryMinutes(canonicalValue, selectedDrug);
           preStartClock = t + deliveryMin;
         }
       }

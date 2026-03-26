@@ -69,7 +69,10 @@ export function init(opts = {}) {
   if (btnRate) btnRate.addEventListener('click', () => show('rate'));
   if (btnBolus) btnBolus.addEventListener('click', () => show('bolus'));
   if (btnCancel) btnCancel.addEventListener('click', close);
-  if (btnConfirm) btnConfirm.addEventListener('click', confirm);
+  if (btnConfirm) btnConfirm.addEventListener('click', () => confirm('pump'));
+
+  const btnPush = $('keypad-push-btn');
+  if (btnPush) btnPush.addEventListener('click', () => confirm('push'));
 }
 
 /**
@@ -105,6 +108,10 @@ export function show(type) {
   const confirmBtn = $('keypad-confirm-btn');
   confirmBtn.textContent = cc.label;
   confirmBtn.className = cc.cls;
+
+  // Show "Push Bolus" button only for bolus type
+  const pushBtn = $('keypad-push-btn');
+  if (pushBtn) pushBtn.style.display = (type === 'bolus') ? '' : 'none';
 
   // Pre-fill if changing existing target
   if (type === 'ceTarget' && getMode() === 'tci' && getCeTarget() > 0) {
@@ -194,7 +201,7 @@ function updateDisplay() {
   }
 }
 
-function confirm() {
+function confirm(deliveryMode) {
   const v = parseFloat(buffer);
   if (isNaN(v) || v < 0) return;
 
@@ -212,7 +219,7 @@ function confirm() {
     }
 
     close();
-    if (onConfirm) onConfirm(currentType, canonical.value, displayText);
+    if (onConfirm) onConfirm(currentType, canonical.value, displayText, deliveryMode);
   } catch (e) {
     console.error('[TCI Sim] Keypad confirm error:', e);
   }
