@@ -262,10 +262,8 @@
     .evt-action-btn.danger:hover{background:rgba(239,68,68,.1)}
 
     .modal-time-picker{max-width:280px}
+    .time-picker-hint{font-size:11px;color:var(--text-muted);text-align:center;margin:0 0 4px}
     .time-picker-display{display:flex;align-items:center;justify-content:center;gap:4px;margin:16px 0}
-    .time-input{width:64px;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:24px;text-align:center;padding:8px 4px;-moz-appearance:textfield}
-    .time-input::-webkit-inner-spin-button,.time-input::-webkit-outer-spin-button{-webkit-appearance:none}
-    .time-sep{font-family:var(--font-mono);font-size:24px;color:var(--text-muted)}
     .time-label{font-family:var(--font-display);font-size:12px;color:var(--text-muted);margin-right:8px}
 
     .modal-add-event{max-width:320px}
@@ -439,11 +437,10 @@
   <!-- =========== TIME PICKER =========== -->
   <div class="modal-overlay" id="modal-time-picker">
     <div class="modal-box modal-time-picker">
-      <h3 id="time-picker-title">Set Time</h3>
+      <h3 id="time-picker-title">Set Event Time</h3>
+      <p class="time-picker-hint">Hours : Minutes</p>
       <div class="time-picker-display">
-        <input type="number" id="time-picker-min" class="time-input" min="0" max="999" placeholder="mm">
-        <span class="time-sep">:</span>
-        <input type="number" id="time-picker-sec" class="time-input" min="0" max="59" placeholder="ss">
+        <input type="time" id="time-picker-input" class="tp-time-input" step="60">
       </div>
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="time-picker-cancel">Cancel</button>
@@ -463,9 +460,7 @@
       </div>
       <div class="time-picker-display" style="margin:12px 0">
         <span class="time-label">Time:</span>
-        <input type="number" id="add-evt-min" class="time-input" min="0" max="999" placeholder="mm">
-        <span class="time-sep">:</span>
-        <input type="number" id="add-evt-sec" class="time-input" min="0" max="59" placeholder="ss">
+        <input type="time" id="add-evt-time" class="tp-time-input" step="60">
       </div>
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="add-evt-cancel">Cancel</button>

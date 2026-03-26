@@ -171,21 +171,32 @@ function handleAction(action, evt) {
 
 let _timePickerCallback = null;
 
+function minutesToTimeStr(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+
+function timeStrToMinutes(str) {
+  const parts = (str || '').split(':');
+  const h = parseInt(parts[0]) || 0;
+  const m = parseInt(parts[1]) || 0;
+  return h * 60 + m;
+}
+
 function openTimePicker(currentMinutes, callback) {
   _timePickerCallback = callback;
-  const totalSec = Math.round(currentMinutes * 60);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  $('time-picker-min').value = m;
-  $('time-picker-sec').value = s;
+  const input = $('time-picker-input');
+  if (input) {
+    input.value = minutesToTimeStr(currentMinutes);
+  }
   openModal('modal-time-picker');
-  $('time-picker-min').focus();
+  if (input) input.focus();
 }
 
 function confirmTimePicker() {
-  const m = parseInt($('time-picker-min').value) || 0;
-  const s = parseInt($('time-picker-sec').value) || 0;
-  const minutes = m + s / 60;
+  const input = $('time-picker-input');
+  const minutes = timeStrToMinutes(input?.value);
   closeModal('modal-time-picker');
   if (_timePickerCallback) {
     _timePickerCallback(minutes);
@@ -203,17 +214,15 @@ function openAddEvent() {
   });
   // Default time to now
   const now = _controls.isCaseStarted() ? _timer.getElapsedMinutes() : 0;
-  const totalSec = Math.round(now * 60);
-  $('add-evt-min').value = Math.floor(totalSec / 60);
-  $('add-evt-sec').value = totalSec % 60;
+  const input = $('add-evt-time');
+  if (input) input.value = minutesToTimeStr(now);
   $('add-evt-confirm').textContent = 'Next: Set Value';
   openModal('modal-add-event');
 }
 
 function confirmAddEvent() {
-  const m = parseInt($('add-evt-min').value) || 0;
-  const s = parseInt($('add-evt-sec').value) || 0;
-  const time = m + s / 60;
+  const input = $('add-evt-time');
+  const time = timeStrToMinutes(input?.value);
   _pendingAddTime = time;
   closeModal('modal-add-event');
 
