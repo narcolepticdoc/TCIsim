@@ -577,7 +577,40 @@ export function createEventList() {
   // ---- High-level drug-scoped operations ----
 
   /**
+   * Find the active bolus event for a drug at a given time, if any.
+   * Returns { bolusEvt, bolusEnd, restoreIdx } or null.
+   */
+  function findActiveBolus(drugId, time) {
+    for (let i = events.length - 1; i >= 0; i--) {
+      const e = events[i];
+      if (e.drug !== drugId || e.type !== 'bolus') continue;
+      if (e.time > time) continue;
+      const delivery = getBolusDelivery(e);
+      const bolusEnd = e.time + delivery.duration;
+      if (time < bolusEnd) {
+        // Find the matching rate-restore event
+        let restoreIdx = -1;
+        for (let j = i + 1; j < events.length; j++) {
+          const r = events[j];
+          if (r.drug === drugId && r.type === 'rate' &&
+              r.source === 'system' && r.annotation === 'Rate restored after bolus' &&
+              Math.abs(r.time - bolusEnd) < 0.001) {
+            restoreIdx = j;
+            break;
+          }
+        }
+        return { bolusEvt: e, bolusIdx: i, bolusEnd, restoreIdx };
+      }
+      break;
+    }
+    return null;
+  }
+
+  /**
    * Add a rate change event.
+   * If the time falls during an active bolus delivery, the event
+   * is deferred to the bolus end time — the bolus completes first,
+   * then the new rate takes effect.
    * 
    * @param {string} drugId
    * @param {number} time
@@ -586,28 +619,75 @@ export function createEventList() {
    * @returns {Object} the created event
    */
   function addRate(drugId, time, mgPerMin, annotation) {
-    const evt = createEvent(drugId, time, 'rate', mgPerMin, {
+    const active = findActiveBolus(drugId, time);
+    let eventTime = time;
+    if (active) {
+      eventTime = active.bolusEnd;
+      // Remove the rate-restore — our new rate replaces it
+      if (active.restoreIdx >= 0) events.splice(active.restoreIdx, 1);
+    }
+    const evt = createEvent(drugId, eventTime, 'rate', mgPerMin, {
       source: 'manual',
       annotation: annotation || `Rate ${mgPerMin.toFixed(1)} mg/min`,
     });
     insert(evt);
-    replayDrugFrom(drugId, evt.id);
+    replayDrugFrom(drugId, active ? active.bolusEvt.id : evt.id);
     return evt;
   }
 
   /**
    * Add a bolus event.
-   * Inserts a rate-restore event after the bolus delivery duration
-   * to preserve the prior infusion rate.
+   * If the time falls during an active bolus delivery, the new dose
+   * is added to the existing bolus (merged). The delivery duration
+   * is recalculated for the combined dose and the rate-restore event
+   * is moved to the new end time. The curve updates as if the
+   * original bolus was always the combined dose.
+   * 
+   * Otherwise, inserts a new bolus with a rate-restore event after
+   * the delivery duration.
    * 
    * @param {string} drugId
    * @param {number} time
    * @param {number} mg
    * @param {string} [annotation]
-   * @param {Object} [opts] - { deliveryMode: 'pump'|'push' }
-   * @returns {Object} the bolus event
+   * @param {Object} [opts] - { deliveryMode: 'pump'|'push', source: string }
+   * @returns {Object} the bolus event (original if merged, new if not)
    */
   function addBolus(drugId, time, mg, annotation, opts = {}) {
+    const active = findActiveBolus(drugId, time);
+
+    if (active) {
+      // Merge into existing bolus
+      const existing = active.bolusEvt;
+      const oldTotal = existing.value;
+      existing.value += mg;
+      existing.annotation = `Bolus ${existing.value.toFixed(1)} mg`;
+
+      // Recalculate delivery duration for the combined dose
+      const { duration: newDuration } = getBolusDelivery(existing);
+      const newEnd = existing.time + newDuration;
+
+      // Move the rate-restore to the new end time
+      if (active.restoreIdx >= 0) {
+        events[active.restoreIdx].time = newEnd;
+        // Re-sort in case the time shift moved it out of order
+        const restoreEvt = events.splice(active.restoreIdx, 1)[0];
+        insert(restoreEvt);
+      } else {
+        // No restore found — create one
+        const priorRate = getRateAtTime(drugId, existing.time);
+        const rateEvt = createEvent(drugId, newEnd, 'rate', priorRate, {
+          source: 'system',
+          annotation: 'Rate restored after bolus',
+        });
+        insert(rateEvt);
+      }
+
+      replayDrugFrom(drugId, existing.id);
+      return existing;
+    }
+
+    // No active bolus — create a new one
     const priorRate = getRateAtTime(drugId, time);
 
     const bolusEvt = createEvent(drugId, time, 'bolus', mg, {
@@ -630,14 +710,23 @@ export function createEventList() {
 
   /**
    * Add a pause event.
+   * If the time falls during an active bolus delivery, the pause
+   * is deferred to the bolus end time — the bolus completes first.
    */
   function addPause(drugId, time, annotation) {
-    const evt = createEvent(drugId, time, 'pause', 0, {
+    const active = findActiveBolus(drugId, time);
+    let eventTime = time;
+    if (active) {
+      eventTime = active.bolusEnd;
+      // Remove the rate-restore — pause replaces it
+      if (active.restoreIdx >= 0) events.splice(active.restoreIdx, 1);
+    }
+    const evt = createEvent(drugId, eventTime, 'pause', 0, {
       source: 'manual',
       annotation: annotation || 'Pump paused',
     });
     insert(evt);
-    replayDrugFrom(drugId, evt.id);
+    replayDrugFrom(drugId, active ? active.bolusEvt.id : evt.id);
     return evt;
   }
 

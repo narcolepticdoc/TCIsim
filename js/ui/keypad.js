@@ -118,6 +118,14 @@ export function show(type) {
     buffer = getCeTarget().toString();
   }
 
+  // Pre-fill last bolus dose for this drug+unit
+  if (type === 'bolus') {
+    try {
+      const lastDose = localStorage.getItem(`tci_lastBolus_${currentDrug}_${currentUnit}`);
+      if (lastDose) buffer = lastDose;
+    } catch (e) {}
+  }
+
   updateDisplay();
   $('modal-keypad').classList.add('open');
 }
@@ -144,6 +152,14 @@ function setUnit(u) {
   document.querySelectorAll('#keypad-units button').forEach(btn => {
     btn.classList.toggle('active', btn.textContent === u);
   });
+  // Reload last bolus dose for this unit (if switching units in bolus mode)
+  if (currentType === 'bolus') {
+    try {
+      const lastDose = localStorage.getItem(`tci_lastBolus_${currentDrug}_${u}`);
+      if (lastDose) buffer = lastDose;
+      else buffer = '';
+    } catch (e) {}
+  }
   updateDisplay();
 }
 
@@ -216,6 +232,11 @@ function confirm(deliveryMode) {
     let displayText = `${buffer} ${currentUnit}`;
     if (currentUnit !== canonical.unit) {
       displayText += ` (${formatValue(canonical.value, canonical.unit)} ${canonical.unit})`;
+    }
+
+    // Remember bolus dose for quick re-dose
+    if (currentType === 'bolus' && buffer) {
+      try { localStorage.setItem(`tci_lastBolus_${currentDrug}_${currentUnit}`, buffer); } catch (e) {}
     }
 
     close();
