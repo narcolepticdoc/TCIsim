@@ -252,11 +252,13 @@ function confirm(deliveryMode) {
       try { localStorage.setItem(`tci_lastBolus_${currentDrug}`, String(canonical.value)); } catch (e) {}
     }
 
+    // Capture one-shot callback before close() clears it
+    const oneShot = oneShotConfirm;
+    oneShotConfirm = null;
+
     close();
-    if (oneShotConfirm) {
-      const cb = oneShotConfirm;
-      oneShotConfirm = null;
-      cb(currentType, canonical.value, displayText, deliveryMode);
+    if (oneShot) {
+      oneShot(currentType, canonical.value, displayText, deliveryMode);
     } else if (onConfirm) {
       onConfirm(currentType, canonical.value, displayText, deliveryMode);
     }
