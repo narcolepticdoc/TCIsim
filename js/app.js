@@ -14,6 +14,7 @@ import * as controls from './ui/controls.js';
 import * as keypad from './ui/keypad.js';
 import * as mode from './ui/mode.js';
 import * as drugPanel from './ui/drug-panel.js';
+import * as history from './ui/history.js';
 import { createChart } from './ui/chart.js';
 import { ceForBIS } from './pk/pd.js';
 import { bolusDeliveryMinutes } from './util/constants.js';
@@ -133,6 +134,9 @@ function refreshChart() {
   const m = mode.get(selectedDrug);
   const ce = mode.getCeTarget(selectedDrug);
   chart.setTargetLine(m === 'tci' && ce > 0 ? ce : null);
+
+  // Update history panel
+  history.render(selectedDrug);
 
   // Auto-save state
   saveState();
@@ -418,7 +422,6 @@ function boot() {
         model.addBolus(selectedDrug, t, canonicalValue, `${label} ${displayText}`, {
           deliveryMode: dm,
         });
-        addAnnotation(`${label}: ${displayText}`);
         // Advance clock by bolus delivery duration
         if (!controls.isCaseStarted()) {
           const deliveryMin = dm === 'push'
@@ -460,6 +463,12 @@ function boot() {
         }
       }
     },
+  });
+
+  history.init({
+    model,
+    getElapsedMinutes: () => timer.getElapsedMinutes(),
+    getPatient: () => model ? model.getPatient() : { weight: 70 },
   });
 
   // Wire new case dialog
