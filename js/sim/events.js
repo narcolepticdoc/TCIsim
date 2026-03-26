@@ -659,7 +659,6 @@ export function createEventList() {
     if (active) {
       // Merge into existing bolus
       const existing = active.bolusEvt;
-      const oldTotal = existing.value;
       existing.value += mg;
       existing.annotation = `Bolus ${existing.value.toFixed(1)} mg`;
 
@@ -667,16 +666,35 @@ export function createEventList() {
       const { duration: newDuration } = getBolusDelivery(existing);
       const newEnd = existing.time + newDuration;
 
-      // Move the rate-restore to the new end time
+      // Remove old rate-restore if present
       if (active.restoreIdx >= 0) {
-        events[active.restoreIdx].time = newEnd;
-        // Re-sort in case the time shift moved it out of order
-        const restoreEvt = events.splice(active.restoreIdx, 1)[0];
-        insert(restoreEvt);
-      } else {
-        // No restore found — create one
-        const priorRate = getRateAtTime(drugId, existing.time);
-        const rateEvt = createEvent(drugId, newEnd, 'rate', priorRate, {
+        events.splice(active.restoreIdx, 1);
+      }
+
+      // Find the correct rate to restore: the last non-system rate/pause
+      // event at or before the new end time (ignoring the bolus itself
+      // and any system rate-restore events).
+      let restoreRate = 0;
+      for (const e of events) {
+        if (e.drug !== drugId) continue;
+        if (e.time > newEnd) break;
+        if (e.source === 'system') continue;  // skip rate-restores
+        if (e.type === 'bolus') continue;
+        if (e.type === 'rate') restoreRate = e.value;
+        else if (e.type === 'pause') restoreRate = 0;
+      }
+
+      // Check if there's already a manual event exactly at newEnd
+      // (e.g. a deferred rate that landed right at the new end).
+      // If so, no rate-restore needed — the manual event takes over.
+      const hasManualAtEnd = events.some(e =>
+        e.drug === drugId && e.source !== 'system' &&
+        (e.type === 'rate' || e.type === 'pause') &&
+        Math.abs(e.time - newEnd) < 0.001
+      );
+
+      if (!hasManualAtEnd) {
+        const rateEvt = createEvent(drugId, newEnd, 'rate', restoreRate, {
           source: 'system',
           annotation: 'Rate restored after bolus',
         });

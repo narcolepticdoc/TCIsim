@@ -62,6 +62,8 @@ export const DRUG_TASK_UNITS = {
     bolus: {
       canonical: 'mg',
       allowed: ['mg', 'mcg/kg', 'mL'],
+      defaultDisplay: 'mg',
+      prefKey: 'tci-pref-bolusUnit-propofol',
     },
     rate: {
       canonical: 'mg/min',
@@ -78,6 +80,8 @@ export const DRUG_TASK_UNITS = {
     bolus: {
       canonical: 'mg',
       allowed: ['mcg', 'mcg/kg', 'mL'],
+      defaultDisplay: 'mcg',
+      prefKey: 'tci-pref-bolusUnit-fentanyl',
     },
     rate: {
       canonical: 'mg/min',
@@ -94,6 +98,8 @@ export const DRUG_TASK_UNITS = {
     bolus: {
       canonical: 'mg',
       allowed: ['mcg', 'mcg/kg'],
+      defaultDisplay: 'mcg',
+      prefKey: 'tci-pref-bolusUnit-remifentanil',
     },
     rate: {
       canonical: 'mg/min',
@@ -110,6 +116,8 @@ export const DRUG_TASK_UNITS = {
     bolus: {
       canonical: 'mg',
       allowed: ['mg', 'mg/kg', 'mL'],
+      defaultDisplay: 'mg',
+      prefKey: 'tci-pref-bolusUnit-ketamine',
     },
     rate: {
       canonical: 'mg/min',

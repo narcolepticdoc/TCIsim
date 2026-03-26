@@ -118,11 +118,16 @@ export function show(type) {
     buffer = getCeTarget().toString();
   }
 
-  // Pre-fill last bolus dose for this drug+unit
+  // Pre-fill last bolus dose for this drug (stored in canonical mg, converted to display unit)
   if (type === 'bolus') {
     try {
-      const lastDose = localStorage.getItem(`tci_lastBolus_${currentDrug}_${currentUnit}`);
-      if (lastDose) buffer = lastDose;
+      const lastMg = localStorage.getItem(`tci_lastBolus_${currentDrug}`);
+      if (lastMg) {
+        const patient = getPatient();
+        const ctx = { weightKg: patient?.weight || 70 };
+        const displayVal = fromCanonical(parseFloat(lastMg), currentUnit, currentDrug, 'bolus', ctx);
+        buffer = formatValue(displayVal, currentUnit);
+      }
     } catch (e) {}
   }
 
@@ -152,12 +157,18 @@ function setUnit(u) {
   document.querySelectorAll('#keypad-units button').forEach(btn => {
     btn.classList.toggle('active', btn.textContent === u);
   });
-  // Reload last bolus dose for this unit (if switching units in bolus mode)
+  // Reload last bolus dose converted to new unit (if switching units in bolus mode)
   if (currentType === 'bolus') {
     try {
-      const lastDose = localStorage.getItem(`tci_lastBolus_${currentDrug}_${u}`);
-      if (lastDose) buffer = lastDose;
-      else buffer = '';
+      const lastMg = localStorage.getItem(`tci_lastBolus_${currentDrug}`);
+      if (lastMg) {
+        const patient = getPatient();
+        const ctx = { weightKg: patient?.weight || 70 };
+        const displayVal = fromCanonical(parseFloat(lastMg), u, currentDrug, 'bolus', ctx);
+        buffer = formatValue(displayVal, u);
+      } else {
+        buffer = '';
+      }
     } catch (e) {}
   }
   updateDisplay();
@@ -234,9 +245,9 @@ function confirm(deliveryMode) {
       displayText += ` (${formatValue(canonical.value, canonical.unit)} ${canonical.unit})`;
     }
 
-    // Remember bolus dose for quick re-dose
-    if (currentType === 'bolus' && buffer) {
-      try { localStorage.setItem(`tci_lastBolus_${currentDrug}_${currentUnit}`, buffer); } catch (e) {}
+    // Remember bolus dose in canonical mg for quick re-dose
+    if (currentType === 'bolus') {
+      try { localStorage.setItem(`tci_lastBolus_${currentDrug}`, String(canonical.value)); } catch (e) {}
     }
 
     close();
