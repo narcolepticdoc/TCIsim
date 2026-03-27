@@ -168,7 +168,8 @@ function setType(type) {
   $('ee-value-section').style.display = type === 'pause' ? 'none' : '';
   $('ee-pause-section').style.display = type === 'pause' ? '' : 'none';
   $('ee-push-btn').style.display = type === 'bolus' ? '' : 'none';
-  $('ee-value-label').textContent = type === 'bolus' ? 'Dose' : 'Rate';
+  const valLabel = $('ee-value-label');
+  if (valLabel) valLabel.textContent = type === 'bolus' ? 'Dose' : 'Rate';
 
   const btn = $('ee-confirm');
   if (type === 'bolus') {
