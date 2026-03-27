@@ -364,30 +364,13 @@ function getSelectVal(id) {
 
 /**
  * Populate pause duration selects.
- * Max duration is capped at the time to the next event (if any)
- * to prevent the pause from overriding subsequent events.
+ * Always 0-10 hours, 0-59 minutes. Duration validation
+ * happens on confirm — if it reaches the next event,
+ * treated as "until next event" (no rate-restore).
  */
 function populatePauseDuration() {
-  const pauseTime = getSelectedCaseMinutes();
-  const events = _model.getEvents(_selectedDrug);
-  
-  // Find next event after pauseTime (excluding the event being edited)
-  let nextEvtTime = Infinity;
-  for (const e of events) {
-    if (e.time > pauseTime && e.id !== _editEvtId && e.source !== 'system') {
-      nextEvtTime = e.time;
-      break;
-    }
-  }
-  
-  const maxMinutes = nextEvtTime === Infinity ? 600 : Math.floor(nextEvtTime - pauseTime);
-  const maxHours = Math.min(10, Math.floor(maxMinutes / 60));
-  const maxMins = Math.min(59, maxMinutes % 60);
-  
-  // Build hour select (0 to maxHours)
-  buildSelect($('ee-pause-hours'), maxHours + 1, 1, 0);
-  // Build minute select (0-59, but will be capped contextually)
-  buildSelect($('ee-pause-minutes'), 60, 2, maxHours === 0 ? Math.min(10, maxMins) : 0);
+  buildSelect($('ee-pause-hours'), 11, 1, 0);
+  buildSelect($('ee-pause-minutes'), 60, 2, 10);
 }
 
 // ---- Confirm ----
@@ -403,8 +386,21 @@ function doConfirm(deliveryMode) {
       if (_pauseMode === 'timed') {
         const dur = getSelectVal('ee-pause-hours') * 60 + getSelectVal('ee-pause-minutes');
         if (dur > 0) {
-          const priorRate = _model.getRateAtTime(drug, time);
-          _model.addRate(drug, time + dur, priorRate, 'Rate restored after timed pause');
+          // Check if duration reaches or passes the next event
+          const events = _model.getEvents(drug);
+          let nextEvtTime = Infinity;
+          for (const e of events) {
+            if (e.time > time && e.source !== 'system') {
+              nextEvtTime = e.time;
+              break;
+            }
+          }
+          if (time + dur < nextEvtTime) {
+            // Safe — insert rate-restore
+            const priorRate = _model.getRateAtTime(drug, time);
+            _model.addRate(drug, time + dur, priorRate, 'Rate restored after timed pause');
+          }
+          // else: duration reaches next event — treat as "until next event", no restore
         }
       }
     });
