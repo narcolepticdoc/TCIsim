@@ -229,9 +229,7 @@
     .keypad-unit-toggle button:hover:not(.active){background:var(--bg-hover);color:var(--text-secondary)}
     .keypad-conversion{font-family:var(--font-mono);font-size:11px;color:var(--cyan);min-height:16px}
 
-    .keypad-right{display:flex;flex-direction:column;gap:6px;width:168px;flex-shrink:0}
-    .keypad-edit-row{display:flex;gap:12px;justify-content:center;margin-bottom:2px}
-    .keypad-edit-row .key{flex:0 0 60px;font-size:13px;padding:8px 0;background:var(--bg-hover);color:var(--text-secondary)}
+    .keypad-right{display:flex;flex-direction:column;gap:6px;width:212px;flex-shrink:0}
     .keypad-numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
     .key{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:18px;padding:10px 0;text-align:center;cursor:pointer;transition:all .1s;user-select:none;-webkit-user-select:none}
     .key:hover{background:var(--bg-hover)}
@@ -426,15 +424,11 @@
           <div class="keypad-conversion" id="keypad-conversion"></div>
         </div>
         <div class="keypad-right">
-          <div class="keypad-edit-row">
-            <div class="key">C</div>
-            <div class="key">⌫</div>
-          </div>
-          <div class="keypad-numpad">
-            <div class="key">7</div><div class="key">8</div><div class="key">9</div>
-            <div class="key">4</div><div class="key">5</div><div class="key">6</div>
-            <div class="key">1</div><div class="key">2</div><div class="key">3</div>
-            <div class="key key-wide">0</div><div class="key">.</div>
+          <div class="ee-grid">
+            <div class="ee-grid-spacer"></div><div class="key">7</div><div class="key">8</div><div class="key">9</div>
+            <div class="ee-grid-spacer"></div><div class="key">4</div><div class="key">5</div><div class="key">6</div>
+            <div class="key ee-fn">C</div><div class="key">1</div><div class="key">2</div><div class="key">3</div>
+            <div class="key ee-fn">⌫</div><div class="key ee-key-wide2">0</div><div class="key">.</div>
           </div>
         </div>
       </div>

@@ -72,6 +72,9 @@ export function init(opts) {
       document.querySelectorAll('.ee-pause-mode').forEach(b =>
         b.classList.toggle('active', b.dataset.mode === _pauseMode));
       $('ee-pause-dur').style.display = _pauseMode === 'timed' ? '' : 'none';
+      if (_pauseMode === 'timed') {
+        populatePauseDuration();
+      }
     });
   });
 
@@ -357,6 +360,34 @@ function buildSelect(selectEl, count, padLen, selectedVal) {
 function getSelectVal(id) {
   const el = $(id);
   return el ? parseInt(el.value) || 0 : 0;
+}
+
+/**
+ * Populate pause duration selects.
+ * Max duration is capped at the time to the next event (if any)
+ * to prevent the pause from overriding subsequent events.
+ */
+function populatePauseDuration() {
+  const pauseTime = getSelectedCaseMinutes();
+  const events = _model.getEvents(_selectedDrug);
+  
+  // Find next event after pauseTime (excluding the event being edited)
+  let nextEvtTime = Infinity;
+  for (const e of events) {
+    if (e.time > pauseTime && e.id !== _editEvtId && e.source !== 'system') {
+      nextEvtTime = e.time;
+      break;
+    }
+  }
+  
+  const maxMinutes = nextEvtTime === Infinity ? 600 : Math.floor(nextEvtTime - pauseTime);
+  const maxHours = Math.min(10, Math.floor(maxMinutes / 60));
+  const maxMins = Math.min(59, maxMinutes % 60);
+  
+  // Build hour select (0 to maxHours)
+  buildSelect($('ee-pause-hours'), maxHours + 1, 1, 0);
+  // Build minute select (0-59, but will be capped contextually)
+  buildSelect($('ee-pause-minutes'), 60, 2, maxHours === 0 ? Math.min(10, maxMins) : 0);
 }
 
 // ---- Confirm ----
