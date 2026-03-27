@@ -479,7 +479,7 @@ function boot() {
     model,
     getElapsedMinutes: () => timer.getElapsedMinutes(),
     getPatient: () => model ? model.getPatient() : { weight: 70 },
-    onEventTap: (evtId) => eventEditor.openActionSheet(evtId),
+    onEventTap: (evtId) => eventEditor.openEdit(evtId),
   });
 
   eventEditor.init({
@@ -488,12 +488,7 @@ function boot() {
     timer,
     controls,
     refreshChart,
-    openKeypadForEdit(type, prefill, callback) {
-      keypad.setOneShotConfirm((t, canonicalValue, displayText, deliveryMode) => {
-        callback(canonicalValue, deliveryMode);
-      });
-      keypad.show(type);
-    },
+    getPatient: () => model ? model.getPatient() : { weight: 70 },
   });
 
   // Wire new case dialog

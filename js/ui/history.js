@@ -36,13 +36,13 @@ export function init(opts) {
   _getPatient = opts.getPatient || (() => ({ weight: 70 }));
   _onEventTap = opts.onEventTap || null;
 
-  // Delegate click on history list
+  // Delegate click on edit buttons in history list
   const list = $('history-list');
   if (list) {
     list.addEventListener('click', (e) => {
-      const row = e.target.closest('.history-row');
-      if (!row || !_onEventTap) return;
-      const evtId = row.dataset.evtId;
+      const btn = e.target.closest('.h-edit-btn');
+      if (!btn || !_onEventTap) return;
+      const evtId = btn.dataset.editId;
       if (evtId) _onEventTap(evtId);
     });
   }
@@ -189,6 +189,7 @@ export function render(drugId) {
       `<div class="history-row ${tc}${dimClass}" data-evt-id="${evt.id}" data-evt-time="${evt.time}">` +
         `<span class="h-time">${fmtTime(evt.time)}</span>` +
         `<span class="h-desc">${desc}</span>` +
+        `<button class="h-edit-btn" data-edit-id="${evt.id}" title="Edit">✎</button>` +
       `</div>`
     );
   }

@@ -790,6 +790,7 @@ export function createEventList() {
     if (changes.value != null) evt.value = changes.value;
     if (changes.type != null) evt.type = changes.type;
     if (changes.annotation != null) evt.annotation = changes.annotation;
+    if (changes.source != null) evt.source = changes.source;
 
     if (timeChanged) {
       evt.time = changes.time;

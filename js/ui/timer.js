@@ -99,6 +99,9 @@ export function setWallClockStart(startDate) {
 
 export function isRunning() { return running; }
 
+/** Get the wall clock start Date, or null if not set. */
+export function getWallClockStart() { return wallClockStart; }
+
 /** Get elapsed time in milliseconds. */
 export function getElapsedMs() {
   if (running && realStartTime != null) {

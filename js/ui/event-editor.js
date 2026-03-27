@@ -1,20 +1,19 @@
 /**
- * event-editor.js — Event Editing & Creation
+ * event-editor.js — Unified Event Editor Modal
  * 
- * Handles the action sheet (tap event → edit/delete), time picker,
- * add-event flow, and TCI conflict rules.
+ * Single modal for adding, editing, and deleting events.
+ * Combines type selector, time picker (case/real), value keypad,
+ * and pause duration into one interface.
  * 
- * Rules:
- *   1. Replay is automatic (events.js handles it).
- *   2. TCI conflict:
- *      2a. Planning + event before TCI start → warn, clear TCI, re-plan. Stay TCI.
- *      2b. Event at/after TCI start → warn, clear from t onward, drop to manual.
- *   3. Past edits while running:
- *      3a. TCI exists at/after t → clear after now, drop to manual.
- *      3b. No TCI → replay silently.
- *   4. TCI target in the past → major warning, wipe from t forward, re-plan.
- *   5. No TCI involvement → replay silently.
+ * Opened by:
+ *   - Edit button on history rows → pre-filled with event data
+ *   - "+ Add Event" button → blank with defaults
+ * 
+ * TCI conflict rules (2a/2b/3a/3b/4/5) apply on confirm/delete.
  */
+
+import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue }
+  from '../util/units.js';
 
 const $ = id => document.getElementById(id);
 
@@ -24,301 +23,483 @@ let _timer = null;
 let _controls = null;
 let _selectedDrug = 'propofol';
 let _refreshChart = null;
-let _openKeypadForEdit = null; // (type, prefill, callback) => void
+let _getPatient = null;
 
-// State for pending operations
-let _pendingEvtId = null;
-let _pendingAction = null; // 'editValue' | 'editTime' | 'delete' | 'deleteAfter'
-let _pendingAddType = null; // 'bolus' | 'rate' | 'pause'
-let _pendingAddTime = null;
+let _isEditMode = false;
+let _editEvtId = null;
+let _editOrigTime = null;
+let _currentType = 'bolus';
+let _buffer = '';
+let _currentUnit = 'mg';
+let _pauseMode = 'until';
+let _timeUnit = 'case';
 
-/**
- * Initialize the event editor.
- */
+// ---- Init ----
+
 export function init(opts) {
   _model = opts.model;
   _mode = opts.mode;
   _timer = opts.timer;
   _controls = opts.controls;
   _refreshChart = opts.refreshChart;
-  _openKeypadForEdit = opts.openKeypadForEdit;
+  _getPatient = opts.getPatient || (() => ({ weight: 70 }));
 
-  // Action sheet cancel
-  $('evt-actions-cancel')?.addEventListener('click', () => closeModal('modal-evt-actions'));
-
-  // Time picker
-  $('time-picker-cancel')?.addEventListener('click', () => closeModal('modal-time-picker'));
-  $('time-picker-confirm')?.addEventListener('click', confirmTimePicker);
-
-  // Add event
-  $('btn-add-event')?.addEventListener('click', openAddEvent);
-  $('add-evt-cancel')?.addEventListener('click', () => closeModal('modal-add-event'));
-  $('add-evt-confirm')?.addEventListener('click', confirmAddEvent);
-
-  // Add event type buttons
-  document.querySelectorAll('.add-evt-type').forEach(btn => {
+  // Type selector
+  document.querySelectorAll('#ee-type-row .ee-type').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.add-evt-type').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      _pendingAddType = btn.dataset.type;
-      // Update confirm button text
-      const confirmBtn = $('add-evt-confirm');
-      if (confirmBtn) {
-        confirmBtn.textContent = _pendingAddType === 'pause' ? 'Add Pause' : 'Next: Set Value';
-      }
+      if (btn.disabled) return;
+      setType(btn.dataset.type);
     });
   });
+
+  // Time unit toggle
+  document.querySelectorAll('#ee-time-unit .tp-unit').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      setTimeUnit(btn.dataset.unit);
+    });
+  });
+
+  // Keypad keys
+  document.querySelectorAll('#modal-evt-editor .ee-key').forEach(btn => {
+    btn.addEventListener('click', () => handleKey(btn.textContent));
+  });
+
+  // Pause mode toggle
+  document.querySelectorAll('.ee-pause-mode').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _pauseMode = btn.dataset.mode;
+      document.querySelectorAll('.ee-pause-mode').forEach(b =>
+        b.classList.toggle('active', b.dataset.mode === _pauseMode));
+      $('ee-pause-dur').style.display = _pauseMode === 'timed' ? '' : 'none';
+    });
+  });
+
+  // Action buttons
+  $('ee-cancel')?.addEventListener('click', close);
+  $('ee-confirm')?.addEventListener('click', () => doConfirm('pump'));
+  $('ee-push-btn')?.addEventListener('click', () => doConfirm('push'));
+  $('ee-delete')?.addEventListener('click', handleDelete);
+  $('ee-delete-after')?.addEventListener('click', handleDeleteAfter);
+  $('btn-add-event')?.addEventListener('click', () => openAdd());
 
   // TCI warning
   $('tci-warn-cancel')?.addEventListener('click', () => closeModal('modal-tci-warn'));
   $('tci-warn-confirm')?.addEventListener('click', confirmTciWarn);
 }
 
-export function setDrug(drugId) {
-  _selectedDrug = drugId;
-}
+export function setDrug(drugId) { _selectedDrug = drugId; }
 
-// ---- Modal helpers ----
+// ---- Open for editing ----
 
-function openModal(id) { $(id)?.classList.add('open'); }
-function closeModal(id) { $(id)?.classList.remove('open'); }
-
-// ---- Action Sheet ----
-
-/**
- * Open the action sheet for an event.
- * Called from history.js when a row is tapped.
- */
-export function openActionSheet(evtId) {
+export function openEdit(evtId) {
   const events = _model.getEvents(_selectedDrug);
   const evt = events.find(e => e.id === evtId);
   if (!evt) return;
 
-  _pendingEvtId = evtId;
+  _isEditMode = true;
+  _editEvtId = evtId;
+  _editOrigTime = evt.time;
 
-  // Title and description
-  const title = $('evt-actions-title');
-  const desc = $('evt-actions-desc');
-  const list = $('evt-actions-list');
+  $('evt-editor-title').textContent = 'Edit Event';
+  $('ee-delete-row').style.display = 'flex';
 
-  const timeStr = fmtTime(evt.time);
-  if (evt.type === 'bolus') {
-    title.textContent = 'Bolus Event';
-    desc.textContent = `${evt.value.toFixed(1)} mg at ${timeStr}`;
-  } else if (evt.type === 'rate') {
-    title.textContent = 'Rate Event';
-    desc.textContent = `${evt.value.toFixed(1)} mg/min at ${timeStr}`;
-  } else if (evt.type === 'pause') {
-    title.textContent = 'Pause Event';
-    desc.textContent = `Pump paused at ${timeStr}`;
-  }
+  const isTci = evt.source === 'tci';
+  document.querySelectorAll('#ee-type-row .ee-type').forEach(btn => {
+    btn.disabled = isTci;
+  });
 
-  // Build action buttons
-  const actions = [];
-  if (evt.source !== 'tci') {
-    if (evt.type !== 'pause') {
-      actions.push({ label: 'Edit Value', action: 'editValue' });
+  setType(evt.type);
+  setTimeFromMinutes(evt.time);
+
+  if (evt.type === 'bolus' || evt.type === 'rate') {
+    const task = evt.type === 'bolus' ? 'bolus' : 'rate';
+    const patient = _getPatient();
+    const ctx = { weightKg: patient?.weight || 70 };
+    try {
+      const displayVal = fromCanonical(evt.value, _currentUnit, _selectedDrug, task, ctx);
+      _buffer = formatValue(displayVal, _currentUnit);
+    } catch (e) {
+      _buffer = String(evt.value);
     }
-    actions.push({ label: 'Edit Time', action: 'editTime' });
-    actions.push({ label: 'Delete', action: 'delete', cls: 'danger' });
+  } else {
+    _buffer = '';
   }
-  actions.push({ label: 'Delete This & All After', action: 'deleteAfter', cls: 'danger' });
 
-  list.innerHTML = '';
-  for (const a of actions) {
+  updateDisplay();
+  openModal('modal-evt-editor');
+}
+
+// ---- Open for adding ----
+
+export function openAdd() {
+  _isEditMode = false;
+  _editEvtId = null;
+  _editOrigTime = null;
+
+  $('evt-editor-title').textContent = 'Add Event';
+  $('ee-delete-row').style.display = 'none';
+
+  document.querySelectorAll('#ee-type-row .ee-type').forEach(btn => {
+    btn.disabled = false;
+  });
+
+  setType('bolus');
+  const now = _controls.isCaseStarted() ? _timer.getElapsedMinutes() : 0;
+  setTimeFromMinutes(now);
+
+  _buffer = '';
+  _pauseMode = 'until';
+  document.querySelectorAll('.ee-pause-mode').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === 'until'));
+  $('ee-pause-dur').style.display = 'none';
+
+  updateDisplay();
+  openModal('modal-evt-editor');
+}
+
+// ---- Type selector ----
+
+function setType(type) {
+  _currentType = type;
+  document.querySelectorAll('#ee-type-row .ee-type').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.type === type));
+
+  $('ee-value-section').style.display = type === 'pause' ? 'none' : '';
+  $('ee-pause-section').style.display = type === 'pause' ? '' : 'none';
+  $('ee-push-btn').style.display = type === 'bolus' ? '' : 'none';
+  $('ee-value-label').textContent = type === 'bolus' ? 'Dose' : 'Rate';
+
+  const btn = $('ee-confirm');
+  if (type === 'bolus') {
+    btn.textContent = _isEditMode ? 'Save Bolus' : 'Give Bolus';
+    btn.className = 'modal-btn-confirm-bolus';
+  } else if (type === 'rate') {
+    btn.textContent = _isEditMode ? 'Save Rate' : 'Set Rate';
+    btn.className = 'modal-btn-confirm-rate';
+  } else {
+    btn.textContent = _isEditMode ? 'Save Pause' : 'Set Pause';
+    btn.className = 'modal-btn-confirm-rate';
+  }
+
+  if (type !== 'pause') {
+    const task = type === 'bolus' ? 'bolus' : 'rate';
+    const allowed = getAllowedUnits(_selectedDrug, task);
+    const prefKey = getPrefKey(_selectedDrug, task);
+    let savedUnit = null;
+    if (prefKey) {
+      try { savedUnit = localStorage.getItem(prefKey); } catch (e) {}
+    }
+    _currentUnit = (savedUnit && allowed.includes(savedUnit))
+      ? savedUnit : (getDefaultUnit(_selectedDrug, task) || allowed[0]);
+    renderUnitToggle(allowed);
+    _buffer = '';
+  }
+  updateDisplay();
+}
+
+// ---- Unit toggle ----
+
+function renderUnitToggle(allowed) {
+  const container = $('ee-units');
+  if (!container) return;
+  container.innerHTML = '';
+  allowed.forEach(u => {
     const btn = document.createElement('button');
-    btn.className = 'evt-action-btn' + (a.cls ? ' ' + a.cls : '');
-    btn.textContent = a.label;
+    btn.textContent = u;
+    btn.className = u === _currentUnit ? 'active' : '';
     btn.addEventListener('click', () => {
-      closeModal('modal-evt-actions');
-      handleAction(a.action, evt);
+      _currentUnit = u;
+      const prefKey = getPrefKey(_selectedDrug, _currentType === 'bolus' ? 'bolus' : 'rate');
+      if (prefKey) {
+        try { localStorage.setItem(prefKey, u); } catch (e) {}
+      }
+      container.querySelectorAll('button').forEach(b =>
+        b.classList.toggle('active', b.textContent === u));
+      _buffer = '';
+      updateDisplay();
     });
-    list.appendChild(btn);
-  }
-
-  openModal('modal-evt-actions');
+    container.appendChild(btn);
+  });
 }
 
-function handleAction(action, evt) {
-  if (action === 'editValue') {
-    // Open keypad pre-filled with current value
-    const type = evt.type === 'bolus' ? 'bolus' : 'rate';
-    _pendingAction = 'editValue';
-    _openKeypadForEdit(type, evt.value, (canonicalValue) => {
-      applyWithRules(evt.time, () => {
-        _model.editEvent(evt.id, { value: canonicalValue });
-      });
+// ---- Keypad ----
+
+function handleKey(k) {
+  if (k === 'C') { _buffer = ''; }
+  else if (k === '⌫') { _buffer = _buffer.slice(0, -1); }
+  else if (k === '.') { if (!_buffer.includes('.')) _buffer += _buffer ? '.' : '0.'; }
+  else { if (_buffer.length < 8) _buffer += k; }
+  updateDisplay();
+}
+
+function updateDisplay() {
+  const el = $('ee-value');
+  if (el) {
+    el.textContent = _buffer || '0';
+    el.classList.toggle('empty', !_buffer);
+  }
+
+  const cv = $('ee-conversion');
+  if (!cv) return;
+  if (_currentType === 'pause') { cv.textContent = ''; return; }
+
+  const v = parseFloat(_buffer);
+  const patient = _getPatient();
+  if (isNaN(v) || v <= 0 || !patient) { cv.textContent = ''; return; }
+
+  const task = _currentType === 'bolus' ? 'bolus' : 'rate';
+  try {
+    const ctx = { weightKg: patient.weight };
+    const canonical = toCanonical(v, _currentUnit, _selectedDrug, task, ctx);
+    const allowed = getAllowedUnits(_selectedDrug, task);
+    const others = allowed.filter(u => u !== _currentUnit);
+    const parts = others.map(u => {
+      const dv = fromCanonical(canonical.value, u, _selectedDrug, task, ctx);
+      return `${formatValue(dv, u)} ${u}`;
     });
-  } else if (action === 'editTime') {
-    _pendingAction = 'editTime';
-    openTimePicker(evt.time, (newMinutes) => {
-      applyWithRules(Math.min(evt.time, newMinutes), () => {
-        _model.editEvent(evt.id, { time: newMinutes });
-      });
-    });
-  } else if (action === 'delete') {
-    applyWithRules(evt.time, () => {
-      _model.deleteEvent(evt.id);
-    });
-  } else if (action === 'deleteAfter') {
-    applyWithRules(evt.time, () => {
-      _model.deleteEventAndAfter(evt.id);
-    });
+    if (_currentUnit !== canonical.unit && !others.includes(canonical.unit)) {
+      parts.unshift(`${formatValue(canonical.value, canonical.unit)} ${canonical.unit}`);
+    }
+    cv.textContent = parts.length > 0 ? '= ' + parts.join(' · ') : '';
+  } catch (e) {
+    cv.textContent = '';
   }
 }
 
-// ---- Time Picker ----
+// ---- Time picker ----
 
-let _timePickerCallback = null;
-
-function minutesToTimeStr(minutes) {
+function setTimeFromMinutes(minutes) {
+  _timeUnit = 'case';
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);
-  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
-}
-
-function timeStrToMinutes(str) {
-  const parts = (str || '').split(':');
-  const h = parseInt(parts[0]) || 0;
-  const m = parseInt(parts[1]) || 0;
-  return h * 60 + m;
-}
-
-function openTimePicker(currentMinutes, callback) {
-  _timePickerCallback = callback;
-  const input = $('time-picker-input');
-  if (input) {
-    input.value = minutesToTimeStr(currentMinutes);
-  }
-  openModal('modal-time-picker');
-  if (input) input.focus();
-}
-
-function confirmTimePicker() {
-  const input = $('time-picker-input');
-  const minutes = timeStrToMinutes(input?.value);
-  closeModal('modal-time-picker');
-  if (_timePickerCallback) {
-    _timePickerCallback(minutes);
-    _timePickerCallback = null;
-  }
-}
-
-// ---- Add Event ----
-
-function openAddEvent() {
-  _pendingAddType = 'bolus';
-  // Reset type buttons
-  document.querySelectorAll('.add-evt-type').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.type === 'bolus');
+  buildScrollList($('ee-hours'), 24, 2, h);
+  buildScrollList($('ee-minutes'), 60, 2, m);
+  const isRunning = _controls.isCaseStarted();
+  document.querySelectorAll('#ee-time-unit .tp-unit').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.unit === 'case');
+    if (btn.dataset.unit === 'real') btn.disabled = !isRunning;
   });
-  // Default time to now
-  const now = _controls.isCaseStarted() ? _timer.getElapsedMinutes() : 0;
-  const input = $('add-evt-time');
-  if (input) input.value = minutesToTimeStr(now);
-  $('add-evt-confirm').textContent = 'Next: Set Value';
-  openModal('modal-add-event');
+  updateTimeConversion();
 }
 
-function confirmAddEvent() {
-  const input = $('add-evt-time');
-  const time = timeStrToMinutes(input?.value);
-  _pendingAddTime = time;
-  closeModal('modal-add-event');
+function getSelectedCaseMinutes() {
+  if (_timeUnit === 'case') {
+    return getScrollVal('ee-hours') * 60 + getScrollVal('ee-minutes');
+  }
+  const realH = getScrollVal('ee-hours');
+  const realM = getScrollVal('ee-minutes');
+  const wallStart = _timer.getWallClockStart ? _timer.getWallClockStart() : null;
+  if (!wallStart) return realH * 60 + realM;
+  const target = new Date(wallStart);
+  target.setHours(realH, realM, 0, 0);
+  return Math.max(0, (target - wallStart) / 60000);
+}
 
-  if (_pendingAddType === 'pause') {
-    // Pause has no value — insert directly
-    applyWithRules(time, () => {
-      _model.addPause(_selectedDrug, time, 'Pause (added from history)');
-    });
+function setTimeUnit(unit) {
+  const caseMin = getSelectedCaseMinutes();
+  _timeUnit = unit;
+  document.querySelectorAll('#ee-time-unit .tp-unit').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.unit === unit));
+
+  if (unit === 'case') {
+    buildScrollList($('ee-hours'), 24, 2, Math.floor(caseMin / 60));
+    buildScrollList($('ee-minutes'), 60, 2, Math.round(caseMin % 60));
   } else {
-    // Open keypad for value entry
-    const type = _pendingAddType; // 'bolus' or 'rate'
-    _openKeypadForEdit(type, null, (canonicalValue) => {
-      applyWithRules(time, () => {
-        if (type === 'bolus') {
-          _model.addBolus(_selectedDrug, time, canonicalValue,
-            `Bolus ${canonicalValue.toFixed(1)} mg (added from history)`);
-        } else {
-          _model.addRate(_selectedDrug, time, canonicalValue,
-            `Rate ${canonicalValue.toFixed(1)} mg/min (added from history)`);
-        }
-      });
-    });
+    const wallStart = _timer.getWallClockStart ? _timer.getWallClockStart() : null;
+    if (wallStart) {
+      const realDate = new Date(wallStart.getTime() + caseMin * 60000);
+      buildScrollList($('ee-hours'), 24, 2, realDate.getHours());
+      buildScrollList($('ee-minutes'), 60, 2, realDate.getMinutes());
+    }
+  }
+  updateTimeConversion();
+}
+
+function updateTimeConversion() {
+  const cv = $('ee-time-conversion');
+  if (!cv) return;
+  const isRunning = _controls.isCaseStarted();
+  const wallStart = _timer.getWallClockStart ? _timer.getWallClockStart() : null;
+
+  if (_timeUnit === 'case') {
+    const caseMin = getScrollVal('ee-hours') * 60 + getScrollVal('ee-minutes');
+    if (isRunning && wallStart) {
+      const rd = new Date(wallStart.getTime() + caseMin * 60000);
+      cv.textContent = `= ${String(rd.getHours()).padStart(2, '0')}:${String(rd.getMinutes()).padStart(2, '0')} real`;
+    } else { cv.textContent = ''; }
+  } else {
+    if (wallStart) {
+      const target = new Date(wallStart);
+      target.setHours(getScrollVal('ee-hours'), getScrollVal('ee-minutes'), 0, 0);
+      const caseMin = Math.max(0, (target - wallStart) / 60000);
+      cv.textContent = `= ${String(Math.floor(caseMin / 60)).padStart(2, '0')}:${String(Math.round(caseMin % 60)).padStart(2, '0')} case`;
+    } else { cv.textContent = ''; }
   }
 }
 
-// ---- TCI Conflict Rule Engine ----
+// ---- Scroll list builder ----
+
+function buildScrollList(container, count, padLen, selectedVal) {
+  if (!container) return;
+  container.innerHTML = '';
+  const spacer = () => {
+    const d = document.createElement('div');
+    d.className = 'tp-scroll-item';
+    d.style.visibility = 'hidden';
+    d.textContent = '00';
+    return d;
+  };
+  container.appendChild(spacer());
+  container.appendChild(spacer());
+  for (let i = 0; i < count; i++) {
+    const item = document.createElement('div');
+    item.className = 'tp-scroll-item' + (i === selectedVal ? ' selected' : '');
+    item.textContent = String(i).padStart(padLen, '0');
+    item.dataset.val = i;
+    item.addEventListener('click', () => {
+      container.querySelectorAll('.tp-scroll-item').forEach(el => el.classList.remove('selected'));
+      item.classList.add('selected');
+      item.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      updateTimeConversion();
+    });
+    container.appendChild(item);
+  }
+  container.appendChild(spacer());
+  container.appendChild(spacer());
+  requestAnimationFrame(() => {
+    const sel = container.querySelector('.selected');
+    if (sel) sel.scrollIntoView({ block: 'center', behavior: 'instant' });
+  });
+}
+
+function getScrollVal(containerId) {
+  const sel = $(containerId)?.querySelector('.tp-scroll-item.selected');
+  return sel ? parseInt(sel.dataset.val) || 0 : 0;
+}
+
+// ---- Confirm ----
+
+function doConfirm(deliveryMode) {
+  const time = getSelectedCaseMinutes();
+  const drug = _selectedDrug;
+
+  if (_currentType === 'pause') {
+    applyWithRules(time, () => {
+      if (_isEditMode && _editEvtId) _model.deleteEvent(_editEvtId);
+      _model.addPause(drug, time, 'Pause');
+      if (_pauseMode === 'timed') {
+        const dur = getScrollVal('ee-pause-hours') * 60 + getScrollVal('ee-pause-minutes');
+        if (dur > 0) {
+          const priorRate = _model.getRateAtTime(drug, time);
+          _model.addRate(drug, time + dur, priorRate, 'Rate restored after timed pause');
+        }
+      }
+    });
+    return;
+  }
+
+  const v = parseFloat(_buffer);
+  if (isNaN(v) || v <= 0) return;
+
+  const task = _currentType === 'bolus' ? 'bolus' : 'rate';
+  const patient = _getPatient();
+  const ctx = { weightKg: patient?.weight || 70 };
+  let canonicalValue;
+  try { canonicalValue = toCanonical(v, _currentUnit, drug, task, ctx).value; }
+  catch (e) { return; }
+
+  applyWithRules(time, () => {
+    if (_isEditMode && _editEvtId) {
+      const events = _model.getEvents(drug);
+      const oldEvt = events.find(e => e.id === _editEvtId);
+      if (oldEvt && oldEvt.type !== _currentType) {
+        // Type changed — delete old, create new
+        _model.deleteEvent(_editEvtId);
+        if (_currentType === 'bolus') {
+          _model.addBolus(drug, time, canonicalValue, `Bolus ${canonicalValue.toFixed(1)} mg`, { deliveryMode });
+        } else {
+          _model.addRate(drug, time, canonicalValue, `Rate ${canonicalValue.toFixed(1)} mg/min`);
+        }
+      } else if (oldEvt) {
+        const changes = { value: canonicalValue };
+        if (Math.abs(time - oldEvt.time) > 0.001) changes.time = time;
+        // Edited TCI events become manual — user took ownership
+        if (oldEvt.source === 'tci') changes.source = 'manual';
+        _model.editEvent(_editEvtId, changes);
+      }
+    } else {
+      if (_currentType === 'bolus') {
+        _model.addBolus(drug, time, canonicalValue, `Bolus ${canonicalValue.toFixed(1)} mg`, { deliveryMode });
+      } else {
+        _model.addRate(drug, time, canonicalValue, `Rate ${canonicalValue.toFixed(1)} mg/min`);
+      }
+    }
+  });
+}
+
+// ---- Delete ----
+
+function handleDelete() {
+  if (!_editEvtId) return;
+  const evt = _model.getEvents(_selectedDrug).find(e => e.id === _editEvtId);
+  if (!evt) return;
+  applyWithRules(evt.time, () => { _model.deleteEvent(_editEvtId); });
+}
+
+function handleDeleteAfter() {
+  if (!_editEvtId) return;
+  const evt = _model.getEvents(_selectedDrug).find(e => e.id === _editEvtId);
+  if (!evt) return;
+  applyWithRules(evt.time, () => { _model.deleteEventAndAfter(_editEvtId); });
+}
+
+// ---- TCI Rule Engine ----
 
 let _pendingRuleAction = null;
-let _pendingRuleContext = null;
 
-/**
- * Apply an edit/add/delete action with TCI conflict rules.
- * @param {number} eventTime - time of the affected event
- * @param {Function} action - the mutation to perform
- */
 function applyWithRules(eventTime, action) {
   const drug = _selectedDrug;
   const events = _model.getEvents(drug);
   const isRunning = _controls.isCaseStarted();
   const now = isRunning ? _timer.getElapsedMinutes() : Infinity;
 
-  // Find TCI events at or after eventTime
-  const tciEvents = events.filter(e => e.source === 'tci' && e.time >= eventTime);
-  const hasTci = tciEvents.length > 0;
-
-  // Find the TCI target start time (earliest TCI event)
-  const allTciEvents = events.filter(e => e.source === 'tci');
-  const tciStartTime = allTciEvents.length > 0
-    ? Math.min(...allTciEvents.map(e => e.time))
-    : Infinity;
-
-  // Get current TCI target (if in TCI mode)
-  const currentMode = _mode.get(drug);
+  const tciAfter = events.filter(e => e.source === 'tci' && e.time >= eventTime);
+  const allTci = events.filter(e => e.source === 'tci');
+  const tciStart = allTci.length > 0 ? Math.min(...allTci.map(e => e.time)) : Infinity;
   const ceTarget = _mode.getCeTarget(drug);
 
-  if (!hasTci) {
-    // Rule 5: No TCI involvement — just do it
+  if (tciAfter.length === 0) {
     action();
+    close();
     _refreshChart();
     return;
   }
 
-  // TCI is involved — determine which rule applies
   if (isRunning && eventTime < now) {
-    // Rule 3a: Past edit while running, TCI exists
     _pendingRuleAction = () => {
       action();
-      // Clear all events after now
       _model.clearAfter(drug, now);
       _mode.set(drug, 'manual', 'Dropped to manual — past event edited');
+      close();
       _refreshChart();
     };
     showTciWarning('Editing a past event will cancel TCI control and clear all future events.');
-  } else if (!isRunning && eventTime < tciStartTime) {
-    // Rule 2a: Planning mode, event before TCI start — re-plan
+  } else if (!isRunning && eventTime < tciStart) {
     _pendingRuleAction = () => {
       action();
-      // Clear all TCI events
-      const tciIds = allTciEvents.map(e => e.id);
-      for (const id of tciIds) {
-        try { _model.deleteEvent(id); } catch (e) {}
-      }
-      // Re-plan same target
-      if (ceTarget > 0) {
-        _model.planTCI(drug, tciStartTime, ceTarget);
-      }
+      for (const e of allTci) { try { _model.deleteEvent(e.id); } catch (x) {} }
+      if (ceTarget > 0) _model.planTCI(drug, tciStart, ceTarget);
+      close();
       _refreshChart();
     };
     showTciWarning('The TCI plan will be recalculated to account for this change.');
   } else {
-    // Rule 2b: Event at or after TCI start
     _pendingRuleAction = () => {
       action();
-      // Clear from eventTime onward
       _model.clearAfter(drug, eventTime);
-      _mode.set(drug, 'manual', 'Dropped to manual — event added/edited in TCI space');
+      _mode.set(drug, 'manual', 'Dropped to manual — event in TCI space');
+      close();
       _refreshChart();
     };
     showTciWarning('This will cancel TCI control and clear all events from this point forward.');
@@ -332,17 +513,17 @@ function showTciWarning(text) {
 
 function confirmTciWarn() {
   closeModal('modal-tci-warn');
-  if (_pendingRuleAction) {
-    _pendingRuleAction();
-    _pendingRuleAction = null;
-  }
+  if (_pendingRuleAction) { _pendingRuleAction(); _pendingRuleAction = null; }
 }
 
-// ---- Helpers ----
+// ---- Modal helpers ----
 
-function fmtTime(minutes) {
-  const totalSec = Math.round(minutes * 60);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return String(m).padStart(3, '0') + ':' + String(s).padStart(2, '0');
+function openModal(id) { $(id)?.classList.add('open'); }
+function closeModal(id) { $(id)?.classList.remove('open'); }
+
+function close() {
+  closeModal('modal-evt-editor');
+  _editEvtId = null;
+  _editOrigTime = null;
+  _buffer = '';
 }

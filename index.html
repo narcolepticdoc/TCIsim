@@ -261,15 +261,49 @@
     .evt-action-btn.danger{color:var(--red)}
     .evt-action-btn.danger:hover{background:rgba(239,68,68,.1)}
 
-    .modal-time-picker{max-width:280px}
-    .time-picker-hint{font-size:11px;color:var(--text-muted);text-align:center;margin:0 0 4px}
-    .time-picker-display{display:flex;align-items:center;justify-content:center;gap:4px;margin:16px 0}
-    .time-label{font-family:var(--font-display);font-size:12px;color:var(--text-muted);margin-right:8px}
-
-    .modal-add-event{max-width:320px}
-    .add-evt-type-row{display:flex;gap:6px;margin-bottom:4px}
-    .add-evt-type{flex:1;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-display);font-size:12px;font-weight:600;padding:8px 0;cursor:pointer;text-align:center;transition:all .15s}
-    .add-evt-type.active{background:var(--blue-dim);color:var(--text-primary);border-color:var(--cyan)}
+    .modal-evt-editor{max-width:500px}
+    .tp-scroll-row{display:flex;align-items:center;justify-content:center;gap:6px}
+    .tp-scroll-compact{margin:8px 0}
+    .tp-scroll-col{display:flex;flex-direction:column;align-items:center}
+    .tp-scroll-sep{font-family:var(--font-mono);font-size:22px;color:var(--text-muted);padding:0 2px;align-self:center}
+    .tp-scroll-list{height:150px;width:60px;overflow-y:auto;background:var(--bg-deep);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch}
+    .tp-scroll-sm{height:110px;width:50px}
+    .tp-scroll-list::-webkit-scrollbar{width:3px}
+    .tp-scroll-list::-webkit-scrollbar-thumb{background:var(--border-subtle);border-radius:2px}
+    .tp-scroll-item{scroll-snap-align:center;height:32px;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:16px;color:var(--text-muted);cursor:pointer;transition:all .1s;user-select:none;-webkit-user-select:none}
+    .tp-scroll-sm .tp-scroll-item{height:28px;font-size:14px}
+    .tp-scroll-item:hover{color:var(--text-primary);background:var(--bg-hover)}
+    .tp-scroll-item.selected{color:var(--text-primary);background:var(--blue-dim);font-weight:700}
+    .tp-unit-toggle{display:flex;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);overflow:hidden}
+    .tp-unit{flex:1;background:none;border:none;color:var(--text-muted);font-family:var(--font-display);font-size:11px;padding:5px 6px;cursor:pointer;transition:all .15s}
+    .tp-unit.active{background:var(--blue-dim);color:var(--text-primary)}
+    .tp-unit:disabled{opacity:0.35;cursor:not-allowed}
+    .tp-conversion{font-family:var(--font-mono);font-size:10px;color:var(--cyan);min-height:14px;text-align:center}
+    .ee-type-row{display:flex;gap:6px;margin-bottom:10px}
+    .ee-type{flex:1;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-display);font-size:12px;font-weight:600;padding:8px 0;cursor:pointer;text-align:center;transition:all .15s}
+    .ee-type.active{background:var(--blue-dim);color:var(--text-primary);border-color:var(--cyan)}
+    .ee-type:disabled{opacity:0.35;cursor:not-allowed}
+    .ee-section{margin-bottom:10px}
+    .ee-section-label{font-family:var(--font-display);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+    .ee-time-row{display:flex;align-items:center;gap:6px}
+    .ee-time-right{display:flex;flex-direction:column;gap:4px;margin-left:8px;flex:1}
+    .tp-unit-toggle-sm{font-size:10px}
+    .tp-unit-toggle-sm .tp-unit{padding:4px 6px;font-size:10px}
+    .ee-value-row{display:flex;gap:12px}
+    .ee-value-left{flex:1;display:flex;flex-direction:column;gap:6px}
+    .ee-value-right{display:flex;flex-direction:column;gap:4px;width:150px;flex-shrink:0}
+    .ee-display{font-size:22px;min-height:40px;padding:8px 10px}
+    .ee-numpad{gap:3px}
+    .ee-key{font-size:15px;padding:8px 0}
+    .ee-pause-toggle{display:flex;gap:6px;margin-bottom:8px}
+    .ee-pause-mode{flex:1;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-display);font-size:11px;padding:7px 8px;cursor:pointer;text-align:center;transition:all .15s}
+    .ee-pause-mode.active{background:var(--blue-dim);color:var(--text-primary);border-color:var(--cyan)}
+    .ee-pause-label{font-size:10px;color:var(--text-muted);align-self:center;margin-left:6px}
+    .ee-actions{margin-top:10px}
+    .ee-delete-row{display:flex;gap:8px;margin-top:8px}
+    .ee-delete-row .evt-action-btn{flex:1;text-align:center;font-size:11px;padding:8px 6px}
+    .h-edit-btn{background:none;border:none;color:var(--text-muted);font-size:14px;padding:2px 6px;cursor:pointer;opacity:0.5;transition:opacity .15s}
+    .h-edit-btn:hover{opacity:1;color:var(--text-primary)}
 
     /* ==== ANIMATIONS ==== */
     @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
@@ -424,47 +458,95 @@
     </div>
   </div>
 
-  <!-- =========== EVENT ACTION SHEET =========== -->
-  <div class="modal-overlay" id="modal-evt-actions">
-    <div class="modal-box modal-actions-box">
-      <h3 id="evt-actions-title">Event</h3>
-      <p id="evt-actions-desc" class="evt-actions-desc"></p>
-      <div class="evt-actions-list" id="evt-actions-list"></div>
-      <div class="modal-actions"><button class="modal-btn-cancel" id="evt-actions-cancel">Cancel</button></div>
-    </div>
-  </div>
+  <!-- =========== UNIFIED EVENT EDITOR =========== -->
+  <div class="modal-overlay" id="modal-evt-editor">
+    <div class="modal-box modal-evt-editor">
+      <h3 id="evt-editor-title">Edit Event</h3>
 
-  <!-- =========== TIME PICKER =========== -->
-  <div class="modal-overlay" id="modal-time-picker">
-    <div class="modal-box modal-time-picker">
-      <h3 id="time-picker-title">Set Event Time</h3>
-      <p class="time-picker-hint">Hours : Minutes</p>
-      <div class="time-picker-display">
-        <input type="time" id="time-picker-input" class="tp-time-input" step="60">
+      <!-- Type selector -->
+      <div class="ee-type-row" id="ee-type-row">
+        <button class="ee-type active" data-type="bolus">Bolus</button>
+        <button class="ee-type" data-type="rate">Rate</button>
+        <button class="ee-type" data-type="pause">Pause</button>
       </div>
-      <div class="modal-actions">
-        <button class="modal-btn-cancel" id="time-picker-cancel">Cancel</button>
-        <button class="modal-btn-confirm-target" id="time-picker-confirm">Set Time</button>
-      </div>
-    </div>
-  </div>
 
-  <!-- =========== ADD EVENT =========== -->
-  <div class="modal-overlay" id="modal-add-event">
-    <div class="modal-box modal-add-event">
-      <h3>Add Event</h3>
-      <div class="add-evt-type-row">
-        <button class="add-evt-type active" data-type="bolus">Bolus</button>
-        <button class="add-evt-type" data-type="rate">Rate</button>
-        <button class="add-evt-type" data-type="pause">Pause</button>
+      <!-- Time section -->
+      <div class="ee-section">
+        <div class="ee-section-label">Time</div>
+        <div class="ee-time-row">
+          <div class="tp-scroll-col">
+            <div class="tp-scroll-list tp-scroll-sm" id="ee-hours"></div>
+          </div>
+          <div class="tp-scroll-sep">:</div>
+          <div class="tp-scroll-col">
+            <div class="tp-scroll-list tp-scroll-sm" id="ee-minutes"></div>
+          </div>
+          <div class="ee-time-right">
+            <div class="tp-unit-toggle tp-unit-toggle-sm" id="ee-time-unit">
+              <button class="tp-unit active" data-unit="case">Case</button>
+              <button class="tp-unit" data-unit="real">Real</button>
+            </div>
+            <div class="tp-conversion" id="ee-time-conversion"></div>
+          </div>
+        </div>
       </div>
-      <div class="time-picker-display" style="margin:12px 0">
-        <span class="time-label">Time:</span>
-        <input type="time" id="add-evt-time" class="tp-time-input" step="60">
+
+      <!-- Value section (bolus/rate) -->
+      <div class="ee-section" id="ee-value-section">
+        <div class="ee-section-label" id="ee-value-label">Dose</div>
+        <div class="ee-value-row">
+          <div class="ee-value-left">
+            <div class="keypad-display ee-display" id="ee-display">
+              <span id="ee-value" class="empty">0</span>
+            </div>
+            <div class="keypad-unit-toggle" id="ee-units"></div>
+            <div class="keypad-conversion" id="ee-conversion"></div>
+          </div>
+          <div class="ee-value-right">
+            <div class="keypad-edit-row">
+              <div class="key ee-key">C</div>
+              <div class="key ee-key">⌫</div>
+            </div>
+            <div class="keypad-numpad ee-numpad">
+              <div class="key ee-key">7</div><div class="key ee-key">8</div><div class="key ee-key">9</div>
+              <div class="key ee-key">4</div><div class="key ee-key">5</div><div class="key ee-key">6</div>
+              <div class="key ee-key">1</div><div class="key ee-key">2</div><div class="key ee-key">3</div>
+              <div class="key ee-key key-wide">0</div><div class="key ee-key">.</div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="modal-actions">
-        <button class="modal-btn-cancel" id="add-evt-cancel">Cancel</button>
-        <button class="modal-btn-confirm-rate" id="add-evt-confirm">Next: Set Value</button>
+
+      <!-- Pause section (replaces value section for pause type) -->
+      <div class="ee-section" id="ee-pause-section" style="display:none">
+        <div class="ee-section-label">Duration</div>
+        <div class="ee-pause-toggle">
+          <button class="ee-pause-mode active" data-mode="until">Until next event</button>
+          <button class="ee-pause-mode" data-mode="timed">Timed</button>
+        </div>
+        <div class="ee-pause-dur" id="ee-pause-dur" style="display:none">
+          <div class="tp-scroll-row tp-scroll-compact">
+            <div class="tp-scroll-col">
+              <div class="tp-scroll-list tp-scroll-sm" id="ee-pause-hours"></div>
+            </div>
+            <div class="tp-scroll-sep">:</div>
+            <div class="tp-scroll-col">
+              <div class="tp-scroll-list tp-scroll-sm" id="ee-pause-minutes"></div>
+            </div>
+            <span class="ee-pause-label">H : M</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="modal-actions ee-actions">
+        <button class="modal-btn-cancel" id="ee-cancel">Cancel</button>
+        <button id="ee-push-btn" class="modal-btn-confirm-push" style="display:none">Push Bolus</button>
+        <button id="ee-confirm" class="modal-btn-confirm-bolus">Give Bolus</button>
+      </div>
+      <div class="ee-delete-row" id="ee-delete-row" style="display:none">
+        <button class="evt-action-btn danger" id="ee-delete">Delete Event</button>
+        <button class="evt-action-btn danger" id="ee-delete-after">Delete &amp; All After</button>
       </div>
     </div>
   </div>
