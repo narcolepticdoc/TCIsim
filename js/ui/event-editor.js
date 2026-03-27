@@ -81,6 +81,8 @@ export function init(opts) {
   $('ee-push-btn')?.addEventListener('click', () => doConfirm('push'));
   $('ee-delete')?.addEventListener('click', handleDelete);
   $('ee-delete-after')?.addEventListener('click', handleDeleteAfter);
+  $('ee-pause-delete')?.addEventListener('click', handleDelete);
+  $('ee-pause-delete-after')?.addEventListener('click', handleDeleteAfter);
   $('btn-add-event')?.addEventListener('click', () => openAdd());
 
   // TCI warning
@@ -103,6 +105,7 @@ export function openEdit(evtId) {
 
   $('evt-editor-title').textContent = 'Edit Event';
   $('ee-delete-row').style.display = 'flex';
+  $('ee-pause-delete-row').style.display = 'flex';
 
   const isTci = evt.source === 'tci';
   document.querySelectorAll('#ee-type-row .ee-type').forEach(btn => {
@@ -139,6 +142,7 @@ export function openAdd() {
 
   $('evt-editor-title').textContent = 'Add Event';
   $('ee-delete-row').style.display = 'none';
+  $('ee-pause-delete-row').style.display = 'none';
 
   document.querySelectorAll('#ee-type-row .ee-type').forEach(btn => {
     btn.disabled = false;
