@@ -262,18 +262,9 @@
     .evt-action-btn.danger:hover{background:rgba(239,68,68,.1)}
 
     .modal-evt-editor{max-width:500px}
-    .tp-scroll-row{display:flex;align-items:center;justify-content:center;gap:6px}
-    .tp-scroll-compact{margin:8px 0}
-    .tp-scroll-col{display:flex;flex-direction:column;align-items:center}
-    .tp-scroll-sep{font-family:var(--font-mono);font-size:22px;color:var(--text-muted);padding:0 2px;align-self:center}
-    .tp-scroll-list{height:150px;width:60px;overflow-y:auto;background:var(--bg-deep);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch}
-    .tp-scroll-sm{height:110px;width:50px}
-    .tp-scroll-list::-webkit-scrollbar{width:3px}
-    .tp-scroll-list::-webkit-scrollbar-thumb{background:var(--border-subtle);border-radius:2px}
-    .tp-scroll-item{scroll-snap-align:center;height:32px;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:16px;color:var(--text-muted);cursor:pointer;transition:all .1s;user-select:none;-webkit-user-select:none}
-    .tp-scroll-sm .tp-scroll-item{height:28px;font-size:14px}
-    .tp-scroll-item:hover{color:var(--text-primary);background:var(--bg-hover)}
-    .tp-scroll-item.selected{color:var(--text-primary);background:var(--blue-dim);font-weight:700}
+    .ee-select{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:16px;padding:6px 10px;outline:none;color-scheme:dark;min-width:56px;text-align:center}
+    .ee-select:focus{border-color:var(--border-focus)}
+    .ee-time-sep{font-family:var(--font-mono);font-size:18px;color:var(--text-muted);padding:0 2px}
     .tp-unit-toggle{display:flex;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);overflow:hidden}
     .tp-unit{flex:1;background:none;border:none;color:var(--text-muted);font-family:var(--font-display);font-size:11px;padding:5px 6px;cursor:pointer;transition:all .15s}
     .tp-unit.active{background:var(--blue-dim);color:var(--text-primary)}
@@ -474,13 +465,9 @@
       <div class="ee-section">
         <div class="ee-section-label">Time</div>
         <div class="ee-time-row">
-          <div class="tp-scroll-col">
-            <div class="tp-scroll-list tp-scroll-sm" id="ee-hours"></div>
-          </div>
-          <div class="tp-scroll-sep">:</div>
-          <div class="tp-scroll-col">
-            <div class="tp-scroll-list tp-scroll-sm" id="ee-minutes"></div>
-          </div>
+          <select class="ee-select" id="ee-hours"></select>
+          <span class="ee-time-sep">:</span>
+          <select class="ee-select" id="ee-minutes"></select>
           <div class="ee-time-right">
             <div class="tp-unit-toggle tp-unit-toggle-sm" id="ee-time-unit">
               <button class="tp-unit active" data-unit="case">Case</button>
@@ -525,14 +512,10 @@
           <button class="ee-pause-mode" data-mode="timed">Timed</button>
         </div>
         <div class="ee-pause-dur" id="ee-pause-dur" style="display:none">
-          <div class="tp-scroll-row tp-scroll-compact">
-            <div class="tp-scroll-col">
-              <div class="tp-scroll-list tp-scroll-sm" id="ee-pause-hours"></div>
-            </div>
-            <div class="tp-scroll-sep">:</div>
-            <div class="tp-scroll-col">
-              <div class="tp-scroll-list tp-scroll-sm" id="ee-pause-minutes"></div>
-            </div>
+          <div class="ee-time-row">
+            <select class="ee-select" id="ee-pause-hours"></select>
+            <span class="ee-time-sep">:</span>
+            <select class="ee-select" id="ee-pause-minutes"></select>
             <span class="ee-pause-label">H : M</span>
           </div>
         </div>

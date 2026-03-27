@@ -273,8 +273,8 @@ function setTimeFromMinutes(minutes) {
   _timeUnit = 'case';
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);
-  buildScrollList($('ee-hours'), 24, 2, h);
-  buildScrollList($('ee-minutes'), 60, 2, m);
+  buildSelect($('ee-hours'), 24, 2, h);
+  buildSelect($('ee-minutes'), 60, 2, m);
   const isRunning = _controls.isCaseStarted();
   document.querySelectorAll('#ee-time-unit .tp-unit').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.unit === 'case');
@@ -285,10 +285,10 @@ function setTimeFromMinutes(minutes) {
 
 function getSelectedCaseMinutes() {
   if (_timeUnit === 'case') {
-    return getScrollVal('ee-hours') * 60 + getScrollVal('ee-minutes');
+    return getSelectVal('ee-hours') * 60 + getSelectVal('ee-minutes');
   }
-  const realH = getScrollVal('ee-hours');
-  const realM = getScrollVal('ee-minutes');
+  const realH = getSelectVal('ee-hours');
+  const realM = getSelectVal('ee-minutes');
   const wallStart = _timer.getWallClockStart ? _timer.getWallClockStart() : null;
   if (!wallStart) return realH * 60 + realM;
   const target = new Date(wallStart);
@@ -303,14 +303,14 @@ function setTimeUnit(unit) {
     btn.classList.toggle('active', btn.dataset.unit === unit));
 
   if (unit === 'case') {
-    buildScrollList($('ee-hours'), 24, 2, Math.floor(caseMin / 60));
-    buildScrollList($('ee-minutes'), 60, 2, Math.round(caseMin % 60));
+    buildSelect($('ee-hours'), 24, 2, Math.floor(caseMin / 60));
+    buildSelect($('ee-minutes'), 60, 2, Math.round(caseMin % 60));
   } else {
     const wallStart = _timer.getWallClockStart ? _timer.getWallClockStart() : null;
     if (wallStart) {
       const realDate = new Date(wallStart.getTime() + caseMin * 60000);
-      buildScrollList($('ee-hours'), 24, 2, realDate.getHours());
-      buildScrollList($('ee-minutes'), 60, 2, realDate.getMinutes());
+      buildSelect($('ee-hours'), 24, 2, realDate.getHours());
+      buildSelect($('ee-minutes'), 60, 2, realDate.getMinutes());
     }
   }
   updateTimeConversion();
@@ -323,7 +323,7 @@ function updateTimeConversion() {
   const wallStart = _timer.getWallClockStart ? _timer.getWallClockStart() : null;
 
   if (_timeUnit === 'case') {
-    const caseMin = getScrollVal('ee-hours') * 60 + getScrollVal('ee-minutes');
+    const caseMin = getSelectVal('ee-hours') * 60 + getSelectVal('ee-minutes');
     if (isRunning && wallStart) {
       const rd = new Date(wallStart.getTime() + caseMin * 60000);
       cv.textContent = `= ${String(rd.getHours()).padStart(2, '0')}:${String(rd.getMinutes()).padStart(2, '0')} real`;
@@ -331,51 +331,31 @@ function updateTimeConversion() {
   } else {
     if (wallStart) {
       const target = new Date(wallStart);
-      target.setHours(getScrollVal('ee-hours'), getScrollVal('ee-minutes'), 0, 0);
+      target.setHours(getSelectVal('ee-hours'), getSelectVal('ee-minutes'), 0, 0);
       const caseMin = Math.max(0, (target - wallStart) / 60000);
       cv.textContent = `= ${String(Math.floor(caseMin / 60)).padStart(2, '0')}:${String(Math.round(caseMin % 60)).padStart(2, '0')} case`;
     } else { cv.textContent = ''; }
   }
 }
 
-// ---- Scroll list builder ----
+// ---- Select builder ----
 
-function buildScrollList(container, count, padLen, selectedVal) {
-  if (!container) return;
-  container.innerHTML = '';
-  const spacer = () => {
-    const d = document.createElement('div');
-    d.className = 'tp-scroll-item';
-    d.style.visibility = 'hidden';
-    d.textContent = '00';
-    return d;
-  };
-  container.appendChild(spacer());
-  container.appendChild(spacer());
+function buildSelect(selectEl, count, padLen, selectedVal) {
+  if (!selectEl) return;
+  selectEl.innerHTML = '';
   for (let i = 0; i < count; i++) {
-    const item = document.createElement('div');
-    item.className = 'tp-scroll-item' + (i === selectedVal ? ' selected' : '');
-    item.textContent = String(i).padStart(padLen, '0');
-    item.dataset.val = i;
-    item.addEventListener('click', () => {
-      container.querySelectorAll('.tp-scroll-item').forEach(el => el.classList.remove('selected'));
-      item.classList.add('selected');
-      item.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      updateTimeConversion();
-    });
-    container.appendChild(item);
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = String(i).padStart(padLen, '0');
+    if (i === selectedVal) opt.selected = true;
+    selectEl.appendChild(opt);
   }
-  container.appendChild(spacer());
-  container.appendChild(spacer());
-  requestAnimationFrame(() => {
-    const sel = container.querySelector('.selected');
-    if (sel) sel.scrollIntoView({ block: 'center', behavior: 'instant' });
-  });
+  selectEl.onchange = updateTimeConversion;
 }
 
-function getScrollVal(containerId) {
-  const sel = $(containerId)?.querySelector('.tp-scroll-item.selected');
-  return sel ? parseInt(sel.dataset.val) || 0 : 0;
+function getSelectVal(id) {
+  const el = $(id);
+  return el ? parseInt(el.value) || 0 : 0;
 }
 
 // ---- Confirm ----
@@ -389,7 +369,7 @@ function doConfirm(deliveryMode) {
       if (_isEditMode && _editEvtId) _model.deleteEvent(_editEvtId);
       _model.addPause(drug, time, 'Pause');
       if (_pauseMode === 'timed') {
-        const dur = getScrollVal('ee-pause-hours') * 60 + getScrollVal('ee-pause-minutes');
+        const dur = getSelectVal('ee-pause-hours') * 60 + getSelectVal('ee-pause-minutes');
         if (dur > 0) {
           const priorRate = _model.getRateAtTime(drug, time);
           _model.addRate(drug, time + dur, priorRate, 'Rate restored after timed pause');
