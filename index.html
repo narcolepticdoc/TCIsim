@@ -261,8 +261,7 @@
     .evt-action-btn.danger{color:var(--red)}
     .evt-action-btn.danger:hover{background:rgba(239,68,68,.1)}
 
-    .modal-evt-editor{max-width:500px;padding:12px 14px}
-    .modal-evt-editor h3{margin:0 0 6px;font-size:14px}
+    .modal-evt-editor{max-width:500px}
     .ee-select{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:16px;padding:6px 10px;outline:none;color-scheme:dark;min-width:56px;text-align:center}
     .ee-select:focus{border-color:var(--border-focus)}
     .ee-time-sep{font-family:var(--font-mono);font-size:18px;color:var(--text-muted);padding:0 2px}
@@ -271,27 +270,22 @@
     .tp-unit.active{background:var(--blue-dim);color:var(--text-primary)}
     .tp-unit:disabled{opacity:0.35;cursor:not-allowed}
     .tp-conversion{font-family:var(--font-mono);font-size:10px;color:var(--cyan);min-height:14px;text-align:center}
-    .ee-type-row{display:flex;gap:4px;margin-bottom:6px}
-    .ee-type{flex:1;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-display);font-size:11px;font-weight:600;padding:5px 0;cursor:pointer;text-align:center;transition:all .15s}
+    .ee-type-row{display:flex;gap:6px;margin-bottom:10px}
+    .ee-type{flex:1;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-display);font-size:12px;font-weight:600;padding:8px 0;cursor:pointer;text-align:center;transition:all .15s}
     .ee-type.active{background:var(--blue-dim);color:var(--text-primary);border-color:var(--cyan)}
     .ee-type:disabled{opacity:0.35;cursor:not-allowed}
-    .ee-inline-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
-    .ee-label{font-family:var(--font-display);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;min-width:34px;flex-shrink:0}
+    .ee-inline-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+    .ee-label{font-family:var(--font-display);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;min-width:36px;flex-shrink:0}
     .tp-unit-toggle-sm{font-size:10px}
-    .tp-unit-toggle-sm .tp-unit{padding:3px 5px;font-size:10px}
-    .ee-display{font-size:18px;min-height:32px;padding:5px 8px;flex:1}
-    .ee-conv{margin:0 0 3px 40px;font-size:10px}
-    .ee-numpad-row{display:flex;gap:6px;align-items:stretch}
-    .ee-numpad-side{display:flex;flex-direction:column;gap:3px;width:36px;flex-shrink:0}
-    .ee-side-key{flex:1;font-size:12px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--bg-hover);color:var(--text-secondary)}
-    .ee-numpad{flex:1;gap:3px}
-    .ee-key{font-size:14px;padding:7px 0}
-    .ee-delete-col{display:flex;flex-direction:column;gap:3px;width:90px;flex-shrink:0}
-    .ee-del-btn{flex:1;font-size:10px;padding:4px 4px;text-align:center;display:flex;align-items:center;justify-content:center}
-    .ee-pause-mode{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-display);font-size:10px;padding:5px 8px;cursor:pointer;text-align:center;transition:all .15s}
+    .tp-unit-toggle-sm .tp-unit{padding:4px 6px;font-size:10px}
+    .ee-numpad-with-side{display:flex;gap:4px}
+    .ee-side-col{display:flex;flex-direction:column;gap:4px;width:40px;flex-shrink:0}
+    .ee-side-col .key{flex:1;display:flex;align-items:center;justify-content:center;font-size:13px;padding:0;background:var(--bg-hover);color:var(--text-secondary)}
+    .ee-pause-mode{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-display);font-size:11px;padding:7px 8px;cursor:pointer;text-align:center;transition:all .15s}
     .ee-pause-mode.active{background:var(--blue-dim);color:var(--text-primary);border-color:var(--cyan)}
     .ee-pause-label{font-size:10px;color:var(--text-muted);margin-left:4px}
-    .ee-actions{margin-top:6px}
+    .ee-delete-row{display:flex;gap:8px;margin-top:8px}
+    .ee-delete-row .evt-action-btn{flex:1;text-align:center;font-size:11px;padding:8px 6px}
     .h-edit-btn{background:none;border:none;color:var(--text-muted);font-size:14px;padding:2px 6px;cursor:pointer;opacity:0.5;transition:opacity .15s}
     .h-edit-btn:hover{opacity:1;color:var(--text-primary)}
 
@@ -473,30 +467,32 @@
         <span class="tp-conversion" id="ee-time-conversion"></span>
       </div>
 
-      <!-- Value section (bolus/rate) — inline label + display + units + numpad -->
+      <!-- Value section (bolus/rate) -->
       <div id="ee-value-section">
-        <div class="ee-inline-row">
-          <span class="ee-label" id="ee-value-label">Dose</span>
-          <div class="keypad-display ee-display" id="ee-display">
-            <span id="ee-value" class="empty">0</span>
+        <div class="keypad-layout">
+          <div class="keypad-left">
+            <div class="ee-inline-row" style="margin-bottom:6px">
+              <span class="ee-label" id="ee-value-label">Dose</span>
+              <div class="keypad-display" id="ee-display" style="flex:1">
+                <span id="ee-value" class="empty">0</span>
+              </div>
+            </div>
+            <div class="keypad-unit-toggle" id="ee-units"></div>
+            <div class="keypad-conversion" id="ee-conversion"></div>
           </div>
-          <div class="keypad-unit-toggle" id="ee-units"></div>
-        </div>
-        <div class="keypad-conversion ee-conv" id="ee-conversion"></div>
-        <div class="ee-numpad-row">
-          <div class="ee-numpad-side">
-            <div class="key ee-key ee-side-key">C</div>
-            <div class="key ee-key ee-side-key">⌫</div>
-          </div>
-          <div class="keypad-numpad ee-numpad">
-            <div class="key ee-key">7</div><div class="key ee-key">8</div><div class="key ee-key">9</div>
-            <div class="key ee-key">4</div><div class="key ee-key">5</div><div class="key ee-key">6</div>
-            <div class="key ee-key">1</div><div class="key ee-key">2</div><div class="key ee-key">3</div>
-            <div class="key ee-key key-wide">0</div><div class="key ee-key">.</div>
-          </div>
-          <div class="ee-delete-col" id="ee-delete-row" style="display:none">
-            <button class="evt-action-btn danger ee-del-btn" id="ee-delete">Delete</button>
-            <button class="evt-action-btn danger ee-del-btn" id="ee-delete-after">Del &amp; After</button>
+          <div class="keypad-right">
+            <div class="ee-numpad-with-side">
+              <div class="ee-side-col">
+                <div class="key ee-key">C</div>
+                <div class="key ee-key">⌫</div>
+              </div>
+              <div class="keypad-numpad">
+                <div class="key ee-key">7</div><div class="key ee-key">8</div><div class="key ee-key">9</div>
+                <div class="key ee-key">4</div><div class="key ee-key">5</div><div class="key ee-key">6</div>
+                <div class="key ee-key">1</div><div class="key ee-key">2</div><div class="key ee-key">3</div>
+                <div class="key ee-key key-wide">0</div><div class="key ee-key">.</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -517,17 +513,17 @@
             <span class="ee-pause-label">H : M</span>
           </div>
         </div>
-        <div class="ee-delete-col" id="ee-pause-delete-row" style="display:none;margin-top:8px">
-          <button class="evt-action-btn danger ee-del-btn" id="ee-pause-delete">Delete</button>
-          <button class="evt-action-btn danger ee-del-btn" id="ee-pause-delete-after">Del &amp; After</button>
-        </div>
       </div>
 
       <!-- Actions -->
-      <div class="modal-actions ee-actions">
+      <div class="modal-actions">
         <button class="modal-btn-cancel" id="ee-cancel">Cancel</button>
-        <button id="ee-push-btn" class="modal-btn-confirm-push" style="display:none">Push</button>
+        <button id="ee-push-btn" class="modal-btn-confirm-push" style="display:none">Push Bolus</button>
         <button id="ee-confirm" class="modal-btn-confirm-bolus">Give Bolus</button>
+      </div>
+      <div class="ee-delete-row" id="ee-delete-row" style="display:none">
+        <button class="evt-action-btn danger" id="ee-delete">Delete Event</button>
+        <button class="evt-action-btn danger" id="ee-delete-after">Delete &amp; All After</button>
       </div>
     </div>
   </div>
