@@ -626,6 +626,18 @@ export function createEventList() {
       // Remove the rate-restore — our new rate replaces it
       if (active.restoreIdx >= 0) events.splice(active.restoreIdx, 1);
     }
+
+    // Also remove any system rate-restore at the exact event time
+    // (handles the case where the new rate lands exactly at bolus end)
+    for (let i = events.length - 1; i >= 0; i--) {
+      const e = events[i];
+      if (e.drug === drugId && e.type === 'rate' && e.source === 'system' &&
+          Math.abs(e.time - eventTime) < 0.001) {
+        events.splice(i, 1);
+        break;
+      }
+    }
+
     const evt = createEvent(drugId, eventTime, 'rate', mgPerMin, {
       source: opts.source || 'manual',
       annotation: annotation || `Rate ${mgPerMin.toFixed(1)} mg/min`,
@@ -739,6 +751,17 @@ export function createEventList() {
       // Remove the rate-restore — pause replaces it
       if (active.restoreIdx >= 0) events.splice(active.restoreIdx, 1);
     }
+
+    // Also remove any system rate-restore at the exact event time
+    for (let i = events.length - 1; i >= 0; i--) {
+      const e = events[i];
+      if (e.drug === drugId && e.type === 'rate' && e.source === 'system' &&
+          Math.abs(e.time - eventTime) < 0.001) {
+        events.splice(i, 1);
+        break;
+      }
+    }
+
     const evt = createEvent(drugId, eventTime, 'pause', 0, {
       source: 'manual',
       annotation: annotation || 'Pump paused',
