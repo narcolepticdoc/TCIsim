@@ -33,6 +33,7 @@ let _buffer = '';
 let _currentUnit = 'mg';
 let _pauseMode = 'until';
 let _timeUnit = 'case';
+let _prefilled = false;
 
 // ---- Init ----
 
@@ -122,11 +123,14 @@ export function openEdit(evtId) {
     try {
       const displayVal = fromCanonical(evt.value, _currentUnit, _selectedDrug, task, ctx);
       _buffer = formatValue(displayVal, _currentUnit);
+      _prefilled = true;
     } catch (e) {
       _buffer = String(evt.value);
+      _prefilled = true;
     }
   } else {
-    _buffer = '';
+    _buffer = ''; _prefilled = false;
+    _prefilled = false;
   }
 
   updateDisplay();
@@ -151,7 +155,7 @@ export function openAdd() {
   const now = _controls.isCaseStarted() ? _timer.getElapsedMinutes() : 0;
   setTimeFromMinutes(now);
 
-  _buffer = '';
+  _buffer = ''; _prefilled = false;
   _pauseMode = 'until';
   document.querySelectorAll('.ee-pause-mode').forEach(b =>
     b.classList.toggle('active', b.dataset.mode === 'until'));
@@ -197,7 +201,7 @@ function setType(type) {
     _currentUnit = (savedUnit && allowed.includes(savedUnit))
       ? savedUnit : (getDefaultUnit(_selectedDrug, task) || allowed[0]);
     renderUnitToggle(allowed);
-    _buffer = '';
+    _buffer = ''; _prefilled = false;
   }
   updateDisplay();
 }
@@ -220,7 +224,7 @@ function renderUnitToggle(allowed) {
       }
       container.querySelectorAll('button').forEach(b =>
         b.classList.toggle('active', b.textContent === u));
-      _buffer = '';
+      _buffer = ''; _prefilled = false;
       updateDisplay();
     });
     container.appendChild(btn);
@@ -230,10 +234,13 @@ function renderUnitToggle(allowed) {
 // ---- Keypad ----
 
 function handleKey(k) {
-  if (k === 'C') { _buffer = ''; }
-  else if (k === '⌫') { _buffer = _buffer.slice(0, -1); }
-  else if (k === '.') { if (!_buffer.includes('.')) _buffer += _buffer ? '.' : '0.'; }
-  else { if (_buffer.length < 8) _buffer += k; }
+  if (k === 'C') { _buffer = ''; _prefilled = false; }
+  else if (k === '⌫') { if (_prefilled) { _buffer = ''; _prefilled = false; } else { _buffer = _buffer.slice(0, -1); } }
+  else {
+    if (_prefilled) { _buffer = ''; _prefilled = false; }
+    if (k === '.') { if (!_buffer.includes('.')) _buffer += _buffer ? '.' : '0.'; }
+    else { if (_buffer.length < 8) _buffer += k; }
+  }
   updateDisplay();
 }
 
@@ -541,5 +548,5 @@ function close() {
   closeModal('modal-evt-editor');
   _editEvtId = null;
   _editOrigTime = null;
-  _buffer = '';
+  _buffer = ''; _prefilled = false;
 }

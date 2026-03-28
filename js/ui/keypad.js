@@ -24,6 +24,7 @@ let oneShotConfirm = null;     // one-shot callback for edit mode — overrides 
 let getPatient = null;         // () => { weight, ... }
 let getMode = null;            // () => mode string
 let getCeTarget = null;        // () => current Ce target
+let prefilled = false;         // true when buffer is pre-populated, clears on first keypress
 
 const TITLES = {
   ceTarget: 'Set Ce Target',
@@ -117,6 +118,7 @@ export function show(type) {
   // Pre-fill if changing existing target
   if (type === 'ceTarget' && getMode() === 'tci' && getCeTarget() > 0) {
     buffer = getCeTarget().toString();
+    prefilled = true;
   }
 
   // Pre-fill last bolus dose for this drug (stored in canonical mg, converted to display unit)
@@ -128,6 +130,7 @@ export function show(type) {
         const ctx = { weightKg: patient?.weight || 70 };
         const displayVal = fromCanonical(parseFloat(lastMg), currentUnit, currentDrug, 'bolus', ctx);
         buffer = formatValue(displayVal, currentUnit);
+        prefilled = true;
       }
     } catch (e) {}
   }
@@ -142,10 +145,13 @@ function close() {
 }
 
 function handleKey(k) {
-  if (k === 'C') { buffer = ''; }
-  else if (k === '⌫') { buffer = buffer.slice(0, -1); }
-  else if (k === '.') { if (!buffer.includes('.')) buffer += buffer ? '.' : '0.'; }
-  else { if (buffer.length < 8) buffer += k; }
+  if (k === 'C') { buffer = ''; prefilled = false; }
+  else if (k === '⌫') { if (prefilled) { buffer = ''; prefilled = false; } else { buffer = buffer.slice(0, -1); } }
+  else {
+    if (prefilled) { buffer = ''; prefilled = false; }
+    if (k === '.') { if (!buffer.includes('.')) buffer += buffer ? '.' : '0.'; }
+    else { if (buffer.length < 8) buffer += k; }
+  }
   updateDisplay();
 }
 
@@ -168,8 +174,10 @@ function setUnit(u) {
         const ctx = { weightKg: patient?.weight || 70 };
         const displayVal = fromCanonical(parseFloat(lastMg), u, currentDrug, 'bolus', ctx);
         buffer = formatValue(displayVal, u);
+        prefilled = true;
       } else {
         buffer = '';
+        prefilled = false;
       }
     } catch (e) {}
   }
