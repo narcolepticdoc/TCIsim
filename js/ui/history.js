@@ -186,8 +186,7 @@ export function render(drugId) {
       desc = `${badge}Pump paused`;
     }
 
-    const editBtn = isSystem ? '' :
-      `<button class="h-edit-btn" data-edit-id="${evt.id}" title="Edit">✎</button>`;
+    const editBtn = `<button class="h-edit-btn" data-edit-id="${evt.id}" title="Edit">✎</button>`;
 
     rows.push(
       `<div class="history-row ${tc}${dimClass}${sysClass}" data-evt-id="${evt.id}" data-evt-time="${evt.time}">` +

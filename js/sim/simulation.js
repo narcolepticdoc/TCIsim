@@ -127,8 +127,8 @@ export function createModel(config = {}) {
   /**
    * Add a rate change event.
    */
-  function addRate(drugId, time, mgPerMin, annotation) {
-    return eventList.addRate(drugId, time, mgPerMin, annotation);
+  function addRate(drugId, time, mgPerMin, annotation, opts) {
+    return eventList.addRate(drugId, time, mgPerMin, annotation, opts);
   }
 
   /**

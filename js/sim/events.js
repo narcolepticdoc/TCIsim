@@ -618,7 +618,7 @@ export function createEventList() {
    * @param {string} [annotation]
    * @returns {Object} the created event
    */
-  function addRate(drugId, time, mgPerMin, annotation) {
+  function addRate(drugId, time, mgPerMin, annotation, opts = {}) {
     const active = findActiveBolus(drugId, time);
     let eventTime = time;
     if (active) {
@@ -627,7 +627,7 @@ export function createEventList() {
       if (active.restoreIdx >= 0) events.splice(active.restoreIdx, 1);
     }
     const evt = createEvent(drugId, eventTime, 'rate', mgPerMin, {
-      source: 'manual',
+      source: opts.source || 'manual',
       annotation: annotation || `Rate ${mgPerMin.toFixed(1)} mg/min`,
     });
     insert(evt);

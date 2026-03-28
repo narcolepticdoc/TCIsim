@@ -401,7 +401,8 @@ function doConfirm(deliveryMode) {
           if (time + dur < nextEvtTime) {
             // Safe — insert rate-restore with the pre-pause rate
             _model.addRate(drug, time + dur, priorRate,
-              `Rate ${priorRate.toFixed(1)} mg/min restored after timed pause`);
+              `Rate ${priorRate.toFixed(1)} mg/min restored after timed pause`,
+              { source: 'system' });
           }
           // else: duration reaches next event — silently treat as "until next event"
         }
