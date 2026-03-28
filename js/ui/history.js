@@ -197,7 +197,6 @@ export function render(drugId) {
       `</div>`
     );
   }
-  }
 
   list.innerHTML = rows.join('');
 }
