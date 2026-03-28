@@ -21,6 +21,8 @@ let _getElapsedMinutes = null;
 let _getPatient = null;
 let _selectedDrug = 'propofol';
 let _onEventTap = null;
+let _timeFormat = 'et'; // 'et' = elapsed time, 'rt' = real time
+let _getWallClockStart = null;
 
 /**
  * Initialize the history module.
@@ -35,15 +37,25 @@ export function init(opts) {
   _getElapsedMinutes = opts.getElapsedMinutes;
   _getPatient = opts.getPatient || (() => ({ weight: 70 }));
   _onEventTap = opts.onEventTap || null;
+  _getWallClockStart = opts.getWallClockStart || null;
 
   // Delegate click on edit buttons in history list
   const list = $('history-list');
   if (list) {
     list.addEventListener('click', (e) => {
+      // Edit button
       const btn = e.target.closest('.h-edit-btn');
-      if (!btn || !_onEventTap) return;
-      const evtId = btn.dataset.editId;
-      if (evtId) _onEventTap(evtId);
+      if (btn && _onEventTap) {
+        const evtId = btn.dataset.editId;
+        if (evtId) _onEventTap(evtId);
+        return;
+      }
+      // Timestamp click — toggle ET/RT
+      const timeEl = e.target.closest('.h-time');
+      if (timeEl) {
+        _timeFormat = _timeFormat === 'et' ? 'rt' : 'et';
+        render(_selectedDrug);
+      }
     });
   }
 }
@@ -58,10 +70,21 @@ export function setDrug(drugId) {
 // ---- Formatting helpers ----
 
 function fmtTime(minutes) {
+  if (_timeFormat === 'rt' && _getWallClockStart) {
+    const wallStart = _getWallClockStart();
+    if (wallStart) {
+      const realDate = new Date(wallStart.getTime() + minutes * 60000);
+      const h = realDate.getHours();
+      const m = String(realDate.getMinutes()).padStart(2, '0');
+      const s = String(realDate.getSeconds()).padStart(2, '0');
+      return `RT ${h}:${m}:${s}`;
+    }
+  }
   const totalSec = Math.round(minutes * 60);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return String(m).padStart(3, '0') + ':' + String(s).padStart(2, '0');
+  const h = Math.floor(totalSec / 3600);
+  const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+  const s = String(totalSec % 60).padStart(2, '0');
+  return `ET ${h}:${m}:${s}`;
 }
 
 function getPreferredRateUnit(drugId) {

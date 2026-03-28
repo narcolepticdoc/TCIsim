@@ -43,6 +43,10 @@ export function init(opts = {}) {
   const inputTime = $('input-start-time');
   if (inputTime) inputTime.addEventListener('input', updatePopoverInfo);
 
+  // Wire mode toggle
+  $('tp-mode-start')?.addEventListener('click', () => setPopoverMode('start'));
+  $('tp-mode-elapsed')?.addEventListener('click', () => setPopoverMode('elapsed'));
+
   // Close popover on outside click
   document.addEventListener('click', e => {
     const wrap = $('timer-wrap');
@@ -142,9 +146,10 @@ function renderDisplay() {
   const el = $('elapsed-timer');
   if (!el) return;
   const t = Math.floor(getElapsedMs() / 1000);
-  const m = Math.floor(t / 60);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
   const s = t % 60;
-  el.textContent = String(m).padStart(3, '0') + ':' + String(s).padStart(2, '0');
+  el.textContent = h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
 }
 
 function updateWallHint() {
@@ -166,7 +171,13 @@ function togglePopover() {
   if (!pop) return;
   if (pop.classList.contains('open')) { closePopover(); return; }
 
-  // Pre-fill with current wall clock start
+  _popoverMode = 'start';
+  $('tp-mode-start')?.classList.add('active');
+  $('tp-mode-elapsed')?.classList.remove('active');
+  $('input-start-time').parentElement.style.display = '';
+  $('tp-elapsed-row').style.display = 'none';
+
+  // Pre-fill start time
   const input = $('input-start-time');
   if (wallClockStart) {
     input.value = String(wallClockStart.getHours()).padStart(2, '0') + ':' +
@@ -176,8 +187,54 @@ function togglePopover() {
     input.value = String(now.getHours()).padStart(2, '0') + ':' +
                   String(now.getMinutes()).padStart(2, '0');
   }
+
+  // Pre-fill elapsed selects
+  populateElapsedSelects();
+
   updatePopoverInfo();
   pop.classList.add('open');
+}
+
+let _popoverMode = 'start'; // 'start' | 'elapsed'
+
+function setPopoverMode(mode) {
+  _popoverMode = mode;
+  $('tp-mode-start')?.classList.toggle('active', mode === 'start');
+  $('tp-mode-elapsed')?.classList.toggle('active', mode === 'elapsed');
+  $('input-start-time').parentElement.style.display = mode === 'start' ? '' : 'none';
+  $('tp-elapsed-row').style.display = mode === 'elapsed' ? '' : 'none';
+  updatePopoverInfo();
+}
+
+function populateElapsedSelects() {
+  const elH = $('tp-elapsed-h');
+  const elM = $('tp-elapsed-m');
+  if (!elH || !elM) return;
+
+  const currentMin = Math.floor(getElapsedMs() / 60000);
+  const h = Math.floor(currentMin / 60);
+  const m = currentMin % 60;
+
+  elH.innerHTML = '';
+  for (let i = 0; i < 24; i++) {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = String(i).padStart(2, '0');
+    if (i === h) opt.selected = true;
+    elH.appendChild(opt);
+  }
+
+  elM.innerHTML = '';
+  for (let i = 0; i < 60; i++) {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = String(i).padStart(2, '0');
+    if (i === m) opt.selected = true;
+    elM.appendChild(opt);
+  }
+
+  elH.onchange = updatePopoverInfo;
+  elM.onchange = updatePopoverInfo;
 }
 
 function closePopover() {
@@ -186,47 +243,63 @@ function closePopover() {
 }
 
 function updatePopoverInfo() {
-  const val = $('input-start-time').value;
   const info = $('tp-info');
-  if (!val || !info) { if (info) info.textContent = ''; return; }
+  if (!info) return;
 
-  const [h, m] = val.split(':').map(Number);
-  const proposed = new Date();
-  proposed.setHours(h, m, 0, 0);
-  const now = new Date();
-  const diffMs = now.getTime() - proposed.getTime();
-
-  if (diffMs > 0) {
-    const diffMin = Math.floor(diffMs / 60000);
-    info.textContent = 'Elapsed would become ' +
-      String(Math.floor(diffMin / 60)).padStart(1, '0') + 'h ' +
-      String(diffMin % 60).padStart(2, '0') + 'm';
+  if (_popoverMode === 'start') {
+    const val = $('input-start-time').value;
+    if (!val) { info.textContent = ''; return; }
+    const [h, m] = val.split(':').map(Number);
+    const proposed = new Date();
+    proposed.setHours(h, m, 0, 0);
+    const now = new Date();
+    const diffMs = now.getTime() - proposed.getTime();
+    if (diffMs > 0) {
+      const diffSec = Math.floor(diffMs / 1000);
+      const eh = Math.floor(diffSec / 3600);
+      const em = Math.floor((diffSec % 3600) / 60);
+      const es = diffSec % 60;
+      info.textContent = `Elapsed: ${eh}:${String(em).padStart(2, '0')}:${String(es).padStart(2, '0')}`;
+    } else {
+      info.textContent = 'Start time is in the future';
+    }
   } else {
-    info.textContent = 'Start time is in the future';
+    // Elapsed mode — show what start time would be
+    const h = parseInt($('tp-elapsed-h')?.value) || 0;
+    const m = parseInt($('tp-elapsed-m')?.value) || 0;
+    const elapsedMs = (h * 60 + m) * 60000;
+    const startDate = new Date(Date.now() - elapsedMs);
+    info.textContent = `Case started at ${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`;
   }
 }
 
 function applyStartTime() {
-  const val = $('input-start-time').value;
-  if (!val) return;
+  if (_popoverMode === 'start') {
+    const val = $('input-start-time').value;
+    if (!val) return;
+    const [h, m] = val.split(':').map(Number);
+    const newStart = new Date();
+    newStart.setHours(h, m, 0, 0);
+    const now = new Date();
+    const newElapsedMs = now.getTime() - newStart.getTime();
+    if (newElapsedMs < 0) { closePopover(); return; }
 
-  const [h, m] = val.split(':').map(Number);
-  const newStart = new Date();
-  newStart.setHours(h, m, 0, 0);
-
-  const now = new Date();
-  const newElapsedMs = now.getTime() - newStart.getTime();
-  if (newElapsedMs < 0) { closePopover(); return; } // future start not allowed
-
-  wallClockStart = newStart;
-  elapsedMs = newElapsedMs;
-  if (realStartTime != null) realStartTime = Date.now() - elapsedMs;
+    wallClockStart = newStart;
+    elapsedMs = newElapsedMs;
+    if (realStartTime != null) realStartTime = Date.now() - elapsedMs;
+  } else {
+    // Elapsed mode
+    const h = parseInt($('tp-elapsed-h')?.value) || 0;
+    const m = parseInt($('tp-elapsed-m')?.value) || 0;
+    const newElapsedMs = (h * 60 + m) * 60000;
+    wallClockStart = new Date(Date.now() - newElapsedMs);
+    elapsedMs = newElapsedMs;
+    if (realStartTime != null) realStartTime = Date.now() - elapsedMs;
+  }
 
   renderDisplay();
   updateWallHint();
   closePopover();
-
-  return { hours: h, minutes: m }; // caller can log annotation
 }
 
 function applyNow() {

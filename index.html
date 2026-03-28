@@ -147,7 +147,7 @@
     .history-row.h-evt-pause{border-left-color:var(--text-muted)}
     .history-row.h-future{opacity:0.45}
     .history-row.h-system{opacity:0.35;font-style:italic;border-left-color:var(--border-subtle)}
-    .history-row .h-time{color:var(--text-muted);min-width:48px;font-size:10px}
+    .history-row .h-time{color:var(--text-muted);min-width:72px;font-size:10px;cursor:pointer}
     .history-row .h-desc{flex:1;color:var(--text-primary)}
     .history-row .h-desc strong{color:var(--text-primary);font-weight:600}
     .history-row .h-detail{color:var(--text-muted);font-size:10px}
@@ -201,6 +201,9 @@
     .timer-popover{display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:12px 14px;z-index:100;width:220px;box-shadow:0 8px 24px rgba(0,0,0,.4);flex-direction:column;gap:8px}
     .timer-popover.open{display:flex}
     .tp-title{font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px}
+    .tp-mode-toggle{display:flex;gap:4px;margin-bottom:6px}
+    .tp-mode{flex:1;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-display);font-size:10px;font-weight:600;padding:4px 0;cursor:pointer;text-align:center;transition:all .15s}
+    .tp-mode.active{background:var(--blue-dim);color:var(--text-primary);border-color:var(--cyan)}
     .tp-row{display:flex;gap:8px;align-items:center}
     .tp-time-input{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:16px;padding:6px 10px;outline:none;width:100%;color-scheme:dark}
     .tp-time-input:focus{border-color:var(--border-focus)}
@@ -333,12 +336,20 @@
       <div class="patient-summary" id="patient-summary"></div>
       <div class="topbar-spacer"></div>
       <div class="timer-wrap" id="timer-wrap">
-        <div class="elapsed-timer" id="elapsed-timer">000:00</div>
+        <div class="elapsed-timer" id="elapsed-timer">0:00:00</div>
         <div class="timer-wall-hint" id="timer-wall-hint"></div>
         <div class="timer-popover" id="timer-popover">
-          <div class="tp-title">Simulation start time</div>
+          <div class="tp-mode-toggle">
+            <button class="tp-mode active" id="tp-mode-start">Start Time</button>
+            <button class="tp-mode" id="tp-mode-elapsed">Elapsed Time</button>
+          </div>
           <div class="tp-row">
             <input type="time" id="input-start-time" class="tp-time-input" step="60">
+          </div>
+          <div class="tp-row" id="tp-elapsed-row" style="display:none">
+            <select class="ee-select" id="tp-elapsed-h"></select>
+            <span class="ee-time-sep">:</span>
+            <select class="ee-select" id="tp-elapsed-m"></select>
           </div>
           <div class="tp-info" id="tp-info"></div>
           <div class="tp-actions">

@@ -91,9 +91,10 @@ function initSimScreen(patient) {
 function addAnnotation(text) {
   if (!text) return;
   const t = Math.floor(timer.getElapsedMs() / 1000);
-  const m = Math.floor(t / 60);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
   const s = t % 60;
-  const ts = String(m).padStart(3, '0') + ':' + String(s).padStart(2, '0');
+  const ts = h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
   annotations.push({ time: ts, text });
 
   // Render to history panel (temporary — will be replaced by event-driven rendering)
@@ -479,6 +480,7 @@ function boot() {
     model,
     getElapsedMinutes: () => timer.getElapsedMinutes(),
     getPatient: () => model ? model.getPatient() : { weight: 70 },
+    getWallClockStart: () => timer.getWallClockStart(),
     onEventTap: (evtId) => eventEditor.openEdit(evtId),
   });
 

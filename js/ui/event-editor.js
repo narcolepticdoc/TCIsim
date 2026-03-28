@@ -330,14 +330,18 @@ function updateTimeConversion() {
     const caseMin = getSelectVal('ee-hours') * 60 + getSelectVal('ee-minutes');
     if (isRunning && wallStart) {
       const rd = new Date(wallStart.getTime() + caseMin * 60000);
-      cv.textContent = `= ${String(rd.getHours()).padStart(2, '0')}:${String(rd.getMinutes()).padStart(2, '0')} real`;
+      const h = rd.getHours();
+      const m = String(rd.getMinutes()).padStart(2, '0');
+      cv.textContent = `= RT ${h}:${m}`;
     } else { cv.textContent = ''; }
   } else {
     if (wallStart) {
       const target = new Date(wallStart);
       target.setHours(getSelectVal('ee-hours'), getSelectVal('ee-minutes'), 0, 0);
       const caseMin = Math.max(0, (target - wallStart) / 60000);
-      cv.textContent = `= ${String(Math.floor(caseMin / 60)).padStart(2, '0')}:${String(Math.round(caseMin % 60)).padStart(2, '0')} case`;
+      const h = Math.floor(caseMin / 60);
+      const m = String(Math.round(caseMin % 60)).padStart(2, '0');
+      cv.textContent = `= ET ${h}:${m}`;
     } else { cv.textContent = ''; }
   }
 }
