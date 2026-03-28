@@ -381,6 +381,9 @@ function doConfirm(deliveryMode) {
 
   if (_currentType === 'pause') {
     applyWithRules(time, () => {
+      // Capture the active rate BEFORE inserting the pause
+      const priorRate = _model.getRateAtTime(drug, time);
+      
       if (_isEditMode && _editEvtId) _model.deleteEvent(_editEvtId);
       _model.addPause(drug, time, 'Pause');
       if (_pauseMode === 'timed') {
@@ -390,17 +393,17 @@ function doConfirm(deliveryMode) {
           const events = _model.getEvents(drug);
           let nextEvtTime = Infinity;
           for (const e of events) {
-            if (e.time > time && e.source !== 'system') {
+            if (e.time > time && e.source !== 'system' && e.type !== 'pause') {
               nextEvtTime = e.time;
               break;
             }
           }
           if (time + dur < nextEvtTime) {
-            // Safe — insert rate-restore
-            const priorRate = _model.getRateAtTime(drug, time);
-            _model.addRate(drug, time + dur, priorRate, 'Rate restored after timed pause');
+            // Safe — insert rate-restore with the pre-pause rate
+            _model.addRate(drug, time + dur, priorRate,
+              `Rate ${priorRate.toFixed(1)} mg/min restored after timed pause`);
           }
-          // else: duration reaches next event — treat as "until next event", no restore
+          // else: duration reaches next event — silently treat as "until next event"
         }
       }
     });

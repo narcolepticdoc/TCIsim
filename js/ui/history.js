@@ -150,10 +150,8 @@ export function render(drugId) {
   if (!list || !empty || !_model) return;
 
   const events = _model.getEvents(drug);
-  // Filter out system events (rate-restore after bolus)
-  const visible = events.filter(e => e.source !== 'system');
 
-  if (visible.length === 0) {
+  if (events.length === 0) {
     empty.style.display = 'block';
     list.innerHTML = '';
     return;
@@ -165,10 +163,12 @@ export function render(drugId) {
 
   // Build HTML
   const rows = [];
-  for (let i = 0; i < visible.length; i++) {
-    const evt = visible[i];
+  for (let i = 0; i < events.length; i++) {
+    const evt = events[i];
     const isPast = evt.time <= now;
+    const isSystem = evt.source === 'system';
     const dimClass = isPast ? '' : ' h-future';
+    const sysClass = isSystem ? ' h-system' : '';
     const tc = typeClass(evt);
     const badge = sourceBadge(evt.source);
 
@@ -180,18 +180,23 @@ export function render(drugId) {
       desc = `${badge}${modeLabel} <strong>${dose}</strong> <span class="h-detail">${delivery}</span>`;
     } else if (evt.type === 'rate') {
       const rate = fmtRate(evt.value, evt.drug);
-      desc = `${badge}Rate <strong>${rate}</strong>`;
+      const prefix = isSystem ? '↩ ' : '';
+      desc = `${badge}${prefix}Rate <strong>${rate}</strong>`;
     } else if (evt.type === 'pause') {
       desc = `${badge}Pump paused`;
     }
 
+    const editBtn = isSystem ? '' :
+      `<button class="h-edit-btn" data-edit-id="${evt.id}" title="Edit">✎</button>`;
+
     rows.push(
-      `<div class="history-row ${tc}${dimClass}" data-evt-id="${evt.id}" data-evt-time="${evt.time}">` +
+      `<div class="history-row ${tc}${dimClass}${sysClass}" data-evt-id="${evt.id}" data-evt-time="${evt.time}">` +
         `<span class="h-time">${fmtTime(evt.time)}</span>` +
         `<span class="h-desc">${desc}</span>` +
-        `<button class="h-edit-btn" data-edit-id="${evt.id}" title="Edit">✎</button>` +
+        editBtn +
       `</div>`
     );
+  }
   }
 
   list.innerHTML = rows.join('');
