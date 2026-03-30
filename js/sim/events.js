@@ -814,6 +814,7 @@ export function createEventList() {
     if (changes.type != null) evt.type = changes.type;
     if (changes.annotation != null) evt.annotation = changes.annotation;
     if (changes.source != null) evt.source = changes.source;
+    if (changes.deliveryMode != null) evt.deliveryMode = changes.deliveryMode;
 
     if (timeChanged) {
       evt.time = changes.time;

@@ -180,7 +180,7 @@ function setType(type) {
 
   const btn = $('ee-confirm');
   if (type === 'bolus') {
-    btn.textContent = _isEditMode ? 'Save Bolus' : 'Give Bolus';
+    btn.textContent = _isEditMode ? 'Save Bolus' : 'Pump Bolus';
     btn.className = 'modal-btn-confirm-bolus';
   } else if (type === 'rate') {
     btn.textContent = _isEditMode ? 'Save Rate' : 'Set Rate';
@@ -447,8 +447,8 @@ function doConfirm(deliveryMode) {
       } else if (oldEvt) {
         const changes = { value: canonicalValue };
         if (Math.abs(time - oldEvt.time) > 0.001) changes.time = time;
-        // Edited TCI events become manual — user took ownership
         if (oldEvt.source === 'tci') changes.source = 'manual';
+        if (oldEvt.type === 'bolus') changes.deliveryMode = deliveryMode;
         _model.editEvent(_editEvtId, changes);
       }
     } else {

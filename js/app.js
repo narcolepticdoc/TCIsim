@@ -421,7 +421,7 @@ function boot() {
           mode.set(selectedDrug, 'manual');
         }
         const dm = deliveryMode || 'pump';
-        const label = dm === 'push' ? 'Push bolus' : 'Bolus';
+        const label = dm === 'push' ? 'IV Push' : 'Pump Bolus';
         model.addBolus(selectedDrug, t, canonicalValue, `${label} ${displayText}`, {
           deliveryMode: dm,
         });

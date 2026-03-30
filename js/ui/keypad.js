@@ -35,7 +35,7 @@ const TITLES = {
 const CONFIRM_LABELS = {
   ceTarget: { label: 'Set Target', cls: 'modal-btn-confirm-target' },
   rate: { label: 'Set Rate', cls: 'modal-btn-confirm-rate' },
-  bolus: { label: 'Give Bolus', cls: 'modal-btn-confirm-bolus' },
+  bolus: { label: 'Pump Bolus', cls: 'modal-btn-confirm-bolus' },
 };
 
 /**

@@ -199,7 +199,7 @@ export function render(drugId) {
     if (evt.type === 'bolus') {
       const dose = fmtBolusDose(evt.value, evt.drug);
       const delivery = fmtBolusDelivery(evt);
-      const modeLabel = evt.deliveryMode === 'push' ? 'Push' : 'Bolus';
+      const modeLabel = evt.deliveryMode === 'push' ? 'IV Push' : 'Pump Bolus';
       desc = `${badge}${modeLabel} <strong>${dose}</strong> <span class="h-detail">${delivery}</span>`;
     } else if (evt.type === 'rate') {
       const rate = fmtRate(evt.value, evt.drug);
