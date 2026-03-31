@@ -329,8 +329,23 @@
       </div>
       <div class="derived-bar" id="derived-bar" style="display:none"><div class="derived-item"><span class="d-label">BMI</span><span class="d-value" id="derived-bmi">—</span></div><div class="derived-item"><span class="d-label">FFM</span><span class="d-value" id="derived-ffm">—</span></div><div class="derived-item"><span class="d-label">Ce50</span><span class="d-value" id="derived-ce50">—</span></div></div>
       <div class="pump-settings">
-        <span class="card-title">Pump Configuration</span>
+        <span class="card-title">Model &amp; Pump Configuration</span>
         <div class="input-grid">
+          <div class="form-row">
+            <label for="input-opioid">Opioid Co-administration</label>
+            <select id="input-opioid">
+              <option value="false" selected>Without opioid</option>
+              <option value="true">With opioid</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="input-tci-mode">TCI Planning Mode</label>
+            <select id="input-tci-mode">
+              <option value="stepped" selected>Stepped</option>
+              <option value="cet">CET</option>
+              <option value="cet-conservative">CET (Conservative)</option>
+            </select>
+          </div>
           <div class="form-row">
             <label for="input-concentration">Propofol Concentration</label>
             <select id="input-concentration">
@@ -347,7 +362,7 @@
             </select>
           </div>
         </div>
-        <div class="pump-derived" id="pump-derived">Max bolus rate: 125.0 mg/min · Max infusion: 12.5 mg/min</div>
+        <div class="pump-derived" id="pump-derived">Max bolus rate: 125.0 mg/min</div>
       </div>
       <button class="btn-confirm" id="btn-confirm">Confirm Patient</button>
       <button class="btn-restore" id="btn-restore" style="display:none">Restore Last Case</button>
@@ -390,7 +405,7 @@
       <div class="drug-panel">
         <div class="drug-card active" id="drug-propofol">
           <div class="drug-name">Propofol</div>
-          <div class="drug-model">Eleveld 2.1 · 10 mg/mL</div>
+          <div class="drug-model" id="propofol-model-label">Eleveld 2018 · 10 mg/mL</div>
           <div class="drug-ce-row">
             <span class="ce-label">Ce</span>
             <span class="ce-current" id="propofol-ce">0.00</span>

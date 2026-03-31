@@ -51,6 +51,17 @@ function initSimScreen(patient) {
     `<span class="ps-val">${p.height}cm</span> ` +
     `BMI <span class="ps-val">${bmi}</span>`;
 
+  // Update drug model label
+  const modelLabel = $('propofol-model-label');
+  if (modelLabel) {
+    const conc = $('input-concentration')?.value || '10';
+    const opioid = p.opioid ? ' · +opioid' : '';
+    const tciMode = setup.getTciMode ? setup.getTciMode() : 'stepped';
+    const modeLabel = tciMode === 'cet' ? ' · CET' :
+                      tciMode === 'cet-conservative' ? ' · CET(C)' : '';
+    modelLabel.textContent = `Eleveld 2018 · ${conc} mg/mL${opioid}${modeLabel}`;
+  }
+
   // Reset modules
   controls.reset();
   mode.reset();
@@ -409,9 +420,10 @@ function boot() {
       }
 
       if (type === 'ceTarget') {
-        // TCI target
+        // TCI target — pass selected planning mode
         mode.setCeTarget(selectedDrug, canonicalValue);
-        model.planTCI(selectedDrug, t, canonicalValue);
+        const tciMode = setup.getTciMode ? setup.getTciMode() : 'stepped';
+        model.planTCI(selectedDrug, t, canonicalValue, { tciMode });
         mode.set(selectedDrug, 'tci', `TCI target Ce=${canonicalValue.toFixed(1)} μg/mL`);
         // TCI plan starts immediately, advance by a small offset
         if (!controls.isCaseStarted()) preStartClock = t + 0.01;

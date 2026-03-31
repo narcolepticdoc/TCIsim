@@ -67,8 +67,11 @@ export function init(opts = {}) {
   // Wire pump settings
   const concEl = $('input-concentration');
   const rateEl = $('input-pump-rate');
+  const tciModeEl = $('input-tci-mode');
+  const opioidEl = $('input-opioid');
   if (concEl) concEl.addEventListener('change', updatePumpDerived);
   if (rateEl) rateEl.addEventListener('change', updatePumpDerived);
+  if (opioidEl) opioidEl.addEventListener('change', () => { updateDerived(); });
 
   // Restore saved pump settings
   restorePumpSettingsUI();
@@ -160,7 +163,9 @@ function updateDerived() {
       const ffm = fatFreeMass(w, h, a, male);
 
       // Use the real Eleveld params to get Ce50 (not the old inline formula)
-      const params = calcEleveldParams({ age: a, weight: w, height: h, male, opioid: false });
+      const opioidEl = $('input-opioid');
+      const opioid = opioidEl ? opioidEl.value === 'true' : false;
+      const params = calcEleveldParams({ age: a, weight: w, height: h, male, opioid });
 
       $('derived-bmi').textContent = bmi.toFixed(1);
       $('derived-ffm').textContent = ffm.toFixed(1) + ' kg';
@@ -225,12 +230,13 @@ function confirmPatient() {
   try {
     if (!validate()) return;
 
+    const opioidEl = $('input-opioid');
     const patient = {
       age: parseInt($('input-age').value),
       weight: Math.round(getWeightKg() * 10) / 10,
       height: Math.round(getHeightCm() * 10) / 10,
       male: $('input-sex').value === 'male',
-      opioid: false,
+      opioid: opioidEl ? opioidEl.value === 'true' : false,
     };
 
     // Apply pump settings before confirming
@@ -247,6 +253,8 @@ function confirmPatient() {
 function applyPumpSettings() {
   const concEl = $('input-concentration');
   const rateEl = $('input-pump-rate');
+  const tciModeEl = $('input-tci-mode');
+  const opioidEl = $('input-opioid');
   if (!concEl || !rateEl) return;
 
   const concentration = parseFloat(concEl.value) || 10;
@@ -258,6 +266,8 @@ function applyPumpSettings() {
   try {
     localStorage.setItem('tci-pump-concentration', String(concentration));
     localStorage.setItem('tci-pump-rate', String(bolusRateMlH));
+    if (tciModeEl) localStorage.setItem('tci-mode', tciModeEl.value);
+    if (opioidEl) localStorage.setItem('tci-opioid', opioidEl.value);
   } catch (e) {}
 }
 
@@ -265,15 +275,13 @@ function restorePumpSettingsUI() {
   try {
     const savedConc = localStorage.getItem('tci-pump-concentration');
     const savedRate = localStorage.getItem('tci-pump-rate');
+    const savedMode = localStorage.getItem('tci-mode');
+    const savedOpioid = localStorage.getItem('tci-opioid');
 
-    if (savedConc) {
-      const el = $('input-concentration');
-      if (el) el.value = savedConc;
-    }
-    if (savedRate) {
-      const el = $('input-pump-rate');
-      if (el) el.value = savedRate;
-    }
+    if (savedConc) { const el = $('input-concentration'); if (el) el.value = savedConc; }
+    if (savedRate) { const el = $('input-pump-rate'); if (el) el.value = savedRate; }
+    if (savedMode) { const el = $('input-tci-mode'); if (el) el.value = savedMode; }
+    if (savedOpioid) { const el = $('input-opioid'); if (el) el.value = savedOpioid; }
   } catch (e) {}
 }
 
@@ -287,7 +295,16 @@ function updatePumpDerived() {
   const bolusRateMgMin = rateMlH * conc / 60;
   const maxInfMgMin = bolusRateMgMin; // same cap
 
-  el.textContent = `Max bolus rate: ${bolusRateMgMin.toFixed(1)} mg/min · Max infusion: ${maxInfMgMin.toFixed(1)} mg/min`;
+  el.textContent = `Max bolus rate: ${bolusRateMgMin.toFixed(1)} mg/min`;
+}
+
+/**
+ * Get the currently selected TCI planning mode.
+ * @returns {string} 'stepped' | 'cet' | 'cet-conservative'
+ */
+export function getTciMode() {
+  const el = $('input-tci-mode');
+  return el ? el.value : 'stepped';
 }
 
 /**

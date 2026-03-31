@@ -25,7 +25,7 @@ import { calcEleveldParams } from '../pk/eleveld.js';
 import { createEngine } from '../pk/engine.js';
 import { createPDModel } from '../pk/pd.js';
 import { createEventList } from './events.js';
-import { planTCIScheme } from './tci-planner.js';
+import { planTCIScheme, planTCISchemeCET, planTCISchemeCETConservative } from './tci-planner.js';
 import { predictTroughTime } from '../pk/decay-predictor.js';
 import { DRUG_DEFS, getPumpSettings } from '../util/constants.js';
 
@@ -192,8 +192,14 @@ export function createModel(config = {}) {
       maxRate: ps.maxRate,
     };
 
-    // Generate scheme
-    const scheme = planTCIScheme(engine, startState, fromTime, ceTarget, planConfig);
+    // Generate scheme — select planner based on tciMode
+    let planFn;
+    switch (planConfig.tciMode) {
+      case 'cet': planFn = planTCISchemeCET; break;
+      case 'cet-conservative': planFn = planTCISchemeCETConservative; break;
+      default: planFn = planTCIScheme; break;
+    }
+    const scheme = planFn(engine, startState, fromTime, ceTarget, planConfig);
 
     // Insert bolus if present (TCI boluses always use pump delivery)
     const bolusStep = scheme.find(s => s.type === 'bolus');
