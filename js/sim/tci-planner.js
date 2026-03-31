@@ -87,9 +87,8 @@ export function planTCIScheme(engine, startState, startTime, ceTarget, config = 
 
   let simTime = startTime;
 
-  // ---- Step 1: Loading bolus ----
+  // ---- Step 1a: Loading bolus (target increase) ----
   // If current Ce is below the lower bound, calculate a loading dose.
-  // The bolus should overshoot Cp so that Ce rises to near the target.
   if (currentCe < lowerBound) {
     const bolusMg = calculateLoadingBolus(engine, ceTarget, cfg);
 
@@ -100,6 +99,22 @@ export function planTCIScheme(engine, startState, startTime, ceTarget, config = 
       const { duration, rate } = plannerBolusDelivery(bolusMg, cfg);
       engine.advance(duration, rate);
       simTime += duration;
+    }
+  }
+
+  // ---- Step 1b: Decay wait (target decrease) ----
+  // If current Ce is above the upper bound, pause and wait for Ce
+  // to decay down to the upper bound before starting maintenance.
+  if (currentCe > upperBound) {
+    scheme.push({ type: 'rate', time: simTime, value: 0 });
+
+    // Advance with rate=0 until Ce drops to upperBound or timeout
+    const maxWait = startTime + cfg.maxPlanTime;
+    while (simTime < maxWait) {
+      engine.advance(cfg.simStep, 0);
+      simTime += cfg.simStep;
+      const ce = engine.getConcentrations().Ce;
+      if (ce <= upperBound) break;
     }
   }
 

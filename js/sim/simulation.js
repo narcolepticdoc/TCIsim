@@ -27,7 +27,7 @@ import { createPDModel } from '../pk/pd.js';
 import { createEventList } from './events.js';
 import { planTCIScheme } from './tci-planner.js';
 import { predictTroughTime } from '../pk/decay-predictor.js';
-import { DRUG_DEFS } from '../util/constants.js';
+import { DRUG_DEFS, getPumpSettings } from '../util/constants.js';
 
 /**
  * @typedef {Object} ModelConfig
@@ -62,10 +62,10 @@ export function createModel(config = {}) {
     eventList.registerEngine(cfg.primaryDrug, engine);
 
     // Register drug config for bolus delivery computation
-    const drugDef = DRUG_DEFS[cfg.primaryDrug] || { concentration: cfg.concentration, bolusRateMlH: 750 };
+    const ps = getPumpSettings(cfg.primaryDrug);
     eventList.registerDrugConfig(cfg.primaryDrug, {
-      concentration: drugDef.concentration || cfg.concentration,
-      bolusRateMlH: drugDef.bolusRateMlH || 750,
+      concentration: ps.concentration,
+      bolusRateMlH: ps.bolusRateMlH,
     });
 
     pdModels[cfg.primaryDrug] = createPDModel({
@@ -97,10 +97,10 @@ export function createModel(config = {}) {
     eventList.registerEngine(cfg.primaryDrug, newEngine);
 
     // Re-register drug config
-    const drugDef = DRUG_DEFS[cfg.primaryDrug] || { concentration: cfg.concentration, bolusRateMlH: 750 };
+    const ps = getPumpSettings(cfg.primaryDrug);
     eventList.registerDrugConfig(cfg.primaryDrug, {
-      concentration: drugDef.concentration || cfg.concentration,
-      bolusRateMlH: drugDef.bolusRateMlH || 750,
+      concentration: ps.concentration,
+      bolusRateMlH: ps.bolusRateMlH,
     });
 
     pdModels[cfg.primaryDrug] = createPDModel({
@@ -120,6 +120,19 @@ export function createModel(config = {}) {
 
   function getParams() {
     return params;
+  }
+
+  /**
+   * Re-register drug config from current pump settings.
+   * Call after user changes pump settings.
+   */
+  function refreshDrugConfig(drugId) {
+    const id = drugId || cfg.primaryDrug;
+    const ps = getPumpSettings(id);
+    eventList.registerDrugConfig(id, {
+      concentration: ps.concentration,
+      bolusRateMlH: ps.bolusRateMlH,
+    });
   }
 
   // ---- Commands: event mutations ----
@@ -171,11 +184,12 @@ export function createModel(config = {}) {
     const startState = eventList.getStateAtTime(drugId, fromTime);
 
     // Pass drug config to planner for realistic bolus delivery
-    const drugDef = DRUG_DEFS[drugId] || {};
+    const ps = getPumpSettings(drugId);
     const planConfig = {
       ...tciConfig,
-      bolusConcentration: drugDef.concentration || cfg.concentration,
-      bolusRateMlH: drugDef.bolusRateMlH || 750,
+      bolusConcentration: ps.concentration,
+      bolusRateMlH: ps.bolusRateMlH,
+      maxRate: ps.maxRate,
     };
 
     // Generate scheme
@@ -331,7 +345,7 @@ export function createModel(config = {}) {
     // Commands
     addRate, addBolus, addPause, planTCI,
     editEvent, deleteEvent, deleteEventAndAfter,
-    clearAfter, reset,
+    clearAfter, reset, refreshDrugConfig,
 
     // Queries
     getConcentrationsAt, computeCurve, predictBIS,

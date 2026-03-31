@@ -18,7 +18,7 @@ import * as history from './ui/history.js';
 import * as eventEditor from './ui/event-editor.js';
 import { createChart } from './ui/chart.js';
 import { ceForBIS } from './pk/pd.js';
-import { bolusDeliveryMinutes } from './util/constants.js';
+import { bolusDeliveryMinutes, setPumpSettings } from './util/constants.js';
 import * as persist from './ui/persist.js';
 
 const $ = id => document.getElementById(id);
@@ -230,6 +230,18 @@ function restoreCase() {
   if (!saved || !saved.patient) return;
 
   try {
+    // Apply saved pump settings before resetting model
+    try {
+      const savedConc = localStorage.getItem('tci-pump-concentration');
+      const savedRate = localStorage.getItem('tci-pump-rate');
+      if (savedConc || savedRate) {
+        setPumpSettings('propofol', {
+          concentration: parseFloat(savedConc) || 10,
+          bolusRateMlH: parseFloat(savedRate) || 750,
+        });
+      }
+    } catch (e) {}
+
     // Reset model and set patient
     model.reset();
     model.setPatient(saved.patient);

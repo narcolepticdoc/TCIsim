@@ -37,19 +37,85 @@ export const DRUG_DEFS = {
   },
 };
 
+// ---- Runtime pump settings (user-configurable) ----
+// Falls back to DRUG_DEFS defaults. Updated from setup screen.
+
+const _pumpSettings = {};
+
+/**
+ * Get effective pump settings for a drug.
+ * Returns { concentration, bolusRateMlH, maxRate }.
+ * User overrides take precedence over DRUG_DEFS defaults.
+ */
+export function getPumpSettings(drugId) {
+  const def = DRUG_DEFS[drugId] || {};
+  const user = _pumpSettings[drugId] || {};
+  return {
+    concentration: user.concentration ?? def.concentration ?? 10,
+    bolusRateMlH: user.bolusRateMlH ?? def.bolusRateMlH ?? 750,
+    maxRate: user.maxRate ?? def.maxRate ?? 200,
+  };
+}
+
+/**
+ * Update pump settings for a drug. Partial updates supported.
+ * @param {string} drugId
+ * @param {Object} settings - { concentration?, bolusRateMlH? }
+ */
+export function setPumpSettings(drugId, settings) {
+  if (!_pumpSettings[drugId]) _pumpSettings[drugId] = {};
+  if (settings.concentration != null) {
+    _pumpSettings[drugId].concentration = settings.concentration;
+    // Derive maxRate from pump speed: (mL/h * mg/mL) / 60 = mg/min
+    const rateMlH = settings.bolusRateMlH ?? getPumpSettings(drugId).bolusRateMlH;
+    _pumpSettings[drugId].maxRate = rateMlH * settings.concentration / 60;
+  }
+  if (settings.bolusRateMlH != null) {
+    _pumpSettings[drugId].bolusRateMlH = settings.bolusRateMlH;
+    // Re-derive maxRate
+    const conc = _pumpSettings[drugId].concentration ?? getPumpSettings(drugId).concentration;
+    _pumpSettings[drugId].maxRate = settings.bolusRateMlH * conc / 60;
+  }
+}
+
+/**
+ * Reset pump settings to defaults for a drug (or all drugs).
+ */
+export function resetPumpSettings(drugId) {
+  if (drugId) {
+    delete _pumpSettings[drugId];
+  } else {
+    Object.keys(_pumpSettings).forEach(k => delete _pumpSettings[k]);
+  }
+}
+
+/**
+ * Get all user-modified pump settings (for persistence).
+ */
+export function getAllPumpSettings() {
+  return JSON.parse(JSON.stringify(_pumpSettings));
+}
+
+/**
+ * Restore pump settings from saved state (for persistence).
+ */
+export function restorePumpSettings(saved) {
+  Object.keys(_pumpSettings).forEach(k => delete _pumpSettings[k]);
+  if (saved) Object.assign(_pumpSettings, saved);
+}
+
 /**
  * Compute bolus delivery duration in minutes.
- * Based on pump max bolus rate and drug concentration.
+ * Uses effective pump settings (user overrides or DRUG_DEFS defaults).
  * 
  * @param {number} doseMg - bolus dose in mg
  * @param {string} drugId - drug identifier
  * @returns {number} delivery time in minutes
  */
 export function bolusDeliveryMinutes(doseMg, drugId) {
-  const drug = DRUG_DEFS[drugId];
-  if (!drug) return 0.05; // fallback
-  const volumeMl = doseMg / drug.concentration;
-  const durationMin = volumeMl / drug.bolusRateMlH * 60;
+  const ps = getPumpSettings(drugId);
+  const volumeMl = doseMg / ps.concentration;
+  const durationMin = volumeMl / ps.bolusRateMlH * 60;
   return Math.max(0.05, durationMin); // minimum 3 seconds
 }
 

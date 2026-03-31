@@ -12,6 +12,7 @@
  */
 
 import { calcEleveldParams, fatFreeMass } from '../pk/eleveld.js';
+import { setPumpSettings, getPumpSettings } from '../util/constants.js';
 
 const $ = id => document.getElementById(id);
 
@@ -62,6 +63,16 @@ export function init(opts = {}) {
   // Wire confirm button
   const btnConfirm = $('btn-confirm');
   if (btnConfirm) btnConfirm.addEventListener('click', confirmPatient);
+
+  // Wire pump settings
+  const concEl = $('input-concentration');
+  const rateEl = $('input-pump-rate');
+  if (concEl) concEl.addEventListener('change', updatePumpDerived);
+  if (rateEl) rateEl.addEventListener('change', updatePumpDerived);
+
+  // Restore saved pump settings
+  restorePumpSettingsUI();
+  updatePumpDerived();
 }
 
 // ---- Units ----
@@ -222,10 +233,61 @@ function confirmPatient() {
       opioid: false,
     };
 
+    // Apply pump settings before confirming
+    applyPumpSettings();
+
     if (onConfirm) onConfirm(patient);
   } catch (err) {
     console.error('[TCI Sim] confirmPatient error:', err);
   }
+}
+
+// ---- Pump settings ----
+
+function applyPumpSettings() {
+  const concEl = $('input-concentration');
+  const rateEl = $('input-pump-rate');
+  if (!concEl || !rateEl) return;
+
+  const concentration = parseFloat(concEl.value) || 10;
+  const bolusRateMlH = parseFloat(rateEl.value) || 750;
+
+  setPumpSettings('propofol', { concentration, bolusRateMlH });
+
+  // Save to localStorage
+  try {
+    localStorage.setItem('tci-pump-concentration', String(concentration));
+    localStorage.setItem('tci-pump-rate', String(bolusRateMlH));
+  } catch (e) {}
+}
+
+function restorePumpSettingsUI() {
+  try {
+    const savedConc = localStorage.getItem('tci-pump-concentration');
+    const savedRate = localStorage.getItem('tci-pump-rate');
+
+    if (savedConc) {
+      const el = $('input-concentration');
+      if (el) el.value = savedConc;
+    }
+    if (savedRate) {
+      const el = $('input-pump-rate');
+      if (el) el.value = savedRate;
+    }
+  } catch (e) {}
+}
+
+function updatePumpDerived() {
+  const el = $('pump-derived');
+  if (!el) return;
+
+  const conc = parseFloat($('input-concentration')?.value) || 10;
+  const rateMlH = parseFloat($('input-pump-rate')?.value) || 750;
+
+  const bolusRateMgMin = rateMlH * conc / 60;
+  const maxInfMgMin = bolusRateMgMin; // same cap
+
+  el.textContent = `Max bolus rate: ${bolusRateMgMin.toFixed(1)} mg/min · Max infusion: ${maxInfMgMin.toFixed(1)} mg/min`;
 }
 
 /**
