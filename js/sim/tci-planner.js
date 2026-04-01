@@ -215,47 +215,48 @@ function calculateLoadingBolus(engine, ceTarget, cfg) {
 /**
  * Find the infusion rate that maintains Ce at the target.
  * 
- * Uses binary search. For each candidate rate, simulates forward
- * over the lookahead window and finds the PEAK Ce deviation from
- * target. The optimal rate minimizes this peak deviation.
+ * Runs two binary searches:
+ * 1. Rate where endpoint Ce (at t + lookAhead) = target
+ * 2. Rate where peak Ce over the window = target (prevents overshoot)
  * 
- * This approach prevents overshoot — it finds the rate where Ce
- * stays closest to target throughout the window, not just at the end.
+ * Returns the LOWER of the two rates — this ensures Ce neither
+ * overshoots (peak constraint) nor undershoots at the end
+ * (endpoint constraint).
  */
 function findMaintenanceRate(engine, ceTarget, cfg, stepNum = 0) {
   const saved = engine.getState();
   const initialLA = cfg.initialLookAhead || 5;
   const lookAhead = Math.min(initialLA + stepNum * 5, 60);
+  const steps = Math.ceil(lookAhead / cfg.simStep);
 
-  let lo = 0;
-  let hi = cfg.maxRate;
-
+  // Search 1: rate where endpoint Ce = target
+  let lo1 = 0, hi1 = cfg.maxRate;
   for (let i = 0; i < cfg.rateSearchIter; i++) {
-    const mid = (lo + hi) / 2;
-
+    const mid = (lo1 + hi1) / 2;
     engine.setState(saved);
+    engine.advance(lookAhead, mid);
+    const ce = engine.getConcentrations().Ce;
+    if (ce < ceTarget) lo1 = mid; else hi1 = mid;
+  }
+  const endpointRate = (lo1 + hi1) / 2;
 
-    // Simulate forward and find max Ce over the window
+  // Search 2: rate where peak Ce over window = target
+  let lo2 = 0, hi2 = cfg.maxRate;
+  for (let i = 0; i < cfg.rateSearchIter; i++) {
+    const mid = (lo2 + hi2) / 2;
+    engine.setState(saved);
     let maxCe = 0;
-    const steps = Math.ceil(lookAhead / cfg.simStep);
     for (let s = 0; s < steps; s++) {
       engine.advance(cfg.simStep, mid);
       const ce = engine.getConcentrations().Ce;
       if (ce > maxCe) maxCe = ce;
     }
-
-    if (Math.abs(maxCe - ceTarget) < 0.001) {
-      engine.setState(saved);
-      return mid;
-    }
-
-    // If peak Ce overshoots target, rate is too high
-    if (maxCe > ceTarget) hi = mid;
-    else lo = mid;
+    if (maxCe > ceTarget) hi2 = mid; else lo2 = mid;
   }
+  const peakRate = (lo2 + hi2) / 2;
 
   engine.setState(saved);
-  return (lo + hi) / 2;
+  return Math.min(endpointRate, peakRate);
 }
 
 /**
@@ -339,8 +340,13 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
 
   let simTime = startTime;
 
-  // ---- Target increase: bolus → pause → maintenance ----
-  if (currentCe < lowerBound) {
+  // ---- Target increase ----
+  // Large deficit (Ce < 80% of target): bolus → pause → maintenance
+  // Small deficit (Ce 80-95% of target): skip bolus, just adjust rate
+  const ceDeficitRatio = currentCe / ceTarget;
+  const needsBolus = currentCe < lowerBound && ceDeficitRatio < 0.8;
+
+  if (needsBolus) {
     const bolusMg = bolusOverrideMg != null
       ? bolusOverrideMg
       : calculateCETBolus(engine, ceTarget, cfg);
