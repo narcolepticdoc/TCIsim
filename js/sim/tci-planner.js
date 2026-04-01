@@ -291,8 +291,15 @@ function runUntilDrift(engine, ceTarget, rate, fromTime, cfg) {
  * @param {TCISchemeConfig} [config] - Scheme configuration
  * @returns {Array<{type:string, time:number, value:number}>}
  */
-export function planTCISchemeCET(engine, startState, startTime, ceTarget, config = {}, bolusOverrideMg = null) {
-  const cfg = { ...DEFAULT_SCHEME_CONFIG, ...config };
+export function planTCISchemeCET(engine, startState, startTime, ceTarget, config = {}, bolusOverrideMg = null, pauseDurationMin = null) {
+  const cfg = {
+    ...DEFAULT_SCHEME_CONFIG,
+    // CET-specific defaults: more steps, tighter convergence, longer horizon
+    maxSteps: 12,
+    rateStablePct: 0.02,
+    maxPlanTime: 360,          // 6 hours for long-term step schedule
+    ...config,
+  };
   const scheme = [];
 
   if (ceTarget <= 0) {
@@ -323,41 +330,35 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
       engine.advance(duration, rate);
       simTime += duration;
 
-      // Step 2: Pause — advance with rate=0 until Ce reaches the lower bound
-      // (Ce is rising from bolus redistribution, will peak then start falling)
+      // Pause — advance with rate=0 until Ce peaks.
+      // If pauseDurationMin is provided (from analytical calculation),
+      // use it directly. Otherwise scan forward to detect peak.
       scheme.push({ type: 'rate', time: simTime, value: 0 });
 
-      let cePeak = 0;
-      let pastPeak = false;
-      let ceReachedTarget = false;
-      const maxWait = startTime + cfg.maxPlanTime;
+      if (pauseDurationMin != null && pauseDurationMin > 0) {
+        // Analytical pause duration (SimTIVA-style)
+        engine.advance(pauseDurationMin, 0);
+        simTime += pauseDurationMin;
+      } else {
+        // Forward scan to detect Ce peak (1-second resolution)
+        const pauseStep = 1 / 60;
+        let cePeak = 0;
+        let cePrior = 0;
+        const maxWait = startTime + cfg.maxPlanTime;
 
-      while (simTime < maxWait) {
-        engine.advance(cfg.simStep, 0);
-        simTime += cfg.simStep;
-        const ce = engine.getConcentrations().Ce;
+        while (simTime < maxWait) {
+          engine.advance(pauseStep, 0);
+          simTime += pauseStep;
+          const ce = engine.getConcentrations().Ce;
 
-        if (ce > cePeak) {
-          cePeak = ce;
-        } else if (ce < cePeak - 0.001) {
-          pastPeak = true;
-        }
-
-        // Ce has risen to or past the target — time to start maintenance
-        if (ce >= lowerBound && !ceReachedTarget) {
-          ceReachedTarget = true;
-        }
-
-        // Once Ce has peaked and is falling back toward target,
-        // or has entered the tolerance band, start maintenance
-        if (ceReachedTarget && pastPeak && ce <= upperBound) {
-          break;
-        }
-
-        // Safety: if Ce peaked and is now falling well below target,
-        // start maintenance early to catch it
-        if (pastPeak && ce < lowerBound) {
-          break;
+          if (ce > cePeak) {
+            cePeak = ce;
+            cePrior = ce;
+          } else if (ce < cePrior - 0.0005) {
+            // Ce has started falling — peak was reached
+            break;
+          }
+          cePrior = ce;
         }
       }
     }
@@ -454,23 +455,31 @@ function calculateCETBolus(engine, ceTarget, cfg) {
  * CET Conservative (SimTIVA-style) planner.
  * 
  * Uses SimTIVA's rate_corr_factor to reduce the bolus by ~9%,
- * producing gentler hemodynamics at the cost of slightly slower
- * onset. The maintenance infusion closes the remaining gap.
+ * and SimTIVA's analytical peak time to determine when to start
+ * maintenance. Produces gentler hemodynamics at the cost of
+ * slightly slower onset.
  * 
  * Validated against SimTIVA output within 1.3%.
  */
 export function planTCISchemeCETConservative(engine, startState, startTime, ceTarget, config = {}) {
   const cfg = { ...DEFAULT_SCHEME_CONFIG, ...config };
 
-  // Compute the rate-corrected bolus using SimTIVA's formula
+  // Compute the rate-corrected bolus and analytical peak time
   const pkParams = engine.params;
   const simtiva = computeSimTIVACETBolus(pkParams, ceTarget, {
     maxRateMlH: cfg.bolusRateMlH || 750,
     concentration: cfg.bolusConcentration || 10,
   });
 
-  // Use the CET planner with the corrected bolus
-  return planTCISchemeCET(engine, startState, startTime, ceTarget, config, simtiva.bolusMg);
+  // Compute pause duration: from bolus end to analytical peak time
+  // SimTIVA starts maintenance at peakTimeSec from bolus start
+  const bolusEndMin = simtiva.durationSec / 60;
+  const peakMin = simtiva.peakTimeSec / 60;
+  const pauseDurationMin = Math.max(0, peakMin - bolusEndMin);
+
+  // Use the CET planner with corrected bolus and explicit pause duration
+  return planTCISchemeCET(engine, startState, startTime, ceTarget, config,
+    simtiva.bolusMg, pauseDurationMin);
 }
 
 /**
