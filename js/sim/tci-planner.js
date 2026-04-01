@@ -212,9 +212,18 @@ function calculateLoadingBolus(engine, ceTarget, cfg) {
  * redistribution), progressively longer for later steps to converge
  * on the true maintenance rate.
  */
+/**
+ * Find the infusion rate that maintains Ce at the target.
+ * 
+ * Uses binary search. For each candidate rate, simulates forward
+ * over the lookahead window and finds the PEAK Ce deviation from
+ * target. The optimal rate minimizes this peak deviation.
+ * 
+ * This approach prevents overshoot — it finds the rate where Ce
+ * stays closest to target throughout the window, not just at the end.
+ */
 function findMaintenanceRate(engine, ceTarget, cfg, stepNum = 0) {
   const saved = engine.getState();
-  // Adaptive lookahead: starts at initialLookAhead, grows with step number
   const initialLA = cfg.initialLookAhead || 5;
   const lookAhead = Math.min(initialLA + stepNum * 5, 60);
 
@@ -225,16 +234,24 @@ function findMaintenanceRate(engine, ceTarget, cfg, stepNum = 0) {
     const mid = (lo + hi) / 2;
 
     engine.setState(saved);
-    engine.advance(lookAhead, mid);
-    const ce = engine.getConcentrations().Ce;
 
-    if (Math.abs(ce - ceTarget) < 0.001) {
+    // Simulate forward and find max Ce over the window
+    let maxCe = 0;
+    const steps = Math.ceil(lookAhead / cfg.simStep);
+    for (let s = 0; s < steps; s++) {
+      engine.advance(cfg.simStep, mid);
+      const ce = engine.getConcentrations().Ce;
+      if (ce > maxCe) maxCe = ce;
+    }
+
+    if (Math.abs(maxCe - ceTarget) < 0.001) {
       engine.setState(saved);
       return mid;
     }
 
-    if (ce < ceTarget) lo = mid;
-    else hi = mid;
+    // If peak Ce overshoots target, rate is too high
+    if (maxCe > ceTarget) hi = mid;
+    else lo = mid;
   }
 
   engine.setState(saved);
@@ -293,13 +310,17 @@ function runUntilDrift(engine, ceTarget, rate, fromTime, cfg) {
  * @returns {Array<{type:string, time:number, value:number}>}
  */
 export function planTCISchemeCET(engine, startState, startTime, ceTarget, config = {}, bolusOverrideMg = null, pauseDurationMin = null) {
+  // Derive initial lookahead from ke0: 3 × half-life ≈ 87.5% equilibration
+  const ke0 = engine.params?.ke0 || 0.146;
+  const ke0HalfLife = Math.log(2) / ke0; // minutes
+  const derivedLookAhead = Math.round(3 * ke0HalfLife);
+
   const cfg = {
     ...DEFAULT_SCHEME_CONFIG,
-    // CET-specific defaults: more steps, tighter convergence, longer horizon
     maxSteps: 12,
     rateStablePct: 0.02,
-    maxPlanTime: 360,          // 6 hours for long-term step schedule
-    initialLookAhead: 12,      // 12 min initial lookahead (balances speed vs overshoot)
+    maxPlanTime: 360,
+    initialLookAhead: derivedLookAhead,
     ...config,
   };
   const scheme = [];
@@ -466,22 +487,43 @@ function calculateCETBolus(engine, ceTarget, cfg) {
 export function planTCISchemeCETConservative(engine, startState, startTime, ceTarget, config = {}) {
   const cfg = { ...DEFAULT_SCHEME_CONFIG, ...config };
 
-  // Compute the rate-corrected bolus and analytical peak time
   const pkParams = engine.params;
-  const simtiva = computeSimTIVACETBolus(pkParams, ceTarget, {
-    maxRateMlH: cfg.bolusRateMlH || 750,
-    concentration: cfg.bolusConcentration || 10,
-  });
 
-  // Compute pause duration: from bolus end to analytical peak time
-  // SimTIVA starts maintenance at peakTimeSec from bolus start
-  const bolusEndMin = simtiva.durationSec / 60;
-  const peakMin = simtiva.peakTimeSec / 60;
-  const pauseDurationMin = Math.max(0, peakMin - bolusEndMin);
+  // Check if there's existing drug in the system
+  engine.setState(startState);
+  const currentCe = engine.getConcentrations().Ce;
 
-  // Use the CET planner with corrected bolus and explicit pause duration
+  let bolusMg, pauseDurationMin;
+
+  if (currentCe < 0.1) {
+    // Starting from zero — use SimTIVA's analytical UDF formula
+    const simtiva = computeSimTIVACETBolus(pkParams, ceTarget, {
+      maxRateMlH: cfg.bolusRateMlH || 750,
+      concentration: cfg.bolusConcentration || 10,
+    });
+    bolusMg = simtiva.bolusMg;
+    const bolusEndMin = simtiva.durationSec / 60;
+    const peakMin = simtiva.peakTimeSec / 60;
+    pauseDurationMin = Math.max(0, peakMin - bolusEndMin);
+  } else {
+    // Existing drug — use binary search (accounts for current state)
+    // then apply rate correction factor for conservative dosing
+    const exactBolus = calculateCETBolus(engine, ceTarget, cfg);
+    const simtiva = computeSimTIVACETBolus(pkParams, ceTarget, {
+      maxRateMlH: cfg.bolusRateMlH || 750,
+      concentration: cfg.bolusConcentration || 10,
+    });
+    // Apply the same proportional reduction as SimTIVA would
+    const correctionRatio = simtiva.rawBolusMg > 0
+      ? simtiva.bolusMg / simtiva.rawBolusMg
+      : 1;
+    bolusMg = exactBolus * correctionRatio;
+    pauseDurationMin = null; // use forward scan (peak time differs with existing drug)
+  }
+
+  engine.setState(startState); // restore before passing to CET planner
   return planTCISchemeCET(engine, startState, startTime, ceTarget, config,
-    simtiva.bolusMg, pauseDurationMin);
+    bolusMg, pauseDurationMin);
 }
 
 /**
