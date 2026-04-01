@@ -214,8 +214,9 @@ function calculateLoadingBolus(engine, ceTarget, cfg) {
  */
 function findMaintenanceRate(engine, ceTarget, cfg, stepNum = 0) {
   const saved = engine.getState();
-  // Adaptive lookahead: 5 min for step 0, up to 60 min for later steps
-  const lookAhead = Math.min(5 + stepNum * 5, 60);
+  // Adaptive lookahead: starts at initialLookAhead, grows with step number
+  const initialLA = cfg.initialLookAhead || 5;
+  const lookAhead = Math.min(initialLA + stepNum * 5, 60);
 
   let lo = 0;
   let hi = cfg.maxRate;
@@ -298,6 +299,7 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
     maxSteps: 12,
     rateStablePct: 0.02,
     maxPlanTime: 360,          // 6 hours for long-term step schedule
+    initialLookAhead: 12,      // 12 min initial lookahead (balances speed vs overshoot)
     ...config,
   };
   const scheme = [];
