@@ -131,7 +131,13 @@ export function planTCIScheme(engine, startState, startTime, ceTarget, config = 
     if (simTime >= startTime + cfg.maxPlanTime) break;
 
     // Find the rate that holds Ce at target over the next period
-    const optimalRate = findMaintenanceRate(engine, ceTarget, cfg, step);
+    let optimalRate = findMaintenanceRate(engine, ceTarget, cfg, step);
+
+    // Maintenance should never pause — if rate search returns ~0 but Ce
+    // is still substantial, use a minimal rate and let the next step correct
+    if (optimalRate < 0.001 && engine.getConcentrations().Ce > ceTarget * 0.5) {
+      optimalRate = 0.001;
+    }
 
     // Check if rate has stabilised (converged to maintenance)
     if (prevRate > 0 && Math.abs(optimalRate - prevRate) / prevRate < cfg.rateStablePct) {
@@ -215,16 +221,18 @@ function calculateLoadingBolus(engine, ceTarget, cfg) {
 /**
  * Find the infusion rate that maintains Ce at the target.
  * 
- * Runs two binary searches:
- * 1. Rate where endpoint Ce (at t + lookAhead) = target
- * 2. Rate where peak Ce over the window = target (prevents overshoot)
+ * Dual-constraint search:
+ * 1. Endpoint: rate where Ce at t + lookAhead = target
+ * 2. Peak: rate where max Ce over window ≤ target (prevents overshoot)
+ * Returns the lower of the two.
  * 
- * Returns the LOWER of the two rates — this ensures Ce neither
- * overshoots (peak constraint) nor undershoots at the end
- * (endpoint constraint).
+ * When Ce is currently ABOVE target (drift correction), only the
+ * endpoint search is used — the peak constraint would force rate=0
+ * since Ce is already above target.
  */
 function findMaintenanceRate(engine, ceTarget, cfg, stepNum = 0) {
   const saved = engine.getState();
+  const currentCe = engine.getConcentrations().Ce;
   const initialLA = cfg.initialLookAhead || 5;
   const lookAhead = Math.min(initialLA + stepNum * 5, 60);
   const steps = Math.ceil(lookAhead / cfg.simStep);
@@ -240,7 +248,13 @@ function findMaintenanceRate(engine, ceTarget, cfg, stepNum = 0) {
   }
   const endpointRate = (lo1 + hi1) / 2;
 
-  // Search 2: rate where peak Ce over window = target
+  // If Ce is above target, just use endpoint rate (bring Ce back down)
+  if (currentCe > ceTarget) {
+    engine.setState(saved);
+    return Math.max(0, endpointRate);
+  }
+
+  // Search 2: rate where peak Ce over window ≤ target
   let lo2 = 0, hi2 = cfg.maxRate;
   for (let i = 0; i < cfg.rateSearchIter; i++) {
     const mid = (lo2 + hi2) / 2;
@@ -407,15 +421,23 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
   }
 
   // ---- Maintenance: find the rate that holds Ce at target ----
-  // At this point Ce should be near the target (either from bolus-pause
-  // approach or decay wait). Find and emit maintenance rate steps.
+  // Rate=0 should only come from explicit pause phases (target decrease,
+  // CET bolus-pause), never from the maintenance loop. If Ce drifts
+  // above the band, we reduce the rate — we don't pause.
 
   let prevRate = -1;
 
   for (let step = 0; step < cfg.maxSteps; step++) {
     if (simTime >= startTime + cfg.maxPlanTime) break;
 
-    const optimalRate = findMaintenanceRate(engine, ceTarget, cfg, step);
+    let optimalRate = findMaintenanceRate(engine, ceTarget, cfg, step);
+
+    // Floor: maintenance rate should never be zero — a drift above target
+    // means we need a LOWER rate, not a pause. If the search returns 0,
+    // use a minimal rate and let the next step correct.
+    if (optimalRate < 0.001 && engine.getConcentrations().Ce > ceTarget * 0.5) {
+      optimalRate = 0.001; // effectively zero but doesn't trigger pause behavior
+    }
 
     // Convergence check
     if (prevRate > 0 && Math.abs(optimalRate - prevRate) / prevRate < cfg.rateStablePct) {
