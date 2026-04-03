@@ -99,9 +99,10 @@ function computeUDFs(pkParams, deltaSec = 1) {
   const l4 = Math.exp(-lambda[4]);
 
   // Compute p_udf per-second (cumulative Cp response to unit infusion)
+  // Extended to 21600 seconds (6 hours) to match SimTIVA's planning horizon
   const p_udf = [0];
   let pt1 = 0, pt2 = 0, pt3 = 0;
-  for (let i = 1; i <= 1000; i++) {
+  for (let i = 1; i <= 21600; i++) {
     pt1 = pt1 * l1 + p_coef[1] * (1 - l1);
     pt2 = pt2 * l2 + p_coef[2] * (1 - l2);
     pt3 = pt3 * l3 + p_coef[3] * (1 - l3);
@@ -200,8 +201,9 @@ export function computeSimTIVACETBolus(pkParams, ceTarget, opts = {}) {
   }
 
   // Effective bolus: floor(rawDose / maxRate * corrFactor) seconds of infusion
+  // real_bolus = round(maxRate * duration) — matches SimTIVA line 4702
   const durationSec = Math.floor(rawBolusMg / maxRateMgSec * rateCorrFactor);
-  const bolusMg = durationSec * maxRateMgSec;
+  const bolusMg = Math.round(durationSec * maxRateMgSec);
   const bolusVolMl = bolusMg / concentration;
 
   // Estimated peak Ce (will be below target due to correction)

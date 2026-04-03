@@ -692,16 +692,45 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   const bolusEvt = scheme.find(e => e.type === 'bolus');
 
   if (bolusEvt) {
-    const bolusDurSec = Math.round((bolusEvt.value / concentration) / (cfg.bolusRateMlH || 750) * 3600);
+    // Seconds-native: compute durations as exact integers
+    const bolusVolMl = bolusEvt.value / concentration;
+    const bolusDurSec = Math.round(bolusVolMl / (cfg.bolusRateMlH || 750) * 3600);
     const bolusRatePerSec = bolusEvt.value / bolusDurSec;
+
     for (let s = 0; s < bolusDurSec; s++) {
       ps1 = ps1 * l1s + p_coef[1] * bolusRatePerSec * (1 - l1s);
       ps2 = ps2 * l2s + p_coef[2] * bolusRatePerSec * (1 - l2s);
       ps3 = ps3 * l3s + p_coef[3] * bolusRatePerSec * (1 - l3s);
     }
-    const pauseSec = Math.round((simTime - startTime) * 60) - bolusDurSec;
+    const totalElapsedSec = Math.round((simTime - startTime) * 60);
+    const pauseSec = Math.max(0, totalElapsedSec - bolusDurSec);
     for (let s = 0; s < pauseSec; s++) {
       ps1 *= l1s; ps2 *= l2s; ps3 *= l3s;
+    }
+  } else if (engine.getConcentrations().Cp > 0.01) {
+    // No bolus emitted — target step-up or decrease with existing drug.
+    // Decompose the current engine state into SimTIVA eigenstates exactly
+    // by sampling Cp at 3 future times (at rate=0) and solving the 3×3 system:
+    //   Cp(t_i) = s1*exp(-λ1*t_i) + s2*exp(-λ2*t_i) + s3*exp(-λ3*t_i)
+    const saved2 = engine.getState();
+    const t1 = 10, t2 = 60, t3 = 300; // sample at +10s, +60s, +300s
+    engine.advance(t1 / 60, 0); const cp1 = engine.getConcentrations().Cp;
+    engine.setState(saved2);
+    engine.advance(t2 / 60, 0); const cp2 = engine.getConcentrations().Cp;
+    engine.setState(saved2);
+    engine.advance(t3 / 60, 0); const cp3 = engine.getConcentrations().Cp;
+    engine.setState(saved2);
+
+    // Cramer's rule on the Vandermonde-like matrix
+    const e11 = Math.exp(-lambda[1] * t1), e12 = Math.exp(-lambda[2] * t1), e13 = Math.exp(-lambda[3] * t1);
+    const e21 = Math.exp(-lambda[1] * t2), e22 = Math.exp(-lambda[2] * t2), e23 = Math.exp(-lambda[3] * t2);
+    const e31 = Math.exp(-lambda[1] * t3), e32 = Math.exp(-lambda[2] * t3), e33 = Math.exp(-lambda[3] * t3);
+
+    const det = e11 * (e22 * e33 - e23 * e32) - e12 * (e21 * e33 - e23 * e31) + e13 * (e21 * e32 - e22 * e31);
+    if (Math.abs(det) > 1e-20) {
+      ps1 = (cp1 * (e22 * e33 - e23 * e32) - e12 * (cp2 * e33 - cp3 * e23) + e13 * (cp2 * e32 - cp3 * e22)) / det;
+      ps2 = (e11 * (cp2 * e33 - cp3 * e23) - cp1 * (e21 * e33 - e23 * e31) + e13 * (e21 * cp3 - cp2 * e31)) / det;
+      ps3 = (e11 * (e22 * cp3 - cp2 * e32) - e12 * (e21 * cp3 - cp2 * e31) + cp1 * (e21 * e32 - e22 * e31)) / det;
     }
   }
 
@@ -739,8 +768,12 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
 
   // Second pass: step extraction (SimTIVA lines 1275-1544)
   // Propofol: threshold=0.08, avgfactor=0.667, roundingfactor=360
-  const cptThreshold = 0.08;
-  const cptAvgFactor = 0.667;
+  // Dynamic threshold/avgfactor based on early maintenance rate magnitude
+  // SimTIVA lines 1250-1259: propofol with cpt_rates[5]*360 >= 30 uses 0.08/0.667,
+  // lower rates use 0.05/0.62
+  const earlyRateMlH = (cptRates[5] || cptRates[0]) * 3600 / concentration;
+  const cptThreshold = earlyRateMlH >= 30 ? 0.08 : 0.05;
+  const cptAvgFactor = earlyRateMlH >= 30 ? 0.667 : 0.62;
   const rf = 360; // round mg/sec to nearest 1 mL/h
   const rnd = (r) => Math.round(r * rf) / rf;
 
