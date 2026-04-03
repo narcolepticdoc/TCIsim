@@ -611,7 +611,9 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   let simTime = startTime;
 
   // ---- Loading: CET bolus + pause (same as conservative) ----
-  const needsBolus = currentCe < ceTarget * 0.8;
+  // SimTIVA always gives a bolus for any CET target increase (no threshold).
+  // The bolus size is computed accounting for existing drug.
+  const needsBolus = currentCe < ceTarget * (1 - cfg.tolerancePct);
 
   if (needsBolus) {
     let bolusMg, pauseDurationMin = null;
@@ -625,13 +627,106 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
       bolusMg = simtiva.bolusMg;
       pauseDurationMin = Math.max(0, (simtiva.peakTimeSec - simtiva.durationSec) / 60);
     } else {
-      const exactBolus = calculateCETBolus(engine, ceTarget, cfg);
+      // SimTIVA CET step-up algorithm (lines 3762-3779):
+      // 1. Decompose Ce into eigenstates
+      // 2. trial_rate = (desired - vmCe(e_state, peak)) / e_udf[peak]  (gives dose in mg with deltaSec=1)
+      // 3. find_peak: adjust peak_time for this dose
+      // 4. Iterate until converged
+      // 5. Apply rate correction factor
+
+      const { e_udf, e_coef, lambda: lam } = computeUDFs(pkParams, 1);
+      const peakTime0 = e_udf.findIndex((v, i) => i > 1 && v < e_udf[i - 1]) - 1 || 175;
+
+      // Decompose Ce eigenstate via 4x4 Gaussian elimination
+      const saved2 = engine.getState();
+      const tSamples = [5, 30, 120, 600];
+      const ceSamples = [];
+      for (const ts of tSamples) {
+        engine.setState(saved2);
+        engine.advance(ts / 60, 0);
+        ceSamples.push(engine.getConcentrations().Ce);
+      }
+      engine.setState(saved2);
+
+      // Solve 4x4 system
+      const N = 4;
+      const A = [];
+      for (let i = 0; i < N; i++) {
+        const row = [];
+        for (let j = 0; j < N; j++) row.push(Math.exp(-lam[j + 1] * tSamples[i]));
+        row.push(ceSamples[i]);
+        A.push(row);
+      }
+      for (let col = 0; col < N; col++) {
+        let maxRow = col, maxVal = Math.abs(A[col][col]);
+        for (let row = col + 1; row < N; row++) {
+          if (Math.abs(A[row][col]) > maxVal) { maxVal = Math.abs(A[row][col]); maxRow = row; }
+        }
+        [A[col], A[maxRow]] = [A[maxRow], A[col]];
+        for (let row = col + 1; row < N; row++) {
+          const f = A[row][col] / A[col][col];
+          for (let j = col; j <= N; j++) A[row][j] -= f * A[col][j];
+        }
+      }
+      const es = new Array(N);
+      for (let i = N - 1; i >= 0; i--) {
+        es[i] = A[i][N];
+        for (let j = i + 1; j < N; j++) es[i] -= A[i][j] * es[j];
+        es[i] /= A[i][i];
+      }
+
+      // vmCe: predict Ce at t seconds from eigenstate at rate=0
+      function vmCe(t) {
+        let c = 0;
+        for (let j = 0; j < 4; j++) c += es[j] * Math.exp(-lam[j + 1] * t);
+        return c;
+      }
+
+      // Iterative trial_rate + find_peak (SimTIVA lines 3762-3779)
+      let tempPeak = peakTime0;
+      let trialDose, current;
+      const minDif = 0.005;
+
+      for (let iter = 0; iter < 20; iter++) {
+        // trial_rate with deltaSec=1 gives dose in mg
+        trialDose = (ceTarget - vmCe(tempPeak)) / e_udf[tempPeak];
+
+        // find_peak: scan for actual peak Ce = vmCe(t) + e_udf[t] * trialDose
+        let peakVal = vmCe(tempPeak) + e_udf[tempPeak] * trialDose;
+        // Search forward
+        while (tempPeak < e_udf.length - 2) {
+          const next = vmCe(tempPeak + 1) + (e_udf[tempPeak + 1] || 0) * trialDose;
+          if (next <= peakVal) break;
+          peakVal = next;
+          tempPeak++;
+        }
+        // Search backward
+        while (tempPeak > 1) {
+          const prev = vmCe(tempPeak - 1) + e_udf[tempPeak - 1] * trialDose;
+          if (prev <= peakVal) break;
+          peakVal = prev;
+          tempPeak--;
+        }
+
+        current = vmCe(tempPeak) + e_udf[tempPeak] * trialDose;
+        if (Math.abs(current - ceTarget) < minDif) break;
+      }
+
+      // trialDose is the raw bolus. Apply rate correction.
       const simtiva = computeSimTIVACETBolus(pkParams, ceTarget, {
         maxRateMlH: cfg.bolusRateMlH || 750,
         concentration: cfg.bolusConcentration || 10,
       });
       const correctionRatio = simtiva.rawBolusMg > 0 ? simtiva.bolusMg / simtiva.rawBolusMg : 1;
-      bolusMg = exactBolus * correctionRatio;
+      bolusMg = trialDose * correctionRatio;
+
+      // Pause duration: from bolus end to peak time
+      const maxRateMlH = cfg.bolusRateMlH || 750;
+      const concentration = cfg.bolusConcentration || 10;
+      const bolusDurSec = Math.round((Math.ceil(bolusMg) / concentration) / maxRateMlH * 3600);
+      if (tempPeak > bolusDurSec) {
+        pauseDurationMin = (tempPeak - bolusDurSec) / 60;
+      }
     }
 
     if (bolusMg > 0) {
