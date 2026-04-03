@@ -58,7 +58,8 @@ function initSimScreen(patient) {
     const opioid = p.opioid ? ' · +opioid' : '';
     const tciMode = setup.getTciMode ? setup.getTciMode() : 'stepped';
     const modeLabel = tciMode === 'cet' ? ' · CET' :
-                      tciMode === 'cet-conservative' ? ' · CET(C)' : '';
+                      tciMode === 'cet-conservative' ? ' · CET(C)' :
+                      tciMode === 'cet-emulation' ? ' · CET(E)' : '';
     modelLabel.textContent = `Eleveld 2018 · ${conc} mg/mL${opioid}${modeLabel}`;
   }
 

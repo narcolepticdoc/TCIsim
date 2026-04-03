@@ -22,7 +22,7 @@
  * Output: array of { type:'bolus'|'rate', time, value } events
  */
 
-import { computeSimTIVACETBolus } from './simtiva-reference.js';
+import { computeSimTIVACETBolus, computeUDFs } from './simtiva-reference.js';
 
 /**
  * @typedef {Object} TCISchemeConfig
@@ -248,19 +248,24 @@ function findMaintenanceRate(engine, ceTarget, cfg, stepNum = 0) {
   }
   const endpointRate = (lo1 + hi1) / 2;
 
-  // If Ce is above target, just use endpoint rate (bring Ce back down)
-  if (currentCe > ceTarget) {
+  // If Ce is above target, endpoint-only (bring it back down gradually)
+  // Otherwise, use both constraints (endpoint + peak prevention)
+  if (currentCe > ceTarget * 1.05) {
+    // Well above target — just find the rate to bring Ce down
     engine.setState(saved);
     return Math.max(0, endpointRate);
   }
 
-  // Search 2: rate where peak Ce over window ≤ target
+  // Search 2: rate where peak Ce over LONG window ≤ target
+  // Use 60 minutes regardless of step — catches slow redistribution overshoot
+  const peakWindow = 60;
+  const peakSteps = Math.ceil(peakWindow / cfg.simStep);
   let lo2 = 0, hi2 = cfg.maxRate;
   for (let i = 0; i < cfg.rateSearchIter; i++) {
     const mid = (lo2 + hi2) / 2;
     engine.setState(saved);
     let maxCe = 0;
-    for (let s = 0; s < steps; s++) {
+    for (let s = 0; s < peakSteps; s++) {
       engine.advance(cfg.simStep, mid);
       const ce = engine.getConcentrations().Ce;
       if (ce > maxCe) maxCe = ce;
@@ -332,8 +337,11 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
 
   const cfg = {
     ...DEFAULT_SCHEME_CONFIG,
-    maxSteps: 12,
-    rateStablePct: 0.02,
+    maxSteps: 10,
+    rateStablePct: 0.01,       // 1% final convergence
+    tolerancePct: 0.03,        // ±3% Ce band for drift detection
+    rateChangeThreshold: 0.08, // 8% rate change to trigger new step (SimTIVA uses 5-8%)
+    minStepDuration: 2.0,      // 2 min minimum per step
     maxPlanTime: 360,
     initialLookAhead: derivedLookAhead,
     ...config,
@@ -420,38 +428,48 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
     }
   }
 
-  // ---- Maintenance: find the rate that holds Ce at target ----
-  // Rate=0 should only come from explicit pause phases (target decrease,
-  // CET bolus-pause), never from the maintenance loop. If Ce drifts
-  // above the band, we reduce the rate — we don't pause.
+  // ---- Maintenance: rate-change threshold scanning ----
+  // Advance in 1-minute intervals checking the optimal rate.
+  // Emit a new step only when the rate has changed by > rateChangeThreshold.
+  // This matches SimTIVA's approach and produces 5-7 steps over hours.
 
-  let prevRate = -1;
+  const rateChangeThresh = cfg.rateChangeThreshold || 0.08;
+  const checkInterval = 1.0; // check every minute
 
-  for (let step = 0; step < cfg.maxSteps; step++) {
-    if (simTime >= startTime + cfg.maxPlanTime) break;
+  // Find initial maintenance rate
+  let currentRate = findMaintenanceRate(engine, ceTarget, cfg, 0);
+  if (currentRate < 0.001 && engine.getConcentrations().Ce > ceTarget * 0.5) {
+    currentRate = 0.001;
+  }
+  scheme.push({ type: 'rate', time: simTime, value: currentRate });
 
-    let optimalRate = findMaintenanceRate(engine, ceTarget, cfg, step);
+  let stepCount = 1;
+  let checkNum = 0;
 
-    // Floor: maintenance rate should never be zero — a drift above target
-    // means we need a LOWER rate, not a pause. If the search returns 0,
-    // use a minimal rate and let the next step correct.
-    if (optimalRate < 0.001 && engine.getConcentrations().Ce > ceTarget * 0.5) {
-      optimalRate = 0.001; // effectively zero but doesn't trigger pause behavior
-    }
+  while (simTime < startTime + cfg.maxPlanTime && stepCount < cfg.maxSteps) {
+    engine.advance(checkInterval, currentRate);
+    simTime += checkInterval;
+    checkNum++;
 
-    // Convergence check
-    if (prevRate > 0 && Math.abs(optimalRate - prevRate) / prevRate < cfg.rateStablePct) {
-      scheme.push({ type: 'rate', time: simTime, value: optimalRate });
+    // Check optimal rate every minute, but only use growing lookAhead
+    const stepIdx = Math.min(checkNum, 20); // cap growth
+    const optimalNow = findMaintenanceRate(engine, ceTarget, cfg, stepIdx);
+
+    const rateChange = currentRate > 0.001
+      ? Math.abs(optimalNow - currentRate) / currentRate
+      : (optimalNow > 0.001 ? 1 : 0);
+
+    if (rateChange > rateChangeThresh) {
+      currentRate = optimalNow > 0.001 ? optimalNow : 0.001;
+      scheme.push({ type: 'rate', time: simTime, value: currentRate });
+      stepCount++;
+    } else if (rateChange < cfg.rateStablePct) {
+      const lastEmitted = scheme[scheme.length - 1];
+      if (Math.abs(optimalNow - lastEmitted.value) / lastEmitted.value > 0.005) {
+        scheme.push({ type: 'rate', time: simTime, value: optimalNow });
+      }
       break;
     }
-
-    scheme.push({ type: 'rate', time: simTime, value: optimalRate });
-    prevRate = optimalRate;
-
-    const stepEnd = runUntilDrift(engine, ceTarget, optimalRate, simTime, cfg);
-    simTime = stepEnd;
-
-    if (simTime >= startTime + cfg.maxPlanTime) break;
   }
 
   engine.setState(saved);
@@ -552,6 +570,258 @@ export function planTCISchemeCETConservative(engine, startState, startTime, ceTa
   engine.setState(startState); // restore before passing to CET planner
   return planTCISchemeCET(engine, startState, startTime, ceTarget, config,
     bolusMg, pauseDurationMin);
+}
+
+/**
+ * CET Emulation planner — ported from SimTIVA's algorithm.
+ * 
+ * Uses SimTIVA's two-pass approach:
+ * 1. First pass: compute optimal Cp-targeting rate at each 2-minute interval
+ *    for 6 hours (180 intervals). Each rate is the amount needed to bring Cp
+ *    to target over the next interval, given current state.
+ * 2. Second pass: extract clinician-feasible steps by scanning the rate array
+ *    and emitting a new step when the rate changes by >cpt_threshold (8%).
+ *    Step rates are weighted averages (cpt_avgfactor).
+ * 
+ * Loading: uses CET bolus + pause (same as CET Conservative).
+ * Maintenance: SimTIVA's per-interval Cp targeting → step extraction.
+ * 
+ * @param {Object} engine
+ * @param {Float64Array} startState
+ * @param {number} startTime
+ * @param {number} ceTarget
+ * @param {Object} [config]
+ * @returns {Array<{type:string, time:number, value:number}>}
+ */
+export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, config = {}) {
+  const cfg = { ...DEFAULT_SCHEME_CONFIG, ...config };
+  const scheme = [];
+
+  if (ceTarget <= 0) {
+    scheme.push({ type: 'rate', time: startTime, value: 0 });
+    return scheme;
+  }
+
+  const saved = engine.getState();
+  engine.setState(startState);
+
+  const currentCe = engine.getConcentrations().Ce;
+  const upperBound = ceTarget * (1 + cfg.tolerancePct);
+
+  let simTime = startTime;
+
+  // ---- Loading: CET bolus + pause (same as conservative) ----
+  const needsBolus = currentCe < ceTarget * 0.8;
+
+  if (needsBolus) {
+    let bolusMg, pauseDurationMin = null;
+    const pkParams = engine.params;
+
+    if (currentCe < 0.1) {
+      const simtiva = computeSimTIVACETBolus(pkParams, ceTarget, {
+        maxRateMlH: cfg.bolusRateMlH || 750,
+        concentration: cfg.bolusConcentration || 10,
+      });
+      bolusMg = simtiva.bolusMg;
+      pauseDurationMin = Math.max(0, (simtiva.peakTimeSec - simtiva.durationSec) / 60);
+    } else {
+      const exactBolus = calculateCETBolus(engine, ceTarget, cfg);
+      const simtiva = computeSimTIVACETBolus(pkParams, ceTarget, {
+        maxRateMlH: cfg.bolusRateMlH || 750,
+        concentration: cfg.bolusConcentration || 10,
+      });
+      const correctionRatio = simtiva.rawBolusMg > 0 ? simtiva.bolusMg / simtiva.rawBolusMg : 1;
+      bolusMg = exactBolus * correctionRatio;
+    }
+
+    if (bolusMg > 0) {
+      // SimTIVA CET rounding: ceil to nearest 1mg
+      bolusMg = Math.ceil(bolusMg);
+      scheme.push({ type: 'bolus', time: simTime, value: bolusMg });
+      const { duration, rate } = plannerBolusDelivery(bolusMg, cfg);
+      engine.advance(duration, rate);
+      simTime += duration;
+
+      scheme.push({ type: 'rate', time: simTime, value: 0 });
+      if (pauseDurationMin != null && pauseDurationMin > 0) {
+        engine.advance(pauseDurationMin, 0);
+        simTime += pauseDurationMin;
+      } else {
+        const pauseStep = 1 / 60;
+        let cePeak = 0, cePrior = 0;
+        while (simTime < startTime + cfg.maxPlanTime) {
+          engine.advance(pauseStep, 0);
+          simTime += pauseStep;
+          const ce = engine.getConcentrations().Ce;
+          if (ce > cePeak) { cePeak = ce; cePrior = ce; }
+          else if (ce < cePrior - 0.0005) break;
+          cePrior = ce;
+        }
+      }
+    }
+  }
+
+  // ---- Target decrease: pause until Ce decays ----
+  if (currentCe > upperBound) {
+    scheme.push({ type: 'rate', time: simTime, value: 0 });
+    while (simTime < startTime + cfg.maxPlanTime) {
+      engine.advance(cfg.simStep, 0);
+      simTime += cfg.simStep;
+      if (engine.getConcentrations().Ce <= upperBound) break;
+    }
+  }
+
+  // ==== Maintenance: SimTIVA deliver_cpt — direct port ====
+  // All rate computation uses SimTIVA's eigenstate math (per-second).
+  // Rates in cptRates[] are in mg/sec. Converted to mg/min for our events.
+
+  const pkParams = engine.params;
+  const { p_udf, p_coef, lambda } = computeUDFs(pkParams);
+  const concentration = cfg.bolusConcentration || 10;
+
+  const cptInterval = 120;
+  const look_l1 = Math.exp(-lambda[1] * cptInterval);
+  const look_l2 = Math.exp(-lambda[2] * cptInterval);
+  const look_l3 = Math.exp(-lambda[3] * cptInterval);
+  const l1s = Math.exp(-lambda[1]);
+  const l2s = Math.exp(-lambda[2]);
+  const l3s = Math.exp(-lambda[3]);
+
+  // Build eigenstate at maintenance start by replaying bolus+pause
+  let ps1 = 0, ps2 = 0, ps3 = 0;
+  const bolusEvt = scheme.find(e => e.type === 'bolus');
+
+  if (bolusEvt) {
+    const bolusDurSec = Math.round((bolusEvt.value / concentration) / (cfg.bolusRateMlH || 750) * 3600);
+    const bolusRatePerSec = bolusEvt.value / bolusDurSec;
+    for (let s = 0; s < bolusDurSec; s++) {
+      ps1 = ps1 * l1s + p_coef[1] * bolusRatePerSec * (1 - l1s);
+      ps2 = ps2 * l2s + p_coef[2] * bolusRatePerSec * (1 - l2s);
+      ps3 = ps3 * l3s + p_coef[3] * bolusRatePerSec * (1 - l3s);
+    }
+    const pauseSec = Math.round((simTime - startTime) * 60) - bolusDurSec;
+    for (let s = 0; s < pauseSec; s++) {
+      ps1 *= l1s; ps2 *= l2s; ps3 *= l3s;
+    }
+  }
+
+  const maintTime = simTime;
+
+  // virtual_model: predict Cp at t seconds from eigenstate at zero rate
+  function vm(s1, s2, s3, t) {
+    const f1 = lambda[1] * t > 100 ? 0 : Math.exp(-lambda[1] * t);
+    const f2 = lambda[2] * t > 100 ? 0 : Math.exp(-lambda[2] * t);
+    const f3 = lambda[3] * t > 100 ? 0 : Math.exp(-lambda[3] * t);
+    return s1 * f1 + s2 * f2 + s3 * f3;
+  }
+
+  // First pass: 180 intervals (SimTIVA lines 2035-2081)
+  const cptRates = [];
+  let testRate = 0;
+
+  for (let i = 0; i < 180; i++) {
+    if (ps1 === 0 && ps2 === 0 && ps3 === 0) {
+      testRate = ceTarget / p_udf[cptInterval];
+    } else {
+      // Advance eigenstate 1 second at testRate, then predict Cp at +interval at zero
+      const ts1 = ps1 * l1s + p_coef[1] * testRate * (1 - l1s);
+      const ts2 = ps2 * l2s + p_coef[2] * testRate * (1 - l2s);
+      const ts3 = ps3 * l3s + p_coef[3] * testRate * (1 - l3s);
+      const trialCp = vm(ts1, ts2, ts3, cptInterval);
+      testRate = ceTarget > trialCp ? (ceTarget - trialCp) / p_udf[cptInterval] : 0;
+    }
+    cptRates.push(testRate);
+    // Advance eigenstate by interval at testRate
+    ps1 = ps1 * look_l1 + p_coef[1] * testRate * (1 - look_l1);
+    ps2 = ps2 * look_l2 + p_coef[2] * testRate * (1 - look_l2);
+    ps3 = ps3 * look_l3 + p_coef[3] * testRate * (1 - look_l3);
+  }
+
+  // Second pass: step extraction (SimTIVA lines 1275-1544)
+  // Propofol: threshold=0.08, avgfactor=0.667, roundingfactor=360
+  const cptThreshold = 0.08;
+  const cptAvgFactor = 0.667;
+  const rf = 360; // round mg/sec to nearest 1 mL/h
+  const rnd = (r) => Math.round(r * rf) / rf;
+
+  let priorTestRate;
+  const cptTimes = [];
+  let waitPeak = 0;
+
+  // Detect rate pattern: decremental or rise-then-fall (SimTIVA lines 1287-1492)
+  if (cptRates[0] > 0 && cptRates[0] >= cptRates[1]) {
+    // Decremental: start from interval 1
+    priorTestRate = cptRates[1];
+    cptTimes.push(1);
+    scheme.push({ type: 'rate', time: maintTime, value: rnd(cptRates[1]) * 60 });
+  } else if (cptRates[0] > 0 && cptRates[1] > cptRates[0]) {
+    // Possible rise-then-fall: find peak
+    for (let k = 1; k < 60; k++) {
+      if (cptRates[k] > cptRates[k - 1]) {
+        waitPeak = k;
+      } else {
+        break;
+      }
+    }
+
+    if (waitPeak <= 1) {
+      // Very short rise (1 interval) — treat as near-flat, use interval 1
+      priorTestRate = cptRates[1];
+      cptTimes.push(1);
+      scheme.push({ type: 'rate', time: maintTime, value: rnd(cptRates[1]) * 60 });
+    } else {
+      // Genuine rise-then-fall: average of rates[1] and rates[waitPeak]
+      const avgRate = rnd((cptRates[waitPeak] + cptRates[1]) / 2);
+      priorTestRate = cptRates[waitPeak];
+      cptTimes.push(waitPeak);
+      scheme.push({ type: 'rate', time: maintTime, value: avgRate * 60 });
+    }
+  } else {
+    // Flat or zero start
+    priorTestRate = cptRates[0];
+    cptTimes.push(0);
+    scheme.push({ type: 'rate', time: maintTime, value: rnd(cptRates[0]) * 60 });
+  }
+
+  // Scan intervals after waitPeak for step changes
+  for (let j = Math.max(2, waitPeak + 1); j < 60; j++) {
+    if (priorTestRate <= 0) continue;
+    const change = (priorTestRate - cptRates[j]) / priorTestRate;
+
+    if (change > cptThreshold) {
+      const lastIdx = cptTimes[cptTimes.length - 1];
+      const avgRate = (cptRates[lastIdx] - cptRates[j]) * cptAvgFactor + cptRates[j];
+      const rounded = rnd(avgRate);
+      // Rate starts at the time corresponding to the last emitted interval
+      // This is SimTIVA line 1513: relativetime = working_clock + cpt_times[last]*120
+      const stepTimeMin = maintTime + lastIdx * cptInterval / 60;
+      const prevVal = scheme[scheme.length - 1]?.value || 0;
+      // Replace the previous step's rate if same timestamp, otherwise add new
+      if (Math.abs(stepTimeMin - (scheme[scheme.length - 1]?.time || 0)) < 0.01) {
+        scheme[scheme.length - 1].value = rounded * 60;
+      } else if (Math.abs(rounded * 60 - prevVal) > 0.01) {
+        scheme.push({ type: 'rate', time: stepTimeMin, value: rounded * 60 });
+      }
+      cptTimes.push(j);
+      priorTestRate = cptRates[j];
+    }
+  }
+
+  // Final step at j=59
+  {
+    const lastIdx = cptTimes[cptTimes.length - 1];
+    const j = 59;
+    const avgRate = (cptRates[lastIdx] - cptRates[j]) * cptAvgFactor + cptRates[j];
+    const rounded = rnd(avgRate);
+    const stepTimeMin = maintTime + lastIdx * cptInterval / 60;
+    const lastVal = scheme[scheme.length - 1]?.value || 0;
+    if (Math.abs(rounded * 60 - lastVal) > 0.01) {
+      scheme.push({ type: 'rate', time: stepTimeMin, value: rounded * 60 });
+    }
+  }
+
+  engine.setState(saved);
+  return scheme;
 }
 
 /**

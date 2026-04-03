@@ -98,6 +98,16 @@ function computeUDFs(pkParams, deltaSec = 1) {
   const l3 = Math.exp(-lambda[3]);
   const l4 = Math.exp(-lambda[4]);
 
+  // Compute p_udf per-second (cumulative Cp response to unit infusion)
+  const p_udf = [0];
+  let pt1 = 0, pt2 = 0, pt3 = 0;
+  for (let i = 1; i <= 1000; i++) {
+    pt1 = pt1 * l1 + p_coef[1] * (1 - l1);
+    pt2 = pt2 * l2 + p_coef[2] * (1 - l2);
+    pt3 = pt3 * l3 + p_coef[3] * (1 - l3);
+    p_udf[i] = pt1 + pt2 + pt3;
+  }
+
   // Compute e_udf per-second
   const e_udf = [0];
   let t1 = 0, t2 = 0, t3 = 0, t4 = 0;
@@ -124,7 +134,7 @@ function computeUDFs(pkParams, deltaSec = 1) {
     prior = e_udf[i];
   }
 
-  return { e_udf, peak_time, p_coef, e_coef, lambda };
+  return { e_udf, p_udf, peak_time, p_coef, e_coef, lambda };
 }
 
 /**
