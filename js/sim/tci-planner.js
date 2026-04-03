@@ -687,33 +687,17 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   const l2s = Math.exp(-lambda[2]);
   const l3s = Math.exp(-lambda[3]);
 
-  // Build eigenstate at maintenance start by replaying bolus+pause
+  // Build eigenstate at maintenance start.
+  // Use Cramer's rule decomposition: sample Cp at 3 future times at rate=0,
+  // solve the 3×3 system to get exact eigenstate coefficients.
+  // This works for ALL cases: from-zero (engine advanced through bolus+pause),
+  // target step-up (engine has existing drug + new bolus), and target decrease
+  // (engine has existing drug after decay).
   let ps1 = 0, ps2 = 0, ps3 = 0;
-  const bolusEvt = scheme.find(e => e.type === 'bolus');
 
-  if (bolusEvt) {
-    // Seconds-native: compute durations as exact integers
-    const bolusVolMl = bolusEvt.value / concentration;
-    const bolusDurSec = Math.round(bolusVolMl / (cfg.bolusRateMlH || 750) * 3600);
-    const bolusRatePerSec = bolusEvt.value / bolusDurSec;
-
-    for (let s = 0; s < bolusDurSec; s++) {
-      ps1 = ps1 * l1s + p_coef[1] * bolusRatePerSec * (1 - l1s);
-      ps2 = ps2 * l2s + p_coef[2] * bolusRatePerSec * (1 - l2s);
-      ps3 = ps3 * l3s + p_coef[3] * bolusRatePerSec * (1 - l3s);
-    }
-    const totalElapsedSec = Math.round((simTime - startTime) * 60);
-    const pauseSec = Math.max(0, totalElapsedSec - bolusDurSec);
-    for (let s = 0; s < pauseSec; s++) {
-      ps1 *= l1s; ps2 *= l2s; ps3 *= l3s;
-    }
-  } else if (engine.getConcentrations().Cp > 0.01) {
-    // No bolus emitted — target step-up or decrease with existing drug.
-    // Decompose the current engine state into SimTIVA eigenstates exactly
-    // by sampling Cp at 3 future times (at rate=0) and solving the 3×3 system:
-    //   Cp(t_i) = s1*exp(-λ1*t_i) + s2*exp(-λ2*t_i) + s3*exp(-λ3*t_i)
+  if (engine.getConcentrations().Cp > 0.001) {
     const saved2 = engine.getState();
-    const t1 = 10, t2 = 60, t3 = 300; // sample at +10s, +60s, +300s
+    const t1 = 10, t2 = 60, t3 = 300; // seconds
     engine.advance(t1 / 60, 0); const cp1 = engine.getConcentrations().Cp;
     engine.setState(saved2);
     engine.advance(t2 / 60, 0); const cp2 = engine.getConcentrations().Cp;
@@ -721,7 +705,6 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
     engine.advance(t3 / 60, 0); const cp3 = engine.getConcentrations().Cp;
     engine.setState(saved2);
 
-    // Cramer's rule on the Vandermonde-like matrix
     const e11 = Math.exp(-lambda[1] * t1), e12 = Math.exp(-lambda[2] * t1), e13 = Math.exp(-lambda[3] * t1);
     const e21 = Math.exp(-lambda[1] * t2), e22 = Math.exp(-lambda[2] * t2), e23 = Math.exp(-lambda[3] * t2);
     const e31 = Math.exp(-lambda[1] * t3), e32 = Math.exp(-lambda[2] * t3), e33 = Math.exp(-lambda[3] * t3);
@@ -748,11 +731,34 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   const cptRates = [];
   let testRate = 0;
 
+  // Check if Ce is below target at maintenance start (rate-only step-up)
+  const ceAtMaint = engine.getConcentrations().Ce;
+  const needsCeBoost = ceAtMaint < ceTarget * 0.95 && !scheme.find(e => e.type === 'bolus');
+  // Number of Ce-targeting intervals: enough to get Ce close to target
+  const ceBoostIntervals = needsCeBoost ? 3 : 0; // 3 intervals = 6 min of Ce-targeting
+
   for (let i = 0; i < 180; i++) {
     if (ps1 === 0 && ps2 === 0 && ps3 === 0) {
       testRate = ceTarget / p_udf[cptInterval];
+    } else if (i < ceBoostIntervals) {
+      // Ce-targeting: find rate where Ce at +5min = target
+      // Shorter lookahead than from-zero case for faster approach
+      const savedEng = engine.getState();
+      let lo = 0, hi = cfg.maxRate;
+      for (let iter = 0; iter < 30; iter++) {
+        const mid = (lo + hi) / 2;
+        engine.setState(savedEng);
+        engine.advance(5, mid); // 5-minute Ce-targeting lookahead
+        const ce = engine.getConcentrations().Ce;
+        if (ce < ceTarget) lo = mid; else hi = mid;
+      }
+      engine.setState(savedEng);
+      // Convert mg/min (engine) → mg/sec (eigenstate)
+      testRate = Math.max(0, (lo + hi) / 2) / 60;
+      // Also advance the engine to keep it in sync for subsequent Ce searches
+      engine.advance(cptInterval / 60, testRate * 60);
     } else {
-      // Advance eigenstate 1 second at testRate, then predict Cp at +interval at zero
+      // Cp-targeting: advance 1 sec at testRate, predict Cp at +interval at zero
       const ts1 = ps1 * l1s + p_coef[1] * testRate * (1 - l1s);
       const ts2 = ps2 * l2s + p_coef[2] * testRate * (1 - l2s);
       const ts3 = ps3 * l3s + p_coef[3] * testRate * (1 - l3s);
