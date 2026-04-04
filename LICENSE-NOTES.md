@@ -23,8 +23,8 @@ Clean-room reimplementation of:
 - Eigenvalue decomposition (`cube()` solver — standard cubic root formula)
 - Unit Dose Functions (`p_udf`, `e_udf` — standard PK response functions)
 - Eigenvector coefficients (`p_coef`, `e_coef` — derived from rate constants and eigenvalues)
-- Rate correction factor — SimTIVA's `scheme_bolusadmin` formula (0.97 - scaling factor)
-- CET bolus computation — `target / e_udf[peak]` (standard PK formula)
+- Rate correction factor — mechanistic UDF simulation (patient-specific Ce trajectory during delivery; replaces the linear approximation used in SimTIVA's `scheme_bolusadmin`)
+- CET bolus computation — `target / e_udf[peak]` (standard PK formula), rounding in mL matching SimTIVA line 4702
 
 These are all standard pharmacokinetic mathematical operations, not novel to SimTIVA.
 
@@ -35,7 +35,8 @@ Contains four planners:
 - **CET Emulation** — reimplements SimTIVA's `deliver_cpt` algorithm:
   - Per-interval rate computation using the analytical Cp-targeting formula
   - Step extraction via rate-change threshold and weighted averaging
-  - Eigenstate reconstruction via Cramer's rule / Gaussian elimination
+  - Eigenstate reconstruction via Cramér's rule / Gaussian elimination
+  - `refitEigenstate()` to resync eigenstate after Ce-boost engine advances
 
 The emulation planner produces results that match SimTIVA's output because it implements the same mathematical algorithm, not because it copies SimTIVA's code.
 

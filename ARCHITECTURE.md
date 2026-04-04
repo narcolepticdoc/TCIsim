@@ -46,7 +46,11 @@ Events are the source of truth. The event list stores time-ordered events (bolus
 
 Boluses are delivered as constant-rate infusions at the pump's max rate. A 128mg bolus at 1000 mL/h (10 mg/mL) takes `128/10/1000*3600 = 46 seconds`. The engine advances through this delivery period, producing realistic Cp spikes.
 
-System rate-restore events are automatically inserted after timed boluses and pauses, flagged with `source: 'system'`.
+System rate-restore events are automatically inserted after timed boluses and pauses, flagged with `source: 'system'`. These are visible in the history panel as dimmed italic rows with a ↩ prefix but can be edited and deleted like any event.
+
+### Overlap and Boundary Rules
+
+`findActiveBolus` uses strict less-than boundary checks. When a manual rate change or pause event falls at the exact time a bolus ends, `addRate` and `addPause` explicitly scan and remove any system rate-restore at that exact time before inserting the new event. Do not rely on `findActiveBolus` alone for boundary collision detection.
 
 ### TCI Conflict Rules
 
@@ -61,7 +65,7 @@ When a TCI scheme is planned, the planner clears future TCI events and inserts t
 - `getConcentrationsAt(drugId, time)` — replays events to get Cp, Ce, rate at any time
 - `getEvents(drugId)` — returns the event list
 
-The facade selects the planner based on `tciMode`: stepped, cet, cet-conservative, or cet-emulation.
+The facade selects the planner based on `tciMode`: `stepped`, `cet`, `cet-conservative`, or `cet-emulation`.
 
 ## Pump Settings (`js/util/constants.js`)
 
@@ -76,11 +80,30 @@ Persisted to localStorage. Accessed via `getPumpSettings(drugId)` / `setPumpSett
 
 Clean-room reimplementation of SimTIVA's eigenvalue-based computations, used by the CET planners:
 
-- `computeUDFs(pkParams, deltaSec)` — eigenvalue decomposition via `cube()` solver, produces `p_udf` (Cp unit dose function, 21600 entries), `e_udf` (Ce unit dose function), `p_coef`, `e_coef`, `lambda` arrays
-- `computeSimTIVACETBolus(pkParams, ceTarget, opts)` — CET bolus with rate correction factor
-- `computeRateCorrFactor()` — SimTIVA's `scheme_bolusadmin` correction formula
+- `computeUDFs(pkParams, deltaSec)` — eigenvalue decomposition via `cube()` solver, produces `p_udf` (Cp unit dose function, 21600 entries), `e_udf` (Ce unit dose function, peak search ceiling 3600s), `p_coef`, `e_coef`, `lambda` arrays
+- `computeSimTIVACETBolus(pkParams, ceTarget, opts)` — CET bolus with mechanistic rate correction factor; rounds in mL then converts to mg (matching SimTIVA)
+- `computeRateCorrFactor(rawBolusMg, peakTimeSec, maxRateMgSec, e_coef, lambda)` — patient-specific UDF simulation replaces previous linear approximation; reduces mean Ce peak error from −8.4% to −1.9% across patient range
 
 **This module does NOT import SimTIVA's GPL-3.0 code.** It is a mathematical reimplementation of the same pharmacokinetic algorithms.
+
+### Key Implementation Details
+
+- `e_udf` peak search ceiling is 3600s (not 1000s) to correctly handle drugs with slow ke0
+- Bolus rounding is done in mL (`Math.round(durationSec * maxRateMgSec / concentration)`) then converted back to mg, matching SimTIVA line 4702
+- `computeRateCorrFactor` takes `e_coef[]` and `lambda[]` (not pump-rate scalars) and simulates the Ce trajectory during delivery to find the mechanistically correct correction duration
+
+## TCI Planners (`js/sim/tci-planner.js`)
+
+Four planning modes. See TCI-PLANNERS.md for full detail.
+
+All planners share:
+- `plannerBolusDelivery(doseMg, cfg)` — computes duration and rate for bolus delivery, matching `events.js getBolusDelivery()`
+- Decay-wait phase for target decreases: when Ce > upperBound, rate=0 and advance until Ce decays to tolerance band before entering maintenance search
+- `refitEigenstate()` pattern for syncing SimTIVA eigenstate to engine reality after any engine advance
+
+### Emulation Planner Eigenstate Sync
+
+`planTCISchemeEmulation` maintains a parallel `ps1/ps2/ps3` eigenstate alongside the engine for the SimTIVA Cp-targeting math. After each Ce-boost interval (where the engine is advanced directly), `refitEigenstate()` is called to resync this eigenstate from the engine via Cramér's rule. Without this, the eigenstate diverges at the Ce→Cp transition, producing wrong first maintenance step rates.
 
 ## UI Architecture
 
@@ -88,5 +111,5 @@ Single-page app with two screens (setup and simulation), no framework. All UI mo
 
 - Setup screen: patient demographics, pump configuration, TCI mode selection
 - Sim screen: drug panel (Ce/Cp display), chart (Chart.js), history panel, keypad modal, event editor modal
-- Timer: elapsed time with optional wall-clock sync, dual-mode popover
-- History: all events visible including system events (dimmed italic), tappable timestamps toggle ET/RT
+- Timer: elapsed time with optional wall-clock sync, dual-mode popover (Start Time / Elapsed Time)
+- History: all events visible including system events (dimmed italic with ↩ prefix), tappable timestamps toggle ET/RT

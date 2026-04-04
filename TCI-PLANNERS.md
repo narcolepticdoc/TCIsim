@@ -35,7 +35,7 @@ Ce-targeting bolus with peak matching.
 
 SimTIVA-style rate-corrected CET.
 
-**Loading:** Uses SimTIVA's `rate_corr_factor` (0.91-0.97 depending on pump rate) to reduce the CET bolus by ~9%. From zero: uses analytical UDF formula for bolus dose and peak time. From existing drug: uses binary search + correction ratio.
+**Loading:** Uses `computeRateCorrFactor` (mechanistic UDF simulation, see below) to reduce the CET bolus. From zero: uses analytical UDF formula for bolus dose and peak time. From existing drug: uses binary search + correction ratio.
 
 **Pause:** Analytical pause duration from SimTIVA's `peakTimeSec` calculation. Matches SimTIVA within 1 second.
 
@@ -70,6 +70,8 @@ testRate = (target - trialCp) / p_udf[120]
 ```
 Eigenstate is advanced by 120 seconds at the computed rate. Produces a 180-element rate array.
 
+**Ce-boost phase:** When Ce is below target at maintenance start and no bolus was given, the first 3 intervals use a 5-minute Ce-targeting binary search via the engine instead of the analytical Cp formula. After each such interval, `refitEigenstate()` resyncs `ps1/ps2/ps3` from the engine via Cramér's rule. This prevents eigenstate divergence at the Ce→Cp handoff. Without this refit, the first Cp-targeting step is overestimated by ~10–15 mL/h.
+
 **Second pass:** Step extraction scanning the rate array:
 - 8% threshold (`cpt_threshold`) — emit a new step when rate has dropped >8% from the last emitted step
 - 0.667 weighted average (`cpt_avgfactor`) — step rate = blend of last step rate and current rate
@@ -81,7 +83,7 @@ Eigenstate is advanced by 120 seconds at the computed rate. Produces a 180-eleme
 
 When maintenance starts from a non-zero state (second target change), the current engine state is decomposed into SimTIVA eigenstates via:
 
-**Cp eigenstate (3×3 Cramer's rule):** Sample Cp at +10s, +60s, +300s at rate=0. Solve:
+**Cp eigenstate (3×3 Cramér's rule):** Sample Cp at +10s, +60s, +300s at rate=0. Solve:
 ```
 Cp(t_i) = s1·exp(-λ1·t_i) + s2·exp(-λ2·t_i) + s3·exp(-λ3·t_i)
 ```
@@ -96,6 +98,16 @@ Both give exact results (verified zero error at all sample points).
 - Best target change handling (0% overshoot on step-ups)
 - 5-7 rate steps matching SimTIVA's step values and timing
 - Rapid target change: Ce=4.51 at t=30 for target 4.5 (vs 4.07-4.15 for other modes)
+
+## Rate Correction Factor
+
+`computeRateCorrFactor` in `simtiva-reference.js` calculates the fraction by which bolus delivery duration is shortened to prevent Ce overshoot during pump delivery.
+
+**Previous approach (linear approximation):** Tuned for a typical patient near 750 mL/h. Produced mean Ce peak error −8.4%, worst case −21.6% for large patients.
+
+**Current approach (mechanistic UDF simulation):** Simulates Ce second-by-second during delivery using `e_coef`/`lambda`. Binary search finds the duration where the Ce peak matches the target. Patient-specific and drug-agnostic. Mean error reduced to −1.9%, worst case −7.2% (n=72 across 6 patients × 4 targets × 3 pump rates).
+
+Typical factors: ~0.92 at 700–750 mL/h, ~0.97–0.99 at 1200 mL/h.
 
 ## Validation Summary
 

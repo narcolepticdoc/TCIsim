@@ -1,6 +1,6 @@
 # TCI Sim — Session History
 
-Detailed session-by-session development log. For current project state, see HANDOFF.md.
+Detailed session-by-session development log. For current project state, see DEVELOPMENT.md.
 
 ---
 
@@ -28,78 +28,36 @@ Detailed session-by-session development log. For current project state, see HAND
 
 *TCI planner — target decrease fix:* Added "decay wait" phase to planTCIScheme. When Ce > upperBound, sets rate=0 and advances until Ce decays to tolerance band before entering maintenance rate search. Fixes: 4.5→2.0 now reaches target in ~15 min (was 30+ and drifting); 3.0→1.0 now catches and holds (was decaying to zero).
 
-*CET planner:* New planTCISchemeCET function — SimTIVA-style Ce-targeting. Calculates CET bolus where peak Ce (after pump-rate delivery + zero-rate pause) = target. ~2.5× larger bolus than stepped planner (141mg vs 57mg for Ce=3.0). Reaches 99% of target in 3.1 min vs >30 min. Activated via { tciMode: 'cet' } in planTCI config. Target decreases use same decay-wait logic as stepped planner.
+*CET planner:* New planTCISchemeCET function — SimTIVA-style Ce-targeting. Calculates CET bolus where peak Ce (after pump-rate delivery + zero-rate pause) = target. ~2.5× larger bolus than stepped planner (141mg vs 57mg for Ce=3.0). Reaches 99% of target in 3.1 min vs >30 min. Activated via `{ tciMode: 'cet' }` in planTCI config. Target decreases use same decay-wait logic as stepped planner.
 
 *SimTIVA reference module:* Ported SimTIVA's UDF calculation, rate_corr_factor, and CET bolus formula to simtiva-reference.js. Validated against SimTIVA screenshot: our calculation gives 126mg vs SimTIVA's 128mg (1.3% difference). SimTIVA intentionally under-doses by ~9% via rate_corr_factor (0.915 at 700 mL/h) — deliberate design choice for gentler hemodynamics. Module exports computeSimTIVACETBolus, computeRawCETBolus, computeUDFs for testing/comparison.
 
-*Performance comparison:* Three-way analysis (Stepped vs CET vs SimTIVA) documented in TCI-PLANNER-COMPARISON.md. CET matches SimTIVA onset curves exactly through 3.5 min. Key difference is SimTIVA's rate correction producing ~9% smaller bolus.
+262 tests, all passing.
+
+**Session 8 (2026-04-02 to 2026-04-04):** TCI planner refinement and CET Emulation mode.
+
+*CET/CET(C) improvements:* Analytical pause timing from UDF peak time (within 1 second). Conservative mode step-up bug fixed (now uses binary search + correction ratio for existing drug). Small adjustment threshold removed for emulation mode. No spurious pauses in maintenance. `findMaintenanceRate` dual-constraint search. ke0-derived lookahead.
+
+*CET Emulation planner (4th mode):* Direct port of SimTIVA's `deliver_cpt` algorithm. First pass: 180 × 120s intervals, analytical Cp-targeting formula. Second pass: 8% threshold + 0.667 weighted average + 1 mL/h rounding + wait_peak averaging. Dynamic threshold/avgfactor based on early maintenance rate.
+
+*Eigenstate decomposition:* Cp 3×3 Cramér's rule for maintenance; Ce 4×4 Gaussian elimination for step-up bolus. Both exact (zero error at sample points). Replaces rough proportional split.
+
+*CET step-up algorithm (ported from SimTIVA):* `trialDose = (target - vmCe(e_state, peak)) / e_udf[peak]`, iterative find_peak, rate correction applied. 0% overshoot, <1 min to 95% on step-ups.
+
+*Bug fixes:* p_udf extended to 21600s; bolus rounding Math.round; dynamic threshold/avgfactor; eigenstate replay in integer seconds.
+
+Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap entirely in first 2-3 steps.
 
 262 tests, all passing.
 
-## Session 8 — TCI Planner Refinement & CET Emulation
+**Session 9 (2026-04-04):** Four fixes from Rev 6 external handoff analysis, validated by quantitative comparison across 6 patients × 4 Ce targets × 3 pump rates (n=72).
 
-### CET Planner Improvements
-- **Analytical pause timing**: CET(C) mode now uses SimTIVA's UDF-derived peak time instead of forward-scanning. Pause timing matches SimTIVA within 1 second.
-- **First maintenance rate match**: Initial rate now matches SimTIVA within 1-2 mL/h (70 vs 71 for 60y F case).
-- **Target step-up bug fixed**: Conservative mode was computing bolus from zero state via UDF formula — now uses binary search for existing drug + rate correction ratio.
-- **Small adjustment threshold**: When Ce ≥ 80% of new target, skips bolus-pause and does rate-only adjustment.
-- **No spurious pauses**: Maintenance loop never emits rate=0. Drift above band → lower rate (not pause).
-- **findMaintenanceRate dual-constraint**: Endpoint search + peak search, returns min. When Ce > target, uses endpoint-only to bring Ce back down.
-- **ke0-derived lookahead**: `3 × ln(2) / ke0` replaces empirical constant. 13-16 min for propofol.
+*Fix 1 — `computeRateCorrFactor` mechanistic replacement:* Old linear formula produced mean Ce peak error −8.4%, worst case −21.6% (120 kg patient, Ce=5, 700 mL/h). Replaced with patient-specific UDF simulation: second-by-second Ce simulation during delivery, binary search for the duration where peak Ce matches target. New mean error −1.9%, worst case −7.2%. Function signature changed — now takes `e_coef[]` and `lambda[]`; call site in `computeSimTIVACETBolus` updated.
 
-### CET Emulation Planner (4th mode)
-Ported SimTIVA's two-pass algorithm:
-- **First pass**: 180 intervals × 120 seconds (6 hours). First interval uses Ce-targeting binary search (matching SimTIVA's CET→CPT handoff). Subsequent intervals use SimTIVA's analytical Cp-targeting formula: `rate = (target - trialCp) / p_udf[120] × 60`.
-- **Second pass**: Step extraction via 8% rate-change threshold + 0.667 weighted average + 1 mL/h rounding. Minimum 10-minute step spacing.
-- **Loading**: Same CET bolus + analytical pause as CET(C).
-- **p_udf**: Added to `computeUDFs` in `simtiva-reference.js`.
+*Fix 2 — `eudf` peak search ceiling 1000 → 3600:* No impact for propofol (peak_time 163–194s). Future-proofs for slow ke0 drugs.
 
-### Results (CET Emulation vs SimTIVA)
-60y F, 70kg, 145cm, opioid, Ce=4.5, 700 mL/h:
-- First rate: 71 vs 70 mL/h ✓
-- Step count: 10 vs 5 (more granular)
-- Ce max overshoot: +8.3%
-- Ce min undershoot: -14.9%
+*Fix 3 — Ce-boost eigenstate sync in emulation planner:* `ps1/ps2/ps3` was not updated after Ce-boost engine advances. Extracted `refitEigenstate()` inner function (Cramér's rule 3-sample refit); called after each Ce-boost interval. Without fix: first Cp-targeting step overestimated by ~10–15 mL/h.
 
-35y M, 70kg, 170cm, Ce=3.0, 700 mL/h:
-- First rate: 64 vs 62 mL/h ✓
-- Step timing at 12m: 62 vs 56 mL/h
-- Late rates converge: 40 @ 5h12m vs 40 @ 5h10m ✓
+*Fix 4 — Bolus rounding mL-first:* Old code rounded to nearest 1 mg. New code rounds to nearest mL then converts (nearest 10 mg at 10 mg/mL). Differences 6–67 mg across patients. Matches SimTIVA line 4702.
 
-### Session 8 (continued) — CET Emulation Planner Fixes
-
-#### Eigenstate Decomposition (Cramer's Rule)
-- **Cp eigenstate** (3×3): sample Cp at 3 future times at rate=0, solve via Cramer's rule. Zero error. Used for maintenance rate computation.
-- **Ce eigenstate** (4×4): sample Ce at 4 future times, solve via Gaussian elimination with partial pivoting. Zero error. Used for CET step-up bolus computation.
-- Replaces rough proportional split (50/35/15%) that caused massive errors on second target changes.
-
-#### CET Step-Up Bolus Algorithm (ported from SimTIVA)
-- Uses Ce eigenstate decomposition to predict where Ce will decay to at peak_time
-- `trialDose = (target - vmCe(e_state, peak)) / e_udf[peak]` — accounts for existing drug
-- Iterative `find_peak` adjusts peak_time for the computed dose
-- Applies rate correction factor from `computeSimTIVACETBolus`
-- Result: 3.5→4.0 gives 38mg bolus (SimTIVA: 33mg), reaches 95% in 0.8 min, 0% overshoot
-
-#### No Bolus Threshold for Emulation Mode
-- SimTIVA ALWAYS gives a bolus for CET target increases — no 80% threshold
-- Emulation planner now matches: `needsBolus = currentCe < ceTarget * (1 - tolerancePct)`
-- Eliminates the slow 20-minute rate-only approach for small step-ups
-
-#### Ce-Targeting Boost for Rate-Only Step-Ups (other planners)
-- First 3 intervals use 5-minute Ce-targeting binary search
-- Falls back to Cp-targeting after 6 minutes
-- Reduces time to 95% from 20 min to 8 min for CET/CET(C) modes
-
-#### Bug Fixes from External Analysis
-1. p_udf extended to 21600 seconds (was 1000)
-2. Bolus rounding: Math.round to match SimTIVA line 4702
-3. Dynamic threshold/avgfactor based on early maintenance rate
-4. Eigenstate replay in integer seconds (no minute/second mixing)
-
-#### Final Performance (35y M, @1000 mL/h)
-| Scenario | Steps | RMSE | Peak Overshoot |
-|---|---|---|---|
-| 0→3.0 | 6 | 7.4% | +15% |
-| 3.5→4.0 step-up | 5 | — | +0% |
-| 3.5→4.5 step-up | 5 | — | +0% |
-| 3→4→3→4.5 rapid | — | — | Ce@30m=4.51 |
+262 tests, all passing.

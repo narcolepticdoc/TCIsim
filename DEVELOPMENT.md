@@ -2,7 +2,7 @@
 
 ## Session History
 
-### Sessions 1-6 (2026-03-25 to 2026-03-30)
+### Sessions 1-6 (2026-03-19 to 2026-03-30)
 
 Built the core application:
 - Matrix-exponential PK engine with Eleveld 2018 parameter computation
@@ -21,7 +21,7 @@ Built the core application:
 
 UI polish and pump settings:
 - Keypad unification (4-column grid, both keypads)
-- System events visible in history (rate-restores as dimmed italic rows)
+- System events visible in history (rate-restores as dimmed italic rows with ↩ prefix)
 - Bolus labels: "Pump Bolus" / "IV Push" with purple scheme
 - Pause duration selects, overflow handling
 - Event overlap boundary fix
@@ -48,7 +48,7 @@ TCI planner refinement and CET Emulation mode:
 - Dynamic threshold/avgfactor based on early maintenance rate magnitude
 
 **Eigenstate decomposition:**
-- Cp: 3×3 Cramer's rule — exact decomposition for maintenance rate computation
+- Cp: 3×3 Cramér's rule — exact decomposition for maintenance rate computation
 - Ce: 4×4 Gaussian elimination with partial pivoting — exact decomposition for step-up bolus
 - Replaces rough proportional approximation that caused major errors on second target changes
 
@@ -63,6 +63,22 @@ TCI planner refinement and CET Emulation mode:
 2. Bolus rounding: `Math.round` to match SimTIVA
 3. Dynamic threshold/avgfactor based on early maintenance rate
 4. Eigenstate replay in integer seconds (eliminates minute/second mixing drift)
+
+### Session 9 (2026-04-04) — TCI Planner Fixes (Rev 6 Handoff)
+
+Applied four fixes from external analysis in `TCI_Planner_Port___Handoff_Notes__Rev_6_.md`:
+
+**Fix 1 — `computeRateCorrFactor` mechanistic replacement (`simtiva-reference.js`):**
+The linear approximation (`0.97 - abs(max1200 - maxRate) / (max1200 - minRate) * 0.1`) was tuned for a typical patient near 750 mL/h and produced systematic Ce underdosing — mean error −8.4%, worst case −21.6% for a 120 kg patient at Ce=5. Replaced with a patient-specific UDF simulation: Ce trajectory is simulated second-by-second during delivery using `e_coef`/`lambda`, binary search finds the duration where peak Ce matches the target. Mean error reduced to −1.9%, worst case −7.2%. Function signature changed — now takes `e_coef[]` and `lambda[]` instead of pump-rate scalars; call site in `computeSimTIVACETBolus` updated accordingly.
+
+**Fix 2 — `eudf` peak search ceiling raised from 1000 to 3600 (`simtiva-reference.js`):**
+All propofol patients have peak_time 163–194s, so no current impact. Fix future-proofs for drugs with slow ke0 (opioids, dexmedetomidine) whose Ce peak can exceed 1000s and would have been silently truncated.
+
+**Fix 3 — Ce-boost eigenstate sync (`tci-planner.js`):**
+In `planTCISchemeEmulation`, after each Ce-boost interval the engine was advanced but the parallel `ps1/ps2/ps3` eigenstate was not updated. At the Ce→Cp transition, the eigenstate diverged from engine reality, producing wrong first maintenance step rates (~10–15 mL/h overestimate). Fixed by extracting the Cramér's rule refit into `refitEigenstate()` and calling it after each Ce-boost `engine.advance()`.
+
+**Fix 4 — Bolus rounding in mL not mg (`simtiva-reference.js`):**
+Old code: `bolusMg = Math.round(durationSec * maxRateMgSec)` (rounds to nearest 1 mg). New code: `bolusVolMl = Math.round(durationSec * maxRateMgSec / concentration); bolusMg = bolusVolMl * concentration` (rounds to nearest mL = nearest 10 mg at 10 mg/mL). Matches SimTIVA line 4702. Differences of 6–67 mg observed across patient range.
 
 ## Known Issues
 
@@ -84,9 +100,9 @@ TCI planner refinement and CET Emulation mode:
 
 ### Near-term
 
-- [ ] Close the 1mg bolus rounding gap (port SimTIVA's `delta_seconds` handling)
-- [ ] Port `scheme_bolusadmin` rate correction for non-zero-state step-ups
-- [ ] Add Emulation mode test coverage to test suite
+- [ ] Close the remaining bolus rounding gap — port SimTIVA's `delta_seconds` handling for exact step-up UDF computation
+- [ ] Port `scheme_bolusadmin` rate correction for non-zero-state step-ups (closes ~5mg step-up gap)
+- [ ] Add Session 9 fixes to test suite (mechanistic rate correction, eigenstate sync)
 
 ### Medium-term
 
