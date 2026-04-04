@@ -18,7 +18,7 @@ import * as history from './ui/history.js';
 import * as eventEditor from './ui/event-editor.js';
 import { createChart } from './ui/chart.js';
 import { ceForBIS } from './pk/pd.js';
-import { bolusDeliveryMinutes, setPumpSettings } from './util/constants.js';
+import { bolusDeliveryMinutes, setPumpSettings, APP_VERSION } from './util/constants.js';
 import * as persist from './ui/persist.js';
 
 const $ = id => document.getElementById(id);
@@ -336,6 +336,10 @@ function restoreCase() {
 // ---- Boot ----
 
 function boot() {
+  // Display app version
+  const vt = document.getElementById('app-version-tag');
+  if (vt) vt.textContent = 'v' + APP_VERSION;
+
   // Create the model
   model = createModel({ primaryDrug: 'propofol' });
 
