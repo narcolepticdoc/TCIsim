@@ -1,24 +1,24 @@
 /**
  * tci-planner.js — TCI Scheme Generators
- * 
+ *
  * Three planning modes:
- * 
+ *
  * 1. planTCIScheme (Stepped) — Conservative gradual approach.
  *    Small bolus targeting peak Ce = target, then stepped maintenance rates.
  *    Slow onset (~8-10 min to 95%) but low Cp overshoot.
- * 
+ *
  * 2. planTCISchemeCET (CET) — Fast onset with exact Ce targeting.
  *    Large bolus where peak Ce after pump-rate delivery + pause = target.
  *    Fast onset (~2.5 min to 95%) but high transient Cp overshoot.
- * 
+ *
  * 3. planTCISchemeCETConservative (CET Conservative) — SimTIVA-style.
  *    Same as CET but with rate-correction factor that reduces bolus ~9%.
  *    Slightly slower onset than CET but gentler hemodynamics.
  *    Validated against SimTIVA output (within 1.3%).
- * 
+ *
  * All three handle target decreases identically: pause until Ce decays
  * to tolerance band, then stepped maintenance.
- * 
+ *
  * Output: array of { type:'bolus'|'rate', time, value } events
  */
 
@@ -63,7 +63,7 @@ function plannerBolusDelivery(doseMg, cfg) {
 
 /**
  * Generate a clinician-feasible TCI scheme.
- * 
+ *
  * @param {Object} engine      - PK engine instance
  * @param {Float64Array} startState - Engine state to start from
  * @param {number} startTime   - Simulation time (minutes)
@@ -170,7 +170,7 @@ export function planTCIScheme(engine, startState, startTime, ceTarget, config = 
  * Calculate the loading bolus dose using binary search.
  * Finds the bolus that, after distribution and equilibration,
  * brings Ce closest to the target.
- * 
+ *
  * We search for the bolus where the PEAK Ce (which occurs several
  * minutes after the bolus due to ke0 lag) matches the target.
  */
@@ -211,21 +211,13 @@ function calculateLoadingBolus(engine, ceTarget, cfg) {
 }
 
 /**
- * Find the infusion rate that maintains Ce at the target from
- * the current engine state.
- * 
- * Uses adaptive lookahead: short for early steps (compensating for
- * redistribution), progressively longer for later steps to converge
- * on the true maintenance rate.
- */
-/**
  * Find the infusion rate that maintains Ce at the target.
- * 
+ *
  * Dual-constraint search:
  * 1. Endpoint: rate where Ce at t + lookAhead = target
  * 2. Peak: rate where max Ce over window ≤ target (prevents overshoot)
  * Returns the lower of the two.
- * 
+ *
  * When Ce is currently ABOVE target (drift correction), only the
  * endpoint search is used — the peak constraint would force rate=0
  * since Ce is already above target.
@@ -235,7 +227,6 @@ function findMaintenanceRate(engine, ceTarget, cfg, stepNum = 0) {
   const currentCe = engine.getConcentrations().Ce;
   const initialLA = cfg.initialLookAhead || 5;
   const lookAhead = Math.min(initialLA + stepNum * 5, 60);
-  const steps = Math.ceil(lookAhead / cfg.simStep);
 
   // Search 1: rate where endpoint Ce = target
   let lo1 = 0, hi1 = cfg.maxRate;
@@ -309,19 +300,19 @@ function runUntilDrift(engine, ceTarget, rate, fromTime, cfg) {
 
 /**
  * SimTIVA-style CET (Ce-targeting) planner.
- * 
+ *
  * Differs from the stepped planner in the loading phase:
  *   - Calculates a larger bolus that, when delivered at pump rate then
  *     followed by a PAUSE (rate=0), produces peak Ce = target.
  *   - Waits during the pause for Ce to reach target, then starts maintenance.
  *   - Produces faster onset than the stepped planner (~2-3 min vs ~8-10 min).
  *   - Cp overshoots significantly during the bolus phase (clinical trade-off).
- * 
+ *
  * For target decreases, behavior is identical to the stepped planner:
  *   pause until Ce decays to target, then maintenance.
- * 
+ *
  * Output: same format as planTCIScheme — array of {type, time, value} events.
- * 
+ *
  * @param {Object} engine      - PK engine instance
  * @param {Float64Array} startState - Engine state to start from
  * @param {number} startTime   - Simulation time (minutes)
@@ -481,7 +472,7 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
  * (after bolus delivery at pump rate, then zero-rate decay) equals
  * the target. This is a larger dose than the stepped planner's bolus
  * because it accounts for the redistribution-driven Ce peak.
- * 
+ *
  * SimTIVA equivalent: the bolus in CET mode where Ce(T_peak) = target.
  */
 function calculateCETBolus(engine, ceTarget, cfg) {
@@ -522,12 +513,12 @@ function calculateCETBolus(engine, ceTarget, cfg) {
 
 /**
  * CET Conservative (SimTIVA-style) planner.
- * 
+ *
  * Uses SimTIVA's rate_corr_factor to reduce the bolus by ~9%,
  * and SimTIVA's analytical peak time to determine when to start
  * maintenance. Produces gentler hemodynamics at the cost of
  * slightly slower onset.
- * 
+ *
  * Validated against SimTIVA output within 1.3%.
  */
 export function planTCISchemeCETConservative(engine, startState, startTime, ceTarget, config = {}) {
@@ -574,7 +565,7 @@ export function planTCISchemeCETConservative(engine, startState, startTime, ceTa
 
 /**
  * CET Emulation planner — ported from SimTIVA's algorithm.
- * 
+ *
  * Uses SimTIVA's two-pass approach:
  * 1. First pass: compute optimal Cp-targeting rate at each 2-minute interval
  *    for 6 hours (180 intervals). Each rate is the amount needed to bring Cp
@@ -582,10 +573,10 @@ export function planTCISchemeCETConservative(engine, startState, startTime, ceTa
  * 2. Second pass: extract clinician-feasible steps by scanning the rate array
  *    and emitting a new step when the rate changes by >cpt_threshold (8%).
  *    Step rates are weighted averages (cpt_avgfactor).
- * 
+ *
  * Loading: uses CET bolus + pause (same as CET Conservative).
  * Maintenance: SimTIVA's per-interval Cp targeting → step extraction.
- * 
+ *
  * @param {Object} engine
  * @param {Float64Array} startState
  * @param {number} startTime
@@ -790,7 +781,16 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   // (engine has existing drug after decay).
   let ps1 = 0, ps2 = 0, ps3 = 0;
 
-  if (engine.getConcentrations().Cp > 0.001) {
+  /**
+   * Refit ps1/ps2/ps3 from the current engine state using Cramér's rule.
+   * Call this whenever the engine has been advanced and the eigenstate
+   * needs to be re-synced to engine reality.
+   */
+  function refitEigenstate() {
+    if (engine.getConcentrations().Cp <= 0.001) {
+      ps1 = 0; ps2 = 0; ps3 = 0;
+      return;
+    }
     const saved2 = engine.getState();
     const t1 = 10, t2 = 60, t3 = 300; // seconds
     engine.advance(t1 / 60, 0); const cp1 = engine.getConcentrations().Cp;
@@ -809,8 +809,13 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
       ps1 = (cp1 * (e22 * e33 - e23 * e32) - e12 * (cp2 * e33 - cp3 * e23) + e13 * (cp2 * e32 - cp3 * e22)) / det;
       ps2 = (e11 * (cp2 * e33 - cp3 * e23) - cp1 * (e21 * e33 - e23 * e31) + e13 * (e21 * cp3 - cp2 * e31)) / det;
       ps3 = (e11 * (e22 * cp3 - cp2 * e32) - e12 * (e21 * cp3 - cp2 * e31) + cp1 * (e21 * e32 - e22 * e31)) / det;
+    } else {
+      ps1 = 0; ps2 = 0; ps3 = 0;
     }
   }
+
+  // Initial eigenstate fit at maintenance start
+  refitEigenstate();
 
   const maintTime = simTime;
 
@@ -850,8 +855,12 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
       engine.setState(savedEng);
       // Convert mg/min (engine) → mg/sec (eigenstate)
       testRate = Math.max(0, (lo + hi) / 2) / 60;
-      // Also advance the engine to keep it in sync for subsequent Ce searches
+      // Advance the engine to keep it in sync for subsequent Ce searches
       engine.advance(cptInterval / 60, testRate * 60);
+      // FIX #3: Refit ps1/ps2/ps3 from the engine after each Ce-boost interval.
+      // Without this, the eigenstate diverges from engine reality and Cp predictions
+      // are wrong for all subsequent Cp-targeting intervals.
+      refitEigenstate();
     } else {
       // Cp-targeting: advance 1 sec at testRate, predict Cp at +interval at zero
       const ts1 = ps1 * l1s + p_coef[1] * testRate * (1 - l1s);
@@ -961,7 +970,7 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
 /**
  * Convenience: plan a TCI scheme from a given event list state.
  * Gets the last executed state for the drug and plans from there.
- * 
+ *
  * @param {Object} eventList - EventList instance
  * @param {string} drugId    - Drug ID
  * @param {number} ceTarget  - Target Ce (μg/mL)
