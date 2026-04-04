@@ -80,15 +80,23 @@ In `planTCISchemeEmulation`, after each Ce-boost interval the engine was advance
 **Fix 4 — Bolus rounding in mL not mg (`simtiva-reference.js`):**
 Old code: `bolusMg = Math.round(durationSec * maxRateMgSec)` (rounds to nearest 1 mg). New code: `bolusVolMl = Math.round(durationSec * maxRateMgSec / concentration); bolusMg = bolusVolMl * concentration` (rounds to nearest mL = nearest 10 mg at 10 mg/mL). Matches SimTIVA line 4702. Differences of 6–67 mg observed across patient range.
 
-### Session 10 (2026-04-04) — UI Polish & Bug Fixes
+### Session 10 (2026-04-04) — UI Polish & Bug Fixes (v0.4.1 → v0.4.2)
 
-**Bug fixes:**
+**Bug fixes (v0.4.1):**
 - Zoom snap-back: `setCurveData` now syncs `chart.options.scales.x.min/max` to `viewMin/viewMax` before each update — zoomed position is preserved across data refreshes.
 - Stop Pump during TCI pause: guard changed from `if (rate === 0) return` to `if (rate === 0 && mode !== 'tci') return` — allows the button to clear future TCI events even when TCI has paused the pump.
 
-**Chart:**
+**Chart (v0.4.1):**
 - Ce Target label moved to right margin (65px layout padding + annotation `position:'end'`).
 - BIS nomogram rewritten with correct Ce ordering and 4 bands: Red (Light Sedation BIS 80–90), Orange (Deep Sedation 60–80), Yellow (GA 40–60), Green (Deep Anesthesia 20–40). Alpha raised from 9% → 19%.
+
+**Follow-up bug fixes (v0.4.2):**
+- Pinch-zoom triggered `recenter()` on finger release: two `touchend` events from a pinch were misread as a double-tap. Fixed with `wasMultiTouch` guard.
+- Auto-scroll fired mid-pinch: `onZoomStart` now sets `autoScroll = false` immediately, before animation frames can call `zoomScale` with stale range. Pan callbacks also sync `viewMin/viewMax`.
+- Ce target label switched from annotation label (clipped to chart area) to `afterDraw` canvas plugin, rendering fully in the right-margin padding.
+- Nomogram bands had inverted Ce ordering (`ceForBIS(20) > ceForBIS(40)` numerically); corrected to ascending Ce from bottom to top of Y axis.
+- Syntax error from `plugins` array at wrong indentation inside Chart constructor.
+- `APP_VERSION` extracted to `js/version.js` — only this file needs editing on future releases.
 - Tooltip shows `Rate: X.X mcg/kg/min` between Ce/Cp and BIS.
 
 **UI labels:**

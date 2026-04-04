@@ -5,6 +5,7 @@ Mobile-first PWA for anesthesia training. Simulates propofol pharmacokinetics us
 ## Key Files
 
 ```
+js/version.js             APP_VERSION — single source of truth, edit here to bump the version
 js/pk/eleveld.js          Eleveld 2018 PK-PD parameter calculator
 js/pk/engine.js           Matrix-exponential PK engine (4×4, arbitrary time steps)
 js/sim/events.js          Event list — source of truth for all pump commands

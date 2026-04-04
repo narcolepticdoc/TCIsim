@@ -79,3 +79,11 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 - History panel: TCI `rate=0` events → "Paused [TCI badge]"; `pause`-type events → "Pump Stopped".
 
 307 tests across 10 suites, all passing.
+
+*Follow-up fixes (same session, version 0.4.2):*
+- Pinch-zoom triggered `recenter()` on finger lift — a pinch fires two `touchend` events (one per finger) within <50ms; the second was being treated as a double-tap. Fixed with `wasMultiTouch` flag: skips double-tap detection after any multi-touch gesture; `lastTap` is not updated on pinch-end so the window stays anchored to the last genuine single tap.
+- Auto-scroll fired mid-pinch — `onZoomStart` callback added to set `autoScroll = false` immediately when the pinch begins, before any animation-frame `setCursorTime` call could fire `zoomScale` with stale `viewMin/viewMax`. `onPanStart` and `onPanComplete` also extended to sync `viewMin/viewMax`.
+- Ce target label clipped — annotation plugin labels are clipped to the chart area; replaced with an `afterDraw` canvas plugin that draws directly to the 2D context in the 65px right-margin padding.
+- Nomogram bands in wrong order — `ceForBIS(N)` returns the Ce concentration required to achieve BIS=N; because more drug lowers BIS, `ce20 > ce40 > ce60 > ce90`. Bands reordered to ascending Ce: `[ce90→ce80]` Red (Light Sedation), `[ce80→ce60]` Orange (Deep Sedation), `[ce60→ce40]` Yellow (GA), `[ce40→ce20]` Green (Deep Anesthesia).
+- Syntax error from inline `plugins` array added at wrong indentation level inside Chart constructor config object.
+- Extracted `APP_VERSION` to `js/version.js` — single source of truth; `constants.js` re-exports it. Only `version.js` needs updating on future releases.
