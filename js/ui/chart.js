@@ -262,14 +262,24 @@ export function createChart(canvas, config = {}) {
           pan: {
             enabled: true,
             mode: 'x',
-            onPanComplete() {
+            onPanStart() {
               autoScroll = false;
+            },
+            onPanComplete({ chart: c }) {
+              autoScroll = false;
+              viewMin = c.scales.x.min;
+              viewMax = c.scales.x.max;
             },
           },
           zoom: {
             wheel: { enabled: false },
             pinch: { enabled: true },
             mode: 'x',
+            onZoomStart() {
+              // Disable auto-scroll immediately so setCursorTime doesn't
+              // call zoomScale with stale viewMin/viewMax mid-gesture
+              autoScroll = false;
+            },
             onZoomComplete({ chart: c }) {
               autoScroll = false;
               // Track the plugin's resulting range
