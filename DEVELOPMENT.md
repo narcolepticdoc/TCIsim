@@ -80,6 +80,27 @@ In `planTCISchemeEmulation`, after each Ce-boost interval the engine was advance
 **Fix 4 — Bolus rounding in mL not mg (`simtiva-reference.js`):**
 Old code: `bolusMg = Math.round(durationSec * maxRateMgSec)` (rounds to nearest 1 mg). New code: `bolusVolMl = Math.round(durationSec * maxRateMgSec / concentration); bolusMg = bolusVolMl * concentration` (rounds to nearest mL = nearest 10 mg at 10 mg/mL). Matches SimTIVA line 4702. Differences of 6–67 mg observed across patient range.
 
+### Session 11 (2026-04-04) — Emulation Planner Overshoot & Long-term Drift (v0.4.2 → v0.4.3)
+
+**Root causes fixed:**
+
+1. **Initial Ce overshoot (~4.6 for Ce=4.5 target) — mL rounding in `computeSimTIVACETBolus` (`simtiva-reference.js`):**
+   `Math.round(durationSec × maxRateMgSec / concentration)` rounds to nearest 1 mL = 10 mg. For a typical bolus (18.54 mL → 19 mL) this added ~4.6 mg excess after the rate-correction factor was already applied, producing a 2.5% Ce overshoot. Fixed: `bolusMg = durationSec * maxRateMgSec` (exact for integer-second delivery, no mL rounding). The emulation planner's own `Math.ceil` at line 725 still applies ≤1 mg rounding — acceptable.
+
+2. **Long-term Ce drift (4.78 at 200+ min) — second-pass scan limit `j < 60` (`tci-planner.js`):**
+   The first pass computes 180 intervals × 120 sec (360 min of rates). The second pass extracted steps only for `j = 0..59` (120 min) — intervals 60–179 were silently discarded. The final emitted scheme step sat at ~90 min maintenance time; after that, Ce drifted upward as V3 (τ ≈ 246 min) filled and the fixed rate became too high. Fixed: scan loop changed to `j < cptRates.length`; hardcoded `j = 59` final-step block updated to `j = cptRates.length - 1`.
+
+3. **First-pass horizon extended 180 → 360 intervals (`tci-planner.js`):**
+   360 × 120 sec = 720 min. V3 is ~95% equilibrated at 720 min vs ~77% at 360 min. The loop is pure eigenstate arithmetic (no `engine.advance`) — computationally free. Named constant `cptIntervalCount = 360` introduced.
+
+4. **Stepped and CET planner horizons extended (`tci-planner.js`):**
+   - Stepped: `maxPlanTime` 120 → 480 min, `maxSteps` 8 → 12.
+   - CET/CET(C): `maxPlanTime` 360 → 720 min, `rateStablePct` 1% → 0.1% (prevents premature stability break before V3 equilibrates).
+
+307 tests across 10 suites, all passing.
+
+---
+
 ### Session 10 (2026-04-04) — UI Polish & Bug Fixes (v0.4.1 → v0.4.2)
 
 **Bug fixes (v0.4.1):**
@@ -109,11 +130,11 @@ Old code: `bolusMg = Math.round(durationSec * maxRateMgSec)` (rounds to nearest 
 
 ### Emulation Planner
 
-1. **First maintenance rate ~2 mL/h lower than SimTIVA** — from 1mg bolus rounding difference (131 vs 128mg). Cascades through eigenstate into maintenance rates. Clinically insignificant.
+1. **First maintenance rate ~2 mL/h lower than SimTIVA** — from bolus rounding difference (emulation uses `Math.ceil` to nearest 1 mg; SimTIVA rounds to nearest 1 mL). Cascades through eigenstate into first maintenance rate. Clinically insignificant.
 
 2. **Step-up bolus ~5mg larger than SimTIVA** — from different `scheme_bolusadmin` correction computation for non-zero-state cases. Both produce 0% Ce overshoot.
 
-3. **From-zero RMSE 7.4% vs SimTIVA's 1.5%** — the gap is entirely in the first 2-3 rate steps. From step 3 onward, rates and timing match exactly.
+3. **From-zero RMSE ~7% vs SimTIVA's 1.5%** — the gap is entirely in the first 2-3 rate steps. From step 3 onward, rates and timing match exactly.
 
 ### Other Planners
 
@@ -125,8 +146,7 @@ Old code: `bolusMg = Math.round(durationSec * maxRateMgSec)` (rounds to nearest 
 
 ### Near-term
 
-- [ ] Close the remaining bolus rounding gap — port SimTIVA's `delta_seconds` handling for exact step-up UDF computation
-- [ ] Port `scheme_bolusadmin` rate correction for non-zero-state step-ups (closes ~5mg step-up gap)
+- [ ] Close the remaining bolus gap — port SimTIVA's `delta_seconds` handling and exact `scheme_bolusadmin` correction for step-up UDF computation (closes ~5mg step-up gap, ~2 mL/h first-rate gap)
 - [ ] Add Session 9 fixes to test suite (mechanistic rate correction, eigenstate sync)
 
 ### Medium-term
@@ -158,4 +178,4 @@ Old code: `bolusMg = Math.round(durationSec * maxRateMgSec)` (rounds to nearest 
 | `test-units.js` | 39 | Unit conversion, display formatting |
 | **Total** | **307** | |
 
-All tests passing as of 2026-04-04.
+All tests passing as of 2026-04-04 (v0.4.3).
