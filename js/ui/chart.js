@@ -281,47 +281,46 @@ export function createChart(canvas, config = {}) {
         },
       },
     },
-  },
-  plugins: [
-    {
-      // Draw the Ce target label in the right-margin padding, outside the
-      // chart area, so it never overlaps nomogram bands or curve data.
-      id: 'targetCeLabel',
-      afterDraw(ch) {
-        if (targetCe === null || targetCe <= 0) return;
-        const yScale = ch.scales.y;
-        const ca = ch.chartArea;
-        if (!yScale || !ca) return;
+    plugins: [
+      {
+        // Draw the Ce target label in the right-margin padding, outside the
+        // chart area, so it never overlaps nomogram bands or curve data.
+        id: 'targetCeLabel',
+        afterDraw(ch) {
+          if (targetCe === null || targetCe <= 0) return;
+          const yScale = ch.scales.y;
+          const ca = ch.chartArea;
+          if (!yScale || !ca) return;
 
-        const y = yScale.getPixelForValue(targetCe);
-        if (y < ca.top || y > ca.bottom) return; // off-screen vertically
+          const y = yScale.getPixelForValue(targetCe);
+          if (y < ca.top || y > ca.bottom) return; // off-screen vertically
 
-        const ctx = ch.ctx;
-        const label = `Ce ${targetCe.toFixed(1)}`;
+          const ctx = ch.ctx;
+          const label = `Ce ${targetCe.toFixed(1)}`;
 
-        ctx.save();
-        ctx.font = '10px sans-serif';
-        const tw = ctx.measureText(label).width;
-        const th = 12; // approximate text height at 10px
-        const pad = 3;
-        const x = ca.right + 6;
+          ctx.save();
+          ctx.font = '10px sans-serif';
+          const tw = ctx.measureText(label).width;
+          const th = 12; // approximate text height at 10px
+          const pad = 3;
+          const x = ca.right + 6;
 
-        // Background pill
-        ctx.fillStyle = COLORS.target + 'dd';
-        ctx.fillRect(x - pad, y - th / 2 - pad, tw + pad * 2, th + pad * 2);
+          // Background rect
+          ctx.fillStyle = COLORS.target + 'dd';
+          ctx.fillRect(x - pad, y - th / 2 - pad, tw + pad * 2, th + pad * 2);
 
-        // Text
-        ctx.fillStyle = '#000';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(label, x, y);
-        ctx.restore();
+          // Text
+          ctx.fillStyle = '#000';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(label, x, y);
+          ctx.restore();
+        },
       },
-    },
-  ],
-});
+    ],
+  });
 
-// ---- Public API ----
+  // ---- Public API ----
 
   let yMaxManual = null; // null = auto-scale, number = user-set
 
