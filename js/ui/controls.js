@@ -77,7 +77,7 @@ function updateButton() {
     btn.textContent = 'Start';
     btn.className = 'btn-ctrl btn-ctrl-pause is-stopped';
   } else {
-    btn.textContent = 'Pause Pump';
+    btn.textContent = 'Stop Pump';
     btn.className = 'btn-ctrl btn-ctrl-pause is-running';
   }
 }

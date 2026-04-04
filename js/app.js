@@ -207,17 +207,19 @@ function computeEffectOverlay() {
   if (!pd) { chart.setEffectOverlay([]); return; }
 
   const params = pd.params;
-  // Use ceForBIS to find Ce values at BIS boundaries
-  const ce85 = ceForBIS(85, params);  // sedation/awake boundary
-  const ce60 = ceForBIS(60, params);  // deep sedation/sedation boundary
-  const ce40 = ceForBIS(40, params);  // GA/deep sedation boundary
-  const ce20 = ceForBIS(20, params);  // deep anesthesia/GA boundary
+  // ceForBIS(N) returns the Ce concentration at which BIS = N.
+  // More drug → lower BIS → higher Ce, so: ce90 < ce80 < ce60 < ce40 < ce20 numerically.
+  const ce90 = ceForBIS(90, params);  // Light Sedation upper boundary
+  const ce80 = ceForBIS(80, params);  // Light Sedation / Deep Sedation boundary
+  const ce60 = ceForBIS(60, params);  // Deep Sedation / GA boundary
+  const ce40 = ceForBIS(40, params);  // GA / Deep Anesthesia boundary
+  const ce20 = ceForBIS(20, params);  // Deep Anesthesia lower boundary
 
   chart.setEffectOverlay([
-    { ceMin: 0,    ceMax: ce20, color: '#22c55e18', label: 'Deep Anesthesia' }, // Green  BIS 0-20
-    { ceMin: ce20, ceMax: ce40, color: '#eab30818', label: 'GA' },              // Yellow BIS 20-40
-    { ceMin: ce40, ceMax: ce60, color: '#f9731618', label: 'Deep Sedation' },   // Orange BIS 40-60
-    { ceMin: ce60, ceMax: ce85, color: '#ef444418', label: 'Sedation' },        // Red    BIS 60-85
+    { ceMin: ce90, ceMax: ce80, color: '#ef444430', label: 'Light Sedation' },  // Red    BIS 80-90
+    { ceMin: ce80, ceMax: ce60, color: '#f9731630', label: 'Deep Sedation' },   // Orange BIS 60-80
+    { ceMin: ce60, ceMax: ce40, color: '#eab30830', label: 'GA' },              // Yellow BIS 40-60
+    { ceMin: ce40, ceMax: ce20, color: '#22c55e30', label: 'Deep Anesthesia' }, // Green  BIS 20-40
   ]);
 }
 

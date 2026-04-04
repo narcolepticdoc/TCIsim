@@ -61,3 +61,21 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 *Fix 4 — Bolus rounding mL-first:* Old code rounded to nearest 1 mg. New code rounds to nearest mL then converts (nearest 10 mg at 10 mg/mL). Differences 6–67 mg across patients. Matches SimTIVA line 4702.
 
 262 tests, all passing.
+
+**Session 10 (2026-04-04):** UI polish, bug fixes, and chart improvements. Version 0.4.1.
+
+*Bug fixes:*
+- Zoom snap-back fixed — `setCurveData` now writes `chart.options.scales.x.min/max = viewMin/viewMax` before each `chart.update()` so a pinch-zoomed view survives data refreshes.
+- Manual pump stop during TCI pause — the guard `if (conc.rate === 0) return` was blocking the Stop Pump button when TCI had a scheduled `rate=0` interval. Changed to `if (conc.rate === 0 && mode !== 'tci') return`; button now correctly clears all future TCI events and stops the pump.
+
+*Chart improvements:*
+- Ce Target annotation label relocated to right margin (added `layout: { padding: { right: 65 } }` to chart options; changed annotation `position: 'start'` → `'end'` with `xAdjust: 5`). Label appears in the margin, not over active curve data.
+- BIS nomogram completely rewritten. Previous bands had inverted `ceMin/ceMax` (ceForBIS returns a Ce value; lower BIS = more drug = higher Ce, so ce20 > ce40 > ce60 > ce85 numerically — the old `{ ceMin:0, ceMax:ce20 }` "Deep Anesthesia" band spanned the entire clinical Ce range and obscured everything else). New bands use correct Ce thresholds: Red (Light Sedation BIS 80–90), Orange (Deep Sedation 60–80), Yellow (GA 40–60), Green (Deep Anesthesia 20–40). Alpha increased from hex `18` to `30` (9% → 19%) for visual distinction.
+- Tooltip: added `Rate: X.X mcg/kg/min` line between Ce/Cp values and BIS. Chart gains `setPatientWeight(kg)` method for the conversion; weight is supplied from `initSimScreen`.
+
+*UI labels:*
+- Pump control button: "Pause Pump" → "Stop Pump".
+- Drug panel status: TCI with `rate=0` → "Paused" (future TCI events pending); manual `rate=0` → "Pump Stopped" (no further instructions).
+- History panel: TCI `rate=0` events → "Paused [TCI badge]"; `pause`-type events → "Pump Stopped".
+
+307 tests across 10 suites, all passing.
