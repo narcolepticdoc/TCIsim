@@ -126,8 +126,9 @@ export function createChart(canvas, config = {}) {
         borderDash: [6, 3],
         label: {
           display: true,
-          content: `Ce target ${targetCe.toFixed(1)}`,
-          position: 'start',
+          content: `Ce ${targetCe.toFixed(1)}`,
+          position: 'end',
+          xAdjust: 5,
           backgroundColor: COLORS.target + 'cc',
           color: '#000',
           font: { size: 10 },
@@ -157,8 +158,10 @@ export function createChart(canvas, config = {}) {
     return annotations;
   }
 
-  // Store BIS values alongside curve for tooltip lookup
-  let bisValues = []; // parallel array to curve data: bisValues[i] = BIS at curveData[i].time
+  // Store BIS and rate values alongside curve for tooltip lookup
+  let bisValues = [];       // parallel array: bisValues[i] = BIS at curveData[i].time
+  let rateValues = [];      // parallel array: rateValues[i] = rate (mg/min) at curveData[i].time
+  let patientWeightKg = null;
   let pdModel = null; // set via setPDModel()
 
   // Create chart instance
@@ -169,6 +172,9 @@ export function createChart(canvas, config = {}) {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
+      layout: {
+        padding: { right: 65 },
+      },
       interaction: {
         mode: 'index',
         intersect: false,
@@ -225,14 +231,24 @@ export function createChart(canvas, config = {}) {
               return '';
             },
             afterBody(items) {
-              // Add BIS to tooltip
-              if (items.length > 0 && bisValues.length > 0) {
-                const idx = items[0].dataIndex;
-                if (idx < bisValues.length && bisValues[idx] !== null) {
-                  return `BIS: ${bisValues[idx].toFixed(0)}`;
+              if (!items.length) return '';
+              const idx = items[0].dataIndex;
+              const lines = [];
+              // Rate line
+              if (rateValues.length > idx) {
+                const rateMgMin = rateValues[idx];
+                if (patientWeightKg && patientWeightKg > 0) {
+                  const rateUcgKgMin = (rateMgMin * 1000) / patientWeightKg;
+                  lines.push(`Rate: ${rateUcgKgMin.toFixed(1)} mcg/kg/min`);
+                } else {
+                  lines.push(`Rate: ${rateMgMin.toFixed(2)} mg/min`);
                 }
               }
-              return '';
+              // BIS line
+              if (bisValues.length > idx && bisValues[idx] !== null) {
+                lines.push(`BIS: ${bisValues[idx].toFixed(0)}`);
+              }
+              return lines;
             },
           },
         },
@@ -292,6 +308,9 @@ export function createChart(canvas, config = {}) {
       dsIdx++;
     }
 
+    // Store rate values for tooltip
+    rateValues = curveData.map(p => p.rate);
+
     // Compute BIS for each point (for tooltip)
     if (pdModel) {
       bisValues = curveData.map(p => {
@@ -308,6 +327,10 @@ export function createChart(canvas, config = {}) {
       const maxConc = Math.max(maxCp, maxCe, targetCe || 0);
       chart.options.scales.y.max = Math.ceil(maxConc * 1.3);
     }
+
+    // Sync scale options to current view state (prevents snap-back after zoom)
+    chart.options.scales.x.min = viewMin;
+    chart.options.scales.x.max = viewMax;
 
     // Show the canvas, hide placeholder
     canvas.style.display = 'block';
@@ -420,6 +443,14 @@ export function createChart(canvas, config = {}) {
   }
 
   /**
+   * Set patient weight for rate unit conversion in tooltip (mg/min → mcg/kg/min).
+   * @param {number|null} kg
+   */
+  function setPatientWeight(kg) {
+    patientWeightKg = kg;
+  }
+
+  /**
    * Destroy the chart instance.
    */
   function destroy() {
@@ -520,6 +551,7 @@ export function createChart(canvas, config = {}) {
     recenter,
     toggleTooltip,
     setPDModel,
+    setPatientWeight,
     destroy,
     get tooltipEnabled() { return tooltipEnabled; },
     get chart() { return chart; },

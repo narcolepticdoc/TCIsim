@@ -91,6 +91,8 @@ function initSimScreen(patient) {
       // Give chart access to PD model for BIS in tooltips
       const pd = model.getPDModel(selectedDrug);
       if (pd) chart.setPDModel(pd);
+      // Give chart patient weight for rate unit conversion in tooltip
+      try { const pt = model.getPatient(); if (pt) chart.setPatientWeight(pt.weight); } catch (e) {}
       computeEffectOverlay();
     } catch (err) {
       console.error('[TCI Sim] Chart creation failed:', err);
@@ -206,14 +208,16 @@ function computeEffectOverlay() {
 
   const params = pd.params;
   // Use ceForBIS to find Ce values at BIS boundaries
-  const ce85 = ceForBIS(85, params);  // awake/sedation boundary
-  const ce60 = ceForBIS(60, params);  // sedation/GA boundary
-  const ce40 = ceForBIS(40, params);  // GA/deep boundary
+  const ce85 = ceForBIS(85, params);  // sedation/awake boundary
+  const ce60 = ceForBIS(60, params);  // deep sedation/sedation boundary
+  const ce40 = ceForBIS(40, params);  // GA/deep sedation boundary
+  const ce20 = ceForBIS(20, params);  // deep anesthesia/GA boundary
 
   chart.setEffectOverlay([
-    { ceMin: 0, ceMax: ce40, color: '#ef444418', label: 'Deep' },
-    { ceMin: ce40, ceMax: ce60, color: '#22c55e18', label: 'GA 40-60' },
-    { ceMin: ce60, ceMax: ce85, color: '#f59e0b12', label: 'Sedation' },
+    { ceMin: 0,    ceMax: ce20, color: '#22c55e18', label: 'Deep Anesthesia' }, // Green  BIS 0-20
+    { ceMin: ce20, ceMax: ce40, color: '#eab30818', label: 'GA' },              // Yellow BIS 20-40
+    { ceMin: ce40, ceMax: ce60, color: '#f9731618', label: 'Deep Sedation' },   // Orange BIS 40-60
+    { ceMin: ce60, ceMax: ce85, color: '#ef444418', label: 'Sedation' },        // Red    BIS 60-85
   ]);
 }
 
@@ -386,18 +390,20 @@ function boot() {
     },
     onPumpPause() {
       const t = timer.getElapsedMinutes();
-      // Guard: don't pause if already paused (rate already 0)
+      // Guard: don't pause if already manually paused (rate=0 in non-TCI mode)
+      // Allow the button to fire in TCI mode even when rate=0 (TCI-scheduled pause),
+      // so the user can clear all future TCI events and stop the pump.
       try {
         const conc = model.getConcentrationsAt(selectedDrug, t);
-        if (conc.rate === 0) return; // already paused
+        if (conc.rate === 0 && mode.get(selectedDrug) !== 'tci') return;
       } catch (e) {}
 
-      model.addPause(model.primaryDrug, t, 'Pump paused');
-      addAnnotation('Pump paused');
-      // Pause drops out of TCI
+      model.addPause(model.primaryDrug, t, 'Pump stopped');
+      addAnnotation('Pump stopped');
+      // Stop drops out of TCI and clears future events
       if (mode.get(selectedDrug) === 'tci') {
         model.clearAfter(selectedDrug, t);
-        mode.set(selectedDrug, 'manual', 'Pump paused');
+        mode.set(selectedDrug, 'manual', 'Pump stopped');
       }
       refreshChart();
     },

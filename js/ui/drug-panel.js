@@ -133,14 +133,20 @@ function update() {
       statusEl.textContent = 'Stopped';
       statusEl.className = 'drug-status stopped';
     } else if (m === 'tci') {
-      // Check if we're in a high-rate phase (bolus delivery) or steady infusion
-      const isBolusPhase = rate > 50; // crude heuristic
-      statusEl.textContent = isBolusPhase ? 'Bolus' : 'Infusing';
-      statusEl.className = 'drug-status ' + (isBolusPhase ? 'bolus' : 'infusing');
-    } else if (m === 'manual') {
       if (rate === 0) {
+        // TCI-scheduled pause (no manual intervention — future events exist)
         statusEl.textContent = 'Paused';
         statusEl.className = 'drug-status paused';
+      } else {
+        const isBolusPhase = rate > 50; // crude heuristic
+        statusEl.textContent = isBolusPhase ? 'Bolus' : 'Infusing';
+        statusEl.className = 'drug-status ' + (isBolusPhase ? 'bolus' : 'infusing');
+      }
+    } else if (m === 'manual') {
+      if (rate === 0) {
+        // Manual pump stop — no further TCI instructions
+        statusEl.textContent = 'Pump Stopped';
+        statusEl.className = 'drug-status stopped';
       } else {
         statusEl.textContent = 'Manual';
         statusEl.className = 'drug-status manual';
