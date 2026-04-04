@@ -2,7 +2,7 @@
  * constants.js — Drug properties, unit conversions, and display constants
  */
 
-export const APP_VERSION = '0.4.0';
+export { VERSION as APP_VERSION } from '../version.js';
 
 // ---- Drug definitions ----
 

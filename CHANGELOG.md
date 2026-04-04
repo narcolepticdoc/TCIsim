@@ -11,6 +11,23 @@
 
 ---
 
+## [0.4.2] — 2026-04-04
+
+Follow-up bug fixes to 0.4.1.
+
+**Bug fixes:**
+- Pinch-zoom snapped to current time on finger lift: the two `touchend` events fired when releasing a pinch were being interpreted as a double-tap, calling `recenter()`. Fixed by tracking `wasMultiTouch` and skipping the double-tap logic after any multi-touch gesture.
+- Auto-scroll fought pinch-zoom mid-gesture: `onZoomStart` callback now disables auto-scroll immediately when the pinch begins, preventing `setCursorTime` from calling `zoomScale` with stale range before `onZoomComplete` fires.
+- Ce target label cut off / overlapping nomogram bands: replaced the annotation plugin label (which is clipped to the chart area) with an `afterDraw` canvas plugin that draws the label directly in the 65px right-margin padding.
+- BIS nomogram bands in wrong order: `ceForBIS(N)` returns the Ce needed to achieve BIS=N, so lower BIS = higher Ce; bands were reversed. Corrected to `[ce90→ce80]` Red, `[ce80→ce60]` Orange, `[ce60→ce40]` Yellow, `[ce40→ce20]` Green.
+- Pump control button renamed "Pause Pump" → "Stop Pump".
+- Syntax error from bad indentation of inline Chart.js `plugins` array.
+
+**Housekeeping:**
+- Extracted `APP_VERSION` into `js/version.js` — the single source of truth for the version number. `constants.js` re-exports it as `APP_VERSION` so no other files need changing on future releases.
+
+---
+
 ## [0.4.1] — 2026-04-04
 
 UI polish, bug fixes, and chart improvements.
