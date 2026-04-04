@@ -80,6 +80,23 @@ In `planTCISchemeEmulation`, after each Ce-boost interval the engine was advance
 **Fix 4 — Bolus rounding in mL not mg (`simtiva-reference.js`):**
 Old code: `bolusMg = Math.round(durationSec * maxRateMgSec)` (rounds to nearest 1 mg). New code: `bolusVolMl = Math.round(durationSec * maxRateMgSec / concentration); bolusMg = bolusVolMl * concentration` (rounds to nearest mL = nearest 10 mg at 10 mg/mL). Matches SimTIVA line 4702. Differences of 6–67 mg observed across patient range.
 
+### Session 10 (2026-04-04) — UI Polish & Bug Fixes
+
+**Bug fixes:**
+- Zoom snap-back: `setCurveData` now syncs `chart.options.scales.x.min/max` to `viewMin/viewMax` before each update — zoomed position is preserved across data refreshes.
+- Stop Pump during TCI pause: guard changed from `if (rate === 0) return` to `if (rate === 0 && mode !== 'tci') return` — allows the button to clear future TCI events even when TCI has paused the pump.
+
+**Chart:**
+- Ce Target label moved to right margin (65px layout padding + annotation `position:'end'`).
+- BIS nomogram rewritten with correct Ce ordering and 4 bands: Red (Light Sedation BIS 80–90), Orange (Deep Sedation 60–80), Yellow (GA 40–60), Green (Deep Anesthesia 20–40). Alpha raised from 9% → 19%.
+- Tooltip shows `Rate: X.X mcg/kg/min` between Ce/Cp and BIS.
+
+**UI labels:**
+- "Pause Pump" → "Stop Pump" on pump control button.
+- Drug panel + history: "Paused" for TCI-scheduled `rate=0`; "Pump Stopped" for manual stop.
+
+307 tests across 10 suites, all passing.
+
 ## Known Issues
 
 ### Emulation Planner
@@ -127,7 +144,10 @@ Old code: `bolusMg = Math.round(durationSec * maxRateMgSec)` (rounds to nearest 
 | `test-tci-scheme.js` | 16 | TCI planner output validation |
 | `test-vs-simtiva.js` | 24 | Cross-validation against SimTIVA values |
 | `test-integration.js` | 25 | End-to-end event scenarios |
+| `test-sim-v2.js` | 45 | Simulation v2 stateless facade |
+| `test-t0-edge.js` | 40 | t=0 boundary and edge cases |
+| `test-unit-safety.js` | 18 | Unit parameter validation |
 | `test-units.js` | 39 | Unit conversion, display formatting |
-| **Total** | **204+** | |
+| **Total** | **307** | |
 
 All tests passing as of 2026-04-04.
