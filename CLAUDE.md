@@ -56,7 +56,7 @@ setPumpSettings('propofol', { concentration: 10, bolusRateMlH: 750 })
 node tests/run-tests.js
 ```
 
-262 tests across 7 suites, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
+Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 307 tests across 10 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
 
 ## Docs
 
