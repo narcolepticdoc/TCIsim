@@ -202,11 +202,16 @@ export function render(drugId) {
       const modeLabel = evt.deliveryMode === 'push' ? 'IV Push' : 'Pump Bolus';
       desc = `${badge}${modeLabel} <strong>${dose}</strong> <span class="h-detail">${delivery}</span>`;
     } else if (evt.type === 'rate') {
-      const rate = fmtRate(evt.value, evt.drug);
-      const prefix = isSystem ? '↩ ' : '';
-      desc = `${badge}${prefix}Rate <strong>${rate}</strong>`;
+      if (evt.value === 0 && evt.source === 'tci') {
+        // TCI-scheduled pause (pump holds until next TCI step)
+        desc = `${badge}Paused`;
+      } else {
+        const rate = fmtRate(evt.value, evt.drug);
+        const prefix = isSystem ? '↩ ' : '';
+        desc = `${badge}${prefix}Rate <strong>${rate}</strong>`;
+      }
     } else if (evt.type === 'pause') {
-      desc = `${badge}Pump paused`;
+      desc = `${badge}Pump Stopped`;
     }
 
     const editBtn = `<button class="h-edit-btn" data-edit-id="${evt.id}" title="Edit">✎</button>`;
