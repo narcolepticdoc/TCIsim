@@ -73,7 +73,12 @@ function plannerBolusDelivery(doseMg, cfg) {
  *          Scheme events: bolus + rate steps
  */
 export function planTCIScheme(engine, startState, startTime, ceTarget, config = {}) {
-  const cfg = { ...DEFAULT_SCHEME_CONFIG, ...config };
+  const cfg = {
+    ...DEFAULT_SCHEME_CONFIG,
+    maxPlanTime: 480,   // 8 hours (default was 120 min) — allows re-evaluation past V3 equilibration
+    maxSteps: 12,       // more steps for the longer horizon (default was 8)
+    ...config,
+  };
   const scheme = [];
 
   if (ceTarget <= 0) {
@@ -329,11 +334,11 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
   const cfg = {
     ...DEFAULT_SCHEME_CONFIG,
     maxSteps: 10,
-    rateStablePct: 0.01,       // 1% final convergence
+    rateStablePct: 0.001,      // 0.1% — prevents premature break before V3 equilibrates (was 1%)
     tolerancePct: 0.03,        // ±3% Ce band for drift detection
     rateChangeThreshold: 0.08, // 8% rate change to trigger new step (SimTIVA uses 5-8%)
     minStepDuration: 2.0,      // 2 min minimum per step
-    maxPlanTime: 360,
+    maxPlanTime: 720,          // 12 hours (was 360 min) — covers V3 equilibration
     initialLookAhead: derivedLookAhead,
     ...config,
   };
@@ -827,7 +832,11 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
     return s1 * f1 + s2 * f2 + s3 * f3;
   }
 
-  // First pass: 180 intervals (SimTIVA lines 2035-2081)
+  // First pass: 360 intervals × 120 sec = 720 min (was 180 × 120 = 360 min).
+  // Extending to 360 is computationally free: this loop is pure eigenstate arithmetic
+  // (no engine.advance calls). V3 is ~95% equilibrated at 720 min vs ~77% at 360 min,
+  // so the final extracted rate step converges much closer to true steady-state.
+  const cptIntervalCount = 360;
   const cptRates = [];
   let testRate = 0;
 
@@ -837,7 +846,7 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   // Number of Ce-targeting intervals: enough to get Ce close to target
   const ceBoostIntervals = needsCeBoost ? 3 : 0; // 3 intervals = 6 min of Ce-targeting
 
-  for (let i = 0; i < 180; i++) {
+  for (let i = 0; i < cptIntervalCount; i++) {
     if (ps1 === 0 && ps2 === 0 && ps3 === 0) {
       testRate = ceTarget / p_udf[cptInterval];
     } else if (i < ceBoostIntervals) {
@@ -926,8 +935,10 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
     scheme.push({ type: 'rate', time: maintTime, value: rnd(cptRates[0]) * 60 });
   }
 
-  // Scan intervals after waitPeak for step changes
-  for (let j = Math.max(2, waitPeak + 1); j < 60; j++) {
+  // Scan ALL computed intervals for step changes (not just the first 60).
+  // The previous j < 60 limit only covered 120 min of the 180-interval (360 min) rate
+  // array, leaving V3-equilibration rate steps beyond 120 min unextracted.
+  for (let j = Math.max(2, waitPeak + 1); j < cptRates.length; j++) {
     if (priorTestRate <= 0) continue;
     const change = (priorTestRate - cptRates[j]) / priorTestRate;
 
@@ -950,10 +961,10 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
     }
   }
 
-  // Final step at j=59
+  // Final step at last computed interval
   {
     const lastIdx = cptTimes[cptTimes.length - 1];
-    const j = 59;
+    const j = cptRates.length - 1;
     const avgRate = (cptRates[lastIdx] - cptRates[j]) * cptAvgFactor + cptRates[j];
     const rounded = rnd(avgRate);
     const stepTimeMin = maintTime + lastIdx * cptInterval / 60;

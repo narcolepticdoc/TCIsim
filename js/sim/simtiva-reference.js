@@ -299,11 +299,13 @@ export function computeSimTIVACETBolus(pkParams, ceTarget, opts = {}) {
     rateCorrFactor = computeRateCorrFactor(rawBolusMg, peak_time, maxRateMgSec, e_coef, lambda);
   }
 
-  // Effective bolus: floor(rawDose / maxRate * corrFactor) seconds of infusion
-  // FIX #4: round in mL then multiply by concentration (matches SimTIVA line 4702)
+  // Effective bolus: floor(rawDose / maxRate * corrFactor) seconds of infusion.
+  // Deliver exactly durationSec seconds at maxRateMgSec — no mL rounding.
+  // Previous FIX #4 (Math.round to nearest mL = 10 mg at 10 mg/mL) introduced up to
+  // ±5 mg error AFTER the rate-correction factor, causing Ce to overshoot by ~2%.
   const durationSec = Math.floor(rawBolusMg / maxRateMgSec * rateCorrFactor);
-  const bolusVolMl = Math.round(durationSec * maxRateMgSec / concentration);
-  const bolusMg = bolusVolMl * concentration;
+  const bolusMg = durationSec * maxRateMgSec;     // exact mg for durationSec seconds
+  const bolusVolMl = bolusMg / concentration;     // float, for reference only
 
   // Estimated peak Ce (will be below target due to correction)
   const estimatedPeakCe = ceTarget * (bolusMg / rawBolusMg);
