@@ -87,3 +87,11 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 - Nomogram bands in wrong order — `ceForBIS(N)` returns the Ce concentration required to achieve BIS=N; because more drug lowers BIS, `ce20 > ce40 > ce60 > ce90`. Bands reordered to ascending Ce: `[ce90→ce80]` Red (Light Sedation), `[ce80→ce60]` Orange (Deep Sedation), `[ce60→ce40]` Yellow (GA), `[ce40→ce20]` Green (Deep Anesthesia).
 - Syntax error from inline `plugins` array added at wrong indentation level inside Chart constructor config object.
 - Extracted `APP_VERSION` to `js/version.js` — single source of truth; `constants.js` re-exports it. Only `version.js` needs updating on future releases.
+
+**Session 11 (2026-04-04):** Ce undershoot on target decrease — fixed in all planners. Version 0.4.4.
+
+*Bug 1 — `findMaintenanceRate` peak constraint (stepped / CET / CET-conservative):* When dropping to a lower Ce target, the planner pauses until Ce decays to `upperBound` (e.g. 3.605 for target 3.5 with 3% CET tolerance). At that moment Ce > target, so the peak-constraint binary search finds `peakRate ≈ 0` (any rate pushes peak Ce above target). `min(endpointRate, ~0) = ~0`; maintenance rate was effectively zero and Ce free-fell to ~3.32 (5.1% below target). The existing `1.05×` bypass only fired for Ce 5%+ above target, missing the common 0–5% zone. Fix: changed to `currentCe >= ceTarget` — whenever Ce is at or above target, use endpoint rate only.
+
+*Bug 2 — Emulation step extraction, decremental case:* SimTIVA's step extraction skips `cptRates[0]` (the high rate needed to bring Cp up quickly after a target decrease) and emits `cptRates[1]` from `maintTime`. SimTIVA re-plans every 2 min so this corrects itself; our one-shot planner does not. Fix: start from interval 0 (not 1) in the decremental branch.
+
+307 tests, all passing.

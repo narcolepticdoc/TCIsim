@@ -126,6 +126,19 @@ Old code: `bolusMg = Math.round(durationSec * maxRateMgSec)` (rounds to nearest 
 
 307 tests across 10 suites, all passing.
 
+### Session 11 (2026-04-04)
+
+Ce out-of-band undershoot on target decrease — fixed in all planners. Version 0.4.4.
+
+*Bug 1 — `findMaintenanceRate` peak constraint (stepped / CET / CET-conservative):*
+After the decay pause, Ce sits at `upperBound` (e.g. 3.605 for a 3.5 target with 3% CET
+tolerance). The peak-constraint binary search asks "what rate keeps max Ce over 60 min ≤ target?" — but Ce already starts above target, so even rate=0 violates the cap; the search converges to `peakRate ≈ 0`. `min(endpointRate, ~0) = ~0`, so the maintenance rate was effectively zero and Ce free-fell to ~3.32 (5% below a 3.5 target). The existing 1.05× bypass threshold only fired when Ce was well above target, missing the 0–5% zone. Fix: changed threshold to `currentCe >= ceTarget` — whenever Ce is at or above target, skip the peak constraint and use endpoint rate only.
+
+*Bug 2 — Emulation step extraction, decremental case:*
+SimTIVA's `deliver_cpt` step extraction skips `cptRates[0]` (the high initial rate needed to bring Cp back up quickly after a target decrease) and starts from `cptRates[1]`. SimTIVA re-plans every 2 minutes so this self-corrects; our one-shot planner does not. Fix: start from interval 0, not interval 1, in the decremental branch.
+
+307 tests, all passing.
+
 ## Known Issues
 
 ### Emulation Planner
@@ -178,4 +191,4 @@ Old code: `bolusMg = Math.round(durationSec * maxRateMgSec)` (rounds to nearest 
 | `test-units.js` | 39 | Unit conversion, display formatting |
 | **Total** | **307** | |
 
-All tests passing as of 2026-04-04 (v0.4.3).
+All tests passing as of 2026-04-04 (v0.4.4).
