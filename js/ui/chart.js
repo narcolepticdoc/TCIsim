@@ -523,6 +523,13 @@ export function createChart(canvas, config = {}) {
   // ---- Double-tap: recenter on current time + re-enable auto-scroll ----
   // Does NOT reset zoom level — just re-centers the view.
   let lastTap = 0;
+  let wasMultiTouch = false;
+
+  // Track pinch/multi-touch so the two touchend events that follow a pinch
+  // release don't get mistaken for a double-tap.
+  canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length >= 2) wasMultiTouch = true;
+  }, { passive: true });
 
   function recenter() {
     autoScroll = true;
@@ -543,6 +550,13 @@ export function createChart(canvas, config = {}) {
   });
   canvas.addEventListener('touchend', (e) => {
     if (yDragActive) return; // don't trigger on Y-axis drag end
+    // Skip if other fingers are still on screen (mid-pinch)
+    if (e.touches.length > 0) return;
+    // Skip if this touchend is the tail of a pinch gesture
+    if (wasMultiTouch) {
+      wasMultiTouch = false;
+      return; // don't update lastTap — keep it at the last genuine single tap
+    }
     const now = Date.now();
     if (now - lastTap < 300) {
       e.preventDefault();
