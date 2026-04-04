@@ -244,9 +244,10 @@ function findMaintenanceRate(engine, ceTarget, cfg, stepNum = 0) {
   }
   const endpointRate = (lo1 + hi1) / 2;
 
-  // If Ce is above target, endpoint-only (bring it back down gradually)
-  // Otherwise, use both constraints (endpoint + peak prevention)
-  if (currentCe > ceTarget * 1.05) {
+  // If Ce is at or above target, endpoint-only.
+  // The peak constraint would return ~0 when Ce > target (since Ce already
+  // exceeds the cap), causing min(endpointRate, ~0) = ~0 and a free-fall.
+  if (currentCe >= ceTarget) {
     // Well above target — just find the rate to bring Ce down
     engine.setState(saved);
     return Math.max(0, endpointRate);
@@ -902,10 +903,12 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
 
   // Detect rate pattern: decremental or rise-then-fall (SimTIVA lines 1287-1492)
   if (cptRates[0] > 0 && cptRates[0] >= cptRates[1]) {
-    // Decremental: start from interval 1
-    priorTestRate = cptRates[1];
-    cptTimes.push(1);
-    scheme.push({ type: 'rate', time: maintTime, value: rnd(cptRates[1]) * 60 });
+    // Decremental: start from interval 0 (not 1 as SimTIVA does).
+    // SimTIVA skips interval 0 because it replans every 2 min; our one-shot
+    // planner must use the first-interval rate or Ce undershoots on target decrease.
+    priorTestRate = cptRates[0];
+    cptTimes.push(0);
+    scheme.push({ type: 'rate', time: maintTime, value: rnd(cptRates[0]) * 60 });
   } else if (cptRates[0] > 0 && cptRates[1] > cptRates[0]) {
     // Possible rise-then-fall: find peak
     for (let k = 1; k < 60; k++) {
