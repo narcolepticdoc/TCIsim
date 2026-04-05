@@ -201,7 +201,7 @@ function computeApproachHTML(drugId, t, m, Ce, ceTarget, rate) {
     }
     const dt = estimateTimeToTarget(drugId, t, Ce, ceTarget);
     if (dt !== null && dt > 0) {
-      return `Approaching Target Ce → <span class="appr-val">${ceTarget.toFixed(1)}</span> in <span class="appr-time">${fmtCountdown(dt)}</span>`;
+      return `Target Ce → <span class="appr-val">${ceTarget.toFixed(1)}</span> in <span class="appr-time">${fmtCountdown(dt)}</span>`;
     }
     return `Target Ce <span class="appr-val">${ceTarget.toFixed(1)}</span>`;
   }
@@ -225,7 +225,7 @@ function computeApproachHTML(drugId, t, m, Ce, ceTarget, rate) {
       // Decaying toward target, show when it'll arrive
       const dt = estimateTimeToTarget(drugId, t, Ce, ceTarget);
       if (dt !== null && dt > 0) {
-        return `Returning to Target Ce → <span class="appr-val">${ceTarget.toFixed(1)}</span> in <span class="appr-time">${fmtCountdown(dt)}</span>`;
+        return `Target Ce → <span class="appr-val">${ceTarget.toFixed(1)}</span> in <span class="appr-time">${fmtCountdown(dt)}</span>`;
       }
     }
   }
