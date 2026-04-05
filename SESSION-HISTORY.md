@@ -88,7 +88,7 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 - Syntax error from inline `plugins` array added at wrong indentation level inside Chart constructor config object.
 - Extracted `APP_VERSION` to `js/version.js` — single source of truth; `constants.js` re-exports it. Only `version.js` needs updating on future releases.
 
-**Session 12 (2026-04-05):** Drug panel redesign. Version 0.4.5.
+**Session 12 (2026-04-05):** Drug panel redesign. Version 0.4.7.
 
 *Drug color strip:* Active card left border uses `--drug-color` CSS variable. Propofol/Ketamine = yellow; Fentanyl/Remifentanil = blue. Step bar inherits drug color.
 
@@ -96,11 +96,13 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 
 *Status + rate inline:* Four pump-state labels only — `Infusing` (green), `Bolus` (green + step-blink), `Paused` (amber), `Stopped` (red). Rate shown inline to the right; standalone `drug-rate` div removed. Bolus detection uses event list `type === 'bolus'` first, rate-heuristic fallback.
 
-*Approach/countdown line:* New `drug-approach` element (throttled to 500ms). TCI running → time to reach target via 30-min curve scan. TCI at target → "At Target". Manual infusion → steady state Ce and time (95% of Ce at 150 min). Pump stopped → "Emergence Ce 1.5 in m:ss" via `model.predictTrough`. Emergence threshold named constant `EMERGENCE_CE = 1.5`.
+*Approach/countdown line:* New `drug-approach` element (throttled to 500ms). TCI running → time to reach target via 30-min curve scan. TCI at target → "At Target". Manual infusion → steady state Ce and time (see below). Pump stopped → "Emergence Ce 1.5 in m:ss" via `model.predictTrough`. Emergence threshold named constant `EMERGENCE_CE = 1.5`.
 
-*BIS color coding:* Dynamic color per reading: >90 muted, 80–90 `#a3e635`, 60–80 amber, 40–60 cyan, <40 red.
+*BIS color coding:* Dynamic color per reading, matching chart nomogram bands exactly: >90 muted (awake), 80–90 `#ef4444` red (Light Sedation), 60–80 `#f97316` orange (Deep Sedation), 40–60 `#eab308` yellow (GA), 20–40 `#22c55e` green (Deep Anesthesia), <20 `#a855f7` purple (Very Deep). Initial commit had mismatched colors; corrected in follow-up.
 
 *Step bar + countdown:* `step-bar-countdown` text element (m:ss, right-aligned) above bar. `updateStepBar` scans event list each frame for prev/next events, computes fill %, shows remaining time.
+
+*Steady state definition (follow-up fix):* Initial approach (95% of Ce at 150 min) could fire immediately if Ce was already near its plateau. Replaced with rate-of-change criterion: first point where Ce changes < 0.05 mcg/mL over a 5-minute window. Clinically: "the number has stopped moving".
 
 307 tests, all passing.
 
