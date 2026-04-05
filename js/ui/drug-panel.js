@@ -175,14 +175,16 @@ function estimateSteadyState(drugId, t) {
   try {
     const curve = model.computeCurve(drugId, t, t + 150, 1.0);
     if (curve.length < 6) return null;
-    const ssCe = curve[curve.length - 1].Ce; // best asymptote estimate at 150 min
     // Find first index where the 5-min change drops below 0.05 mcg/mL
     for (let i = 0; i + 5 < curve.length; i++) {
       if (Math.abs(curve[i + 5].Ce - curve[i].Ce) < 0.05) {
-        return { ssCe, ssMin: curve[i].time - t };
+        // Use Ce AT the stability point, not the 150-min endpoint.
+        // The two are very different: Ce is "stable" locally within a few minutes
+        // but continues drifting slowly as peripheral compartments fill over hours.
+        return { ssCe: curve[i].Ce, ssMin: curve[i].time - t };
       }
     }
-    return { ssCe, ssMin: null };
+    return { ssCe: curve[curve.length - 1].Ce, ssMin: null };
   } catch (e) { return null; }
 }
 
@@ -210,7 +212,7 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
       const result = model.predictTrough(drugId, t, EMERGENCE_CE);
       if (result && result.time !== null && result.time > t) {
         return {
-          prefix: `Emergence Ce <span class="appr-val">${EMERGENCE_CE.toFixed(1)}</span> in `,
+          prefix: `Emergence <span class="appr-val">${EMERGENCE_CE.toFixed(1)}</span> in `,
           arrivalMin: result.time,
           staticText: '', newLockedSsCe: null,
         };
@@ -223,17 +225,17 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
   if (m === 'tci' && ceTarget > 0) {
     if (Math.abs(Ce - ceTarget) < 0.05) {
       return { prefix: '', arrivalMin: null, newLockedSsCe: null,
-        staticText: `At Target Ce <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
+        staticText: `At Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
     }
     const dt = estimateTimeToTarget(drugId, t, Ce, ceTarget);
     if (dt !== null && dt > 0) {
       return {
-        prefix: `Target Ce → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
+        prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
         arrivalMin: t + dt, staticText: '', newLockedSsCe: null,
       };
     }
     return { prefix: '', arrivalMin: null, newLockedSsCe: null,
-      staticText: `Target Ce <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
+      staticText: `Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
   }
 
   // Manual infusion — steady state
@@ -247,13 +249,13 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
       const ceStr = `<span class="appr-val">${displayCe.toFixed(1)}</span>`;
       if (ss.ssMin !== null && ss.ssMin > 0.5) {
         return {
-          prefix: `Steady state Ce ≈ ${ceStr} in `,
+          prefix: `Steady state ≈ ${ceStr} in `,
           arrivalMin: t + ss.ssMin,
           staticText: '', newLockedSsCe: ss.ssCe,
         };
       }
       return { prefix: '', arrivalMin: null, newLockedSsCe: ss.ssCe,
-        staticText: `Steady state Ce ≈ ${ceStr}` };
+        staticText: `Steady state ≈ ${ceStr}` };
     }
   }
 
@@ -262,7 +264,7 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
     const dt = estimateTimeToTarget(drugId, t, Ce, ceTarget);
     if (dt !== null && dt > 0) {
       return {
-        prefix: `Target Ce → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
+        prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
         arrivalMin: t + dt, staticText: '', newLockedSsCe: null,
       };
     }
