@@ -101,7 +101,7 @@ Old code: `bolusMg = Math.round(durationSec * maxRateMgSec)` (rounds to nearest 
 
 ---
 
-### Session 12 (2026-04-05) — Drug Panel Redesign (v0.4.4 → v0.4.5)
+### Session 12 (2026-04-05) — Drug Panel Redesign (v0.4.4 → v0.4.7)
 
 Denser, more information-rich drug panel layout. All changes in `index.html` (CSS + HTML) and `js/ui/drug-panel.js`.
 
@@ -115,14 +115,16 @@ Denser, more information-rich drug panel layout. All changes in `index.html` (CS
 - *TCI mode, running:* `Approaching Target → X.X in m:ss` (scans 30-min curve for Ce crossing target ±0.05).
 - *TCI mode, at target (|Ce − target| < 0.05):* `At Target X.X mcg/mL`.
 - *TCI mode, paused, Ce above target:* `Returning to Target → X.X in m:ss`.
-- *Manual infusion:* `Steady state ≈ X.X mcg/mL in m:ss` (scans 150-min curve; "steady state" = first point within 5% of Ce at 150 min).
+- *Manual infusion:* `Steady state ≈ X.X mcg/mL in m:ss` — see steady state definition below.
 - *Pump stopped (no mode):* `Emergence Ce 1.5 in m:ss` (calls `model.predictTrough` with threshold 1.5 mcg/mL; threshold is a named constant `EMERGENCE_CE` for future configurability).
 
-**BIS color coding:** BIS value color is set dynamically per reading: > 90 muted, 80–90 yellow-green (`#a3e635`), 60–80 amber, 40–60 cyan, < 40 red. Static `color: var(--green)` CSS rule removed.
+**BIS color coding:** BIS value color is set dynamically per reading, matching the chart nomogram bands exactly: > 90 muted (awake, no band), 80–90 `#ef4444` red (Light Sedation), 60–80 `#f97316` orange (Deep Sedation), 40–60 `#eab308` yellow (GA), 20–40 `#22c55e` green (Deep Anesthesia), < 20 `#a855f7` purple (Very Deep). Static `color: var(--green)` CSS rule removed. Initial implementation had mismatched colors; corrected to nomogram values in follow-up commit.
 
 **Step bar + live countdown:** `step-bar-area` now contains a small `step-bar-countdown` text element (9px mono, right-aligned, format `m:ss`) above the progress bar. `updateStepBar` scans `model.getEvents(drugId)` each frame to find the previous and next events around the current time, computes fill percentage, and shows the time remaining until the next event. Bar is hidden (0% width, blank countdown) when no future events exist.
 
-307 tests across 10 suites, all passing.
+**Steady state definition (follow-up fix):** Initial approach used 5% of the 150-min Ce value as the threshold, which could fire immediately if Ce was already near its plateau. Replaced with rate-of-change criterion: "steady state" = first point in the 150-min curve where Ce changes less than 0.05 mcg/mL over a 5-minute window. This maps to the clinical reality of "the number has stopped moving" regardless of where Ce started.
+
+308 tests across 10 suites, all passing.
 
 ---
 
