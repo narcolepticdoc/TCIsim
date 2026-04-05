@@ -101,6 +101,31 @@ Old code: `bolusMg = Math.round(durationSec * maxRateMgSec)` (rounds to nearest 
 
 ---
 
+### Session 12 (2026-04-05) — Drug Panel Redesign (v0.4.4 → v0.4.5)
+
+Denser, more information-rich drug panel layout. All changes in `index.html` (CSS + HTML) and `js/ui/drug-panel.js`.
+
+**Drug color strip:** Active card left border now uses a per-drug `--drug-color` CSS variable. Propofol and Ketamine (hypnotics) = yellow (`#f59e0b`); Fentanyl and Remifentanil (narcotics) = blue (`#3b82f6`). Step bar also inherits drug color.
+
+**Combined Cp/Ce row:** Ce and Cp merged onto one baseline-aligned flex row. Ce is 22px/600-weight (was 18px), Cp is 11px, separated by a dim `|`. Removes the separate `drug-cp-row` and the `ce-target-display` arrow span.
+
+**Pump status label:** Simplified to four pump-state labels only — no more "Manual" or "Pump Stopped". States: `Infusing` (green), `Bolus` (green + CSS step-blink animation), `Paused` (amber), `Stopped` (red). Infusion rate is now shown inline to the right of the status label; the separate `drug-rate` div is removed. Bolus detection checks the event list for an active `type === 'bolus'` event (falling back to `rate > 50` heuristic).
+
+**Approach / countdown line:** New `drug-approach` element below the concentration row. Content depends on pump state — computed via `model.computeCurve` or `model.predictTrough`, throttled to 500ms to avoid excessive work per frame:
+- *TCI mode, running:* `Approaching Target → X.X in m:ss` (scans 30-min curve for Ce crossing target ±0.05).
+- *TCI mode, at target (|Ce − target| < 0.05):* `At Target X.X mcg/mL`.
+- *TCI mode, paused, Ce above target:* `Returning to Target → X.X in m:ss`.
+- *Manual infusion:* `Steady state ≈ X.X mcg/mL in m:ss` (scans 150-min curve; "steady state" = first point within 5% of Ce at 150 min).
+- *Pump stopped (no mode):* `Emergence Ce 1.5 in m:ss` (calls `model.predictTrough` with threshold 1.5 mcg/mL; threshold is a named constant `EMERGENCE_CE` for future configurability).
+
+**BIS color coding:** BIS value color is set dynamically per reading: > 90 muted, 80–90 yellow-green (`#a3e635`), 60–80 amber, 40–60 cyan, < 40 red. Static `color: var(--green)` CSS rule removed.
+
+**Step bar + live countdown:** `step-bar-area` now contains a small `step-bar-countdown` text element (9px mono, right-aligned, format `m:ss`) above the progress bar. `updateStepBar` scans `model.getEvents(drugId)` each frame to find the previous and next events around the current time, computes fill percentage, and shows the time remaining until the next event. Bar is hidden (0% width, blank countdown) when no future events exist.
+
+307 tests across 10 suites, all passing.
+
+---
+
 ### Session 10 (2026-04-04) — UI Polish & Bug Fixes (v0.4.1 → v0.4.2)
 
 **Bug fixes (v0.4.1):**

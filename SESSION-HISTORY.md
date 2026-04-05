@@ -88,6 +88,22 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 - Syntax error from inline `plugins` array added at wrong indentation level inside Chart constructor config object.
 - Extracted `APP_VERSION` to `js/version.js` — single source of truth; `constants.js` re-exports it. Only `version.js` needs updating on future releases.
 
+**Session 12 (2026-04-05):** Drug panel redesign. Version 0.4.5.
+
+*Drug color strip:* Active card left border uses `--drug-color` CSS variable. Propofol/Ketamine = yellow; Fentanyl/Remifentanil = blue. Step bar inherits drug color.
+
+*Combined Cp/Ce row:* Ce (22px) and Cp (11px) merged onto one baseline row, separated by a dim `|`. Removed `drug-cp-row` and `ce-target-display` span.
+
+*Status + rate inline:* Four pump-state labels only — `Infusing` (green), `Bolus` (green + step-blink), `Paused` (amber), `Stopped` (red). Rate shown inline to the right; standalone `drug-rate` div removed. Bolus detection uses event list `type === 'bolus'` first, rate-heuristic fallback.
+
+*Approach/countdown line:* New `drug-approach` element (throttled to 500ms). TCI running → time to reach target via 30-min curve scan. TCI at target → "At Target". Manual infusion → steady state Ce and time (95% of Ce at 150 min). Pump stopped → "Emergence Ce 1.5 in m:ss" via `model.predictTrough`. Emergence threshold named constant `EMERGENCE_CE = 1.5`.
+
+*BIS color coding:* Dynamic color per reading: >90 muted, 80–90 `#a3e635`, 60–80 amber, 40–60 cyan, <40 red.
+
+*Step bar + countdown:* `step-bar-countdown` text element (m:ss, right-aligned) above bar. `updateStepBar` scans event list each frame for prev/next events, computes fill %, shows remaining time.
+
+307 tests, all passing.
+
 **Session 11 (2026-04-04):** Ce undershoot on target decrease — fixed in all planners. Version 0.4.4.
 
 *Bug 1 — `findMaintenanceRate` peak constraint (stepped / CET / CET-conservative):* When dropping to a lower Ce target, the planner pauses until Ce decays to `upperBound` (e.g. 3.605 for target 3.5 with 3% CET tolerance). At that moment Ce > target, so the peak-constraint binary search finds `peakRate ≈ 0` (any rate pushes peak Ce above target). `min(endpointRate, ~0) = ~0`; maintenance rate was effectively zero and Ce free-fell to ~3.32 (5.1% below target). The existing `1.05×` bypass only fired for Ce 5%+ above target, missing the common 0–5% zone. Fix: changed to `currentCe >= ceTarget` — whenever Ce is at or above target, use endpoint rate only.
