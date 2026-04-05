@@ -50,7 +50,7 @@ export function createModel(config = {}) {
 
   let eventList = createEventList();
   let pdModels = {};               // { drugId: pdModel | null }
-  let patient = { age: 35, weight: 70, height: 170, male: true, opioid: false };
+  let patient = { age: 35, weight: 70, height: 170, male: true, opioid: false, ce50OpioidCorrection: false };
   let params = null;               // PK-PD params for primary drug
 
   // ---- Initialization ----
