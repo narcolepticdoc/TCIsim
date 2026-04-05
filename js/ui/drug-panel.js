@@ -20,14 +20,18 @@ let onFrame    = null;   // callback: (elapsedMinutes) => void
 // Emergence Ce level (mcg/mL). Could become a user setting later.
 const EMERGENCE_CE = 1.5;
 
-// Approach line cache — heavy computation (computeCurve / predictTrough) runs at
-// most every 5 s. The countdown itself ticks live every rAF frame from arrivalMin.
+// Approach line cache.
 //   prefix     — HTML label ending with "in " when a countdown follows, else ''
 //   arrivalMin — absolute elapsed-minutes of arrival (null = no countdown)
 //   staticText — full HTML for no-countdown states ("At Target Ce 3.5" etc.)
+//   lockedSsCe — the steady-state Ce value shown in the label. Only reset when
+//                mode/rate/target changes, never on the 5 s time-based recompute.
+//                Prevents the displayed value from jumping when a mid-bolus
+//                recompute produces a different 150-min projection endpoint.
 const APPROACH_RECOMPUTE_MS = 5000;
 let _approachCache = {
   prefix: '', arrivalMin: null, staticText: '',
+  lockedSsCe: null,
   computedAt: -Infinity, mode: '', rate: 0, target: 0,
 };
 
@@ -184,13 +188,20 @@ function estimateSteadyState(drugId, t) {
 
 /**
  * Compute approach line data (the expensive part — calls computeCurve / predictTrough).
- * Returns { prefix, arrivalMin, staticText }:
- *   prefix     — HTML ending with "in " when a live countdown follows
- *   arrivalMin — absolute elapsed-minutes of arrival (null = no countdown)
- *   staticText — full HTML for states with no countdown
+ *
+ * @param {string|null} lockedSsCe - if non-null, use this for the steady-state Ce
+ *   display label instead of recomputing from the 150-min curve. Pass null on a
+ *   mode/rate/target change (forces a fresh lock); pass the existing cache value
+ *   on time-based recomputes (keeps the label stable).
+ *
+ * Returns { prefix, arrivalMin, staticText, newLockedSsCe }:
+ *   prefix        — HTML ending with "in " when a live countdown follows
+ *   arrivalMin    — absolute elapsed-minutes of arrival (null = no countdown)
+ *   staticText    — full HTML for no-countdown states
+ *   newLockedSsCe — the ssCe value computed this run (caller stores it on first compute)
  */
-function computeApproachData(drugId, t, m, Ce, ceTarget, rate) {
-  const noData = { prefix: '', arrivalMin: null, staticText: '' };
+function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
+  const noData = { prefix: '', arrivalMin: null, staticText: '', newLockedSsCe: null };
 
   // Pump fully stopped (no mode) — emergence countdown
   if (m === 'none' || (rate === 0 && m !== 'tci')) {
@@ -200,8 +211,8 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate) {
       if (result && result.time !== null && result.time > t) {
         return {
           prefix: `Emergence Ce <span class="appr-val">${EMERGENCE_CE.toFixed(1)}</span> in `,
-          arrivalMin: result.time,   // predictTrough already returns absolute minutes
-          staticText: '',
+          arrivalMin: result.time,
+          staticText: '', newLockedSsCe: null,
         };
       }
     } catch (e) {}
@@ -211,18 +222,17 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate) {
   // TCI mode
   if (m === 'tci' && ceTarget > 0) {
     if (Math.abs(Ce - ceTarget) < 0.05) {
-      return { prefix: '', arrivalMin: null,
+      return { prefix: '', arrivalMin: null, newLockedSsCe: null,
         staticText: `At Target Ce <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
     }
     const dt = estimateTimeToTarget(drugId, t, Ce, ceTarget);
     if (dt !== null && dt > 0) {
       return {
         prefix: `Target Ce → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
-        arrivalMin: t + dt,
-        staticText: '',
+        arrivalMin: t + dt, staticText: '', newLockedSsCe: null,
       };
     }
-    return { prefix: '', arrivalMin: null,
+    return { prefix: '', arrivalMin: null, newLockedSsCe: null,
       staticText: `Target Ce <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
   }
 
@@ -230,15 +240,20 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate) {
   if (m === 'manual' && rate > 0) {
     const ss = estimateSteadyState(drugId, t);
     if (ss) {
-      const ceStr = `<span class="appr-val">${ss.ssCe.toFixed(1)}</span>`;
+      // Use the locked value if one exists; otherwise lock the freshly computed one.
+      // This prevents the display Ce from jumping on time-based recomputes where the
+      // 150-min projection shifts due to mid-bolus engine state changes.
+      const displayCe = (lockedSsCe !== null) ? lockedSsCe : ss.ssCe;
+      const ceStr = `<span class="appr-val">${displayCe.toFixed(1)}</span>`;
       if (ss.ssMin !== null && ss.ssMin > 0.5) {
         return {
           prefix: `Steady state Ce ≈ ${ceStr} in `,
           arrivalMin: t + ss.ssMin,
-          staticText: '',
+          staticText: '', newLockedSsCe: ss.ssCe,
         };
       }
-      return { prefix: '', arrivalMin: null, staticText: `Steady state Ce ≈ ${ceStr}` };
+      return { prefix: '', arrivalMin: null, newLockedSsCe: ss.ssCe,
+        staticText: `Steady state Ce ≈ ${ceStr}` };
     }
   }
 
@@ -248,8 +263,7 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate) {
     if (dt !== null && dt > 0) {
       return {
         prefix: `Target Ce → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
-        arrivalMin: t + dt,
-        staticText: '',
+        arrivalMin: t + dt, staticText: '', newLockedSsCe: null,
       };
     }
   }
@@ -261,17 +275,26 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate) {
  * Update approach line.
  * - Recomputes arrival time at most every 5 s (or on mode/rate/target change).
  * - Renders the countdown live every rAF frame from the cached arrivalMin.
+ * - lockedSsCe (the display Ce value for steady state) is only reset on a
+ *   mode/rate/target change, never on the 5 s time-based recompute, so the
+ *   label stays stable while conditions are in flux.
  */
 function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
   const now = Date.now();
-  const cacheValid =
-    now - _approachCache.computedAt < APPROACH_RECOMPUTE_MS &&
-    _approachCache.mode   === m &&
-    Math.abs(_approachCache.rate   - rate)     < 0.01 &&
-    Math.abs(_approachCache.target - ceTarget) < 0.01;
 
-  if (!cacheValid) {
-    const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate);
+  const displayChanged =
+    _approachCache.mode !== m ||
+    Math.abs(_approachCache.rate   - rate)     > 0.01 ||
+    Math.abs(_approachCache.target - ceTarget) > 0.01;
+
+  const timeExpired = now - _approachCache.computedAt >= APPROACH_RECOMPUTE_MS;
+
+  if (displayChanged || timeExpired) {
+    // On display change: pass null so computeApproachData locks a fresh ssCe.
+    // On time-based recompute: pass existing lockedSsCe so label stays stable.
+    const lockToPass = displayChanged ? null : _approachCache.lockedSsCe;
+    const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockToPass);
+
     _approachCache.prefix     = data.prefix;
     _approachCache.arrivalMin = data.arrivalMin;
     _approachCache.staticText = data.staticText;
@@ -279,6 +302,9 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
     _approachCache.mode       = m;
     _approachCache.rate       = rate;
     _approachCache.target     = ceTarget;
+
+    // Only update the locked Ce value when the display actually changed.
+    if (displayChanged) _approachCache.lockedSsCe = data.newLockedSsCe;
   }
 
   // Build live HTML every frame
@@ -430,5 +456,6 @@ function update() {
 /** Force an immediate update (after a model mutation). */
 export function forceUpdate() {
   _approachCache.computedAt = -Infinity; // force recompute
+  _approachCache.lockedSsCe = null;      // release locked Ce — model state changed
   update();
 }
