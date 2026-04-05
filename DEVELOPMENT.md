@@ -164,6 +164,22 @@ SimTIVA's `deliver_cpt` step extraction skips `cptRates[0]` (the high initial ra
 
 307 tests, all passing.
 
+### Session 13 (2026-04-05) — eBIS Opioid Correction Toggle (v0.4.5 → v0.4.6)
+
+**Bug:** eBIS reported ~24 vs SimTIVA's ~42 for a standard opioid patient (35M 170cm 70kg, Ce=3.5).
+
+**Root cause:** `eleveld.js` always applied the Eleveld 2018 paper's Ce50 opioid correction (`× exp(−0.567) ≈ 0.567`), halving Ce50 from 3.08 → 1.75 μg/mL. SimTIVA does not implement this correction, so its BIS calculations use Ce50=3.08 regardless of opioid status.
+
+**Fix:** Ce50 opioid correction is now opt-in via a new `ce50OpioidCorrection` field on the patient object (default `false` = SimTIVA behaviour). A "Ce50 opioid correction" checkbox is added to the setup form, visible only when "With opioid" is selected. Toggling it on applies the Eleveld paper formula for users who prefer strict pharmacological accuracy.
+
+- `js/pk/eleveld.js` — `ce50OpioidFlag` gated on `opioid && ce50OpioidCorrection`
+- `index.html` — new checkbox row (shown/hidden by JS based on opioid select)
+- `js/ui/setup.js` — wires checkbox, show/hide logic, localStorage persistence (`tci-ce50-correction`)
+- `js/sim/simulation.js` — default patient includes `ce50OpioidCorrection: false`
+- Tests updated: `test-pk.js` (44 tests), `test-integration.js` — opioid Ce50 assertions updated; new test confirms correction-on behavior
+
+308 tests across 10 suites, all passing.
+
 ## Known Issues
 
 ### Emulation Planner
@@ -204,7 +220,7 @@ SimTIVA's `deliver_cpt` step extraction skips `cptRates[0]` (the high initial ra
 
 | Suite | Tests | Coverage |
 |---|---|---|
-| `test-pk.js` | 43 | Eleveld params, matrix-exp, compartment dynamics |
+| `test-pk.js` | 44 | Eleveld params, matrix-exp, compartment dynamics |
 | `test-model.js` | 42 | Simulation facade, event handling, concentrations |
 | `test-decay.js` | 15 | Decay prediction, context-sensitive times |
 | `test-tci-scheme.js` | 16 | TCI planner output validation |
@@ -214,6 +230,6 @@ SimTIVA's `deliver_cpt` step extraction skips `cptRates[0]` (the high initial ra
 | `test-t0-edge.js` | 40 | t=0 boundary and edge cases |
 | `test-unit-safety.js` | 18 | Unit parameter validation |
 | `test-units.js` | 39 | Unit conversion, display formatting |
-| **Total** | **307** | |
+| **Total** | **308** | |
 
-All tests passing as of 2026-04-04 (v0.4.4).
+All tests passing as of 2026-04-05 (v0.4.6).
