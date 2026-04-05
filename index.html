@@ -99,29 +99,44 @@
 
     /* Drug panel */
     .drug-panel{width:210px;min-width:170px;flex-shrink:0;display:flex;flex-direction:column;gap:1px;background:var(--border-subtle);border-right:1px solid var(--border-subtle);overflow-y:auto}
-    .drug-card{background:var(--bg-card);padding:9px 11px;cursor:pointer;transition:background .15s;display:flex;flex-direction:column;gap:4px}
+    .drug-card{background:var(--bg-card);padding:9px 11px;cursor:pointer;transition:background .15s;display:flex;flex-direction:column;gap:3px}
     .drug-card:hover{background:var(--bg-hover)}
-    .drug-card.active{background:var(--bg-input);border-left:3px solid var(--blue)}
+    .drug-card.active{background:var(--bg-input);border-left:3px solid var(--drug-color,var(--blue))}
     .drug-card.disabled{opacity:.3;cursor:default;pointer-events:none}
+    /* Drug-type color strips */
+    #drug-propofol{--drug-color:#f59e0b}
+    #drug-ketamine{--drug-color:#f59e0b}
+    #drug-fentanyl{--drug-color:#3b82f6}
+    #drug-remifentanil{--drug-color:#3b82f6}
     .drug-card .drug-name{font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--text-primary);text-transform:uppercase;letter-spacing:.5px}
     .drug-card .drug-model{font-size:9px;color:var(--text-muted)}
-    .drug-card .drug-ce-row{display:flex;align-items:baseline;gap:6px;margin-top:1px}
-    .drug-card .ce-label{font-size:10px;color:var(--text-muted)}
-    .drug-card .ce-current{font-family:var(--font-mono);font-size:18px;font-weight:500;color:var(--cyan)}
-    .drug-card .ce-target-display{font-family:var(--font-mono);font-size:11px;color:var(--amber)}
-    .drug-card .drug-cp-row{display:flex;align-items:baseline;gap:6px}
+    /* Combined Cp / Ce row */
+    .drug-card .drug-conc-row{display:flex;align-items:baseline;gap:4px;margin-top:2px}
+    .drug-card .ce-label{font-size:9px;color:var(--text-muted)}
+    .drug-card .ce-current{font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--cyan);line-height:1}
+    .drug-card .cp-sep{font-size:10px;color:var(--border);margin:0 2px}
     .drug-card .cp-label{font-size:9px;color:var(--text-muted)}
-    .drug-card .cp-current{font-family:var(--font-mono);font-size:12px;color:#ef4444}
-    .drug-card .drug-status{font-size:10px;font-weight:500}
+    .drug-card .cp-current{font-family:var(--font-mono);font-size:11px;color:#ef4444}
+    /* Approach / countdown line */
+    .drug-card .drug-approach{font-family:var(--font-mono);font-size:9.5px;color:var(--text-muted);min-height:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .drug-card .drug-approach .appr-val{color:var(--cyan)}
+    .drug-card .drug-approach .appr-time{color:var(--amber)}
+    /* Status row: status label + inline rate */
+    .drug-card .drug-status-row{display:flex;align-items:center;gap:5px}
+    .drug-card .drug-status{font-size:10px;font-weight:600}
     .drug-card .drug-status.infusing{color:var(--green)}
     .drug-card .drug-status.paused{color:var(--amber)}
-    .drug-card .drug-status.stopped{color:var(--text-muted)}
-    .drug-card .drug-status.bolus{color:var(--red)}
-    .drug-card .drug-status.manual{color:var(--purple)}
-    .drug-card .drug-rate{font-family:var(--font-mono);font-size:11px;color:var(--text-secondary)}
-    .drug-card .drug-bis{font-family:var(--font-mono);font-size:11px;color:var(--green)}
-    .drug-card .step-bar-wrap{height:3px;background:var(--bg-deep);border-radius:2px;overflow:hidden;margin-top:1px}
-    .drug-card .step-bar{height:100%;background:var(--blue);border-radius:2px;transition:width .5s linear}
+    .drug-card .drug-status.stopped{color:#ef4444}
+    @keyframes bolus-blink{0%,100%{opacity:1}50%{opacity:.25}}
+    .drug-card .drug-status.bolus{color:var(--green);animation:bolus-blink .7s step-end infinite}
+    .drug-card .drug-rate{font-family:var(--font-mono);font-size:10px;color:var(--text-secondary)}
+    /* BIS */
+    .drug-card .drug-bis{font-family:var(--font-mono);font-size:11px}
+    /* Progress bar + countdown */
+    .drug-card .step-bar-area{margin-top:2px}
+    .drug-card .step-bar-countdown{font-family:var(--font-mono);font-size:9px;color:var(--text-muted);text-align:right;min-height:11px}
+    .drug-card .step-bar-wrap{height:3px;background:var(--bg-deep);border-radius:2px;overflow:hidden}
+    .drug-card .step-bar{height:100%;background:var(--drug-color,var(--blue));border-radius:2px;transition:width .5s linear}
 
     /* Content area */
     .sim-content{flex:1;display:flex;flex-direction:column;min-width:0}
@@ -193,7 +208,7 @@
     @media(max-height:380px){
       .sim-topbar{height:28px}.elapsed-timer{font-size:14px}
       .timer-wall-hint{font-size:8px}
-      .drug-panel{width:170px;min-width:140px}.drug-card{padding:6px 8px;gap:2px}.drug-card .drug-name{font-size:11px}.drug-card .ce-current{font-size:15px}
+      .drug-panel{width:175px;min-width:140px}.drug-card{padding:6px 8px;gap:2px}.drug-card .drug-name{font-size:11px}.drug-card .ce-current{font-size:18px}
       .content-tab{padding:5px 12px;font-size:10px}
       .sim-controls{padding:4px 8px;gap:3px}.btn-ctrl{padding:6px 10px;font-size:11px}
     }
@@ -408,19 +423,23 @@
         <div class="drug-card active" id="drug-propofol">
           <div class="drug-name">Propofol</div>
           <div class="drug-model" id="propofol-model-label">Eleveld 2018 · 10 mg/mL</div>
-          <div class="drug-ce-row">
+          <div class="drug-conc-row">
             <span class="ce-label">Ce</span>
             <span class="ce-current" id="propofol-ce">0.00</span>
-            <span class="ce-target-display" id="propofol-target-disp"></span>
-          </div>
-          <div class="drug-cp-row">
+            <span class="cp-sep">|</span>
             <span class="cp-label">Cp</span>
             <span class="cp-current" id="propofol-cp">0.00</span>
           </div>
-          <div class="drug-status stopped" id="propofol-status">Stopped</div>
-          <div class="drug-rate" id="propofol-rate"></div>
+          <div class="drug-approach" id="propofol-approach"></div>
+          <div class="drug-status-row">
+            <span class="drug-status stopped" id="propofol-status">Stopped</span>
+            <span class="drug-rate" id="propofol-rate"></span>
+          </div>
           <div class="drug-bis" id="propofol-bis"></div>
-          <div class="step-bar-wrap"><div class="step-bar" id="propofol-bar" style="width:0%"></div></div>
+          <div class="step-bar-area">
+            <div class="step-bar-countdown" id="propofol-bar-countdown"></div>
+            <div class="step-bar-wrap"><div class="step-bar" id="propofol-bar" style="width:0%"></div></div>
+          </div>
         </div>
         <div class="drug-card disabled"><div class="drug-name">Fentanyl</div><div class="drug-model">Coming soon</div></div>
         <div class="drug-card disabled"><div class="drug-name">Ketamine</div><div class="drug-model">Coming soon</div></div>
