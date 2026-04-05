@@ -175,14 +175,16 @@ function estimateSteadyState(drugId, t) {
   try {
     const curve = model.computeCurve(drugId, t, t + 150, 1.0);
     if (curve.length < 6) return null;
-    const ssCe = curve[curve.length - 1].Ce; // best asymptote estimate at 150 min
     // Find first index where the 5-min change drops below 0.05 mcg/mL
     for (let i = 0; i + 5 < curve.length; i++) {
       if (Math.abs(curve[i + 5].Ce - curve[i].Ce) < 0.05) {
-        return { ssCe, ssMin: curve[i].time - t };
+        // Use Ce AT the stability point, not the 150-min endpoint.
+        // The two are very different: Ce is "stable" locally within a few minutes
+        // but continues drifting slowly as peripheral compartments fill over hours.
+        return { ssCe: curve[i].Ce, ssMin: curve[i].time - t };
       }
     }
-    return { ssCe, ssMin: null };
+    return { ssCe: curve[curve.length - 1].Ce, ssMin: null };
   } catch (e) { return null; }
 }
 
