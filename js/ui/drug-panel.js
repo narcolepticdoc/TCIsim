@@ -20,8 +20,16 @@ let onFrame    = null;   // callback: (elapsedMinutes) => void
 // Emergence Ce level (mcg/mL). Could become a user setting later.
 const EMERGENCE_CE = 1.5;
 
-// Approach line cache — recomputed at most every 500ms wall-clock time
-let _approachCache = { text: '', computedAt: -Infinity, mode: '', rate: 0, target: 0 };
+// Approach line cache — heavy computation (computeCurve / predictTrough) runs at
+// most every 5 s. The countdown itself ticks live every rAF frame from arrivalMin.
+//   prefix     — HTML label ending with "in " when a countdown follows, else ''
+//   arrivalMin — absolute elapsed-minutes of arrival (null = no countdown)
+//   staticText — full HTML for no-countdown states ("At Target Ce 3.5" etc.)
+const APPROACH_RECOMPUTE_MS = 5000;
+let _approachCache = {
+  prefix: '', arrivalMin: null, staticText: '',
+  computedAt: -Infinity, mode: '', rate: 0, target: 0,
+};
 
 /**
  * Initialize the drug panel.
@@ -175,87 +183,121 @@ function estimateSteadyState(drugId, t) {
 }
 
 /**
- * Build the HTML for the approach line. Uses span elements for color.
- * Returns HTML string.
+ * Compute approach line data (the expensive part — calls computeCurve / predictTrough).
+ * Returns { prefix, arrivalMin, staticText }:
+ *   prefix     — HTML ending with "in " when a live countdown follows
+ *   arrivalMin — absolute elapsed-minutes of arrival (null = no countdown)
+ *   staticText — full HTML for states with no countdown
  */
-function computeApproachHTML(drugId, t, m, Ce, ceTarget, rate) {
-  // Pump fully stopped (no mode) — show emergence countdown
+function computeApproachData(drugId, t, m, Ce, ceTarget, rate) {
+  const noData = { prefix: '', arrivalMin: null, staticText: '' };
+
+  // Pump fully stopped (no mode) — emergence countdown
   if (m === 'none' || (rate === 0 && m !== 'tci')) {
-    if (Ce <= EMERGENCE_CE + 0.05) return ''; // already below or at emergence
+    if (Ce <= EMERGENCE_CE + 0.05) return noData;
     try {
       const result = model.predictTrough(drugId, t, EMERGENCE_CE);
-      if (result && result.time !== null) {
-        const dt = result.time - t;
-        if (dt > 0) {
-          return `Emergence Ce <span class="appr-val">${EMERGENCE_CE.toFixed(1)}</span> in <span class="appr-time">${fmtCountdown(dt)}</span>`;
-        }
+      if (result && result.time !== null && result.time > t) {
+        return {
+          prefix: `Emergence Ce <span class="appr-val">${EMERGENCE_CE.toFixed(1)}</span> in `,
+          arrivalMin: result.time,   // predictTrough already returns absolute minutes
+          staticText: '',
+        };
       }
     } catch (e) {}
-    return '';
+    return noData;
   }
 
-  // TCI mode — approaching target
+  // TCI mode
   if (m === 'tci' && ceTarget > 0) {
     if (Math.abs(Ce - ceTarget) < 0.05) {
-      return `At Target Ce <span class="appr-val">${ceTarget.toFixed(1)}</span>`;
+      return { prefix: '', arrivalMin: null,
+        staticText: `At Target Ce <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
     }
     const dt = estimateTimeToTarget(drugId, t, Ce, ceTarget);
     if (dt !== null && dt > 0) {
-      return `Approaching Target Ce → <span class="appr-val">${ceTarget.toFixed(1)}</span> in <span class="appr-time">${fmtCountdown(dt)}</span>`;
+      return {
+        prefix: `Target Ce → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
+        arrivalMin: t + dt,
+        staticText: '',
+      };
     }
-    return `Target Ce <span class="appr-val">${ceTarget.toFixed(1)}</span>`;
+    return { prefix: '', arrivalMin: null,
+      staticText: `Target Ce <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
   }
 
-  // Manual infusion — show steady state estimate
+  // Manual infusion — steady state
   if (m === 'manual' && rate > 0) {
     const ss = estimateSteadyState(drugId, t);
     if (ss) {
       const ceStr = `<span class="appr-val">${ss.ssCe.toFixed(1)}</span>`;
       if (ss.ssMin !== null && ss.ssMin > 0.5) {
-        return `Steady state Ce ≈ ${ceStr} in <span class="appr-time">${fmtCountdown(ss.ssMin)}</span>`;
+        return {
+          prefix: `Steady state Ce ≈ ${ceStr} in `,
+          arrivalMin: t + ss.ssMin,
+          staticText: '',
+        };
       }
-      return `Steady state Ce ≈ ${ceStr}`;
+      return { prefix: '', arrivalMin: null, staticText: `Steady state Ce ≈ ${ceStr}` };
     }
   }
 
-  // TCI paused — show emergence or target depending on which is relevant
-  if (m === 'tci' && rate === 0 && ceTarget > 0) {
-    // Approaching target (resumed) or decaying?
-    if (Ce > ceTarget + 0.1) {
-      // Decaying toward target, show when it'll arrive
-      const dt = estimateTimeToTarget(drugId, t, Ce, ceTarget);
-      if (dt !== null && dt > 0) {
-        return `Returning to Target Ce → <span class="appr-val">${ceTarget.toFixed(1)}</span> in <span class="appr-time">${fmtCountdown(dt)}</span>`;
-      }
+  // TCI paused, Ce above target — show when it'll arrive
+  if (m === 'tci' && rate === 0 && ceTarget > 0 && Ce > ceTarget + 0.1) {
+    const dt = estimateTimeToTarget(drugId, t, Ce, ceTarget);
+    if (dt !== null && dt > 0) {
+      return {
+        prefix: `Target Ce → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
+        arrivalMin: t + dt,
+        staticText: '',
+      };
     }
   }
 
-  return '';
+  return noData;
 }
 
 /**
- * Update approach line, throttled to ~500ms.
+ * Update approach line.
+ * - Recomputes arrival time at most every 5 s (or on mode/rate/target change).
+ * - Renders the countdown live every rAF frame from the cached arrivalMin.
  */
 function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
   const now = Date.now();
   const cacheValid =
-    now - _approachCache.computedAt < 500 &&
-    _approachCache.mode === m &&
-    Math.abs(_approachCache.rate - rate) < 0.01 &&
+    now - _approachCache.computedAt < APPROACH_RECOMPUTE_MS &&
+    _approachCache.mode   === m &&
+    Math.abs(_approachCache.rate   - rate)     < 0.01 &&
     Math.abs(_approachCache.target - ceTarget) < 0.01;
 
   if (!cacheValid) {
-    _approachCache.text       = computeApproachHTML(drugId, t, m, Ce, ceTarget, rate);
+    const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate);
+    _approachCache.prefix     = data.prefix;
+    _approachCache.arrivalMin = data.arrivalMin;
+    _approachCache.staticText = data.staticText;
     _approachCache.computedAt = now;
     _approachCache.mode       = m;
     _approachCache.rate       = rate;
     _approachCache.target     = ceTarget;
   }
 
-  const el = $(drugId + '-approach');
-  if (el && el.innerHTML !== _approachCache.text) {
-    el.innerHTML = _approachCache.text;
+  // Build live HTML every frame
+  let html = '';
+  if (_approachCache.arrivalMin !== null) {
+    const remaining = _approachCache.arrivalMin - t;
+    if (remaining > 0) {
+      html = _approachCache.prefix +
+        `<span class="appr-time">${fmtCountdown(remaining)}</span>`;
+    } else {
+      // Crossed threshold — force recompute next frame
+      _approachCache.computedAt = -Infinity;
+    }
+  } else {
+    html = _approachCache.staticText;
   }
+
+  const el = $(drugId + '-approach');
+  if (el && el.innerHTML !== html) el.innerHTML = html;
 }
 
 // ──────────────────────────────────────────────────────────────────
