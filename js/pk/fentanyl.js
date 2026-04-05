@@ -6,9 +6,9 @@
  * All volumes and clearances scale linearly with effective body weight.
  * Micro-rate constants are weight-independent (scaling factor cancels).
  *
- * For patients >80 kg, actual body weight is replaced by a
- * "pharmacokinetic mass" (Shibutani 2004) that accounts for the
- * nonlinear relationship between obesity and fentanyl distribution.
+ * The Shibutani 2004 PK mass correction applies only to patients meeting
+ * both entry criteria of the derivation study: TBW ≥ 85 kg AND BMI > 30.
+ * Patients who are tall and lean (high TBW, low BMI) use TBW directly.
  *
  * Ce is in mcg/mL (canonical engine unit). Clinical display is ng/mL.
  * Therapeutic range: ~1–5 ng/mL (0.001–0.005 mcg/mL) intraoperative.
@@ -38,21 +38,23 @@ const REF_Q3  =  99.22 / 60;  // L/min  (99.22 L/h)
 const KE0     = 0.1195;        // /min  (Shafer 1990)
 
 /**
- * Shibutani 2004 pharmacokinetic mass.
+ * Shibutani 2004 pharmacokinetic mass formula.
  *
- * For TBW ≤ 80 kg, returns TBW unchanged.
- * For TBW > 80 kg, returns the PK mass from the nonlinear formula derived
- * in Shibutani 2004 (Anesthesiology 101:603), which corrects for the
- * over-prediction of fentanyl concentrations in obese patients.
+ * Applies only when TBW ≥ 85 kg AND BMI > 30 — the inclusion criteria for the
+ * obese group in the Shibutani 2004 derivation study. Outside those bounds,
+ * TBW is returned unchanged.
  *
- * Key reference values: 83.3 kg at TBW=100, 99.5 kg at TBW=140.
+ * Key reference values (obese patients): 83.3 kg at TBW=100, 99.5 kg at TBW=140.
  *
  * @param {number} tbw - Total body weight in kg
+ * @param {number} bmi - Body mass index (kg/m²)
  * @returns {number} Effective pharmacokinetic weight in kg
  */
-export function pkMass(tbw) {
-  if (tbw <= 80) return tbw;
-  return 52 / (1 + (196.4 * Math.exp(-0.025 * tbw) - 53.66) / 100);
+export function pkMass(tbw, bmi) {
+  if (tbw >= 85 && bmi > 30) {
+    return 52 / (1 + (196.4 * Math.exp(-0.025 * tbw) - 53.66) / 100);
+  }
+  return tbw;
 }
 
 /**
@@ -60,11 +62,14 @@ export function pkMass(tbw) {
  *
  * @param {Object} patient
  * @param {number} patient.weight - Total body weight in kg
+ * @param {number} patient.height - Height in cm
  * @returns {Object} PK parameters with rate constants in per-minute units
  */
 export function calcFentanylParams(patient) {
-  const { weight } = patient;
-  const s = pkMass(weight) / REF_WEIGHT;
+  const { weight, height } = patient;
+  const heightM = height / 100;
+  const bmi = weight / (heightM * heightM);
+  const s = pkMass(weight, bmi) / REF_WEIGHT;
 
   // Volumes (L) and clearances (L/min) — linear scaling with PK mass
   const V1 = REF_V1 * s;
