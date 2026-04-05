@@ -111,10 +111,10 @@
     .drug-card .drug-name{font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--text-primary);text-transform:uppercase;letter-spacing:.5px}
     .drug-card .drug-model{font-size:9px;color:var(--text-muted)}
     /* Combined Cp / Ce row */
-    .drug-card .drug-conc-row{display:flex;align-items:baseline;gap:4px;margin-top:2px}
+    .drug-card .drug-conc-row{display:flex;align-items:baseline;gap:3px;margin-top:2px}
     .drug-card .ce-label{font-size:9px;color:var(--text-muted)}
     .drug-card .ce-current{font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--cyan);line-height:1}
-    .drug-card .cp-sep{font-size:10px;color:var(--border);margin:0 2px}
+    .drug-card .cp-sep{font-size:10px;color:var(--border);margin:0 1px}
     .drug-card .cp-label{font-size:9px;color:var(--text-muted)}
     .drug-card .cp-current{font-family:var(--font-mono);font-size:11px;color:#ef4444}
     /* Approach / countdown line */
@@ -130,8 +130,9 @@
     @keyframes bolus-blink{0%,100%{opacity:1}50%{opacity:.25}}
     .drug-card .drug-status.bolus{color:var(--green);animation:bolus-blink .7s step-end infinite}
     .drug-card .drug-rate{font-family:var(--font-mono);font-size:10px;color:var(--text-secondary)}
-    /* eBIS — inline in conc row */
-    .drug-card .drug-bis{font-family:var(--font-mono);font-size:11px;margin-left:2px}
+    /* eBIS — inline in conc row, matches Ce/Cp label+value pattern */
+    .drug-card .bis-label{font-size:9px;color:var(--text-muted)}
+    .drug-card .drug-bis{font-family:var(--font-mono);font-size:11px}
     /* Progress bar + countdown */
     .drug-card .step-bar-area{margin-top:2px}
     .drug-card .step-bar-countdown{font-family:var(--font-mono);font-size:9px;color:var(--text-muted);text-align:right;min-height:11px}
@@ -434,7 +435,8 @@
             <span class="cp-sep">|</span>
             <span class="cp-label">Cp</span>
             <span class="cp-current" id="propofol-cp">0.00</span>
-            <span class="cp-sep">|</span>
+            <span class="bis-sep cp-sep" id="propofol-bis-sep" style="display:none">|</span>
+            <span class="bis-label" id="propofol-bis-label" style="display:none">eBIS</span>
             <span class="drug-bis" id="propofol-bis"></span>
           </div>
           <div class="drug-approach" id="propofol-approach"></div>
