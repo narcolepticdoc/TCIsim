@@ -101,7 +101,7 @@ Old code: `bolusMg = Math.round(durationSec * maxRateMgSec)` (rounds to nearest 
 
 ---
 
-### Session 12 (2026-04-05) — Drug Panel Redesign (v0.4.4 → v0.5.0)
+### Session 12 (2026-04-05) — Drug Panel Redesign (v0.4.4 → v0.4.10)
 
 Denser, more information-rich drug panel layout. All changes in `index.html` (CSS + HTML) and `js/ui/drug-panel.js`.
 

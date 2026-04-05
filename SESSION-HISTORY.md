@@ -88,7 +88,7 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 - Syntax error from inline `plugins` array added at wrong indentation level inside Chart constructor config object.
 - Extracted `APP_VERSION` to `js/version.js` — single source of truth; `constants.js` re-exports it. Only `version.js` needs updating on future releases.
 
-**Session 12 (2026-04-05):** Drug panel redesign. Version 0.5.0.
+**Session 12 (2026-04-05):** Drug panel redesign. Version 0.4.10.
 
 *Drug color strip:* Active card left border uses `--drug-color` CSS variable. Propofol/Ketamine = yellow; Fentanyl/Remifentanil = blue. Step bar inherits drug color.
 
