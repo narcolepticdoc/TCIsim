@@ -112,6 +112,8 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 
 *Approach line rewritten to scan precomputed chart curve (v0.4.11):* `estimateSteadyState` and `estimateTimeToTarget` previously each called `model.computeCurve` independently on every recompute. Now `app.js` passes the same curve computed by `refreshChart` to `drugPanel.setCurveData`. Both functions scan `_sharedCurve` directly — pure array iteration, no model calls. Cache invalidates on curve version change or pump-state change; no time-based throttle needed. Stability criterion made explicit: `SS_DRIFT_THRESHOLD = 0.1 mcg/mL` over `SS_WINDOW_MIN = 10 min` (60 samples at 10s resolution). This is the Ce the clinician will observe stabilizing on the monitor, not a distant PK equilibrium.
 
+*eBIS moved into Ce/Cp row (v0.4.12):* BIS promoted from a standalone div below the status row into the `drug-conc-row` flex line. Renamed "BIS" → "eBIS" to clarify PD-model origin. Label + separator hidden when not active. Label/value split to match Ce/Cp pattern (9px muted label, 11px mono value). Row gap and separator margins tightened.
+
 307 tests, all passing.
 
 **Session 11 (2026-04-04):** Ce undershoot on target decrease — fixed in all planners. Version 0.4.4.
