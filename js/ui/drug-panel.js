@@ -21,6 +21,7 @@ let getMode                  = null;   // () => mode string
 let getCeTarget              = null;   // () => Ce target number
 let getIntermittentThreshold = null;   // () => intermittent redose threshold (mcg/mL canonical)
 let getDrugId                = null;   // () => selected drug id
+let getDrugIds               = null;   // () => string[] all drug ids with cards
 let rafId                    = null;
 let onFrame                  = null;   // callback: (elapsedMinutes) => void
 
@@ -89,6 +90,7 @@ export function init(opts = {}) {
   getCeTarget              = opts.getCeTarget || (() => 0);
   getIntermittentThreshold = opts.getIntermittentThreshold || (() => 0);
   getDrugId                = opts.getDrugId  || (() => 'propofol');
+  getDrugIds               = opts.getDrugIds || (() => ['propofol', 'fentanyl', 'ketamine']);
   onFrame                  = opts.onFrame    || null;
   loop();
 }
@@ -441,6 +443,27 @@ function update() {
   const ceTarget    = getCeTarget();
   const caseStarted = timer.isRunning() || t > 0;
 
+  // ── Update Ce/Cp for ALL drug tiles (not just selected) ─────────
+  // Non-selected tiles get a lightweight Ce/Cp-only update so they
+  // stay live when a case starts without requiring the user to click them.
+  const allDrugs = getDrugIds ? getDrugIds() : [drugId];
+  for (const dId of allDrugs) {
+    if (dId === drugId) continue;  // selected drug gets full update below
+    const ceEl2 = $(dId + '-ce');
+    const cpEl2 = $(dId + '-cp');
+    if (!ceEl2 && !cpEl2) continue;
+    if (!caseStarted || t <= 0) {
+      if (ceEl2) ceEl2.textContent = fmtCe(0, dId);
+      if (cpEl2) cpEl2.textContent = fmtCe(0, dId);
+      continue;
+    }
+    try {
+      const conc = model.getConcentrationsAt(dId, t);
+      if (ceEl2) ceEl2.textContent = fmtCe(conc.Ce, dId);
+      if (cpEl2) cpEl2.textContent = fmtCe(conc.Cp, dId);
+    } catch (e) {}
+  }
+
   let Cp = 0, Ce = 0, rate = 0, bis = null;
   if (caseStarted && t > 0) {
     try {
@@ -477,11 +500,11 @@ function update() {
     if (!caseStarted || m === 'none') {
       label = 'Stopped'; cls = 'stopped';
     } else if (m === 'intermittent') {
-      // Intermittent (bolus-only) mode: no pump states, just bolus or monitoring
+      // Intermittent (bolus-only) mode: show only during active bolus, blank otherwise
       if (isInBolusPhase(drugId, t) || rate > 50) {
         label = 'Bolus'; cls = 'bolus';
       } else {
-        label = 'Monitoring'; cls = 'paused';
+        label = ''; cls = '';
       }
     } else if (rate === 0) {
       label = 'Paused'; cls = 'paused';
@@ -512,14 +535,31 @@ function update() {
   if (bisSep)   bisSep.style.display   = bisVis ? '' : 'none';
 
   // ── Step bar + countdown ────────────────────────────────────────
-  // Intermittent mode has no scheduled pump events — step-bar is meaningless
-  if (caseStarted && m !== 'intermittent') {
-    updateStepBar(drugId, t);
-  } else {
-    const barEl = $(drugId + '-bar');
-    const cntEl = $(drugId + '-bar-countdown');
-    if (barEl) barEl.style.width = '0%';
-    if (cntEl) cntEl.textContent = '';
+  if (caseStarted) {
+    if (m !== 'intermittent') {
+      updateStepBar(drugId, t);
+    } else {
+      // Intermittent mode: during bolus delivery show progress normally;
+      // after delivery show the redose countdown from the approach cache.
+      const barEl = $(drugId + '-bar');
+      const cntEl = $(drugId + '-bar-countdown');
+      let hasNextEvt = false;
+      try {
+        const evts = model.getEvents(drugId);
+        hasNextEvt = evts.some(e => e.time > t + 0.0001);
+      } catch (e) {}
+
+      if (hasNextEvt) {
+        updateStepBar(drugId, t);                     // bolus delivery in progress
+      } else if (_approachCache.arrivalMin !== null) {
+        const rem = _approachCache.arrivalMin - t;
+        if (barEl) barEl.style.width = '0%';
+        if (cntEl) cntEl.textContent = rem > 0 ? fmtCountdown(rem) : '';
+      } else {
+        if (barEl) barEl.style.width = '0%';
+        if (cntEl) cntEl.textContent = '';
+      }
+    }
   }
 
   // ── Notify app.js for chart cursor ─────────────────────────────

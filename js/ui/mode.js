@@ -139,22 +139,24 @@ function updateModeUI(drugId) {
   } else {
     // Non-TCI drug (fentanyl, ketamine): two separate modes — intermittent or infusion
     if (m === 'intermittent') {
-      // Bolus-only mode: no pump, hide rate button entirely
-      br.style.display = 'none';
+      // Bolus-only mode; btn-rate visible as a clear "switch to infusion" action
       ml.textContent = 'INTERMITTENT';
       ml.className = 'mode-label target-mode';
       bt.textContent = 'Change Threshold';
       bt.classList.add('active-mode');
+      br.textContent = 'Set Infusion Rate';  // label makes intent clear
     } else if (m === 'manual') {
       ml.textContent = 'INFUSION';
       ml.className = 'mode-label manual-mode';
       bt.textContent = 'Intermittent';
+      br.textContent = 'Manual Rate';        // restore default label
       br.classList.add('active-mode');
       bb.classList.add('active-mode');
     } else {
       ml.textContent = 'NO MODE';
       ml.className = 'mode-label no-mode';
       bt.textContent = 'Intermittent';
+      br.textContent = 'Manual Rate';        // restore default label
     }
   }
 }

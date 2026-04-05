@@ -186,6 +186,10 @@ function refreshChart() {
   const ce = mode.getCeTarget(selectedDrug);
   chart.setTargetLine(m === 'tci' && ce > 0 ? ce * yScale : null);
 
+  // Intermittent threshold line (amber dashed, analogous to TCI target line)
+  const threshold = mode.getIntermittentThreshold(selectedDrug);
+  chart.setThresholdLine(m === 'intermittent' && threshold > 0 ? threshold * yScale : null);
+
   // Update history panel
   history.render(selectedDrug);
 
@@ -557,6 +561,7 @@ function boot() {
     },
     getIntermittentThreshold: () => mode.getIntermittentThreshold(selectedDrug),
     getDrugId: () => selectedDrug,
+    getDrugIds: () => ['propofol', 'fentanyl', 'ketamine'],
     onFrame(t) {
       // Update chart cursor — throttled to every 500ms
       if (chart && t > 0) {
