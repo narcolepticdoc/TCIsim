@@ -22,12 +22,20 @@
  */
 
 import { calcEleveldParams } from '../pk/eleveld.js';
+import { calcFentanylParams } from '../pk/fentanyl.js';
+import { calcKetamineParams } from '../pk/ketamine.js';
 import { createEngine } from '../pk/engine.js';
 import { createPDModel } from '../pk/pd.js';
 import { createEventList } from './events.js';
 import { planTCIScheme, planTCISchemeCET, planTCISchemeCETConservative, planTCISchemeEmulation } from './tci-planner.js';
 import { predictTroughTime } from '../pk/decay-predictor.js';
 import { DRUG_DEFS, getPumpSettings } from '../util/constants.js';
+
+/**
+ * Drugs that do not support TCI (Ce targeting).
+ * These use manual rate + intermittent bolus mode only.
+ */
+export const NO_TCI_DRUGS = new Set(['fentanyl', 'ketamine']);
 
 /**
  * @typedef {Object} ModelConfig
@@ -74,6 +82,22 @@ export function createModel(config = {}) {
       gamma2: params.gamma2,
       BIS_baseline: params.BIS_baseline,
     });
+
+    // Register secondary drugs (fentanyl, ketamine) — no PD model
+    for (const [drugId, calcFn] of [
+      ['fentanyl', calcFentanylParams],
+      ['ketamine', calcKetamineParams],
+    ]) {
+      const pk = calcFn({ weight: patient.weight });
+      const eng = createEngine(pk);
+      eventList.registerEngine(drugId, eng);
+      const ps = getPumpSettings(drugId);
+      eventList.registerDrugConfig(drugId, {
+        concentration: ps.concentration,
+        bolusRateMlH: ps.bolusRateMlH,
+      });
+      pdModels[drugId] = null;
+    }
   }
 
   // Initialize immediately
@@ -109,6 +133,24 @@ export function createModel(config = {}) {
       gamma2: params.gamma2,
       BIS_baseline: params.BIS_baseline,
     });
+
+    // Rebuild secondary drug engines with new patient weight
+    for (const [drugId, calcFn] of [
+      ['fentanyl', calcFentanylParams],
+      ['ketamine', calcKetamineParams],
+    ]) {
+      const pk = calcFn({ weight: patient.weight });
+      const oldEng = eventList.getEngine(drugId);
+      const savedState = oldEng ? oldEng.getState() : null;
+      const newEng = createEngine(pk);
+      if (savedState) newEng.setState(savedState);
+      eventList.registerEngine(drugId, newEng);
+      const ps = getPumpSettings(drugId);
+      eventList.registerDrugConfig(drugId, {
+        concentration: ps.concentration,
+        bolusRateMlH: ps.bolusRateMlH,
+      });
+    }
 
     eventList.replayAll();
     return params;

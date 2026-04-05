@@ -16,7 +16,7 @@ import { DRUG_DEFS } from '../util/constants.js';
 const $ = id => document.getElementById(id);
 
 let buffer = '';
-let currentType = 'ceTarget';  // 'ceTarget' | 'rate' | 'bolus'
+let currentType = 'ceTarget';  // 'ceTarget' | 'rate' | 'bolus' | 'intermittent'
 let currentDrug = 'propofol';
 let currentUnit = 'mcg/mL';
 let onConfirm = null;          // (type, canonicalValue, displayText, deliveryMode) => void
@@ -24,18 +24,21 @@ let oneShotConfirm = null;     // one-shot callback for edit mode — overrides 
 let getPatient = null;         // () => { weight, ... }
 let getMode = null;            // () => mode string
 let getCeTarget = null;        // () => current Ce target
+let isTciDrug = null;          // () => bool — does the selected drug support TCI?
 let prefilled = false;         // true when buffer is pre-populated, clears on first keypress
 
 const TITLES = {
   ceTarget: 'Set Ce Target',
   rate: 'Set Manual Rate',
   bolus: 'Add Bolus',
+  intermittent: 'Set Redose Threshold',
 };
 
 const CONFIRM_LABELS = {
   ceTarget: { label: 'Set Target', cls: 'modal-btn-confirm-target' },
   rate: { label: 'Set Rate', cls: 'modal-btn-confirm-rate' },
   bolus: { label: 'Pump Bolus', cls: 'modal-btn-confirm-bolus' },
+  intermittent: { label: 'Set Threshold', cls: 'modal-btn-confirm-target' },
 };
 
 /**
@@ -45,12 +48,14 @@ const CONFIRM_LABELS = {
  * @param {Function} opts.getPatient - () => patient object
  * @param {Function} opts.getMode - () => current mode string
  * @param {Function} opts.getCeTarget - () => current Ce target
+ * @param {Function} [opts.isTciDrug] - () => bool, true if selected drug supports TCI
  */
 export function init(opts = {}) {
   onConfirm = opts.onConfirm || null;
   getPatient = opts.getPatient || (() => ({ weight: 70 }));
   getMode = opts.getMode || (() => 'none');
   getCeTarget = opts.getCeTarget || (() => 0);
+  isTciDrug = opts.isTciDrug || (() => true);
 
   // Wire keypad buttons (numeric keys)
   document.querySelectorAll('#modal-keypad .key').forEach(btn => {
@@ -67,7 +72,10 @@ export function init(opts = {}) {
   const btnCancel = $('keypad-cancel-btn');
   const btnConfirm = $('keypad-confirm-btn');
 
-  if (btnTarget) btnTarget.addEventListener('click', () => show('ceTarget'));
+  if (btnTarget) btnTarget.addEventListener('click', () => {
+    if (isTciDrug()) show('ceTarget');
+    else show('intermittent');
+  });
   if (btnRate) btnRate.addEventListener('click', () => show('rate'));
   if (btnBolus) btnBolus.addEventListener('click', () => show('bolus'));
   if (btnCancel) btnCancel.addEventListener('click', close);
@@ -92,15 +100,17 @@ export function show(type) {
   $('keypad-title').textContent = title;
 
   // Restore preferred unit or use default
-  const allowed = getAllowedUnits(currentDrug, type);
-  const prefKey = getPrefKey(currentDrug, type);
+  // 'intermittent' uses the same Ce units as 'ceTarget' for the selected drug
+  const unitTask = (type === 'intermittent') ? 'ceTarget' : type;
+  const allowed = getAllowedUnits(currentDrug, unitTask);
+  const prefKey = getPrefKey(currentDrug, unitTask);
   let savedUnit = null;
   if (prefKey) {
     try { savedUnit = localStorage.getItem(prefKey); } catch (e) {}
   }
   currentUnit = (savedUnit && allowed.includes(savedUnit))
     ? savedUnit
-    : (getDefaultUnit(currentDrug, type) || allowed[0]);
+    : (getDefaultUnit(currentDrug, unitTask) || allowed[0]);
 
   // Build unit toggle buttons
   renderUnitToggle(allowed);
@@ -157,7 +167,8 @@ function handleKey(k) {
 
 function setUnit(u) {
   currentUnit = u;
-  const prefKey = getPrefKey(currentDrug, currentType);
+  const unitTask = currentType === 'intermittent' ? 'ceTarget' : currentType;
+  const prefKey = getPrefKey(currentDrug, unitTask);
   if (prefKey) {
     try { localStorage.setItem(prefKey, u); } catch (e) {}
   }
@@ -216,14 +227,16 @@ function updateDisplay() {
 
   try {
     const ctx = { weightKg: patient.weight };
-    const canonical = toCanonical(v, currentUnit, currentDrug, currentType, ctx);
+    // 'intermittent' uses ceTarget units for conversion
+    const convTask = currentType === 'intermittent' ? 'ceTarget' : currentType;
+    const canonical = toCanonical(v, currentUnit, currentDrug, convTask, ctx);
 
     // Show conversion to other allowed units
-    const allowed = getAllowedUnits(currentDrug, currentType);
+    const allowed = getAllowedUnits(currentDrug, convTask);
     const others = allowed.filter(u => u !== currentUnit);
 
     const parts = others.map(u => {
-      const displayVal = fromCanonical(canonical.value, u, currentDrug, currentType, ctx);
+      const displayVal = fromCanonical(canonical.value, u, currentDrug, convTask, ctx);
       return `${formatValue(displayVal, u)} ${u}`;
     });
 
@@ -247,7 +260,9 @@ function confirm(deliveryMode) {
 
   try {
     const ctx = { weightKg: patient.weight };
-    const canonical = toCanonical(v, currentUnit, currentDrug, currentType, ctx);
+    // 'intermittent' uses ceTarget units for conversion
+    const convTask = currentType === 'intermittent' ? 'ceTarget' : currentType;
+    const canonical = toCanonical(v, currentUnit, currentDrug, convTask, ctx);
 
     // Build a human-readable display string for the annotation
     let displayText = `${buffer} ${currentUnit}`;

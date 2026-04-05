@@ -15,13 +15,14 @@ import { fromCanonical, formatValue, getAllowedUnits, getDefaultUnit, getPrefKey
 
 const $ = id => document.getElementById(id);
 
-let model      = null;
-let timer      = null;
-let getMode    = null;   // () => mode string
-let getCeTarget = null;  // () => Ce target number
-let getDrugId  = null;   // () => selected drug id
-let rafId      = null;
-let onFrame    = null;   // callback: (elapsedMinutes) => void
+let model                    = null;
+let timer                    = null;
+let getMode                  = null;   // () => mode string
+let getCeTarget              = null;   // () => Ce target number
+let getIntermittentThreshold = null;   // () => intermittent redose threshold (mcg/mL canonical)
+let getDrugId                = null;   // () => selected drug id
+let rafId                    = null;
+let onFrame                  = null;   // callback: (elapsedMinutes) => void
 
 // ──────────────────────────────────────────────────────────────────
 // Shared curve store — set by app.js after every refreshChart()
@@ -82,12 +83,13 @@ let _approachCache = {
 // ──────────────────────────────────────────────────────────────────
 
 export function init(opts = {}) {
-  model      = opts.model;
-  timer      = opts.timer;
-  getMode    = opts.getMode    || (() => 'none');
-  getCeTarget = opts.getCeTarget || (() => 0);
-  getDrugId  = opts.getDrugId  || (() => 'propofol');
-  onFrame    = opts.onFrame    || null;
+  model                    = opts.model;
+  timer                    = opts.timer;
+  getMode                  = opts.getMode    || (() => 'none');
+  getCeTarget              = opts.getCeTarget || (() => 0);
+  getIntermittentThreshold = opts.getIntermittentThreshold || (() => 0);
+  getDrugId                = opts.getDrugId  || (() => 'propofol');
+  onFrame                  = opts.onFrame    || null;
   loop();
 }
 
@@ -142,6 +144,18 @@ function isInBolusPhase(drugId, t) {
   return false;
 }
 
+/**
+ * Format Ce (or Cp) for display in the drug card.
+ * Fentanyl Ce is tiny in mcg/mL — display in ng/mL instead (×1000).
+ */
+function fmtCe(ceMcgMl, drugId) {
+  const allowed = getAllowedUnits(drugId, 'ceTarget');
+  if (allowed && allowed[0] === 'ng/mL') {
+    return (ceMcgMl * 1000).toFixed(1);
+  }
+  return ceMcgMl.toFixed(2);
+}
+
 /** Format rate for inline display next to status label. Returns '' if no rate. */
 function fmtRateInline(drugId, rate) {
   if (!rate || rate <= 0) return '';
@@ -178,6 +192,21 @@ function estimateTimeToTarget(t, Ce, ceTarget) {
     if (pt.time <= t) continue;
     if (approaching  && pt.Ce >= ceTarget - 0.05) return pt.time - t;
     if (!approaching && pt.Ce <= ceTarget + 0.05) return pt.time - t;
+  }
+  return null;
+}
+
+/**
+ * Find when Ce first drops AT OR BELOW ceTarget by scanning _sharedCurve.
+ * Used for intermittent mode where Ce is always above threshold when counting
+ * down — avoids the fixed ±0.05 tolerance that breaks for small fentanyl values.
+ * Returns delta-minutes from t, or null if not found.
+ */
+function estimateTimeToThreshold(t, ceTarget) {
+  if (!_sharedCurve) return null;
+  for (const pt of _sharedCurve) {
+    if (pt.time <= t) continue;
+    if (pt.Ce <= ceTarget) return pt.time - t;
   }
   return null;
 }
@@ -227,8 +256,20 @@ function estimateSteadyState(t) {
 function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
   const noData = { prefix: '', arrivalMin: null, staticText: '', newLockedSsCe: null };
 
+  // Intermittent bolus mode — countdown to redose threshold
+  if (m === 'intermittent' && ceTarget > 0) {
+    if (Ce <= ceTarget) {
+      return { prefix: '', arrivalMin: null, staticText: 'Redose now', newLockedSsCe: null };
+    }
+    const dt = estimateTimeToThreshold(t, ceTarget);
+    if (dt !== null && dt > 0) {
+      return { prefix: 'Redose in ', arrivalMin: t + dt, staticText: '', newLockedSsCe: null };
+    }
+    return { prefix: '', arrivalMin: null, staticText: 'Monitoring…', newLockedSsCe: null };
+  }
+
   // Pump stopped — emergence countdown (uses predictTrough; no curve scan needed)
-  if (m === 'none' || (rate === 0 && m !== 'tci')) {
+  if (m === 'none' || (rate === 0 && m !== 'tci' && m !== 'intermittent')) {
     if (Ce <= EMERGENCE_CE + 0.05) return noData;
     try {
       const result = model.predictTrough(drugId, t, EMERGENCE_CE);
@@ -411,13 +452,13 @@ function update() {
     } catch (e) {}
   }
 
-  // ── Ce display ──────────────────────────────────────────────────
+  // ── Ce display (unit-aware: ng/mL for fentanyl, mcg/mL otherwise) ─
   const ceEl = $(drugId + '-ce');
-  if (ceEl) ceEl.textContent = Ce.toFixed(2);
+  if (ceEl) ceEl.textContent = fmtCe(Ce, drugId);
 
   // ── Cp display ──────────────────────────────────────────────────
   const cpEl = $(drugId + '-cp');
-  if (cpEl) cpEl.textContent = Cp.toFixed(2);
+  if (cpEl) cpEl.textContent = fmtCe(Cp, drugId);
 
   // ── Approach line ───────────────────────────────────────────────
   if (caseStarted) {

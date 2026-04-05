@@ -72,6 +72,11 @@
     .pump-settings .card-title{font-size:11px;margin-bottom:6px;display:block}
     .pump-settings .input-grid{gap:6px 12px}
     .pump-derived{font-family:var(--font-mono);font-size:10px;color:var(--cyan);margin-top:4px}
+    .drug-setup-tabs{display:flex;gap:3px;margin-bottom:6px}
+    .drug-setup-tab{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-mono);font-size:10px;padding:3px 10px;cursor:pointer;transition:all .15s}
+    .drug-setup-tab.active{background:var(--blue-dim,rgba(59,130,246,.15));color:var(--text-primary);border-color:var(--border)}
+    .drug-setup-panel{display:none}
+    .drug-setup-panel.active{display:block}
     .derived-item{display:flex;flex-direction:column;flex:1}
     .derived-item .d-label{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
     .derived-item .d-value{font-family:var(--font-mono);font-size:13px;color:var(--text-accent);font-weight:500}
@@ -117,6 +122,7 @@
     .drug-card .cp-sep{font-size:10px;color:var(--border);margin:0 1px}
     .drug-card .cp-label{font-size:9px;color:var(--text-muted)}
     .drug-card .cp-current{font-family:var(--font-mono);font-size:11px;color:#ef4444}
+    .drug-card .ce-unit{font-size:8px;color:var(--text-muted);margin-left:1px}
     /* Approach / countdown line */
     .drug-card .drug-approach{font-family:var(--font-mono);font-size:9.5px;color:var(--text-muted);min-height:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .drug-card .drug-approach .appr-val{color:var(--cyan)}
@@ -347,45 +353,92 @@
       <div class="derived-bar" id="derived-bar" style="display:none"><div class="derived-item"><span class="d-label">BMI</span><span class="d-value" id="derived-bmi">—</span></div><div class="derived-item"><span class="d-label">FFM</span><span class="d-value" id="derived-ffm">—</span></div><div class="derived-item"><span class="d-label">Ce50</span><span class="d-value" id="derived-ce50">—</span></div></div>
       <div class="pump-settings">
         <span class="card-title">Model &amp; Pump Configuration</span>
-        <div class="input-grid">
-          <div class="form-row">
-            <label for="input-opioid">Opioid Co-administration</label>
-            <select id="input-opioid">
-              <option value="false" selected>Without opioid</option>
-              <option value="true">With opioid</option>
-            </select>
-          </div>
-          <div class="form-row" id="ce50-correction-row" style="display:none">
-            <label for="input-ce50-correction">Ce50 opioid correction</label>
-            <input type="checkbox" id="input-ce50-correction">
-            <span class="form-hint">Eleveld paper (×e⁻⁰·⁵⁶⁷). Off = SimTIVA default.</span>
-          </div>
-          <div class="form-row">
-            <label for="input-tci-mode">TCI Planning Mode</label>
-            <select id="input-tci-mode">
-              <option value="stepped" selected>Stepped</option>
-              <option value="cet">CET</option>
-              <option value="cet-conservative">CET (Conservative)</option>
-              <option value="cet-emulation">CET (Emulation)</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label for="input-concentration">Propofol Concentration</label>
-            <select id="input-concentration">
-              <option value="10" selected>1% (10 mg/mL)</option>
-              <option value="20">2% (20 mg/mL)</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label for="input-pump-rate">Max Pump Rate</label>
-            <select id="input-pump-rate">
-              <option value="750" selected>750 mL/h</option>
-              <option value="1000">1000 mL/h</option>
-              <option value="1200">1200 mL/h</option>
-            </select>
-          </div>
+        <div class="drug-setup-tabs">
+          <button class="drug-setup-tab active" id="setup-tab-propofol">Propofol</button>
+          <button class="drug-setup-tab" id="setup-tab-fentanyl">Fentanyl</button>
+          <button class="drug-setup-tab" id="setup-tab-ketamine">Ketamine</button>
         </div>
-        <div class="pump-derived" id="pump-derived">Max bolus rate: 125.0 mg/min</div>
+        <div class="drug-setup-panel active" id="setup-panel-propofol">
+          <div class="input-grid">
+            <div class="form-row">
+              <label for="input-opioid">Opioid Co-administration</label>
+              <select id="input-opioid">
+                <option value="false" selected>Without opioid</option>
+                <option value="true">With opioid</option>
+              </select>
+            </div>
+            <div class="form-row" id="ce50-correction-row" style="display:none">
+              <label for="input-ce50-correction">Ce50 opioid correction</label>
+              <input type="checkbox" id="input-ce50-correction">
+              <span class="form-hint">Eleveld paper (×e⁻⁰·⁵⁶⁷). Off = SimTIVA default.</span>
+            </div>
+            <div class="form-row">
+              <label for="input-tci-mode">TCI Planning Mode</label>
+              <select id="input-tci-mode">
+                <option value="stepped" selected>Stepped</option>
+                <option value="cet">CET</option>
+                <option value="cet-conservative">CET (Conservative)</option>
+                <option value="cet-emulation">CET (Emulation)</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="input-concentration">Propofol Concentration</label>
+              <select id="input-concentration">
+                <option value="10" selected>1% (10 mg/mL)</option>
+                <option value="20">2% (20 mg/mL)</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="input-pump-rate">Max Pump Rate</label>
+              <select id="input-pump-rate">
+                <option value="750" selected>750 mL/h</option>
+                <option value="1000">1000 mL/h</option>
+                <option value="1200">1200 mL/h</option>
+              </select>
+            </div>
+          </div>
+          <div class="pump-derived" id="pump-derived">Max bolus rate: 125.0 mg/min</div>
+        </div>
+        <div class="drug-setup-panel" id="setup-panel-fentanyl">
+          <div class="input-grid">
+            <div class="form-row">
+              <label for="input-fentanyl-concentration">Concentration</label>
+              <select id="input-fentanyl-concentration">
+                <option value="0.05" selected>50 mcg/mL (standard)</option>
+                <option value="0.025">25 mcg/mL</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="input-fentanyl-pump-rate">Max Pump Rate</label>
+              <select id="input-fentanyl-pump-rate">
+                <option value="750" selected>750 mL/h</option>
+                <option value="1000">1000 mL/h</option>
+                <option value="1200">1200 mL/h</option>
+              </select>
+            </div>
+          </div>
+          <div class="pump-derived" id="pump-derived-fentanyl">Max bolus rate: 0.6 mcg/min</div>
+        </div>
+        <div class="drug-setup-panel" id="setup-panel-ketamine">
+          <div class="input-grid">
+            <div class="form-row">
+              <label for="input-ketamine-concentration">Concentration</label>
+              <select id="input-ketamine-concentration">
+                <option value="10" selected>10 mg/mL (1%)</option>
+                <option value="50">50 mg/mL (5%)</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="input-ketamine-pump-rate">Max Pump Rate</label>
+              <select id="input-ketamine-pump-rate">
+                <option value="750" selected>750 mL/h</option>
+                <option value="1000">1000 mL/h</option>
+                <option value="1200">1200 mL/h</option>
+              </select>
+            </div>
+          </div>
+          <div class="pump-derived" id="pump-derived-ketamine">Max bolus rate: 125.0 mg/min</div>
+        </div>
       </div>
       <button class="btn-confirm" id="btn-confirm">Confirm Patient</button>
       <button class="btn-restore" id="btn-restore" style="display:none">Restore Last Case</button>
@@ -449,8 +502,50 @@
             <div class="step-bar-wrap"><div class="step-bar" id="propofol-bar" style="width:0%"></div></div>
           </div>
         </div>
-        <div class="drug-card disabled"><div class="drug-name">Fentanyl</div><div class="drug-model">Coming soon</div></div>
-        <div class="drug-card disabled"><div class="drug-name">Ketamine</div><div class="drug-model">Coming soon</div></div>
+        <div class="drug-card" id="drug-fentanyl">
+          <div class="drug-name">Fentanyl</div>
+          <div class="drug-model" id="fentanyl-model-label">Shafer 1990 · 50 mcg/mL</div>
+          <div class="drug-conc-row">
+            <span class="ce-label">Ce</span>
+            <span class="ce-current" id="fentanyl-ce">0.0</span>
+            <span class="ce-unit" id="fentanyl-ce-unit">ng/mL</span>
+            <span class="cp-sep">|</span>
+            <span class="cp-label">Cp</span>
+            <span class="cp-current" id="fentanyl-cp">0.0</span>
+            <span class="ce-unit">ng/mL</span>
+          </div>
+          <div class="drug-approach" id="fentanyl-approach"></div>
+          <div class="drug-status-row">
+            <span class="drug-status stopped" id="fentanyl-status">Stopped</span>
+            <span class="drug-rate" id="fentanyl-rate"></span>
+          </div>
+          <div class="step-bar-area">
+            <div class="step-bar-countdown" id="fentanyl-bar-countdown"></div>
+            <div class="step-bar-wrap"><div class="step-bar" id="fentanyl-bar" style="width:0%"></div></div>
+          </div>
+        </div>
+        <div class="drug-card" id="drug-ketamine">
+          <div class="drug-name">Ketamine</div>
+          <div class="drug-model" id="ketamine-model-label">Domino 1982 · 10 mg/mL</div>
+          <div class="drug-conc-row">
+            <span class="ce-label">Ce</span>
+            <span class="ce-current" id="ketamine-ce">0.00</span>
+            <span class="ce-unit" id="ketamine-ce-unit">μg/mL</span>
+            <span class="cp-sep">|</span>
+            <span class="cp-label">Cp</span>
+            <span class="cp-current" id="ketamine-cp">0.00</span>
+            <span class="ce-unit">μg/mL</span>
+          </div>
+          <div class="drug-approach" id="ketamine-approach"></div>
+          <div class="drug-status-row">
+            <span class="drug-status stopped" id="ketamine-status">Stopped</span>
+            <span class="drug-rate" id="ketamine-rate"></span>
+          </div>
+          <div class="step-bar-area">
+            <div class="step-bar-countdown" id="ketamine-bar-countdown"></div>
+            <div class="step-bar-wrap"><div class="step-bar" id="ketamine-bar" style="width:0%"></div></div>
+          </div>
+        </div>
       </div>
       <div class="sim-content">
         <div class="content-tabs">
