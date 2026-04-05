@@ -88,7 +88,7 @@ const THETA = {
 };
 
 function calcEleveldParams(patient) {
-  const {age,weight,height,male,opioid,pma:pmaInput}=patient;
+  const {age,weight,height,male,opioid,ce50OpioidCorrection,pma:pmaInput}=patient;
   const bmi=weight/Math.pow(height/100,2);
   const ffm=fatFreeMass(weight,height,age,male);
   const pma=getPMA(age,pmaInput);
@@ -110,7 +110,8 @@ function calcEleveldParams(patient) {
   const q3_sex=male?1:(q3_mat/q3_mat_ref);
   const Q3=THETA.Q3*Math.pow(V3/THETA.V3,0.75)*q3_sex;
   const ke0=THETA.ke0_ref*Math.pow(weight/WGT_REF,THETA.ke0_wgt_exp);
-  const Ce50=THETA.Ce50*Math.exp(THETA.Ce50_aging*(age-AGE_REF))*Math.exp(THETA.Ce50_opioid*opioidFlag);
+  const ce50OpioidFlag2=(opioid&&ce50OpioidCorrection)?1:0;
+  const Ce50=THETA.Ce50*Math.exp(THETA.Ce50_aging*(age-AGE_REF))*Math.exp(THETA.Ce50_opioid*ce50OpioidFlag2);
   
   return {
     patient:{age,weight,height,male,opioid,bmi,ffm,pma},
@@ -367,9 +368,10 @@ console.log('\n=== TEST 6: Covariate Sensitivity ===');
   // Female: CL should be higher
   assert(female.CL > base.CL, `Female CL (${female.CL.toFixed(3)}) > Male CL (${base.CL.toFixed(3)})`);
   
-  // Opioid: Ce50 should decrease (synergy)
-  assert(opioid.Ce50 < base.Ce50, `Opioid Ce50 (${opioid.Ce50.toFixed(2)}) < No-opioid Ce50 (${base.Ce50.toFixed(2)})`);
-  
+  // Opioid: Ce50 is the same as base by default (opioid correction off, matches SimTIVA).
+  // The Eleveld paper correction (exp(-0.567)) is only applied when ce50OpioidCorrection=true.
+  assert(opioid.Ce50 === base.Ce50, `Opioid Ce50 (${opioid.Ce50.toFixed(2)}) === Base Ce50 (${base.Ce50.toFixed(2)}) — correction off by default`);
+
   // Opioid: V3 must decrease (exp(-0.0138*age) applied only with opioid)
   // At age 35: V3 = 273 * ffm/ffmref * exp(-0.0138*35) ≈ 168 L, NOT 273 L
   assert(opioid.V3 < base.V3, `Opioid V3 (${opioid.V3.toFixed(1)}) < Base V3 (${base.V3.toFixed(1)})`);
@@ -423,11 +425,15 @@ console.log('\n=== TEST 7: Ce50 Absolute Values (Age-Stratified) ===');
   assert(Math.abs(ttP.Ce50 - 2.98374611609866) < 0.001,
     `Ce50 matches TivaTrainer DiY4 (${ttP.Ce50.toFixed(6)} ≈ 2.983746)`);
 
-  // Opioid at age 50: Ce50 = 2.800 * exp(-0.567) ≈ 1.588
+  // Opioid at age 50 (default, correction off): Ce50 = 2.800 (same as no-opioid)
   const opP = calcEleveldParams({ age: 50, weight: 70, height: 170, male: true, opioid: true });
-  const opExpected = 2.800 * Math.exp(-0.567);
-  assert(Math.abs(opP.Ce50 - opExpected) < 0.02,
-    `Ce50 age 50 + opioid: ${opP.Ce50.toFixed(3)} ≈ ${opExpected.toFixed(3)}`);
+  assert(Math.abs(opP.Ce50 - 2.800) < 0.01,
+    `Ce50 age 50 + opioid (correction off): ${opP.Ce50.toFixed(3)} ≈ 2.800`);
+  // With correction on: Ce50 = 2.800 * exp(-0.567) ≈ 1.588
+  const opPCorr = calcEleveldParams({ age: 50, weight: 70, height: 170, male: true, opioid: true, ce50OpioidCorrection: true });
+  const opCorrExpected = 2.800 * Math.exp(-0.567);
+  assert(Math.abs(opPCorr.Ce50 - opCorrExpected) < 0.02,
+    `Ce50 age 50 + opioid (correction on): ${opPCorr.Ce50.toFixed(3)} ≈ ${opCorrExpected.toFixed(3)}`);
 }
 
 // ---- TEST 8: Gamma Split-Direction (BIS Curve Shape) ----

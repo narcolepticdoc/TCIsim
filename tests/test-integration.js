@@ -62,7 +62,7 @@ function calcEleveldParams(pt){
   const Q2=1.75*Math.pow(V2/25.5,0.75)*(1+1.3*(1-fq3mat(age*toweeks)));
   const Q3=1.11*Math.pow(V3/273,0.75)*(fq3mat(age*toweeks)/fq3mat(35*toweeks));
   const ke0=0.146*Math.pow(weight/70,-0.25);
-  const Ce50=3.08*Math.exp(-0.00635*(age-35))*Math.exp(-0.567*(opioid?1:0));
+  const Ce50=3.08*Math.exp(-0.00635*(age-35)); // opioid correction off by default (matches SimTIVA)
   return{V1,V2,V3,CL,Q2,Q3,ke0,Ce50,gamma1:1.89,gamma2:1.47,BIS_baseline:93,
     k10:CL/V1,k12:Q2/V1,k21:Q2/V2,k13:Q3/V1,k31:Q3/V3,patient:pt};
 }
@@ -367,8 +367,8 @@ console.log('\n===== 6. Elderly Patient — Age-Adjusted PD =====\n');
 
   const params = model.getParams();
 
-  // Ce50 should be lower for elderly + opioid
-  ok(params.Ce50 < 2.0, `Elderly+opioid Ce50=${params.Ce50.toFixed(3)} (should be <2.0)`);
+  // Ce50 decreases with age (elderly = ~2.39 for 75y). Opioid correction off by default (SimTIVA mode).
+  ok(params.Ce50 < 2.6, `Elderly Ce50=${params.Ce50.toFixed(3)} (should be <2.6 due to aging)`);
 
   // Plan TCI at Ce=2.0 (appropriate for elderly)
   model.planTCI('propofol', 0, 2.0);
