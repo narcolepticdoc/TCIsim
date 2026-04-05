@@ -69,14 +69,21 @@ function fmtCountdown(minutes) {
 }
 
 /**
- * BIS → color string
+ * BIS → color matching the chart nomogram bands:
+ *   > 90  muted       (awake, no band)
+ *  80-90  #ef4444 red    Light Sedation
+ *  60-80  #f97316 orange Deep Sedation
+ *  40-60  #eab308 yellow GA
+ *  20-40  #22c55e green  Deep Anesthesia
+ *   < 20  #a855f7 purple Very Deep
  */
 function bisColor(bis) {
   if (bis > 90) return 'var(--text-muted)';
-  if (bis > 80) return '#a3e635';
-  if (bis > 60) return 'var(--amber)';
-  if (bis > 40) return 'var(--cyan)';
-  return '#ef4444';
+  if (bis > 80) return '#ef4444';
+  if (bis > 60) return '#f97316';
+  if (bis > 40) return '#eab308';
+  if (bis > 20) return '#22c55e';
+  return '#a855f7';
 }
 
 /**
