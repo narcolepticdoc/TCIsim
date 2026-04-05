@@ -87,7 +87,7 @@ function initSimScreen(patient) {
   const ketLabel = $('ketamine-model-label');
   if (ketLabel) {
     const kConc = $('input-ketamine-concentration')?.value || '10';
-    ketLabel.textContent = `Domino 1982 · ${kConc} mg/mL`;
+    ketLabel.textContent = `Domino/Navarrete · ${kConc} mg/mL`;
   }
 
   // Reset modules

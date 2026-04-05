@@ -1,29 +1,52 @@
 /**
- * ketamine.js — Domino/Clements 1982 Ketamine PK Parameter Calculator
+ * ketamine.js — Domino 1982 / Navarrete 2024 Ketamine PK Parameter Calculator
  *
- * 2-compartment model implemented as a 3-compartment model with a
- * sink V3 (large volume, minimal Q3) so the generic 4×4 engine matrix
- * remains well-conditioned and non-singular.
+ * 3-compartment model. V1 scales linearly with total body weight at 63 mL/kg.
+ * All five micro-rate constants are fixed population values (not weight-scaled).
+ * V2, V3, and all clearances are derived from V1 and the fixed micro-constants,
+ * and therefore scale proportionally with body weight.
  *
- * Ce is in mcg/mL (canonical engine unit).
- * Clinical ranges: analgesia ~0.2–0.4 mcg/mL, dissociation ~2–4 mcg/mL.
+ * This is the parameterization validated in Absalom 2007 (Br J Anaesth 98:756),
+ * which confirmed predictive performance of the Domino model in clinical TCI.
+ *
+ * ke0 estimated by Navarrete 2024 using NONMEM fitted to ANI response data
+ * from IV ketamine boluses in awake adults (95% CI: 0.20–0.28 /min).
+ *
+ * Ce is in mcg/mL (canonical engine unit). Clinical display is ng/mL.
+ * Therapeutic ranges: analgesia ~200–400 ng/mL, dissociation ~2000–4000 ng/mL.
  *
  * References:
- *   Domino EF et al. Clin Pharmacol Ther 1982;36(5):645-53.
- *   Clements JA, Nimmo WS. Br J Anaesth 1981;53(1):27-30.
- *
- * Note: Q3 is set to the engine's minimum plausible value (0.05 L/min).
- * k31 = Q3/V3 = 0.05/1000 = 5×10⁻⁵ min⁻¹ — effectively a one-way sink.
- * This is intentional (2-compartment approximation), not a unit error.
+ *   Domino EF et al. "Plasma levels of ketamine and two of its metabolites
+ *     in surgical patients." Anesth Analg 1982;61(2):87–92.
+ *   Absalom AR et al. "Predictive performance of the Domino, Hijazi, and
+ *     Clements models during low-dose target-controlled ketamine infusions."
+ *     Br J Anaesth 2007;98(5):756–65.
+ *   Navarrete-Ibacache M et al. "Characterization of the temporal profile of
+ *     the antinociceptive effects of an IV bolus of ketamine using the
+ *     Analgesia Nociception Index (ANI) in non-anesthetized adult patients."
+ *     J Clin Monit Comput 2025;39(2):349–354 (Epub 2024 Nov 15).
  *
  * Rate constants are in per-MINUTE units (engine invariant).
  */
 
+// Fixed micro-rate constants (min⁻¹) — population values, not weight-scaled
+const K10 = 0.4381;  // Central elimination
+const K12 = 0.5921;  // Central → fast peripheral
+const K21 = 0.2470;  // Fast peripheral → central
+const K13 = 0.5900;  // Central → slow peripheral
+const K31 = 0.0146;  // Slow peripheral → central
+
+// Effect-site equilibration (min⁻¹) — not weight-scaled (Navarrete 2024)
+const KE0 = 0.238;
+
+// V1 per-kg scaling factor (Domino 1982, confirmed Absalom 2007)
+const V1_PER_KG = 0.063; // L/kg  (63 mL/kg)
+
 /**
- * Calculate Domino 1982 ketamine PK parameters for a given patient.
+ * Calculate Domino/Navarrete ketamine PK parameters for a given patient.
  *
- * V1, V2, CL, Q2 scale linearly with weight.
- * V3 is a fixed large sink (1000 L); Q3 and ke0 are population constants.
+ * V1 scales linearly with weight. V2, V3, CL, Q2, Q3 are derived from
+ * V1 and the fixed micro-constants (K10–K31), so they all scale with V1.
  *
  * @param {Object} patient
  * @param {number} patient.weight - Total body weight in kg
@@ -32,25 +55,22 @@
 export function calcKetamineParams(patient) {
   const { weight } = patient;
 
-  // Volumes (L)
-  const V1 = 0.18  * weight;  // Central compartment (0.18 L/kg)
-  const V2 = 0.65  * weight;  // Fast peripheral (0.65 L/kg)
-  const V3 = 1000;            // Sink compartment — fixed large value
+  // Central volume — sole direct weight coparameter
+  const V1 = V1_PER_KG * weight;
 
-  // Clearances (L/min)
-  const CL = 0.019 * weight;  // Metabolic clearance (0.019 L/min/kg)
-  const Q2 = 0.074 * weight;  // Inter-compartmental fast (0.074 L/min/kg)
-  const Q3 = 0.05;            // Minimal slow peripheral (keeps engine valid)
+  // Derived volumes from fixed micro-constants and V1
+  const V2 = (K12 / K21) * V1;   // ≈ 2.3967 × V1
+  const V3 = (K13 / K31) * V1;   // ≈ 40.411 × V1
 
-  // Effect-site equilibration (min⁻¹) — approximate from literature
-  const ke0 = 0.5;
+  // Clearances derived from fixed micro-constants and V1 (L/min)
+  const CL = K10 * V1;
+  const Q2 = K12 * V1;
+  const Q3 = K13 * V1;
 
-  // Micro-rate constants (min⁻¹)
-  const k10 = CL / V1;
-  const k12 = Q2 / V1;
-  const k21 = Q2 / V2;
-  const k13 = Q3 / V1;
-  const k31 = Q3 / V3;  // = 5×10⁻⁵ min⁻¹ — negligible
-
-  return { V1, V2, V3, CL, Q2, Q3, ke0, k10, k12, k21, k13, k31 };
+  return {
+    V1, V2, V3, CL, Q2, Q3,
+    ke0: KE0,
+    // Micro-constants returned directly — they are the fixed population values
+    k10: K10, k12: K12, k21: K21, k13: K13, k31: K31,
+  };
 }
