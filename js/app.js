@@ -28,7 +28,9 @@ let model = null;
 let confirmedPatient = null;
 let selectedDrug = 'propofol';
 let chart = null;
-let preStartClock = 0; // running time for pre-start events (minutes)
+const preStartClock = {}; // { [drugId]: minutes } — per-drug so multi-drug events can overlap
+function getPreStartClock(drugId) { return preStartClock[drugId] || 0; }
+function advancePreStartClock(drugId, by) { preStartClock[drugId] = (preStartClock[drugId] || 0) + by; }
 let annotations = []; // mode transitions, editorial actions
 let lastHistoryDimUpdate = 0; // throttle timestamp for history dimming
 
@@ -91,7 +93,7 @@ function initSimScreen(patient) {
   // Reset modules
   controls.reset();
   mode.reset();
-  preStartClock = 0;
+  Object.keys(preStartClock).forEach(k => delete preStartClock[k]);
   annotations = [];
 
   // Reset sim screen state
@@ -428,7 +430,7 @@ function boot() {
   controls.init({
     timer,
     onCaseStart() {
-      preStartClock = 0;
+      Object.keys(preStartClock).forEach(k => delete preStartClock[k]);
       addAnnotation('Case started');
     },
     onPumpPause() {
@@ -474,8 +476,8 @@ function boot() {
       if (controls.isCaseStarted()) {
         t = timer.getElapsedMinutes();
       } else {
-        // Pre-start plan mode: advance clock by execution duration of each action
-        t = preStartClock;
+        // Pre-start plan mode: each drug has its own clock so multi-drug events can overlap
+        t = getPreStartClock(selectedDrug);
       }
 
       if (type === 'ceTarget') {
@@ -485,7 +487,7 @@ function boot() {
         model.planTCI(selectedDrug, t, canonicalValue, { tciMode });
         mode.set(selectedDrug, 'tci', `TCI target Ce=${canonicalValue.toFixed(1)} μg/mL`);
         // TCI plan starts immediately, advance by a small offset
-        if (!controls.isCaseStarted()) preStartClock = t + 0.01;
+        if (!controls.isCaseStarted()) advancePreStartClock(selectedDrug, 0.01);
       } else if (type === 'rate') {
         // Manual rate — drops out of TCI
         if (mode.get(selectedDrug) === 'tci') {
@@ -494,7 +496,7 @@ function boot() {
         model.addRate(selectedDrug, t, canonicalValue, `Rate ${displayText}`);
         mode.set(selectedDrug, 'manual', `Manual rate: ${displayText}`);
         // Rate change is near-instantaneous
-        if (!controls.isCaseStarted()) preStartClock = t + 0.01;
+        if (!controls.isCaseStarted()) advancePreStartClock(selectedDrug, 0.01);
       } else if (type === 'intermittent') {
         // Intermittent bolus mode — store threshold, no model changes
         mode.setIntermittentThreshold(selectedDrug, canonicalValue);
@@ -515,12 +517,12 @@ function boot() {
         model.addBolus(selectedDrug, t, canonicalValue, `${label} ${displayText}`, {
           deliveryMode: dm,
         });
-        // Advance clock by bolus delivery duration
+        // Advance this drug's clock by its bolus delivery duration
         if (!controls.isCaseStarted()) {
           const deliveryMin = dm === 'push'
             ? 10 / 60  // 10 seconds
             : bolusDeliveryMinutes(canonicalValue, selectedDrug);
-          preStartClock = t + deliveryMin;
+          advancePreStartClock(selectedDrug, deliveryMin);
         }
       }
 
