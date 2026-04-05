@@ -138,6 +138,8 @@ New approach: `app.js` now also calls `drugPanel.setCurveData(curve)` after `cha
 
 **Stability criterion made explicit:** Two named constants define what "steady state" means for display purposes: `SS_DRIFT_THRESHOLD = 0.1` mcg/mL and `SS_WINDOW_MIN = 10` minutes. The first point in the curve where Ce changes less than 0.1 mcg/mL over the next 10 minutes is declared stable. At 10-second chart resolution that is a 60-sample window. This is more conservative than the previous 0.05/5-min criterion and better reflects the clinical reality that Ce drifts slowly upward for hours — the displayed value is the Ce the clinician will observe on the monitor stabilizing, not a distant pharmacokinetic equilibrium.
 
+**eBIS moved into Ce/Cp row (v0.4.12):** The BIS value was previously rendered in a standalone `<div class="drug-bis">` below the status row. Moved into the `drug-conc-row` flex layout as a third group, separated from Cp by an additional `|`. Renamed from "BIS" to "eBIS" (effect-site BIS) to clarify that this is a PD model prediction, not a measured monitor value. Separator and label are hidden via `display:none` when eBIS is not active (case not started or t=0), so the row stays clean before induction. Label ("eBIS") rendered as a 9px muted `<span>` matching the Ce/Cp label pattern; value rendered as 11px mono matching Cp. Row gap tightened (4px → 3px), separator margin tightened (2px → 1px each side).
+
 308 tests across 10 suites, all passing.
 
 ---
