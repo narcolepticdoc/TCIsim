@@ -454,7 +454,7 @@ function update() {
   const bisEl = $(drugId + '-bis');
   if (bisEl) {
     if (bis !== null && caseStarted && t > 0) {
-      bisEl.textContent = `BIS ${bis.toFixed(0)}`;
+      bisEl.textContent = `eBIS ${bis.toFixed(0)}`;
       bisEl.style.color = bisColor(bis);
     } else {
       bisEl.textContent = '';
