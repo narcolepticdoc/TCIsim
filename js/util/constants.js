@@ -191,6 +191,10 @@ export const DRUG_TASK_UNITS = {
       defaultDisplay: 'mg/kg/h',
       prefKey: 'tci-pref-rateUnit-ketamine',
     },
+    ceTarget: {
+      canonical: 'mcg/mL',
+      allowed: ['mcg/mL'],
+    },
   },
 };
 

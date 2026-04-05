@@ -7,7 +7,7 @@
  * Phase 2, Steps 1-3: Setup, timer, controls, keypad, mode wired.
  */
 
-import { createModel } from './sim/simulation.js';
+import { createModel, NO_TCI_DRUGS } from './sim/simulation.js';
 import * as setup from './ui/setup.js';
 import * as timer from './ui/timer.js';
 import * as controls from './ui/controls.js';
@@ -51,7 +51,7 @@ function initSimScreen(patient) {
     `<span class="ps-val">${p.height}cm</span> ` +
     `BMI <span class="ps-val">${bmi}</span>`;
 
-  // Update drug model label
+  // Update drug model labels
   const modelLabel = $('propofol-model-label');
   if (modelLabel) {
     const conc = $('input-concentration')?.value || '10';
@@ -61,6 +61,17 @@ function initSimScreen(patient) {
                       tciMode === 'cet-conservative' ? ' · CET(C)' :
                       tciMode === 'cet-emulation' ? ' · CET(E)' : '';
     modelLabel.textContent = `Eleveld 2018 · ${conc} mg/mL${opioid}${modeLabel}`;
+  }
+  const fentLabel = $('fentanyl-model-label');
+  if (fentLabel) {
+    const fConc = $('input-fentanyl-concentration')?.value || '0.05';
+    const fConcMcg = (parseFloat(fConc) * 1000).toFixed(0);
+    fentLabel.textContent = `Shafer 1990 · ${fConcMcg} mcg/mL`;
+  }
+  const ketLabel = $('ketamine-model-label');
+  if (ketLabel) {
+    const kConc = $('input-ketamine-concentration')?.value || '10';
+    ketLabel.textContent = `Domino 1982 · ${kConc} mg/mL`;
   }
 
   // Reset modules
@@ -369,6 +380,9 @@ function boot() {
       try {
         confirmedPatient = patient;
         model.setPatient(patient);
+        // Refresh drug configs for secondary drugs (pump settings may have changed)
+        model.refreshDrugConfig('fentanyl');
+        model.refreshDrugConfig('ketamine');
         initSimScreen(patient);
       } catch (err) {
         console.error('[TCI Sim] onConfirm error:', err);
@@ -424,6 +438,7 @@ function boot() {
     getPatient: () => model ? model.getPatient() : null,
     getMode: () => mode.get(selectedDrug),
     getCeTarget: () => mode.getCeTarget(selectedDrug),
+    isTciDrug: () => !NO_TCI_DRUGS.has(selectedDrug),
     onConfirm(type, canonicalValue, displayText, deliveryMode) {
       let t;
       if (controls.isCaseStarted()) {
@@ -450,12 +465,18 @@ function boot() {
         mode.set(selectedDrug, 'manual', `Manual rate: ${displayText}`);
         // Rate change is near-instantaneous
         if (!controls.isCaseStarted()) preStartClock = t + 0.01;
+      } else if (type === 'intermittent') {
+        // Intermittent bolus mode — store threshold, no model changes
+        mode.setIntermittentThreshold(selectedDrug, canonicalValue);
+        mode.set(selectedDrug, 'intermittent', `Intermittent mode, redose threshold ${displayText}`);
+        refreshChart();
+        return; // refreshChart already called
       } else if (type === 'bolus') {
         // Bolus — if in TCI, clear forward plan first, then bolus
         if (mode.get(selectedDrug) === 'tci') {
           model.clearAfter(selectedDrug, t);
           mode.set(selectedDrug, 'manual', 'Dropped out of TCI — manual bolus');
-        } else if (mode.get(selectedDrug) === 'none') {
+        } else if (mode.get(selectedDrug) === 'none' || mode.get(selectedDrug) === 'intermittent') {
           mode.set(selectedDrug, 'manual');
         }
         const dm = deliveryMode || 'pump';
@@ -482,6 +503,10 @@ function boot() {
       const drugId = card.id.replace('drug-', '');
       selectedDrug = drugId;
       keypad.setDrug(drugId);
+      mode.refreshUI(drugId);
+      history.setDrug(drugId);
+      history.render();
+      refreshChart();
       document.querySelectorAll('.drug-card').forEach(c => c.classList.remove('active'));
       card.classList.add('active');
     });
@@ -492,7 +517,12 @@ function boot() {
     model,
     timer,
     getMode: () => mode.get(selectedDrug),
-    getCeTarget: () => mode.getCeTarget(selectedDrug),
+    getCeTarget: () => {
+      const m = mode.get(selectedDrug);
+      if (m === 'intermittent') return mode.getIntermittentThreshold(selectedDrug);
+      return mode.getCeTarget(selectedDrug);
+    },
+    getIntermittentThreshold: () => mode.getIntermittentThreshold(selectedDrug),
     getDrugId: () => selectedDrug,
     onFrame(t) {
       // Update chart cursor — throttled to every 500ms

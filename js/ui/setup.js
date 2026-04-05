@@ -64,7 +64,13 @@ export function init(opts = {}) {
   const btnConfirm = $('btn-confirm');
   if (btnConfirm) btnConfirm.addEventListener('click', confirmPatient);
 
-  // Wire pump settings
+  // Wire drug setup tabs
+  ['propofol', 'fentanyl', 'ketamine'].forEach(d => {
+    const tab = $(`setup-tab-${d}`);
+    if (tab) tab.addEventListener('click', () => switchDrugTab(d));
+  });
+
+  // Wire pump settings (propofol)
   const concEl = $('input-concentration');
   const rateEl = $('input-pump-rate');
   const tciModeEl = $('input-tci-mode');
@@ -75,6 +81,18 @@ export function init(opts = {}) {
     updateDerived();
     updateCe50CorrectionVisibility();
   });
+
+  // Wire pump settings (fentanyl)
+  const fentConcEl = $('input-fentanyl-concentration');
+  const fentRateEl = $('input-fentanyl-pump-rate');
+  if (fentConcEl) fentConcEl.addEventListener('change', updatePumpDerivedFentanyl);
+  if (fentRateEl) fentRateEl.addEventListener('change', updatePumpDerivedFentanyl);
+
+  // Wire pump settings (ketamine)
+  const ketConcEl = $('input-ketamine-concentration');
+  const ketRateEl = $('input-ketamine-pump-rate');
+  if (ketConcEl) ketConcEl.addEventListener('change', updatePumpDerivedKetamine);
+  if (ketRateEl) ketRateEl.addEventListener('change', updatePumpDerivedKetamine);
 
   // Wire Ce50 opioid correction checkbox
   const ce50CorrEl = $('input-ce50-correction');
@@ -288,7 +306,33 @@ function applyPumpSettings() {
 
   setPumpSettings('propofol', { concentration, bolusRateMlH });
 
-  // Save to localStorage
+  // Fentanyl settings
+  const fentConcEl = $('input-fentanyl-concentration');
+  const fentRateEl = $('input-fentanyl-pump-rate');
+  if (fentConcEl && fentRateEl) {
+    const fConc = parseFloat(fentConcEl.value) || 0.05;
+    const fRate = parseFloat(fentRateEl.value) || 750;
+    setPumpSettings('fentanyl', { concentration: fConc, bolusRateMlH: fRate });
+    try {
+      localStorage.setItem('tci-pump-concentration-fentanyl', String(fConc));
+      localStorage.setItem('tci-pump-rate-fentanyl', String(fRate));
+    } catch (e) {}
+  }
+
+  // Ketamine settings
+  const ketConcEl = $('input-ketamine-concentration');
+  const ketRateEl = $('input-ketamine-pump-rate');
+  if (ketConcEl && ketRateEl) {
+    const kConc = parseFloat(ketConcEl.value) || 10;
+    const kRate = parseFloat(ketRateEl.value) || 750;
+    setPumpSettings('ketamine', { concentration: kConc, bolusRateMlH: kRate });
+    try {
+      localStorage.setItem('tci-pump-concentration-ketamine', String(kConc));
+      localStorage.setItem('tci-pump-rate-ketamine', String(kRate));
+    } catch (e) {}
+  }
+
+  // Save propofol-specific settings to localStorage
   try {
     localStorage.setItem('tci-pump-concentration', String(concentration));
     localStorage.setItem('tci-pump-rate', String(bolusRateMlH));
@@ -313,7 +357,37 @@ function restorePumpSettingsUI() {
     const savedCe50Corr = localStorage.getItem('tci-ce50-correction');
     if (savedCe50Corr) { const el = $('input-ce50-correction'); if (el) el.checked = savedCe50Corr === 'true'; }
   } catch (e) {}
+
+  // Restore fentanyl settings
+  try {
+    const fc = localStorage.getItem('tci-pump-concentration-fentanyl');
+    const fr = localStorage.getItem('tci-pump-rate-fentanyl');
+    if (fc) { const el = $('input-fentanyl-concentration'); if (el) el.value = fc; }
+    if (fr) { const el = $('input-fentanyl-pump-rate'); if (el) el.value = fr; }
+  } catch (e) {}
+
+  // Restore ketamine settings
+  try {
+    const kc = localStorage.getItem('tci-pump-concentration-ketamine');
+    const kr = localStorage.getItem('tci-pump-rate-ketamine');
+    if (kc) { const el = $('input-ketamine-concentration'); if (el) el.value = kc; }
+    if (kr) { const el = $('input-ketamine-pump-rate'); if (el) el.value = kr; }
+  } catch (e) {}
+
+  updatePumpDerivedFentanyl();
+  updatePumpDerivedKetamine();
 }
+
+// ---- Drug setup tab switching ----
+
+function switchDrugTab(drugId) {
+  document.querySelectorAll('.drug-setup-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.drug-setup-panel').forEach(p => p.classList.remove('active'));
+  $(`setup-tab-${drugId}`)?.classList.add('active');
+  $(`setup-panel-${drugId}`)?.classList.add('active');
+}
+
+// ---- Pump derived displays ----
 
 function updatePumpDerived() {
   const el = $('pump-derived');
@@ -323,8 +397,25 @@ function updatePumpDerived() {
   const rateMlH = parseFloat($('input-pump-rate')?.value) || 750;
 
   const bolusRateMgMin = rateMlH * conc / 60;
-  const maxInfMgMin = bolusRateMgMin; // same cap
 
+  el.textContent = `Max bolus rate: ${bolusRateMgMin.toFixed(1)} mg/min`;
+}
+
+function updatePumpDerivedFentanyl() {
+  const el = $('pump-derived-fentanyl');
+  if (!el) return;
+  const conc = parseFloat($('input-fentanyl-concentration')?.value) || 0.05;
+  const rateMlH = parseFloat($('input-fentanyl-pump-rate')?.value) || 750;
+  const bolusRateMcgMin = rateMlH * conc * 1000 / 60; // convert mg→mcg for display
+  el.textContent = `Max bolus rate: ${bolusRateMcgMin.toFixed(1)} mcg/min`;
+}
+
+function updatePumpDerivedKetamine() {
+  const el = $('pump-derived-ketamine');
+  if (!el) return;
+  const conc = parseFloat($('input-ketamine-concentration')?.value) || 10;
+  const rateMlH = parseFloat($('input-ketamine-pump-rate')?.value) || 750;
+  const bolusRateMgMin = rateMlH * conc / 60;
   el.textContent = `Max bolus rate: ${bolusRateMgMin.toFixed(1)} mg/min`;
 }
 

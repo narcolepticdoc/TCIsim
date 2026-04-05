@@ -13,7 +13,11 @@ const $ = id => document.getElementById(id);
 
 const modes = {};  // { drugId: 'none' | 'tci' | 'manual' | 'intermittent' }
 let ceTargets = {}; // { drugId: number } — current Ce target per drug
+let intermittentThresholds = {}; // { drugId: number } — Ce redose threshold for intermittent mode
 let onModeChange = null;
+
+/** Drugs that support TCI (Ce targeting). All others use intermittent/manual only. */
+const TCI_CAPABLE_DRUGS = new Set(['propofol', 'remifentanil']);
 
 /**
  * Initialize mode tracking.
@@ -41,6 +45,7 @@ export function set(drugId, newMode, detail) {
   const oldMode = modes[drugId] || 'none';
   modes[drugId] = newMode;
   if (newMode !== 'tci') ceTargets[drugId] = 0;
+  if (newMode !== 'intermittent') intermittentThresholds[drugId] = 0;
   if (onModeChange) onModeChange(drugId, newMode, oldMode, detail);
   updateModeUI(drugId);
 }
@@ -60,17 +65,40 @@ export function setCeTarget(drugId, ce) {
 }
 
 /**
+ * Get the Ce redose threshold for intermittent mode.
+ */
+export function getIntermittentThreshold(drugId) {
+  return intermittentThresholds[drugId] || 0;
+}
+
+/**
+ * Set the Ce redose threshold for intermittent mode.
+ */
+export function setIntermittentThreshold(drugId, ce) {
+  intermittentThresholds[drugId] = ce;
+}
+
+/**
  * Reset all mode state.
  */
 export function reset() {
   for (const k of Object.keys(modes)) modes[k] = 'none';
   for (const k of Object.keys(ceTargets)) ceTargets[k] = 0;
+  for (const k of Object.keys(intermittentThresholds)) intermittentThresholds[k] = 0;
   updateModeUI();
 }
 
 /**
+ * Refresh the mode UI for a given drug (call when switching drug cards).
+ */
+export function refreshUI(drugId) {
+  updateModeUI(drugId);
+}
+
+/**
  * Update the mode label and button highlights.
- * Currently propofol-specific DOM; will generalize with multi-drug UI.
+ * Handles both TCI-capable drugs (propofol) and intermittent-only drugs
+ * (fentanyl, ketamine).
  */
 function updateModeUI(drugId) {
   const ml = $('mode-label');
@@ -83,23 +111,45 @@ function updateModeUI(drugId) {
   br.classList.remove('active-mode');
   bb.classList.remove('active-mode');
 
-  const m = modes[drugId || 'propofol'] || 'none';
-  const ce = ceTargets[drugId || 'propofol'] || 0;
+  const resolvedDrug = drugId || 'propofol';
+  const m = modes[resolvedDrug] || 'none';
+  const isTci = TCI_CAPABLE_DRUGS.has(resolvedDrug);
 
-  if (m === 'tci') {
-    ml.textContent = 'TARGET';
-    ml.className = 'mode-label target-mode';
-    bt.textContent = 'Change Target';
-    bt.classList.add('active-mode');
-  } else if (m === 'manual') {
-    ml.textContent = 'MANUAL';
-    ml.className = 'mode-label manual-mode';
-    bt.textContent = 'Set Target';
-    br.classList.add('active-mode');
-    bb.classList.add('active-mode');
+  if (isTci) {
+    // TCI-capable drug (propofol, remifentanil)
+    if (m === 'tci') {
+      ml.textContent = 'TARGET';
+      ml.className = 'mode-label target-mode';
+      bt.textContent = 'Change Target';
+      bt.classList.add('active-mode');
+    } else if (m === 'manual') {
+      ml.textContent = 'MANUAL';
+      ml.className = 'mode-label manual-mode';
+      bt.textContent = 'Set Target';
+      br.classList.add('active-mode');
+      bb.classList.add('active-mode');
+    } else {
+      ml.textContent = 'NO MODE';
+      ml.className = 'mode-label no-mode';
+      bt.textContent = 'Set Target';
+    }
   } else {
-    ml.textContent = 'NO MODE';
-    ml.className = 'mode-label no-mode';
-    bt.textContent = 'Set Target';
+    // Intermittent-only drug (fentanyl, ketamine)
+    if (m === 'intermittent') {
+      ml.textContent = 'INTERMITTENT';
+      ml.className = 'mode-label target-mode';
+      bt.textContent = 'Change Threshold';
+      bt.classList.add('active-mode');
+    } else if (m === 'manual') {
+      ml.textContent = 'MANUAL';
+      ml.className = 'mode-label manual-mode';
+      bt.textContent = 'Intermittent';
+      br.classList.add('active-mode');
+      bb.classList.add('active-mode');
+    } else {
+      ml.textContent = 'NO MODE';
+      ml.className = 'mode-label no-mode';
+      bt.textContent = 'Intermittent';
+    }
   }
 }
