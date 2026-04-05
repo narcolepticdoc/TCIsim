@@ -88,7 +88,7 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 - Syntax error from inline `plugins` array added at wrong indentation level inside Chart constructor config object.
 - Extracted `APP_VERSION` to `js/version.js` — single source of truth; `constants.js` re-exports it. Only `version.js` needs updating on future releases.
 
-**Session 12 (2026-04-05):** Drug panel redesign. Version 0.4.10.
+**Session 12 (2026-04-05):** Drug panel redesign. Version 0.4.11.
 
 *Drug color strip:* Active card left border uses `--drug-color` CSS variable. Propofol/Ketamine = yellow; Fentanyl/Remifentanil = blue. Step bar inherits drug color.
 
@@ -108,7 +108,9 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 
 *Steady state display Ce stability fix:* During rapid Ce changes, 5 s recomputes hit different engine states, shifting the 150-min `ssCe` projection and causing the label to jump. Fixed with `lockedSsCe` in the cache: the display Ce value is only reset on mode/rate/target change or `forceUpdate`, never on the time-based recompute. Countdown still updates every 5 s.
 
-*Steady state Ce value corrected to stability point:* `ssCe` was taken from `curve[last].Ce` (Ce at t+150 min — long-term PK equilibrium), while `ssMin` was the time to first local stability by the rate-of-change criterion (typically a few minutes). Mismatched values produced displays like "Steady state ≈ 4.7 in 1:58" when Ce would actually be ≈ 3.8 at the 2-minute mark. Fixed: `ssCe` now uses `curve[i].Ce` at the stability point itself, so the display is a coherent statement — "in N min, Ce will have stabilized at ≈ X." Ce continues to drift slowly upward after this point as V3 fills (τ ≈ 246 min), but the drift rate is below the 0.05/5-min threshold and below clinical significance for moment-to-moment dosing. Fallback (no stability point within 150 min) still uses the 150-min endpoint.
+*Steady state Ce value corrected to stability point:* `ssCe` was taken from `curve[last].Ce` (Ce at t+150 min — long-term PK equilibrium), while `ssMin` was the time to first local stability by the rate-of-change criterion (typically a few minutes). Mismatched values produced displays like "Steady state ≈ 4.7 in 1:58" when Ce would actually be ≈ 3.8 at the 2-minute mark. Fixed: `ssCe` now uses `curve[i].Ce` at the stability point itself — a coherent statement.
+
+*Approach line rewritten to scan precomputed chart curve (v0.4.11):* `estimateSteadyState` and `estimateTimeToTarget` previously each called `model.computeCurve` independently on every recompute. Now `app.js` passes the same curve computed by `refreshChart` to `drugPanel.setCurveData`. Both functions scan `_sharedCurve` directly — pure array iteration, no model calls. Cache invalidates on curve version change or pump-state change; no time-based throttle needed. Stability criterion made explicit: `SS_DRIFT_THRESHOLD = 0.1 mcg/mL` over `SS_WINDOW_MIN = 10 min` (60 samples at 10s resolution). This is the Ce the clinician will observe stabilizing on the monitor, not a distant PK equilibrium.
 
 307 tests, all passing.
 

@@ -142,6 +142,7 @@ function refreshChart() {
 
   const curve = model.computeCurve(selectedDrug, 0, endTime, 10 / 60);
   chart.setCurveData(curve);
+  drugPanel.setCurveData(curve);
 
   // Show chart controls
   const cc = $('chart-controls');
