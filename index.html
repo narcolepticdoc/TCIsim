@@ -130,8 +130,8 @@
     @keyframes bolus-blink{0%,100%{opacity:1}50%{opacity:.25}}
     .drug-card .drug-status.bolus{color:var(--green);animation:bolus-blink .7s step-end infinite}
     .drug-card .drug-rate{font-family:var(--font-mono);font-size:10px;color:var(--text-secondary)}
-    /* BIS */
-    .drug-card .drug-bis{font-family:var(--font-mono);font-size:11px}
+    /* eBIS — inline in conc row */
+    .drug-card .drug-bis{font-family:var(--font-mono);font-size:11px;margin-left:2px}
     /* Progress bar + countdown */
     .drug-card .step-bar-area{margin-top:2px}
     .drug-card .step-bar-countdown{font-family:var(--font-mono);font-size:9px;color:var(--text-muted);text-align:right;min-height:11px}
@@ -434,13 +434,14 @@
             <span class="cp-sep">|</span>
             <span class="cp-label">Cp</span>
             <span class="cp-current" id="propofol-cp">0.00</span>
+            <span class="cp-sep">|</span>
+            <span class="drug-bis" id="propofol-bis"></span>
           </div>
           <div class="drug-approach" id="propofol-approach"></div>
           <div class="drug-status-row">
             <span class="drug-status stopped" id="propofol-status">Stopped</span>
             <span class="drug-rate" id="propofol-rate"></span>
           </div>
-          <div class="drug-bis" id="propofol-bis"></div>
           <div class="step-bar-area">
             <div class="step-bar-countdown" id="propofol-bar-countdown"></div>
             <div class="step-bar-wrap"><div class="step-bar" id="propofol-bar" style="width:0%"></div></div>
