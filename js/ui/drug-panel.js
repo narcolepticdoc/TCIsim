@@ -450,16 +450,17 @@ function update() {
     rateEl.textContent = (caseStarted && rate > 0) ? fmtRateInline(drugId, rate) : '';
   }
 
-  // ── BIS ─────────────────────────────────────────────────────────
-  const bisEl = $(drugId + '-bis');
+  // ── eBIS ─────────────────────────────────────────────────────────
+  const bisEl    = $(drugId + '-bis');
+  const bisLabel = $(drugId + '-bis-label');
+  const bisSep   = $(drugId + '-bis-sep');
+  const bisVis   = bis !== null && caseStarted && t > 0;
   if (bisEl) {
-    if (bis !== null && caseStarted && t > 0) {
-      bisEl.textContent = `eBIS ${bis.toFixed(0)}`;
-      bisEl.style.color = bisColor(bis);
-    } else {
-      bisEl.textContent = '';
-    }
+    bisEl.textContent  = bisVis ? bis.toFixed(0) : '';
+    bisEl.style.color  = bisVis ? bisColor(bis) : '';
   }
+  if (bisLabel) bisLabel.style.display = bisVis ? '' : 'none';
+  if (bisSep)   bisSep.style.display   = bisVis ? '' : 'none';
 
   // ── Step bar + countdown ────────────────────────────────────────
   if (caseStarted) updateStepBar(drugId, t);
