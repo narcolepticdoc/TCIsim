@@ -155,19 +155,19 @@ function estimateTimeToTarget(drugId, t, Ce, ceTarget) {
 
 /**
  * Find steady-state Ce and time to reach it (for manual infusion).
- * "Steady state" = when Ce stops changing by more than 0.02 mcg/mL per minute
- * over a 3-min window — clinically relevant stability.
+ * "Steady state" = when Ce changes by less than 0.05 mcg/mL over any
+ * 5-minute window — the number has stopped moving meaningfully.
  * Returns { ssCe, ssMin } or null.
  */
 function estimateSteadyState(drugId, t) {
   try {
     const curve = model.computeCurve(drugId, t, t + 150, 1.0);
-    if (curve.length < 5) return null;
-    const ssCe = curve[curve.length - 1].Ce; // asymptote at 150min
-    // Find first point where Ce is within 5% of ssCe
-    for (const pt of curve) {
-      if (Math.abs(pt.Ce - ssCe) / (ssCe || 1) < 0.05) {
-        return { ssCe, ssMin: pt.time - t };
+    if (curve.length < 6) return null;
+    const ssCe = curve[curve.length - 1].Ce; // best asymptote estimate at 150 min
+    // Find first index where the 5-min change drops below 0.05 mcg/mL
+    for (let i = 0; i + 5 < curve.length; i++) {
+      if (Math.abs(curve[i + 5].Ce - curve[i].Ce) < 0.05) {
+        return { ssCe, ssMin: curve[i].time - t };
       }
     }
     return { ssCe, ssMin: null };
