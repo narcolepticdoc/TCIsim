@@ -111,6 +111,9 @@ function updateModeUI(drugId) {
   br.classList.remove('active-mode');
   bb.classList.remove('active-mode');
 
+  // Default: show btn-rate (may be hidden below for intermittent)
+  br.style.display = '';
+
   const resolvedDrug = drugId || 'propofol';
   const m = modes[resolvedDrug] || 'none';
   const isTci = TCI_CAPABLE_DRUGS.has(resolvedDrug);
@@ -134,14 +137,16 @@ function updateModeUI(drugId) {
       bt.textContent = 'Set Target';
     }
   } else {
-    // Intermittent-only drug (fentanyl, ketamine)
+    // Non-TCI drug (fentanyl, ketamine): two separate modes — intermittent or infusion
     if (m === 'intermittent') {
+      // Bolus-only mode: no pump, hide rate button entirely
+      br.style.display = 'none';
       ml.textContent = 'INTERMITTENT';
       ml.className = 'mode-label target-mode';
       bt.textContent = 'Change Threshold';
       bt.classList.add('active-mode');
     } else if (m === 'manual') {
-      ml.textContent = 'MANUAL';
+      ml.textContent = 'INFUSION';
       ml.className = 'mode-label manual-mode';
       bt.textContent = 'Intermittent';
       br.classList.add('active-mode');

@@ -476,6 +476,13 @@ function update() {
     let label = 'Stopped', cls = 'stopped';
     if (!caseStarted || m === 'none') {
       label = 'Stopped'; cls = 'stopped';
+    } else if (m === 'intermittent') {
+      // Intermittent (bolus-only) mode: no pump states, just bolus or monitoring
+      if (isInBolusPhase(drugId, t) || rate > 50) {
+        label = 'Bolus'; cls = 'bolus';
+      } else {
+        label = 'Monitoring'; cls = 'paused';
+      }
     } else if (rate === 0) {
       label = 'Paused'; cls = 'paused';
     } else if (isInBolusPhase(drugId, t) || rate > 50) {
@@ -488,7 +495,8 @@ function update() {
   }
 
   if (rateEl) {
-    rateEl.textContent = (caseStarted && rate > 0) ? fmtRateInline(drugId, rate) : '';
+    // Never show rate in intermittent mode — no pump
+    rateEl.textContent = (caseStarted && rate > 0 && m !== 'intermittent') ? fmtRateInline(drugId, rate) : '';
   }
 
   // ── eBIS ─────────────────────────────────────────────────────────
@@ -504,7 +512,15 @@ function update() {
   if (bisSep)   bisSep.style.display   = bisVis ? '' : 'none';
 
   // ── Step bar + countdown ────────────────────────────────────────
-  if (caseStarted) updateStepBar(drugId, t);
+  // Intermittent mode has no scheduled pump events — step-bar is meaningless
+  if (caseStarted && m !== 'intermittent') {
+    updateStepBar(drugId, t);
+  } else {
+    const barEl = $(drugId + '-bar');
+    const cntEl = $(drugId + '-bar-countdown');
+    if (barEl) barEl.style.width = '0%';
+    if (cntEl) cntEl.textContent = '';
+  }
 
   // ── Notify app.js for chart cursor ─────────────────────────────
   if (onFrame) onFrame(t);

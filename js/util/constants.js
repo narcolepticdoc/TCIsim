@@ -193,7 +193,7 @@ export const DRUG_TASK_UNITS = {
     },
     ceTarget: {
       canonical: 'mcg/mL',
-      allowed: ['mcg/mL'],
+      allowed: ['ng/mL'],
     },
   },
 };

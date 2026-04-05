@@ -54,6 +54,8 @@ export function createChart(canvas, config = {}) {
   let viewMax = 30;       // default 30-minute view
   let autoScroll = true;
   let tooltipEnabled = true;
+  let _currentDrugId = cfg.drugId || 'propofol';
+  let _yScale = 1;        // scale factor applied to curve data (1 for mcg/mL, 1000 for ng/mL)
 
   // Build datasets
   const datasets = [];
@@ -349,10 +351,12 @@ export function createChart(canvas, config = {}) {
     // Store rate values for tooltip
     rateValues = curveData.map(p => p.rate);
 
-    // Compute BIS for each point (for tooltip)
+    // Compute BIS for each point (for tooltip).
+    // curveData Ce values may be pre-scaled (×_yScale) by app.js; unscale before
+    // passing to pdModel.predict() which expects canonical mcg/mL.
     if (pdModel) {
       bisValues = curveData.map(p => {
-        try { return pdModel.predict(p.Ce); } catch (e) { return null; }
+        try { return pdModel.predict(p.Ce / _yScale); } catch (e) { return null; }
       });
     } else {
       bisValues = [];
@@ -447,6 +451,7 @@ export function createChart(canvas, config = {}) {
   function resetView() {
     autoScroll = true;
     yMaxManual = null;
+    try { localStorage.removeItem('chart-ymax-' + _currentDrugId); } catch (e) {}
     viewMin = 0;
     viewMax = 30;
     chart.options.scales.y.min = 0;
@@ -486,6 +491,42 @@ export function createChart(canvas, config = {}) {
    */
   function setPatientWeight(kg) {
     patientWeightKg = kg;
+  }
+
+  /**
+   * Switch the chart to display a different drug.
+   * Saves the current drug's y-axis max, then restores (or auto-scales) the new drug's.
+   *
+   * @param {string} drugId - New drug identifier
+   * @param {string} yLabel - Y-axis label (e.g. 'μg/mL' or 'ng/mL')
+   * @param {number} suggestedMax - Default y-max if no saved value exists
+   * @param {number} [yScale=1] - Scale factor applied to incoming curve Ce/Cp data
+   */
+  function switchDrug(drugId, yLabel, suggestedMax, yScale) {
+    // Save current drug's y-max before switching
+    if (_currentDrugId && yMaxManual !== null) {
+      try { localStorage.setItem('chart-ymax-' + _currentDrugId, String(yMaxManual)); } catch (e) {}
+    }
+
+    _currentDrugId = drugId;
+    _yScale = yScale || 1;
+
+    // Update y-axis label
+    chart.options.scales.y.title.text = yLabel || 'μg/mL';
+
+    // Restore saved y-max for new drug, or use auto-scale with suggestedMax
+    let saved = NaN;
+    try { saved = parseFloat(localStorage.getItem('chart-ymax-' + drugId)); } catch (e) {}
+    if (isFinite(saved) && saved > 0) {
+      yMaxManual = saved;
+      chart.options.scales.y.max = yMaxManual;
+      delete chart.options.scales.y.suggestedMax;
+    } else {
+      yMaxManual = null;
+      delete chart.options.scales.y.max;
+      chart.options.scales.y.suggestedMax = suggestedMax || 10;
+    }
+    chart.update('none');
   }
 
   /**
@@ -537,6 +578,7 @@ export function createChart(canvas, config = {}) {
 
     yMaxManual = newMax;
     chart.options.scales.y.max = newMax;
+    try { localStorage.setItem('chart-ymax-' + _currentDrugId, String(newMax)); } catch (e) {}
     chart.update('none');
   }
 
@@ -604,6 +646,7 @@ export function createChart(canvas, config = {}) {
     toggleTooltip,
     setPDModel,
     setPatientWeight,
+    switchDrug,
     destroy,
     get tooltipEnabled() { return tooltipEnabled; },
     get chart() { return chart; },
