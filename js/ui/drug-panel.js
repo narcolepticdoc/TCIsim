@@ -197,21 +197,21 @@ function computeApproachHTML(drugId, t, m, Ce, ceTarget, rate) {
   // TCI mode — approaching target
   if (m === 'tci' && ceTarget > 0) {
     if (Math.abs(Ce - ceTarget) < 0.05) {
-      return `At Target <span class="appr-val">${ceTarget.toFixed(1)} mcg/mL</span>`;
+      return `At Target <span class="appr-val">${ceTarget.toFixed(1)}</span>`;
     }
     const dt = estimateTimeToTarget(drugId, t, Ce, ceTarget);
     const dirLabel = Ce < ceTarget ? 'Approaching' : 'Approaching';
     if (dt !== null && dt > 0) {
       return `${dirLabel} Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in <span class="appr-time">${fmtCountdown(dt)}</span>`;
     }
-    return `Target Ce <span class="appr-val">${ceTarget.toFixed(1)} mcg/mL</span>`;
+    return `Target Ce <span class="appr-val">${ceTarget.toFixed(1)}</span>`;
   }
 
   // Manual infusion — show steady state estimate
   if (m === 'manual' && rate > 0) {
     const ss = estimateSteadyState(drugId, t);
     if (ss) {
-      const ceStr = `<span class="appr-val">${ss.ssCe.toFixed(1)} mcg/mL</span>`;
+      const ceStr = `<span class="appr-val">${ss.ssCe.toFixed(1)}</span>`;
       if (ss.ssMin !== null && ss.ssMin > 0.5) {
         return `Steady state ≈ ${ceStr} in <span class="appr-time">${fmtCountdown(ss.ssMin)}</span>`;
       }
