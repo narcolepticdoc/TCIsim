@@ -218,12 +218,14 @@ function saveState() {
     }));
   }
 
-  // Collect mode state
+  // Collect mode state for all drugs
   const modes = {};
   const ceTargets = {};
-  for (const drugId of ['propofol']) {
+  const intermittentThresholds = {};
+  for (const drugId of ['propofol', 'fentanyl', 'ketamine']) {
     modes[drugId] = mode.get(drugId);
     ceTargets[drugId] = mode.getCeTarget(drugId);
+    intermittentThresholds[drugId] = mode.getIntermittentThreshold(drugId);
   }
 
   persist.saveCase({
@@ -232,6 +234,7 @@ function saveState() {
     wallClockStart: timer.getWallClock() ? new Date(timer.getWallClock().getTime() - timer.getElapsedMs()).toISOString() : null,
     modes,
     ceTargets,
+    intermittentThresholds,
     annotations,
     primaryDrug: selectedDrug,
   });
@@ -344,6 +347,11 @@ function restoreCase() {
     if (saved.ceTargets) {
       for (const [drugId, ce] of Object.entries(saved.ceTargets)) {
         if (ce > 0) mode.setCeTarget(drugId, ce);
+      }
+    }
+    if (saved.intermittentThresholds) {
+      for (const [drugId, thr] of Object.entries(saved.intermittentThresholds)) {
+        if (thr > 0) mode.setIntermittentThreshold(drugId, thr);
       }
     }
 
