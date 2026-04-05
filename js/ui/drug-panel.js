@@ -3,6 +3,12 @@
  *
  * Updates the drug card with live values from the model:
  * Ce, Cp, approach countdown, status+rate, BIS, step-bar. Runs on rAF.
+ *
+ * Approach line stability detection uses the precomputed chart curve
+ * (supplied via setCurveData) rather than calling model.computeCurve
+ * independently. Scanning an array is essentially free, so no throttle
+ * is needed — the cache invalidates when a new curve arrives or when
+ * the pump state changes.
  */
 
 import { fromCanonical, formatValue, getAllowedUnits, getDefaultUnit, getPrefKey } from '../util/units.js';
@@ -17,34 +23,64 @@ let getDrugId  = null;   // () => selected drug id
 let rafId      = null;
 let onFrame    = null;   // callback: (elapsedMinutes) => void
 
+// ──────────────────────────────────────────────────────────────────
+// Shared curve store — set by app.js after every refreshChart()
+// ──────────────────────────────────────────────────────────────────
+
+// Precomputed chart curve. Array of { time, Cp, Ce, C2, C3, rate }
+// at 10-second resolution, from t=0 to endTime.
+let _sharedCurve  = null;
+let _curveVersion = 0;   // incremented on every setCurveData call
+
+/**
+ * Receive the precomputed chart curve from app.js.
+ * Called once per model mutation (after refreshChart).
+ */
+export function setCurveData(curve) {
+  _sharedCurve  = curve;
+  _curveVersion++;
+  // Invalidate approach cache so next frame rescans with fresh data
+  _approachCache.computedVersion = -1;
+  _approachCache.lockedSsCe      = null;
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Stability criteria (for "Steady state" display)
+// ──────────────────────────────────────────────────────────────────
+
+// Ce must change less than SS_DRIFT_THRESHOLD over a SS_WINDOW_MIN window.
+// At 10-second chart resolution, SS_WINDOW_MIN = 10 min → 60 samples.
+// A 0.1 mcg/mL change over 10 minutes (0.01 mcg/mL/min) is below the
+// noise floor of any clinical monitor and below clinical significance
+// for moment-to-moment dosing decisions.
+const SS_DRIFT_THRESHOLD = 0.1;   // mcg/mL
+const SS_WINDOW_MIN      = 10;    // minutes
+
 // Emergence Ce level (mcg/mL). Could become a user setting later.
 const EMERGENCE_CE = 1.5;
 
-// Approach line cache.
-//   prefix     — HTML label ending with "in " when a countdown follows, else ''
-//   arrivalMin — absolute elapsed-minutes of arrival (null = no countdown)
-//   staticText — full HTML for no-countdown states ("At Target Ce 3.5" etc.)
-//   lockedSsCe — the steady-state Ce value shown in the label. Only reset when
-//                mode/rate/target changes, never on the 5 s time-based recompute.
-//                Prevents the displayed value from jumping when a mid-bolus
-//                recompute produces a different 150-min projection endpoint.
-const APPROACH_RECOMPUTE_MS = 5000;
+// ──────────────────────────────────────────────────────────────────
+// Approach line cache
+//   prefix          — HTML label ending with "in " when countdown follows
+//   arrivalMin      — absolute elapsed-minutes of arrival (null = no countdown)
+//   staticText      — full HTML for no-countdown states
+//   lockedSsCe      — Ce shown in label; only reset on pump-state change
+//                     (mode/rate/target), not on curve updates, so the
+//                     value stays stable while Ce is rapidly changing.
+//   computedVersion — _curveVersion at last compute; mismatch → rescan
+//   mode/rate/target — pump-state snapshot at last compute
+// ──────────────────────────────────────────────────────────────────
 let _approachCache = {
   prefix: '', arrivalMin: null, staticText: '',
   lockedSsCe: null,
-  computedAt: -Infinity, mode: '', rate: 0, target: 0,
+  computedVersion: -1,
+  mode: '', rate: 0, target: 0,
 };
 
-/**
- * Initialize the drug panel.
- * @param {Object} opts
- * @param {Object} opts.model - simulation model
- * @param {Object} opts.timer - timer module
- * @param {Function} opts.getMode - () => current mode for selected drug
- * @param {Function} opts.getCeTarget - () => current Ce target
- * @param {Function} opts.getDrugId - () => selected drug id
- * @param {Function} [opts.onFrame] - called each rAF with elapsed minutes
- */
+// ──────────────────────────────────────────────────────────────────
+// Init / lifecycle
+// ──────────────────────────────────────────────────────────────────
+
 export function init(opts = {}) {
   model      = opts.model;
   timer      = opts.timer;
@@ -55,7 +91,6 @@ export function init(opts = {}) {
   loop();
 }
 
-/** Stop the animation loop (for cleanup). */
 export function stop() {
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
 }
@@ -69,9 +104,7 @@ function loop() {
 // Helpers
 // ──────────────────────────────────────────────────────────────────
 
-/**
- * Format minutes as m:ss  (e.g. 125.4s → "2:05")
- */
+/** Format minutes as m:ss  (e.g. 125.4s → "2:05") */
 function fmtCountdown(minutes) {
   if (!isFinite(minutes) || minutes <= 0) return '0:00';
   const totalSec = Math.round(minutes * 60);
@@ -98,33 +131,18 @@ function bisColor(bis) {
   return '#a855f7';
 }
 
-/**
- * Check if current time is inside an active bolus event.
- * Returns true when the most recent event at/before t is a 'bolus' type.
- */
+/** Returns true when the most recent event at/before t is a bolus. */
 function isInBolusPhase(drugId, t) {
   try {
     const events = model.getEvents(drugId);
-    // Walk backwards to find last event at or before t
-    let last = null;
     for (let i = events.length - 1; i >= 0; i--) {
-      if (events[i].time <= t) { last = events[i]; break; }
-    }
-    if (last && last.type === 'bolus') {
-      // Still in bolus if t hasn't reached bolus end time
-      // We can't compute end time here without pump settings,
-      // but if the current rate from the model is very high (>50 mg/min)
-      // and source is bolus, treat it as bolus phase.
-      return true;
+      if (events[i].time <= t) return events[i].type === 'bolus';
     }
   } catch (e) {}
   return false;
 }
 
-/**
- * Format rate for inline display next to status label.
- * Returns '' if no rate.
- */
+/** Format rate for inline display next to status label. Returns '' if no rate. */
 function fmtRateInline(drugId, rate) {
   if (!rate || rate <= 0) return '';
   try {
@@ -146,66 +164,70 @@ function fmtRateInline(drugId, rate) {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Approach line computation (throttled to 500ms)
+// Curve scanning — approach line computation
 // ──────────────────────────────────────────────────────────────────
 
 /**
- * Find when Ce first comes within 0.05 of ceTarget scanning forward.
- * Returns delta-minutes from t, or null if not found within 30 min.
+ * Find when Ce first comes within 0.05 of ceTarget by scanning _sharedCurve.
+ * Returns delta-minutes from t, or null if not found.
  */
-function estimateTimeToTarget(drugId, t, Ce, ceTarget) {
-  try {
-    const curve = model.computeCurve(drugId, t, t + 30, 0.1);
-    const approaching = Ce < ceTarget;
-    for (const pt of curve) {
-      if (approaching && pt.Ce >= ceTarget - 0.05) return pt.time - t;
-      if (!approaching && pt.Ce <= ceTarget + 0.05) return pt.time - t;
-    }
-  } catch (e) {}
+function estimateTimeToTarget(t, Ce, ceTarget) {
+  if (!_sharedCurve) return null;
+  const approaching = Ce < ceTarget;
+  for (const pt of _sharedCurve) {
+    if (pt.time <= t) continue;
+    if (approaching  && pt.Ce >= ceTarget - 0.05) return pt.time - t;
+    if (!approaching && pt.Ce <= ceTarget + 0.05) return pt.time - t;
+  }
   return null;
 }
 
 /**
- * Find steady-state Ce and time to reach it (for manual infusion).
- * "Steady state" = when Ce changes by less than 0.05 mcg/mL over any
- * 5-minute window — the number has stopped moving meaningfully.
+ * Find when Ce stabilises by scanning _sharedCurve from current time.
+ *
+ * Stability: Ce changes < SS_DRIFT_THRESHOLD (0.1 mcg/mL) over a
+ * SS_WINDOW_MIN (10 min) window. At 10-second chart resolution that
+ * is 60 samples per window.
+ *
+ * ssCe is the Ce value AT the stability point — not the distant
+ * 2-hour equilibrium. Ce will continue drifting slowly after this
+ * point as V3 fills (τ ≈ 246 min for propofol), but at a rate below
+ * the threshold and below clinical significance.
+ *
  * Returns { ssCe, ssMin } or null.
  */
-function estimateSteadyState(drugId, t) {
-  try {
-    const curve = model.computeCurve(drugId, t, t + 150, 1.0);
-    if (curve.length < 6) return null;
-    // Find first index where the 5-min change drops below 0.05 mcg/mL
-    for (let i = 0; i + 5 < curve.length; i++) {
-      if (Math.abs(curve[i + 5].Ce - curve[i].Ce) < 0.05) {
-        // Use Ce AT the stability point, not the 150-min endpoint.
-        // The two are very different: Ce is "stable" locally within a few minutes
-        // but continues drifting slowly as peripheral compartments fill over hours.
-        return { ssCe: curve[i].Ce, ssMin: curve[i].time - t };
-      }
+function estimateSteadyState(t) {
+  if (!_sharedCurve || _sharedCurve.length < 2) return null;
+
+  const stepMin     = _sharedCurve[1].time - _sharedCurve[0].time;
+  const windowSteps = Math.max(1, Math.round(SS_WINDOW_MIN / stepMin));
+
+  // Find start index: first sample at or after t
+  let startIdx = 0;
+  while (startIdx < _sharedCurve.length && _sharedCurve[startIdx].time < t) startIdx++;
+
+  for (let i = startIdx; i + windowSteps < _sharedCurve.length; i++) {
+    const drift = Math.abs(_sharedCurve[i + windowSteps].Ce - _sharedCurve[i].Ce);
+    if (drift < SS_DRIFT_THRESHOLD) {
+      return { ssCe: _sharedCurve[i].Ce, ssMin: _sharedCurve[i].time - t };
     }
-    return { ssCe: curve[curve.length - 1].Ce, ssMin: null };
-  } catch (e) { return null; }
+  }
+  return null;
 }
 
 /**
- * Compute approach line data (the expensive part — calls computeCurve / predictTrough).
+ * Compute approach line data by scanning the shared curve.
+ * Pure array operations — no model calls except predictTrough for emergence.
  *
- * @param {string|null} lockedSsCe - if non-null, use this for the steady-state Ce
- *   display label instead of recomputing from the 150-min curve. Pass null on a
- *   mode/rate/target change (forces a fresh lock); pass the existing cache value
- *   on time-based recomputes (keeps the label stable).
+ * lockedSsCe: if non-null, use this Ce for the steady-state label instead
+ *   of the freshly scanned value. Released on pump-state change.
  *
- * Returns { prefix, arrivalMin, staticText, newLockedSsCe }:
- *   prefix        — HTML ending with "in " when a live countdown follows
- *   arrivalMin    — absolute elapsed-minutes of arrival (null = no countdown)
- *   staticText    — full HTML for no-countdown states
- *   newLockedSsCe — the ssCe value computed this run (caller stores it on first compute)
+ * Returns { prefix, arrivalMin, staticText, newLockedSsCe }.
  */
 function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
   const noData = { prefix: '', arrivalMin: null, staticText: '', newLockedSsCe: null };
 
-  // Pump fully stopped (no mode) — emergence countdown
+  // Pump stopped — emergence countdown (uses predictTrough; no curve scan needed)
   if (m === 'none' || (rate === 0 && m !== 'tci')) {
     if (Ce <= EMERGENCE_CE + 0.05) return noData;
     try {
@@ -221,13 +243,13 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
     return noData;
   }
 
-  // TCI mode
+  // TCI mode — time to reach target
   if (m === 'tci' && ceTarget > 0) {
     if (Math.abs(Ce - ceTarget) < 0.05) {
       return { prefix: '', arrivalMin: null, newLockedSsCe: null,
         staticText: `At Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
     }
-    const dt = estimateTimeToTarget(drugId, t, Ce, ceTarget);
+    const dt = estimateTimeToTarget(t, Ce, ceTarget);
     if (dt !== null && dt > 0) {
       return {
         prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
@@ -238,16 +260,16 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
       staticText: `Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
   }
 
-  // Manual infusion — steady state
+  // Manual infusion — time to steady state
   if (m === 'manual' && rate > 0) {
-    const ss = estimateSteadyState(drugId, t);
+    const ss = estimateSteadyState(t);
     if (ss) {
-      // Use the locked value if one exists; otherwise lock the freshly computed one.
-      // This prevents the display Ce from jumping on time-based recomputes where the
-      // 150-min projection shifts due to mid-bolus engine state changes.
+      // lockedSsCe keeps the displayed Ce stable across curve refreshes that
+      // occur while Ce is still changing (e.g. during/after a bolus).
+      // Released on any pump-state change so the value stays clinically current.
       const displayCe = (lockedSsCe !== null) ? lockedSsCe : ss.ssCe;
       const ceStr = `<span class="appr-val">${displayCe.toFixed(1)}</span>`;
-      if (ss.ssMin !== null && ss.ssMin > 0.5) {
+      if (ss.ssMin > 0.5) {
         return {
           prefix: `Steady state ≈ ${ceStr} in `,
           arrivalMin: t + ss.ssMin,
@@ -259,9 +281,9 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
     }
   }
 
-  // TCI paused, Ce above target — show when it'll arrive
+  // TCI paused, Ce above target — time to decay to target
   if (m === 'tci' && rate === 0 && ceTarget > 0 && Ce > ceTarget + 0.1) {
-    const dt = estimateTimeToTarget(drugId, t, Ce, ceTarget);
+    const dt = estimateTimeToTarget(t, Ce, ceTarget);
     if (dt !== null && dt > 0) {
       return {
         prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
@@ -275,41 +297,39 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
 
 /**
  * Update approach line.
- * - Recomputes arrival time at most every 5 s (or on mode/rate/target change).
- * - Renders the countdown live every rAF frame from the cached arrivalMin.
- * - lockedSsCe (the display Ce value for steady state) is only reset on a
- *   mode/rate/target change, never on the 5 s time-based recompute, so the
- *   label stays stable while conditions are in flux.
+ *
+ * Rescans the shared curve when:
+ *   a) a new curve has arrived (_curveVersion changed), or
+ *   b) the pump state changed (mode / rate / target).
+ *
+ * The countdown renders live every rAF frame from the cached arrivalMin.
+ * lockedSsCe is only released on pump-state change, keeping the displayed
+ * Ce stable across curve refreshes that occur mid-bolus.
  */
 function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
-  const now = Date.now();
-
   const displayChanged =
-    _approachCache.mode !== m ||
+    _approachCache.mode   !== m ||
     Math.abs(_approachCache.rate   - rate)     > 0.01 ||
     Math.abs(_approachCache.target - ceTarget) > 0.01;
 
-  const timeExpired = now - _approachCache.computedAt >= APPROACH_RECOMPUTE_MS;
+  const curveChanged = _approachCache.computedVersion !== _curveVersion;
 
-  if (displayChanged || timeExpired) {
-    // On display change: pass null so computeApproachData locks a fresh ssCe.
-    // On time-based recompute: pass existing lockedSsCe so label stays stable.
+  if (displayChanged || curveChanged) {
     const lockToPass = displayChanged ? null : _approachCache.lockedSsCe;
     const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockToPass);
 
-    _approachCache.prefix     = data.prefix;
-    _approachCache.arrivalMin = data.arrivalMin;
-    _approachCache.staticText = data.staticText;
-    _approachCache.computedAt = now;
-    _approachCache.mode       = m;
-    _approachCache.rate       = rate;
-    _approachCache.target     = ceTarget;
+    _approachCache.prefix          = data.prefix;
+    _approachCache.arrivalMin      = data.arrivalMin;
+    _approachCache.staticText      = data.staticText;
+    _approachCache.computedVersion = _curveVersion;
+    _approachCache.mode            = m;
+    _approachCache.rate            = rate;
+    _approachCache.target          = ceTarget;
 
-    // Only update the locked Ce value when the display actually changed.
     if (displayChanged) _approachCache.lockedSsCe = data.newLockedSsCe;
   }
 
-  // Build live HTML every frame
+  // Render countdown live every frame
   let html = '';
   if (_approachCache.arrivalMin !== null) {
     const remaining = _approachCache.arrivalMin - t;
@@ -317,8 +337,8 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
       html = _approachCache.prefix +
         `<span class="appr-time">${fmtCountdown(remaining)}</span>`;
     } else {
-      // Crossed threshold — force recompute next frame
-      _approachCache.computedAt = -Infinity;
+      // Crossed threshold — next curve refresh will trigger a rescan
+      _approachCache.computedVersion = -1;
     }
   } else {
     html = _approachCache.staticText;
@@ -339,7 +359,6 @@ function updateStepBar(drugId, t) {
 
   try {
     const events = model.getEvents(drugId);
-    // Find next event strictly after t
     let nextEvt = null;
     for (const e of events) {
       if (e.time > t + 0.0001) { nextEvt = e; break; }
@@ -350,18 +369,17 @@ function updateStepBar(drugId, t) {
       return;
     }
 
-    // Find last event at or before t
     let prevTime = 0;
     for (let i = events.length - 1; i >= 0; i--) {
       if (events[i].time <= t + 0.0001) { prevTime = events[i].time; break; }
     }
 
-    const span = nextEvt.time - prevTime;
-    const elapsed = t - prevTime;
-    const pct = span > 0 ? Math.min(100, Math.max(0, (elapsed / span) * 100)) : 0;
+    const span      = nextEvt.time - prevTime;
+    const elapsed   = t - prevTime;
+    const pct       = span > 0 ? Math.min(100, Math.max(0, (elapsed / span) * 100)) : 0;
     const remaining = nextEvt.time - t;
 
-    barEl.style.width = pct + '%';
+    barEl.style.width       = pct + '%';
     countdownEl.textContent = remaining > 0 ? fmtCountdown(remaining) : '';
   } catch (e) {
     barEl.style.width = '0%';
@@ -376,10 +394,10 @@ function updateStepBar(drugId, t) {
 function update() {
   if (!model || !timer) return;
 
-  const drugId    = getDrugId();
-  const t         = timer.getElapsedMinutes();
-  const m         = getMode();
-  const ceTarget  = getCeTarget();
+  const drugId      = getDrugId();
+  const t           = timer.getElapsedMinutes();
+  const m           = getMode();
+  const ceTarget    = getCeTarget();
   const caseStarted = timer.isRunning() || t > 0;
 
   let Cp = 0, Ce = 0, rate = 0, bis = null;
@@ -415,7 +433,6 @@ function update() {
 
   if (statusEl) {
     let label = 'Stopped', cls = 'stopped';
-
     if (!caseStarted || m === 'none') {
       label = 'Stopped'; cls = 'stopped';
     } else if (rate === 0) {
@@ -425,14 +442,12 @@ function update() {
     } else {
       label = 'Infusing'; cls = 'infusing';
     }
-
     statusEl.textContent = label;
     statusEl.className   = 'drug-status ' + cls;
   }
 
   if (rateEl) {
-    const showRate = caseStarted && rate > 0;
-    rateEl.textContent = showRate ? fmtRateInline(drugId, rate) : '';
+    rateEl.textContent = (caseStarted && rate > 0) ? fmtRateInline(drugId, rate) : '';
   }
 
   // ── BIS ─────────────────────────────────────────────────────────
@@ -447,9 +462,7 @@ function update() {
   }
 
   // ── Step bar + countdown ────────────────────────────────────────
-  if (caseStarted) {
-    updateStepBar(drugId, t);
-  }
+  if (caseStarted) updateStepBar(drugId, t);
 
   // ── Notify app.js for chart cursor ─────────────────────────────
   if (onFrame) onFrame(t);
@@ -457,7 +470,7 @@ function update() {
 
 /** Force an immediate update (after a model mutation). */
 export function forceUpdate() {
-  _approachCache.computedAt = -Infinity; // force recompute
-  _approachCache.lockedSsCe = null;      // release locked Ce — model state changed
+  _approachCache.computedVersion = -1;
+  _approachCache.lockedSsCe      = null;
   update();
 }
