@@ -562,6 +562,7 @@ function boot() {
     getIntermittentThreshold: () => mode.getIntermittentThreshold(selectedDrug),
     getDrugId: () => selectedDrug,
     getDrugIds: () => ['propofol', 'fentanyl', 'ketamine'],
+    getModeForDrug: (drugId) => mode.get(drugId),
     onFrame(t) {
       // Update chart cursor — throttled to every 500ms
       if (chart && t > 0) {

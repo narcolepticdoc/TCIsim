@@ -22,6 +22,7 @@ let getCeTarget              = null;   // () => Ce target number
 let getIntermittentThreshold = null;   // () => intermittent redose threshold (mcg/mL canonical)
 let getDrugId                = null;   // () => selected drug id
 let getDrugIds               = null;   // () => string[] all drug ids with cards
+let getModeForDrug           = null;   // (drugId) => mode string for any drug
 let rafId                    = null;
 let onFrame                  = null;   // callback: (elapsedMinutes) => void
 
@@ -89,9 +90,10 @@ export function init(opts = {}) {
   getMode                  = opts.getMode    || (() => 'none');
   getCeTarget              = opts.getCeTarget || (() => 0);
   getIntermittentThreshold = opts.getIntermittentThreshold || (() => 0);
-  getDrugId                = opts.getDrugId  || (() => 'propofol');
-  getDrugIds               = opts.getDrugIds || (() => ['propofol', 'fentanyl', 'ketamine']);
-  onFrame                  = opts.onFrame    || null;
+  getDrugId                = opts.getDrugId      || (() => 'propofol');
+  getDrugIds               = opts.getDrugIds     || (() => ['propofol', 'fentanyl', 'ketamine']);
+  getModeForDrug           = opts.getModeForDrug || null;
+  onFrame                  = opts.onFrame        || null;
   loop();
 }
 
@@ -263,11 +265,15 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
     if (Ce <= ceTarget) {
       return { prefix: '', arrivalMin: null, staticText: 'Redose now', newLockedSsCe: null };
     }
-    const dt = estimateTimeToThreshold(t, ceTarget);
-    if (dt !== null && dt > 0) {
-      return { prefix: 'Redose in ', arrivalMin: t + dt, staticText: '', newLockedSsCe: null };
-    }
-    return { prefix: '', arrivalMin: null, staticText: 'Monitoring…', newLockedSsCe: null };
+    // Use predictTrough for unlimited lookahead — not limited by chart curve length.
+    // Essential for ketamine where Ce decay can extend far beyond the 120-min curve.
+    try {
+      const result = model.predictTrough(drugId, t, ceTarget);
+      if (result && result.time !== null && result.time > t) {
+        return { prefix: 'Redose in ', arrivalMin: result.time, staticText: '', newLockedSsCe: null };
+      }
+    } catch (e) {}
+    return { prefix: '', arrivalMin: null, staticText: '', newLockedSsCe: null };
   }
 
   // Pump stopped — emergence countdown (uses predictTrough; no curve scan needed)
@@ -443,24 +449,62 @@ function update() {
   const ceTarget    = getCeTarget();
   const caseStarted = timer.isRunning() || t > 0;
 
-  // ── Update Ce/Cp for ALL drug tiles (not just selected) ─────────
-  // Non-selected tiles get a lightweight Ce/Cp-only update so they
-  // stay live when a case starts without requiring the user to click them.
+  // ── Update ALL drug tiles (not just selected) ───────────────────
+  // Non-selected tiles get Ce/Cp, status label, and step-bar updates
+  // so they stay live when a case starts without requiring a click.
   const allDrugs = getDrugIds ? getDrugIds() : [drugId];
   for (const dId of allDrugs) {
     if (dId === drugId) continue;  // selected drug gets full update below
-    const ceEl2 = $(dId + '-ce');
-    const cpEl2 = $(dId + '-cp');
-    if (!ceEl2 && !cpEl2) continue;
+    const ceEl2    = $(dId + '-ce');
+    const cpEl2    = $(dId + '-cp');
+    const statusEl2 = $(dId + '-status');
+    if (!ceEl2 && !cpEl2 && !statusEl2) continue;
+
     if (!caseStarted || t <= 0) {
       if (ceEl2) ceEl2.textContent = fmtCe(0, dId);
       if (cpEl2) cpEl2.textContent = fmtCe(0, dId);
+      if (statusEl2) { statusEl2.textContent = 'Stopped'; statusEl2.className = 'drug-status stopped'; }
       continue;
     }
     try {
-      const conc = model.getConcentrationsAt(dId, t);
+      const conc  = model.getConcentrationsAt(dId, t);
       if (ceEl2) ceEl2.textContent = fmtCe(conc.Ce, dId);
       if (cpEl2) cpEl2.textContent = fmtCe(conc.Cp, dId);
+
+      // Status label
+      const dMode = getModeForDrug ? getModeForDrug(dId) : 'none';
+      const dRate = conc.rate;
+      let dLabel = 'Stopped', dCls = 'stopped';
+      if (dMode === 'none') {
+        dLabel = 'Stopped'; dCls = 'stopped';
+      } else if (dMode === 'intermittent') {
+        if (isInBolusPhase(dId, t) || dRate > 50) { dLabel = 'Bolus'; dCls = 'bolus'; }
+        else { dLabel = ''; dCls = ''; }
+      } else if (dRate === 0) {
+        dLabel = 'Paused'; dCls = 'paused';
+      } else if (isInBolusPhase(dId, t) || dRate > 50) {
+        dLabel = 'Bolus'; dCls = 'bolus';
+      } else {
+        dLabel = 'Infusing'; dCls = 'infusing';
+      }
+      if (statusEl2) { statusEl2.textContent = dLabel; statusEl2.className = 'drug-status ' + dCls; }
+
+      // Step-bar
+      if (dMode !== 'intermittent') {
+        updateStepBar(dId, t);
+      } else {
+        // Intermittent: show progress during bolus delivery, blank afterward
+        const barEl2 = $(dId + '-bar');
+        const cntEl2 = $(dId + '-bar-countdown');
+        let hasNextEvt2 = false;
+        try { hasNextEvt2 = model.getEvents(dId).some(e => e.time > t + 0.0001); } catch (e2) {}
+        if (hasNextEvt2) {
+          updateStepBar(dId, t);
+        } else {
+          if (barEl2) barEl2.style.width = '0%';
+          if (cntEl2) cntEl2.textContent = '';
+        }
+      }
     } catch (e) {}
   }
 
