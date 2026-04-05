@@ -49,13 +49,14 @@ export function createChart(canvas, config = {}) {
 
   let cursorTime = 0;
   let targetCe = null;
-  let effectBands = [];   // [{ ceMin, ceMax, color, label }]
+  let thresholdCe = null;   // intermittent redose threshold line (same scale as targetCe)
+  let effectBands = [];     // [{ ceMin, ceMax, color, label }]
   let viewMin = 0;
-  let viewMax = 30;       // default 30-minute view
+  let viewMax = 30;         // default 30-minute view
   let autoScroll = true;
   let tooltipEnabled = true;
   let _currentDrugId = cfg.drugId || 'propofol';
-  let _yScale = 1;        // scale factor applied to curve data (1 for mcg/mL, 1000 for ng/mL)
+  let _yScale = 1;          // scale factor applied to curve data (1 for mcg/mL, 1000 for ng/mL)
 
   // Build datasets
   const datasets = [];
@@ -127,6 +128,19 @@ export function createChart(canvas, config = {}) {
         borderWidth: 1.5,
         borderDash: [6, 3],
         // Label is drawn in the right margin by the targetCeLabel inline plugin
+      };
+    }
+
+    // Intermittent redose threshold line
+    if (thresholdCe !== null && thresholdCe > 0) {
+      annotations.threshold = {
+        type: 'line',
+        yMin: thresholdCe,
+        yMax: thresholdCe,
+        borderColor: '#f59e0b',   // amber — distinct from target orange
+        borderWidth: 1.5,
+        borderDash: [4, 3],
+        // Label drawn in right margin by targetCeLabel plugin below
       };
     }
 
@@ -285,38 +299,35 @@ export function createChart(canvas, config = {}) {
     },
     plugins: [
       {
-        // Draw the Ce target label in the right-margin padding, outside the
-        // chart area, so it never overlaps nomogram bands or curve data.
+        // Draw target and threshold labels in the right-margin padding,
+        // outside the chart area, so they never overlap curve data.
         id: 'targetCeLabel',
         afterDraw(ch) {
-          if (targetCe === null || targetCe <= 0) return;
-          const yScale = ch.scales.y;
+          const yScl = ch.scales.y;
           const ca = ch.chartArea;
-          if (!yScale || !ca) return;
+          if (!yScl || !ca) return;
 
-          const y = yScale.getPixelForValue(targetCe);
-          if (y < ca.top || y > ca.bottom) return; // off-screen vertically
+          function drawRightLabel(ctx, value, label, color) {
+            const y = yScl.getPixelForValue(value);
+            if (y < ca.top || y > ca.bottom) return;
+            ctx.save();
+            ctx.font = '10px sans-serif';
+            const tw = ctx.measureText(label).width;
+            const th = 12, pad = 3, x = ca.right + 6;
+            ctx.fillStyle = color + 'dd';
+            ctx.fillRect(x - pad, y - th / 2 - pad, tw + pad * 2, th + pad * 2);
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, x, y);
+            ctx.restore();
+          }
 
           const ctx = ch.ctx;
-          const label = `Ce ${targetCe.toFixed(1)}`;
-
-          ctx.save();
-          ctx.font = '10px sans-serif';
-          const tw = ctx.measureText(label).width;
-          const th = 12; // approximate text height at 10px
-          const pad = 3;
-          const x = ca.right + 6;
-
-          // Background rect
-          ctx.fillStyle = COLORS.target + 'dd';
-          ctx.fillRect(x - pad, y - th / 2 - pad, tw + pad * 2, th + pad * 2);
-
-          // Text
-          ctx.fillStyle = '#000';
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(label, x, y);
-          ctx.restore();
+          if (targetCe !== null && targetCe > 0)
+            drawRightLabel(ctx, targetCe, `Ce ${targetCe.toFixed(1)}`, COLORS.target);
+          if (thresholdCe !== null && thresholdCe > 0)
+            drawRightLabel(ctx, thresholdCe, 'Threshold', '#f59e0b');
         },
       },
     ],
@@ -418,6 +429,16 @@ export function createChart(canvas, config = {}) {
   }
 
   /**
+   * Set the intermittent redose threshold line.
+   * @param {number|null} ce - threshold in chart units, or null to hide
+   */
+  function setThresholdLine(ce) {
+    thresholdCe = ce;
+    chart.options.plugins.annotation.annotations = buildAnnotations();
+    chart.update('none');
+  }
+
+  /**
    * Set the horizontal target line.
    * @param {number|null} ce - target Ce, or null to hide
    */
@@ -510,6 +531,7 @@ export function createChart(canvas, config = {}) {
 
     _currentDrugId = drugId;
     _yScale = yScale || 1;
+    thresholdCe = null;  // clear stale threshold from previous drug
 
     // Update y-axis label
     chart.options.scales.y.title.text = yLabel || 'μg/mL';
@@ -640,6 +662,7 @@ export function createChart(canvas, config = {}) {
     setCursorTime,
     setEffectOverlay,
     setTargetLine,
+    setThresholdLine,
     setViewRange,
     resetView,
     recenter,

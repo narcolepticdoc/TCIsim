@@ -115,15 +115,18 @@ export function show(type) {
   // Build unit toggle buttons
   renderUnitToggle(allowed);
 
+  // In intermittent mode, bolus is always IV Push — show a single "Administer" button
+  const isIntermittentBolus = (type === 'bolus') && (getMode() === 'intermittent');
+
   // Confirm button style
   const cc = CONFIRM_LABELS[type];
   const confirmBtn = $('keypad-confirm-btn');
-  confirmBtn.textContent = cc.label;
-  confirmBtn.className = cc.cls;
+  confirmBtn.textContent = isIntermittentBolus ? 'Administer' : cc.label;
+  confirmBtn.className = isIntermittentBolus ? 'modal-btn-confirm-bolus' : cc.cls;
 
-  // Show "Push Bolus" button only for bolus type
+  // Show "IV Push" button only for bolus type when NOT in intermittent mode
   const pushBtn = $('keypad-push-btn');
-  if (pushBtn) pushBtn.style.display = (type === 'bolus') ? '' : 'none';
+  if (pushBtn) pushBtn.style.display = (type === 'bolus' && !isIntermittentBolus) ? '' : 'none';
 
   // Pre-fill if changing existing target
   if (type === 'ceTarget' && getMode() === 'tci' && getCeTarget() > 0) {
