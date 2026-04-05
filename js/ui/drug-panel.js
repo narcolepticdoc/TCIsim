@@ -64,7 +64,7 @@ const SS_WINDOW_MIN      = 10;    // minutes
 const EMERGENCE_CE = 1.5;
 
 // ──────────────────────────────────────────────────────────────────
-// Approach line cache
+// Approach line cache (selected drug)
 //   prefix          — HTML label ending with "in " when countdown follows
 //   arrivalMin      — absolute elapsed-minutes of arrival (null = no countdown)
 //   staticText      — full HTML for no-countdown states
@@ -80,6 +80,12 @@ let _approachCache = {
   computedVersion: -1,
   mode: '', rate: 0, target: 0,
 };
+
+// Per-drug cache for non-selected intermittent approach/bar countdown.
+// Avoids calling predictTrough every rAF frame — invalidates only when
+// the event count changes (i.e. after a new bolus or a reset).
+// Format: { [drugId]: { arrivalMin: number|null, eventCount: number } }
+const _nonSelectedCache = {};
 
 // ──────────────────────────────────────────────────────────────────
 // Init / lifecycle
@@ -491,36 +497,64 @@ function update() {
       }
       if (statusEl2) { statusEl2.textContent = dLabel; statusEl2.className = 'drug-status ' + dCls; }
 
-      // Step-bar
+      // Step-bar + approach line for non-selected drug
+      const approachEl2 = $(dId + '-approach');
       if (dMode !== 'intermittent') {
         updateStepBar(dId, t);
+        if (approachEl2 && approachEl2.innerHTML !== '') approachEl2.innerHTML = '';
       } else {
-        // Intermittent: show progress during bolus delivery, countdown afterward
+        // Intermittent: show bolus progress or redose countdown
         const barEl2 = $(dId + '-bar');
         const cntEl2 = $(dId + '-bar-countdown');
         let hasNextEvt2 = false;
-        try { hasNextEvt2 = model.getEvents(dId).some(e => e.time > t + 0.0001); } catch (e2) {}
+        let evtCount2 = 0;
+        try {
+          const evts2 = model.getEvents(dId);
+          evtCount2 = evts2.length;
+          hasNextEvt2 = evts2.some(e => e.time > t + 0.0001);
+        } catch (e2) {}
+
         if (hasNextEvt2) {
           updateStepBar(dId, t);
+          if (approachEl2 && approachEl2.innerHTML !== '') approachEl2.innerHTML = '';
         } else {
           if (barEl2) barEl2.style.width = '0%';
-          if (cntEl2) {
-            let cntText = '';
-            if (getIntermittentThresholdForDrug) {
-              const thr = getIntermittentThresholdForDrug(dId);
-              if (thr > 0) {
-                if (conc.Ce <= thr) {
-                  cntText = 'Redose now';
+          let cntText = '';
+          let approachHtml = '';
+          if (getIntermittentThresholdForDrug) {
+            const thr = getIntermittentThresholdForDrug(dId);
+            if (thr > 0) {
+              if (conc.Ce <= thr) {
+                cntText = 'Redose now';
+                approachHtml = 'Redose now';
+              } else {
+                // Use cached arrivalMin to avoid calling predictTrough every frame.
+                // Invalidate only when the event list changes (new bolus, reset, etc.).
+                const cached = _nonSelectedCache[dId];
+                let arrivalMin = null;
+                if (cached && cached.eventCount === evtCount2 &&
+                    cached.arrivalMin !== null && cached.arrivalMin > t) {
+                  arrivalMin = cached.arrivalMin;
                 } else {
                   try {
                     const res = model.predictTrough(dId, t, thr);
-                    if (res && res.time > t) cntText = fmtCountdown(res.time - t);
+                    if (res && res.time > t) arrivalMin = res.time;
                   } catch (e2) {}
+                  _nonSelectedCache[dId] = { arrivalMin, eventCount: evtCount2 };
+                }
+                if (arrivalMin !== null) {
+                  const rem = arrivalMin - t;
+                  if (rem > 0) {
+                    const fmtd = fmtCountdown(rem);
+                    cntText = fmtd;
+                    approachHtml = `Redose in <span class="appr-time">${fmtd}</span>`;
+                  }
                 }
               }
             }
-            cntEl2.textContent = cntText;
           }
+          if (cntEl2) cntEl2.textContent = cntText;
+          if (approachEl2 && approachEl2.innerHTML !== approachHtml) approachEl2.innerHTML = approachHtml;
         }
       }
     } catch (e) {}
