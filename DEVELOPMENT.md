@@ -198,6 +198,28 @@ SimTIVA's `deliver_cpt` step extraction skips `cptRates[0]` (the high initial ra
 
 308 tests across 10 suites, all passing.
 
+### Session 14 (2026-04-05) — Fentanyl & Ketamine Drug Support (v0.5.0)
+
+**Fentanyl PK model (`js/pk/fentanyl.js`):** Shafer 1990 3-compartment. V1=12.7 L, V2=462.7 L, V3=238.1 L, CL=0.599 L/min, Q2=2.05 L/min, Q3=0.076 L/min (weight-scaled V1/CL). ke0=0.114/min (Scott 1985, t½≈6.1 min). Display unit: ng/mL.
+
+**Ketamine PK model (`js/pk/ketamine.js`):** Domino 1982 / Clements 1982 3-compartment. Weight-scaled V1/CL. Clinical range 200–4000 ng/mL. Display unit: ng/mL.
+
+**Intermittent bolus mode:** New per-drug mode alongside Manual and TCI. IV-push–only — no pump events generated. Threshold keypad type sets the Ce redose threshold. History filtered to boluses only in this mode. Approach line uses `model.predictTrough()` for unlimited-lookahead redose countdown (essential for ketamine, whose Ce can take 200–600 min to decay). Step-bar shows delivery progress during bolus, then shows "Redose in M:SS" countdown text.
+
+**All-tile live updates:** Background rAF loop now updates Ce/Cp, status label, and step-bar for every drug card every frame. `getModeForDrug` and `getIntermittentThresholdForDrug` callbacks supply per-drug context for non-selected tiles.
+
+**Per-drug chart config:** `CHART_DRUG_CONFIG` in `app.js` maps each drug to `{ yScale, yLabel, yDefault }`. Fentanyl/ketamine curves scaled ×1000 (mcg/mL → ng/mL) before charting; drug-panel receives canonical values. y-axis max persists per drug to localStorage.
+
+**Step-bar inversion:** Container background swapped to drug color; fill bar is now dark. Full container = ready to dose; dark fill grows left-to-right as interval elapses.
+
+**Per-drug pre-start clock:** `preStartClock` refactored from scalar to `{ [drugId]: minutes }` map. Propofol bolus delivery no longer delays fentanyl/ketamine pre-start events.
+
+**BIS bands cleared on drug switch:** `computeEffectOverlay()` called inside `refreshChart()` (was only called at chart init); fentanyl/ketamine have no PD model so bands clear automatically.
+
+346 tests across 11 suites, all passing.
+
+---
+
 ## Known Issues
 
 ### Emulation Planner
@@ -225,14 +247,14 @@ SimTIVA's `deliver_cpt` step extraction skips `cptRates[0]` (the high initial ra
 
 - [ ] PWA polish: service worker, offline support, app icons, portrait overlay
 - [ ] Disclaimer/about screen
-- [ ] Intermittent bolus mode (model support exists, needs UI workflow)
-
-### Long-term
-
-- [ ] Fentanyl PK model (tracking only, not TCI)
-- [ ] Ketamine PK model (tracking only, not TCI)
 - [ ] Remifentanil TCI support
 - [ ] Multi-drug interaction display
+
+### Completed
+
+- [x] Fentanyl PK model — Shafer 1990, ng/mL display (v0.5.0)
+- [x] Ketamine PK model — Domino/Clements 1982, ng/mL display (v0.5.0)
+- [x] Intermittent bolus mode — IV-push only, redose threshold, countdown (v0.5.0)
 
 ## Test Suites
 

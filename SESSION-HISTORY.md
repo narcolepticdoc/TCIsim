@@ -124,6 +124,30 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 
 307 tests, all passing.
 
+**Session 14 (2026-04-05):** Fentanyl and ketamine drug support. Version 0.5.0.
+
+*Fentanyl PK model (`js/pk/fentanyl.js`):* Shafer 1990 3-compartment model. PK parameters (V1=12.7 L, V2=462.7 L, V3=238.1 L, CL=0.599 L/min, Q2=2.05 L/min, Q3=0.076 L/min) with weight scaling for V1 and CL. ke0 from Scott 1985 (0.114/min, t½ke0≈6.1 min). Unit: ng/mL (×1000 from canonical mcg/mL). 18 tests.
+
+*Ketamine PK model (`js/pk/ketamine.js`):* Domino 1982 / Clements 1982 parameters. 3-compartment with weight-scaled V1 and CL. ke0 fitted to clinical onset. Clinical range 200–4000 ng/mL (canonical 0.2–4 mcg/mL). Unit: ng/mL. 20 tests.
+
+*Engine registration (`js/sim/simulation.js`):* Both drugs get their own matrix-exponential engine instances, registered at init and rebuilt on `setPatient`. `predictTrough` and all model operations work drug-agnostically.
+
+*Intermittent bolus mode (`js/ui/mode.js`, `js/ui/keypad.js`, `js/ui/history.js`, `js/app.js`):* New mode (beside Manual and TCI). IV-push only — no pump involved. User sets a Ce redose threshold via the Intermittent keypad type. History filtered to bolus events only while in this mode. btn-rate shows "Set Infusion Rate" to transition back to infusion. Bolus keypad shows single "Administer" button (no pump/push choice). Approach line shows "Redose in M:SS" / "Redose now".
+
+*Threshold chart line (`js/ui/chart.js`):* Amber (#f59e0b) dashed horizontal annotation at the redose Ce threshold. Right-margin label drawn via `afterDraw` canvas plugin alongside the TCI target label. `setThresholdLine(ce)` public method; cleared on drug switch.
+
+*Per-drug chart config (`js/app.js`):* `CHART_DRUG_CONFIG` maps each drug to yScale/yLabel/yDefault. Fentanyl and ketamine curves scaled ×1000 before passing to chart; drug-panel receives canonical values. `chart.switchDrug(drugId, yLabel, suggestedMax, yScale)` persists/restores yMax per drug from localStorage.
+
+*Redose countdown via matrix engine (`js/ui/drug-panel.js`):* `computeApproachData` intermittent case replaced `estimateTimeToThreshold` (chart-curve scan, ~120 min limit) with `model.predictTrough(drugId, t, ceTarget)` — unlimited lookahead via matrix exponential, correct for ketamine's 200–600 min Ce decay.
+
+*All-tile live updates (`js/ui/drug-panel.js`, `js/app.js`):* Background rAF loop now updates Ce/Cp, status label, and step-bar for every drug tile every frame, not just the selected one. `getModeForDrug` and `getIntermittentThresholdForDrug` callbacks enable per-drug status and countdown logic for non-selected tiles.
+
+*Step-bar inversion (`index.html`):* Container background → drug color; fill bar → dark. Bar depletes from full orange (ready) to dark (time's up) as the interval elapses. Non-selected intermittent tiles show "Redose in M:SS" via `predictTrough` in the background loop.
+
+*Per-drug pre-start clock (`js/app.js`):* `preStartClock` changed from a scalar to a `{}` map with `getPreStartClock(drugId)` / `advancePreStartClock(drugId, by)` helpers. Queuing a propofol bolus pre-start no longer delays fentanyl/ketamine events — each drug's clock advances independently.
+
+346 tests across 11 suites, all passing.
+
 **Session 13 (2026-04-05):** eBIS opioid correction toggle. Version 0.4.6.
 
 *Bug:* eBIS reported ~24 vs SimTIVA's ~42 for a standard opioid patient (35M 170cm 70kg, Ce=3.5). Root cause: `eleveld.js` always applied the Eleveld 2018 paper's Ce50 opioid correction (`× exp(−0.567)`), halving Ce50 from 3.08 → 1.75 μg/mL. SimTIVA does not implement this correction.
