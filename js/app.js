@@ -32,6 +32,20 @@ let preStartClock = 0; // running time for pre-start events (minutes)
 let annotations = []; // mode transitions, editorial actions
 let lastHistoryDimUpdate = 0; // throttle timestamp for history dimming
 
+// ---- Per-Drug Chart Configuration ----
+// yScale: multiply canonical mcg/mL curve values before passing to chart
+// yLabel: y-axis title
+// yDefault: suggestedMax when no saved value exists
+const CHART_DRUG_CONFIG = {
+  propofol:     { yScale: 1,    yLabel: 'μg/mL', yDefault: 10 },
+  remifentanil: { yScale: 1,    yLabel: 'μg/mL', yDefault: 10 },
+  fentanyl:     { yScale: 1000, yLabel: 'ng/mL',  yDefault: 10 },
+  ketamine:     { yScale: 1000, yLabel: 'ng/mL',  yDefault: 2000 },
+};
+function getChartDrugConfig(drugId) {
+  return CHART_DRUG_CONFIG[drugId] || { yScale: 1, yLabel: 'μg/mL', yDefault: 10 };
+}
+
 // ---- Screen Navigation ----
 
 function showScreen(id) {
@@ -104,6 +118,9 @@ function initSimScreen(patient) {
       if (pd) chart.setPDModel(pd);
       // Give chart patient weight for rate unit conversion in tooltip
       try { const pt = model.getPatient(); if (pt) chart.setPatientWeight(pt.weight); } catch (e) {}
+      // Apply per-drug y-axis config (label, scale, default range)
+      const initCfg = getChartDrugConfig(selectedDrug);
+      chart.switchDrug(selectedDrug, initCfg.yLabel, initCfg.yDefault, initCfg.yScale);
       computeEffectOverlay();
     } catch (err) {
       console.error('[TCI Sim] Chart creation failed:', err);
@@ -151,18 +168,23 @@ function refreshChart() {
   const lastEventTime = events.length > 0 ? events[events.length - 1].time : 0;
   const endTime = Math.max(120, t + 120, lastEventTime + 120);
 
-  const curve = model.computeCurve(selectedDrug, 0, endTime, 10 / 60);
-  chart.setCurveData(curve);
-  drugPanel.setCurveData(curve);
+  const rawCurve = model.computeCurve(selectedDrug, 0, endTime, 10 / 60);
+  const { yScale, yLabel, yDefault } = getChartDrugConfig(selectedDrug);
+  const chartCurve = yScale === 1 ? rawCurve : rawCurve.map(pt => ({
+    ...pt, Ce: pt.Ce * yScale, Cp: pt.Cp * yScale,
+  }));
+  chart.setCurveData(chartCurve);
+  drugPanel.setCurveData(rawCurve);  // drug-panel uses canonical mcg/mL for threshold comparisons
+  computeEffectOverlay();  // clears BIS bands for drugs without a PD model
 
   // Show chart controls
   const cc = $('chart-controls');
   if (cc) cc.style.display = 'flex';
 
-  // Update target line
+  // Update target line (scale Ce target to match chart units)
   const m = mode.get(selectedDrug);
   const ce = mode.getCeTarget(selectedDrug);
-  chart.setTargetLine(m === 'tci' && ce > 0 ? ce : null);
+  chart.setTargetLine(m === 'tci' && ce > 0 ? ce * yScale : null);
 
   // Update history panel
   history.render(selectedDrug);
@@ -430,6 +452,10 @@ function boot() {
   mode.init({
     onModeChange(drugId, newMode, oldMode, detail) {
       if (detail) addAnnotation(detail);
+      // Keep history filter in sync with mode changes for the selected drug
+      if (drugId === selectedDrug) {
+        history.setBolusOnly(newMode === 'intermittent');
+      }
     },
   });
 
@@ -476,10 +502,11 @@ function boot() {
         if (mode.get(selectedDrug) === 'tci') {
           model.clearAfter(selectedDrug, t);
           mode.set(selectedDrug, 'manual', 'Dropped out of TCI — manual bolus');
-        } else if (mode.get(selectedDrug) === 'none' || mode.get(selectedDrug) === 'intermittent') {
+        } else if (mode.get(selectedDrug) === 'none') {
           mode.set(selectedDrug, 'manual');
         }
-        const dm = deliveryMode || 'pump';
+        // Intermittent mode: stay in intermittent, always use IV Push (no pump)
+        const dm = (mode.get(selectedDrug) === 'intermittent') ? 'push' : (deliveryMode || 'pump');
         const label = dm === 'push' ? 'IV Push' : 'Pump Bolus';
         model.addBolus(selectedDrug, t, canonicalValue, `${label} ${displayText}`, {
           deliveryMode: dm,
@@ -504,8 +531,14 @@ function boot() {
       selectedDrug = drugId;
       keypad.setDrug(drugId);
       mode.refreshUI(drugId);
+      history.setBolusOnly(mode.get(drugId) === 'intermittent');
       history.setDrug(drugId);
       history.render();
+      // Switch chart to new drug's y-axis config (label, scale, persisted range)
+      if (chart) {
+        const cfg = getChartDrugConfig(drugId);
+        chart.switchDrug(drugId, cfg.yLabel, cfg.yDefault, cfg.yScale);
+      }
       refreshChart();
       document.querySelectorAll('.drug-card').forEach(c => c.classList.remove('active'));
       card.classList.add('active');

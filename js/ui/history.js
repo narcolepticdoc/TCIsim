@@ -23,6 +23,7 @@ let _selectedDrug = 'propofol';
 let _onEventTap = null;
 let _timeFormat = 'et'; // 'et' = elapsed time, 'rt' = real time
 let _getWallClockStart = null;
+let _bolusOnly = false;  // When true, only bolus events are shown (intermittent mode)
 
 /**
  * Initialize the history module.
@@ -65,6 +66,13 @@ export function init(opts) {
  */
 export function setDrug(drugId) {
   _selectedDrug = drugId;
+}
+
+/**
+ * When true, render() shows only bolus events (used in intermittent mode).
+ */
+export function setBolusOnly(v) {
+  _bolusOnly = !!v;
 }
 
 // ---- Formatting helpers ----
@@ -172,7 +180,8 @@ export function render(drugId) {
   const empty = $('history-empty');
   if (!list || !empty || !_model) return;
 
-  const events = _model.getEvents(drug);
+  let events = _model.getEvents(drug);
+  if (_bolusOnly) events = events.filter(e => e.type === 'bolus');
 
   if (events.length === 0) {
     empty.style.display = 'block';
