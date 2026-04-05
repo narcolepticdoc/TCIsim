@@ -111,3 +111,13 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 *Bug 2 — Emulation step extraction, decremental case:* SimTIVA's step extraction skips `cptRates[0]` (the high rate needed to bring Cp up quickly after a target decrease) and emits `cptRates[1]` from `maintTime`. SimTIVA re-plans every 2 min so this corrects itself; our one-shot planner does not. Fix: start from interval 0 (not 1) in the decremental branch.
 
 307 tests, all passing.
+
+**Session 13 (2026-04-05):** eBIS opioid correction toggle. Version 0.4.6.
+
+*Bug:* eBIS reported ~24 vs SimTIVA's ~42 for a standard opioid patient (35M 170cm 70kg, Ce=3.5). Root cause: `eleveld.js` always applied the Eleveld 2018 paper's Ce50 opioid correction (`× exp(−0.567)`), halving Ce50 from 3.08 → 1.75 μg/mL. SimTIVA does not implement this correction.
+
+*Fix:* Ce50 opioid correction is now opt-in. New `ce50OpioidCorrection` field on the patient object (default `false` = SimTIVA behaviour). New checkbox in the setup UI — shown only when "With opioid" is selected, persisted to localStorage. With toggle off (default): Ce50=3.08, eBIS≈42 at Ce=3.5. With toggle on: Ce50=1.75, eBIS≈24 (Eleveld paper formula). The opioid flag continues to affect PK parameters (V3, CL) in both modes.
+
+*Files changed:* `js/pk/eleveld.js`, `index.html`, `js/ui/setup.js`, `js/sim/simulation.js`, `tests/test-pk.js` (44 tests), `tests/test-integration.js`.
+
+308 tests across 10 suites, all passing.
