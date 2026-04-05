@@ -21,8 +21,9 @@ let getMode                  = null;   // () => mode string
 let getCeTarget              = null;   // () => Ce target number
 let getIntermittentThreshold = null;   // () => intermittent redose threshold (mcg/mL canonical)
 let getDrugId                = null;   // () => selected drug id
-let getDrugIds               = null;   // () => string[] all drug ids with cards
-let getModeForDrug           = null;   // (drugId) => mode string for any drug
+let getDrugIds                        = null;   // () => string[] all drug ids with cards
+let getModeForDrug                    = null;   // (drugId) => mode string for any drug
+let getIntermittentThresholdForDrug   = null;   // (drugId) => canonical mcg/mL threshold
 let rafId                    = null;
 let onFrame                  = null;   // callback: (elapsedMinutes) => void
 
@@ -92,8 +93,9 @@ export function init(opts = {}) {
   getIntermittentThreshold = opts.getIntermittentThreshold || (() => 0);
   getDrugId                = opts.getDrugId      || (() => 'propofol');
   getDrugIds               = opts.getDrugIds     || (() => ['propofol', 'fentanyl', 'ketamine']);
-  getModeForDrug           = opts.getModeForDrug || null;
-  onFrame                  = opts.onFrame        || null;
+  getModeForDrug                  = opts.getModeForDrug                  || null;
+  getIntermittentThresholdForDrug = opts.getIntermittentThresholdForDrug || null;
+  onFrame                         = opts.onFrame                         || null;
   loop();
 }
 
@@ -493,7 +495,7 @@ function update() {
       if (dMode !== 'intermittent') {
         updateStepBar(dId, t);
       } else {
-        // Intermittent: show progress during bolus delivery, blank afterward
+        // Intermittent: show progress during bolus delivery, countdown afterward
         const barEl2 = $(dId + '-bar');
         const cntEl2 = $(dId + '-bar-countdown');
         let hasNextEvt2 = false;
@@ -502,7 +504,23 @@ function update() {
           updateStepBar(dId, t);
         } else {
           if (barEl2) barEl2.style.width = '0%';
-          if (cntEl2) cntEl2.textContent = '';
+          if (cntEl2) {
+            let cntText = '';
+            if (getIntermittentThresholdForDrug) {
+              const thr = getIntermittentThresholdForDrug(dId);
+              if (thr > 0) {
+                if (conc.Ce <= thr) {
+                  cntText = 'Redose now';
+                } else {
+                  try {
+                    const res = model.predictTrough(dId, t, thr);
+                    if (res && res.time > t) cntText = fmtCountdown(res.time - t);
+                  } catch (e2) {}
+                }
+              }
+            }
+            cntEl2.textContent = cntText;
+          }
         }
       }
     } catch (e) {}
