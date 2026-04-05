@@ -206,7 +206,7 @@ function saveState() {
 
   // Collect events for all drugs (strip snapshot — Float64Array won't serialize)
   const eventsByDrug = {};
-  for (const drugId of ['propofol']) { // extend for multi-drug
+  for (const drugId of ['propofol', 'fentanyl', 'ketamine']) {
     eventsByDrug[drugId] = model.getEvents(drugId).map(evt => ({
       drug: evt.drug,
       time: evt.time,
