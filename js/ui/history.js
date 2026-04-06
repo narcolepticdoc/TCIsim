@@ -10,7 +10,7 @@
  * and future (after current time, dimmed).
  */
 
-import { DRUG_DEFS, bolusDeliveryMinutes } from '../util/constants.js';
+import { DRUG_DEFS, bolusDeliveryMinutes, pushDeliveryMinutes } from '../util/constants.js';
 import { fromCanonical, getPrefKey, getDefaultUnit, formatValue }
   from '../util/units.js';
 
@@ -143,13 +143,13 @@ function fmtBolusDose(mg, drugId) {
 
 function fmtBolusDelivery(evt) {
   if (evt.deliveryMode === 'push') {
-    return '10 sec push';
+    const durMin = pushDeliveryMinutes(evt.value, evt.drug);
+    return durMin < 1
+      ? Math.round(durMin * 60) + ' sec push'
+      : durMin.toFixed(1) + ' min push';
   }
   const durMin = bolusDeliveryMinutes(evt.value, evt.drug);
-  if (durMin < 1) {
-    return Math.round(durMin * 60) + ' sec';
-  }
-  return durMin.toFixed(1) + ' min';
+  return durMin < 1 ? Math.round(durMin * 60) + ' sec' : durMin.toFixed(1) + ' min';
 }
 
 // ---- Source badge ----
@@ -209,18 +209,20 @@ export function render(drugId) {
       const dose = fmtBolusDose(evt.value, evt.drug);
       const delivery = fmtBolusDelivery(evt);
       const modeLabel = evt.deliveryMode === 'push' ? 'IV Push' : 'Pump Bolus';
-      desc = `${badge}${modeLabel} <strong>${dose}</strong> <span class="h-detail">${delivery}</span>`;
+      desc = `<span class="h-type">${badge}${modeLabel}</span>` +
+             `<span class="h-value"><strong>${dose}</strong> <span class="h-detail">${delivery}</span></span>`;
     } else if (evt.type === 'rate') {
       if (evt.value === 0 && evt.source === 'tci') {
         // TCI-scheduled pause (pump holds until next TCI step)
-        desc = `${badge}Paused`;
+        desc = `<span class="h-type">${badge}Paused</span>`;
       } else {
         const rate = fmtRate(evt.value, evt.drug);
         const prefix = isSystem ? '↩ ' : '';
-        desc = `${badge}${prefix}Rate <strong>${rate}</strong>`;
+        desc = `<span class="h-type">${badge}${prefix}Rate</span>` +
+               `<span class="h-value"><strong>${rate}</strong></span>`;
       }
     } else if (evt.type === 'pause') {
-      desc = `${badge}Pump Stopped`;
+      desc = `<span class="h-type">${badge}Pump Stopped</span>`;
     }
 
     const editBtn = `<button class="h-edit-btn" data-edit-id="${evt.id}" title="Edit">✎</button>`;

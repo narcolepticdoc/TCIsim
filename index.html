@@ -113,37 +113,38 @@
     #drug-ketamine{--drug-color:#f59e0b}
     #drug-fentanyl{--drug-color:#3b82f6}
     #drug-remifentanil{--drug-color:#3b82f6}
-    .drug-card .drug-name{font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--text-primary);text-transform:uppercase;letter-spacing:.5px}
+    .drug-card .drug-name{font-family:var(--font-mono);font-size:13px;font-weight:500;color:var(--text-primary);text-transform:uppercase;letter-spacing:.5px}
     .drug-card .drug-model{font-size:9px;color:var(--text-muted)}
     /* Combined Cp / Ce row */
     .drug-card .drug-conc-row{display:flex;align-items:baseline;gap:3px;margin-top:2px}
-    .drug-card .ce-label{font-size:9px;color:var(--text-muted)}
+    .drug-card .ce-label{font-size:10px;color:var(--text-muted)}
     .drug-card .ce-current{font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--cyan);line-height:1}
     .drug-card .cp-sep{font-size:10px;color:var(--border);margin:0 1px}
-    .drug-card .cp-label{font-size:9px;color:var(--text-muted)}
-    .drug-card .cp-current{font-family:var(--font-mono);font-size:11px;color:#ef4444}
-    .drug-card .ce-unit{font-size:8px;color:var(--text-muted);margin-left:1px}
+    .drug-card .cp-label{font-size:10px;color:var(--text-muted)}
+    .drug-card .cp-current{font-family:var(--font-mono);font-size:12px;color:#ef4444}
+    .drug-card .ce-unit{font-size:9px;color:var(--text-muted);margin-left:1px}
     /* Approach / countdown line */
-    .drug-card .drug-approach{font-family:var(--font-mono);font-size:9.5px;color:var(--text-secondary);min-height:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .drug-card .drug-approach{font-family:var(--font-mono);font-size:10.5px;color:var(--text-secondary);min-height:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .drug-card .drug-approach .appr-val{color:var(--cyan)}
     .drug-card .drug-approach .appr-time{color:var(--amber)}
     /* Status row: status label + inline rate */
     .drug-card .drug-status-row{display:flex;align-items:center;gap:5px}
-    .drug-card .drug-status{font-size:10px;font-weight:600}
+    .drug-card .drug-status{font-size:11px;font-weight:600}
     .drug-card .drug-status.infusing{color:var(--green)}
     .drug-card .drug-status.paused{color:var(--amber)}
     .drug-card .drug-status.stopped{color:#ef4444}
     @keyframes bolus-blink{0%,100%{opacity:1}50%{opacity:.25}}
     .drug-card .drug-status.bolus{color:var(--green);animation:bolus-blink .7s step-end infinite}
-    .drug-card .drug-rate{font-family:var(--font-mono);font-size:10px;color:var(--text-secondary)}
+    .drug-card .drug-rate{font-family:var(--font-mono);font-size:11px;color:var(--text-secondary)}
     /* eBIS — inline in conc row, matches Ce/Cp label+value pattern */
-    .drug-card .bis-label{font-size:9px;color:var(--text-muted)}
+    .drug-card .bis-label{font-size:10px;color:var(--text-muted)}
     .drug-card .drug-bis{font-family:var(--font-mono);font-size:11px}
     /* Progress bar + countdown */
     .drug-card .step-bar-area{margin-top:2px}
-    .drug-card .step-bar-countdown{font-family:var(--font-mono);font-size:9px;color:var(--text-secondary);text-align:left;min-height:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .drug-card .step-bar-countdown{font-family:var(--font-mono);font-size:10px;color:var(--text-secondary);text-align:right;min-height:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .drug-card .step-bar-countdown .appr-time{color:var(--amber)}
     .drug-card .step-bar-wrap{height:3px;background:var(--drug-color,var(--blue));border-radius:2px;overflow:hidden}
+    .drug-card .step-bar-wrap.step-bar-below{background:var(--red)}
     .drug-card .step-bar{height:100%;background:var(--bg-deep);border-radius:2px;transition:width .5s linear}
 
     /* ── Warning system ─────────────────────────────────────────────── */
@@ -204,9 +205,11 @@
     .history-row.h-evt-pause{border-left-color:var(--text-muted)}
     .history-row.h-future{opacity:0.45}
     .history-row.h-system{opacity:0.35;font-style:italic;border-left-color:var(--border-subtle)}
-    .history-row .h-time{color:var(--text-muted);min-width:72px;font-size:10px;cursor:pointer}
-    .history-row .h-desc{flex:1;color:var(--text-primary)}
-    .history-row .h-desc strong{color:var(--text-primary);font-weight:600}
+    .history-row .h-time{color:var(--text-secondary);min-width:72px;font-size:10px;cursor:pointer}
+    .history-row .h-desc{flex:1;color:var(--text-primary);display:flex;flex-direction:column;align-items:flex-start;gap:1px}
+    .history-row .h-type{font-size:10px;color:var(--text-muted);line-height:1.3}
+    .history-row .h-value{line-height:1.3}
+    .history-row .h-value strong{color:var(--text-primary);font-weight:600}
     .history-row .h-detail{color:var(--text-muted);font-size:10px}
     .h-badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;margin-right:5px;vertical-align:middle}
     .h-badge-tci{background:var(--amber);color:#000}
@@ -271,11 +274,14 @@
       /* Drug panel */
       .drug-panel{width:250px}
       .drug-card{padding:11px 13px;gap:4px}
-      .drug-card .drug-name{font-size:13px}
+      .drug-card .drug-name{font-size:14px}
       .drug-card .ce-current{font-size:26px}
-      .drug-card .drug-approach{font-size:10.5px}
-      .drug-card .drug-status{font-size:11px}
-      .drug-card .drug-rate{font-size:11px}
+      .drug-card .ce-label,.drug-card .cp-label,.drug-card .bis-label{font-size:10.5px}
+      .drug-card .cp-current{font-size:13px}
+      .drug-card .drug-approach{font-size:11.5px}
+      .drug-card .drug-status{font-size:12px}
+      .drug-card .drug-rate{font-size:12px}
+      .drug-card .step-bar-countdown{font-size:11px}
 
       /* Controls bar */
       .btn-ctrl{font-size:13px;padding:9px 18px}
@@ -304,8 +310,10 @@
       .setup-brand{width:280px}.setup-brand h1{font-size:30px}
       .setup-form{max-width:600px}
       .drug-panel{width:285px}
+      .drug-card .drug-name{font-size:15px}
       .drug-card .ce-current{font-size:30px}
-      .drug-card .drug-name{font-size:14px}
+      .drug-card .drug-approach{font-size:12px}
+      .drug-card .step-bar-countdown{font-size:12px}
       .elapsed-timer{font-size:21px}
       .btn-ctrl{font-size:14px;padding:10px 20px}
     }

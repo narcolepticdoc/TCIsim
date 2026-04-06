@@ -307,19 +307,23 @@ export function createChart(canvas, config = {}) {
           const ca = ch.chartArea;
           if (!yScl || !ca) return;
 
-          function drawRightLabel(ctx, value, label, color) {
+          function drawRightLabel(ctx, value, label, color, label2 = null) {
             const y = yScl.getPixelForValue(value);
             if (y < ca.top || y > ca.bottom) return;
             ctx.save();
             ctx.font = '10px sans-serif';
-            const tw = ctx.measureText(label).width;
-            const th = 12, pad = 3, x = ca.right + 6;
+            const lines = label2 ? [label, label2] : [label];
+            const lineH = 13, pad = 3, x = ca.right + 6;
+            const tw = Math.max(...lines.map(l => ctx.measureText(l).width));
+            const totalH = lines.length * lineH;
             ctx.fillStyle = color + 'dd';
-            ctx.fillRect(x - pad, y - th / 2 - pad, tw + pad * 2, th + pad * 2);
+            ctx.fillRect(x - pad, y - totalH / 2 - pad, tw + pad * 2, totalH + pad * 2);
             ctx.fillStyle = '#000';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
-            ctx.fillText(label, x, y);
+            lines.forEach((line, i) => {
+              ctx.fillText(line, x, y - totalH / 2 + lineH * i + lineH / 2);
+            });
             ctx.restore();
           }
 
@@ -327,7 +331,7 @@ export function createChart(canvas, config = {}) {
           if (targetCe !== null && targetCe > 0)
             drawRightLabel(ctx, targetCe, `Ce ${targetCe.toFixed(1)}`, COLORS.target);
           if (thresholdCe !== null && thresholdCe > 0)
-            drawRightLabel(ctx, thresholdCe, 'Threshold', '#f59e0b');
+            drawRightLabel(ctx, thresholdCe, 'Threshold', '#f59e0b', thresholdCe.toFixed(2));
         },
       },
     ],

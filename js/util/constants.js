@@ -113,6 +113,15 @@ export function bolusDeliveryMinutes(doseMg, drugId) {
   return Math.max(0.05, durationMin); // minimum 3 seconds
 }
 
+// Rapid IV push: 3600 mL/h (1 mL/s), minimum 1 second.
+// Mirrors PUSH_RATE_MLH in events.js — must stay in sync.
+const _PUSH_RATE_MLH = 3600;
+export function pushDeliveryMinutes(doseMg, drugId) {
+  const ps = getPumpSettings(drugId);
+  const volumeMl = doseMg / ps.concentration;
+  return Math.max(1 / 60, volumeMl / _PUSH_RATE_MLH * 60);
+}
+
 // ---- Per-drug, per-task unit configuration ----
 // canonical = what the engine uses (mg, mg/min, mcg/mL)
 // allowed = what the keypad can display
