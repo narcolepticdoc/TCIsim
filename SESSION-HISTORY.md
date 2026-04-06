@@ -4,6 +4,28 @@ Detailed session-by-session development log. For current project state, see DEVE
 
 ---
 
+**Session 20 (2026-04-06):** Responsive tablet layout, UI polish, and history correctness fixes. Version 0.5.6.
+
+*Responsive layout:* Added `@media(min-width:1020px)` breakpoint targeting iPad 10th gen (1080px) and iPad mini 7th gen (1133px) and all larger iPads — chosen to be safely above iPhone 17 landscape (932px). At ≥1020px: `.sim-content` switches to `flex-direction:row`, both chart and history panels shown simultaneously (chart `flex:2`, history `flex:1`), tab buttons hidden. New `⤢/⤡` expand button in `.chart-controls` (hidden on phone, shown on tablet) toggles a `.chart-expanded` class that hides the history column and lets chart fill full width; `chart.chart.resize()` called after toggle. `setView()` updated to skip panel class toggling at ≥1020px. Added `@media(min-width:1200px)` for iPad Air/Pro further scaling. Drug panel width 210→250→285px; Ce font 22→26→30px; topbar 34→42px; form/button sizes scaled proportionally at each breakpoint.
+
+*Drug panel font enlargement:* Base sizes increased: `drug-name` 12→13px, approach 9.5→10.5px, status/rate 10→11px, countdown 9→10px, Cp 11→12px, Ce/Cp/BIS labels 9→10px. At ≥1020px further increases (approach 11.5px, status/rate 12px, countdown 11px, Cp 13px). At ≥1200px: name 15px, approach/countdown 12px.
+
+*Step bar countdown:* Changed `text-align:left` → `text-align:right` so times align vertically across drug tiles.
+
+*Step bar below-threshold indicator:* Added `.drug-card .step-bar-wrap.step-bar-below { background: var(--red) }`. In the selected-drug intermittent path (lines ~834–849 of `drug-panel.js`), the `step-bar-below` class is toggled on `barEl.parentElement` across the three branches (delivery, countdown, below-threshold). In the non-selected path (lines ~660–705), same toggle using `isBelowThreshold` flag. Bug: non-selected path had `barPct = 100` for below-threshold, causing the dark inner fill to cover the red wrap — fixed to `barPct = 0`.
+
+*History timestamps:* `.h-time` color changed from `var(--text-muted)` to `var(--text-secondary)`.
+
+*History two-line layout:* `.h-desc` changed to `display:flex; flex-direction:column`. Event type ("IV Push", "Rate", "Pump Stopped") on first line as `.h-type` (10px, muted); dose/rate value bold on second line as `.h-value`. TCI badge stays on the type line. Applied consistently to bolus, rate (including TCI-pause and system restore), and pause event types.
+
+*IV push delivery time:* `fmtBolusDelivery` in `history.js` was returning hardcoded "10 sec push". Added `pushDeliveryMinutes(doseMg, drugId)` to `constants.js` (3600 mL/h = 1 mL/s, 1-second minimum; mirrors `PUSH_RATE_MLH` in `events.js`). Now correctly computes duration from dose volume, e.g. 100mg at 1% = 6 sec push.
+
+*Chart threshold label:* `drawRightLabel()` in `chart.js` extended with optional `label2` parameter. When supplied, draws two lines centred on the y-value with `lineH=13px` spacing and a taller background box. Threshold call-site changed to `drawRightLabel(ctx, thresholdCe, 'Threshold', '#f59e0b', thresholdCe.toFixed(2))`. Target label unchanged (single line).
+
+359 tests across 12 suites, all passing. Branch: `claude/scale-tablet-interface-Yt13l`.
+
+---
+
 **Session 19 (2026-04-06):** Ce overshoot fix for CET Emulation planner — mid-range step-ups. Version 0.5.4. Two targeted changes to `planTCISchemeEmulation` in `js/sim/tci-planner.js`. Fix 1 (`cpOvershoot` guard): when a bolus was delivered and `cpAtMaint > ceTarget × 1.02` at maintenance start, use 2 Ce-boost intervals before Cp-targeting. Root cause: the `correctionRatio` inflates the bolus beyond what the analytical pause duration accounts for, leaving Cp above ceTarget at maintenance start; the Cp-targeting eigenstate then schedules infusion while Ce is still equilibrating upward, producing a ~4.125 peak at ~1 hour on a 3.5→4.0 step-up. The Ce-boost intervals directly constrain Ce via binary search, preventing the overshoot. Fix 2 (dynamic `stepMagnitude` threshold): for step-ups where `(ceTarget − Ce₀) / ceTarget ≤ 0.20` (small steps, e.g. 3.5→4.0), use 5% threshold / 0.62 avgfactor in the second-pass step extraction even when early maintenance rate ≥ 30 mL/h. The 8% threshold missed the slow V3-equilibration decline (4–6% over hours), causing Ce to drift to ~4.155 by 4 hours. Uses existing `currentCe` (captured at plan start) — no new variable needed. All 359 tests pass. Branch: `claude/fix-ce-overshoot-DdsF1`.
 
 ---
