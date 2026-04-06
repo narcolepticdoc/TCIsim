@@ -171,3 +171,11 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 *Files changed:* `js/pk/eleveld.js`, `index.html`, `js/ui/setup.js`, `js/sim/simulation.js`, `tests/test-pk.js` (44 tests), `tests/test-integration.js`.
 
 308 tests across 10 suites, all passing.
+
+**Session 16 (2026-04-06):** Large Ce undershoot on target decrease fixed in emulation planner. Version 0.5.2.
+
+*Root cause:* For large target drops (e.g., 4.5→2.5), the decay pause runs 9+ minutes at rate=0. Cp falls far faster than Ce (Cp=3.06 vs Ce=4.38 just 1 minute into the pause). When Ce finally reaches upperBound (2.625), Cp is ~1.5. ke0 equilibration immediately pulls Ce toward Cp, and the Cp-targeting maintenance rate can't raise Cp fast enough — Ce dips to 2.27 (9.2% below target).
+
+*Fix:* Extended the existing `ceBoostIntervals` mechanism (Ce-targeting binary search, already used for rate-only step-ups) to also activate when Cp is >10% below target at maintenance start. Number of intervals: `ceil(cpGap / (ceTarget × 0.1))`, capped at 8. Each interval finds the rate where `engine.advance(5, rate)` → Ce at +5min = target, advances the engine 2 min, then refits the eigenstate. By interval 4 (8 min): Ce ≈ 2.50, Cp ≈ 2.35; Cp-targeting takes over with a small gap, ke0 equilibration no longer drives Ce out of band.
+
+359 tests, all passing.
