@@ -35,20 +35,8 @@ const PUSH_RATE_MLH = 3600;
 
 /**
  * Create an event object.
+ * Defined inside createEventList() — uses closure-scoped genId().
  */
-function createEvent(drug, time, type, value, opts = {}) {
-  return {
-    id: genId(),
-    drug,                              // 'propofol' | 'fentanyl' | ...
-    time,                              // elapsed minutes
-    type,                              // 'rate' | 'bolus' | 'pause'
-    value,                             // mg/min for rate, mg for bolus, 0 for pause
-    source: opts.source || 'manual',   // 'tci' | 'manual' | 'system'
-    deliveryMode: opts.deliveryMode || 'pump', // 'pump' | 'push' (bolus only)
-    annotation: opts.annotation || '', // human-readable context
-    snapshot: opts.snapshot || null,    // Float64Array engine state after this event
-  };
-}
 
 /**
  * Create a multi-drug EventList manager.
@@ -57,6 +45,21 @@ export function createEventList() {
   let events = [];
   let _nextId = 1; // instance-scoped so clearAll() only resets this instance
   function genId() { return 'evt_' + String(_nextId++).padStart(5, '0'); }
+
+  function createEvent(drug, time, type, value, opts = {}) {
+    return {
+      id: genId(),
+      drug,                              // 'propofol' | 'fentanyl' | ...
+      time,                              // elapsed minutes
+      type,                              // 'rate' | 'bolus' | 'pause'
+      value,                             // mg/min for rate, mg for bolus, 0 for pause
+      source: opts.source || 'manual',   // 'tci' | 'manual' | 'system'
+      deliveryMode: opts.deliveryMode || 'pump', // 'pump' | 'push' (bolus only)
+      annotation: opts.annotation || '', // human-readable context
+      snapshot: opts.snapshot || null,    // Float64Array engine state after this event
+    };
+  }
+
   const engines = {};      // { drugId: engineInstance }
   const drugConfigs = {};  // { drugId: { concentration, bolusRateMlH } }
 
@@ -910,5 +913,3 @@ export function createEventList() {
     get raw() { return events; },
   };
 }
-
-export { createEvent };
