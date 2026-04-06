@@ -200,9 +200,9 @@ SimTIVA's `deliver_cpt` step extraction skips `cptRates[0]` (the high initial ra
 
 ### Session 14 (2026-04-05) — Fentanyl & Ketamine Drug Support (v0.5.0)
 
-**Fentanyl PK model (`js/pk/fentanyl.js`):** Shafer 1990 3-compartment. V1=12.7 L, V2=462.7 L, V3=238.1 L, CL=0.599 L/min, Q2=2.05 L/min, Q3=0.076 L/min (weight-scaled V1/CL). ke0=0.114/min (Scott 1985, t½≈6.1 min). Display unit: ng/mL.
+**Fentanyl PK model (`js/pk/fentanyl.js`):** Shafer 1990 3-compartment. Parameters corrected in v0.5.1 — see Session 15. ke0=0.1195 /min. Display unit: ng/mL.
 
-**Ketamine PK model (`js/pk/ketamine.js`):** Domino 1982 / Clements 1982 3-compartment. Weight-scaled V1/CL. Clinical range 200–4000 ng/mL. Display unit: ng/mL.
+**Ketamine PK model (`js/pk/ketamine.js`):** Domino/Navarrete 3-compartment with fixed population micro-constants. Parameters corrected in v0.5.1 — see Session 15. ke0=0.238 /min. Display unit: ng/mL.
 
 **Intermittent bolus mode:** New per-drug mode alongside Manual and TCI. IV-push–only — no pump events generated. Threshold keypad type sets the Ce redose threshold. History filtered to boluses only in this mode. Approach line uses `model.predictTrough()` for unlimited-lookahead redose countdown (essential for ketamine, whose Ce can take 200–600 min to decay). Step-bar shows delivery progress during bolus, then shows "Redose in M:SS" countdown text.
 
@@ -217,6 +217,28 @@ SimTIVA's `deliver_cpt` step extraction skips `cptRates[0]` (the high initial ra
 **BIS bands cleared on drug switch:** `computeEffectOverlay()` called inside `refreshChart()` (was only called at chart init); fentanyl/ketamine have no PD model so bands clear automatically.
 
 346 tests across 11 suites, all passing.
+
+---
+
+### Session 15 (2026-04-06) — PK Model Corrections and Bug Fixes (v0.5.1)
+
+**Fentanyl PK model corrected (`js/pk/fentanyl.js`):**
+- Shafer 1990 parameters: V1=7.35 L, V2=33.94 L, V3=275.62 L, CL=36.47 L/h, Q2=207.71 L/h, Q3=99.22 L/h, ke0=0.1195 /min
+- Shibutani 2004 inclusion criteria: `pkMass(tbw, bmi)` applies only when TBW ≥ 85 kg AND BMI > 30. Previous threshold (TBW > 80 kg, no BMI check) incorrectly triggered for tall lean patients and created a non-physiological discontinuity at the boundary. BMI computed from `patient.height` in `calcFentanylParams`.
+
+**Ketamine PK model corrected (`js/pk/ketamine.js`):**
+- Domino/Navarrete fixed-Kij parameterization: K10=0.4381, K12=0.5921, K21=0.2470, K13=0.5900, K31=0.0146 /min; ke0=0.238 /min; V1=0.063×weight; all other volumes and clearances derived from V1 and fixed micro-constants.
+
+**Non-selected tile freeze fixed (`js/ui/drug-panel.js`):**
+1. Approach line element (`$(dId + '-approach')`) was never written for non-selected drugs — it kept stale HTML from when the drug was last selected.
+2. `predictTrough` was called every rAF frame (~60×/sec) for each non-selected intermittent drug, causing ~2000 engine advances per frame per drug. Added `_nonSelectedCache` keyed by event count; `predictTrough` is called once per bolus, then `arrivalMin − t` computes the live countdown (same pattern as selected-drug `_approachCache`). Both the approach line and the bar countdown are now updated each frame.
+
+**Save/restore fixed (`js/app.js`):**
+- `eventsByDrug` serialisation loop was `for (const drugId of ['propofol'])` — fentanyl/ketamine events were never saved.
+- Mode and `ceTarget` collection likewise only covered `['propofol']`; `intermittentThresholds` was not saved at all.
+- All three drugs are now included in `eventsByDrug`, `modes`, `ceTargets`, and the new `intermittentThresholds` field. Restore applies all four.
+
+359 tests across 12 suites, all passing.
 
 ---
 
@@ -270,6 +292,8 @@ SimTIVA's `deliver_cpt` step extraction skips `cptRates[0]` (the high initial ra
 | `test-t0-edge.js` | 40 | t=0 boundary and edge cases |
 | `test-unit-safety.js` | 18 | Unit parameter validation |
 | `test-units.js` | 39 | Unit conversion, display formatting |
+| `test-fentanyl-pk.js` | 28 | Shafer 1990 parameters, Shibutani 2004 pkMass, BMI criteria |
+| `test-ketamine-pk.js` | 23 | Domino/Navarrete fixed-Kij parameters, V1 scaling |
 | **Total** | **308** | |
 
 All tests passing as of 2026-04-05 (v0.4.6).
