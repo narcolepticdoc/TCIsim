@@ -148,6 +148,20 @@ Final performance (35y M, 1000 mL/h, 0→3.0): RMSE 7.4% vs SimTIVA's 1.5%, gap 
 
 346 tests across 11 suites, all passing.
 
+**Session 15 (2026-04-06):** PK model corrections and bug fixes for fentanyl and ketamine. Version 0.5.1.
+
+*Fentanyl PK corrected (`js/pk/fentanyl.js`):* Shafer 1990 parameters replaced with authoritative values: V1=7.35 L, V2=33.94 L, V3=275.62 L, CL=36.47 L/h, Q2=207.71 L/h, Q3=99.22 L/h, ke0=0.1195 /min. Weight scaling via Shibutani 2004 pharmacokinetic mass, now requiring both TBW ≥ 85 kg AND BMI > 30 (the actual inclusion criteria from the derivation study). Previous threshold (TBW > 80 with no BMI gate) incorrectly applied the correction to tall lean patients and created a non-physiological discontinuity at the boundary. `pkMass(tbw, bmi)` now takes both arguments; `calcFentanylParams` computes BMI from `patient.height`. 28 tests (+4 boundary cases).
+
+*Ketamine PK corrected (`js/pk/ketamine.js`):* Replaced with Domino/Navarrete parameterization using fixed population micro-constants (K10=0.4381, K12=0.5921, K21=0.2470, K13=0.5900, K31=0.0146 /min; ke0=0.238 /min). V1=0.063×weight; V2, V3, CL, Q2, Q3 all derived from V1 and the fixed Kij. Model label updated to "Domino/Navarrete". 23 tests.
+
+*Non-selected tile approach line frozen (`js/ui/drug-panel.js`):* `$(dId + '-approach')` was only ever written by `updateApproachLine()` which only runs for the selected drug. Deselecting a tile left its approach line showing stale HTML that never counted down. Fixed: non-selected loop now also writes the approach line element.
+
+*Non-selected `predictTrough` called 60×/sec (`js/ui/drug-panel.js`):* The selected drug avoids calling `predictTrough` every frame by caching `arrivalMin` and using `arrivalMin − t` per frame. Non-selected drugs had no equivalent cache — `predictTrough` (~1000 engine advances internally) was fired at rAF rate. Fixed with `_nonSelectedCache` keyed by event count; `predictTrough` is now called once per bolus.
+
+*Fentanyl/ketamine events not saved (`js/app.js`):* `eventsByDrug` serialisation loop was `for (const drugId of ['propofol'])` with a `// extend for multi-drug` comment. Fentanyl/ketamine events were never written to the save blob. Modes and thresholds also only covered propofol. Fixed: all three drugs saved and restored, including `intermittentThresholds` which was a new saved field.
+
+359 tests across 12 suites, all passing.
+
 **Session 13 (2026-04-05):** eBIS opioid correction toggle. Version 0.4.6.
 
 *Bug:* eBIS reported ~24 vs SimTIVA's ~42 for a standard opioid patient (35M 170cm 70kg, Ce=3.5). Root cause: `eleveld.js` always applied the Eleveld 2018 paper's Ce50 opioid correction (`× exp(−0.567)`), halving Ce50 from 3.08 → 1.75 μg/mL. SimTIVA does not implement this correction.
