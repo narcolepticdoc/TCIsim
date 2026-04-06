@@ -330,6 +330,18 @@ The background rAF loop previously cleared the approach line element for all non
 
 ---
 
+### Session 20 (2026-04-06) — Restore Bug Fix (v0.5.5)
+
+**Root cause:** Session 19 moved `genId` inside `createEventList()` for instance-scoped ID counters (audit issue #6). But `createEvent` — a module-level function — still called `genId()`. In the browser, every call to `addBolus`/`addRate`/`addPause` threw `ReferenceError: genId is not defined`. The restore try-catch caught this, but `addAnnotation` also failed (timer not started yet), so the failure was completely silent.
+
+**Why tests passed:** Every test file inlines its own `genId`/`createEventList` copy rather than importing from `events.js`, so the broken module was never exercised.
+
+**Fix:** Moved `createEvent` inside `createEventList()`, immediately after `genId`, so it is within the closure and can see the instance-scoped counter. Removed the now-inaccessible `export { createEvent }` line. No external callers existed.
+
+359 tests across 12 suites, all passing.
+
+---
+
 ### Session 19 (2026-04-06) — Audit Remediation (v0.5.4)
 
 External code audit reviewed and independently verified against source. Four audit claims were false positives (file not truncated, Ce-boost engine correctly restored, CET small-deficit path intentional design, units.js `checkAllowed` not bypassed). The following issues were confirmed and fixed:
