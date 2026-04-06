@@ -240,6 +240,18 @@ SimTIVA's `deliver_cpt` step extraction skips `cptRates[0]` (the high initial ra
 
 359 tests across 12 suites, all passing.
 
+### Session 16 (2026-04-06) — Ce Undershoot on Target Decrease (v0.5.2)
+
+**Ce out-of-band undershoot on target decrease — two-part fix.**
+
+*Session 11 fix (v0.4.4):* Fixed `findMaintenanceRate` peak-constraint threshold (`ceTarget * 1.05` → `ceTarget`) and emulation step extraction to start from interval 0 instead of 1 in the decremental case. These resolved moderate target drops (e.g., 4.5→3.5, dip from 3.32 to within band).
+
+*This session (v0.5.2):* Large target drops (e.g., 4.5→2.5) still caused Ce to dip to 2.27 (9.2% below target). Root cause: the 9+ minute pause at rate=0 lets Cp fall much faster than Ce (screenshot: Cp=3.06 just 1 min into a pause from 4.5). By the time Ce reaches `upperBound` (2.625), Cp is ~1.5. ke0 equilibration pulls Ce toward Cp faster than the Cp-targeting maintenance rate can raise Cp.
+
+**Fix:** Activate Ce-targeting intervals (the existing `ceBoostIntervals` mechanism, used for rate-only step-ups) when Cp is >10% below target at maintenance start. The number of intervals scales with the Cp gap: `ceil(cpGap / (ceTarget × 0.1))`, capped at 8. For a 4.5→2.5 drop with Cp≈1.5: 4 intervals (8 min) of Ce-targeting, each finding the rate to hold Ce at target over the next 5 minutes. By the time Cp-targeting takes over, the Cp–Ce gap is small and ke0 no longer drives Ce out of band.
+
+359 tests across 12 suites, all passing.
+
 ---
 
 ## Known Issues
