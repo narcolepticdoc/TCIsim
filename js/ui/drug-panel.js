@@ -678,6 +678,7 @@ function update() {
                 const cached = _nonSelectedCache[dId];
                 let arrivalMin = null;
                 if (cached && cached.eventCount === evtCount2 &&
+                    cached.threshold === thr &&
                     cached.arrivalMin !== null && cached.arrivalMin > t) {
                   arrivalMin = cached.arrivalMin;
                 } else {
@@ -685,7 +686,7 @@ function update() {
                     const res = model.predictTrough(dId, t, thr);
                     if (res && res.time > t) arrivalMin = res.time;
                   } catch (e2) {}
-                  _nonSelectedCache[dId] = { arrivalMin, eventCount: evtCount2 };
+                  _nonSelectedCache[dId] = { arrivalMin, eventCount: evtCount2, threshold: thr };
                 }
                 if (arrivalMin !== null) {
                   const rem = arrivalMin - t;
