@@ -18,7 +18,7 @@ import * as history from './ui/history.js';
 import * as eventEditor from './ui/event-editor.js';
 import { createChart } from './ui/chart.js';
 import { ceForBIS } from './pk/pd.js';
-import { bolusDeliveryMinutes, setPumpSettings, APP_VERSION } from './util/constants.js';
+import { bolusDeliveryMinutes, setPumpSettings, getPumpSettings, APP_VERSION } from './util/constants.js';
 import * as persist from './ui/persist.js';
 import * as warnings from './ui/warnings.js';
 
@@ -34,6 +34,11 @@ function getPreStartClock(drugId) { return preStartClock[drugId] || 0; }
 function advancePreStartClock(drugId, by) { preStartClock[drugId] = (preStartClock[drugId] || 0) + by; }
 let annotations = []; // mode transitions, editorial actions
 let lastHistoryDimUpdate = 0; // throttle timestamp for history dimming
+
+// TCI delay popup state
+let pendingTCI = null;       // { drugId, ceTarget, tciMode } — held while delay modal is open
+let tciDelaySeconds = 10;    // last-selected delay, persists within session
+let tciCountdownInterval = null;
 
 // ---- Per-Drug Chart Configuration ----
 // yScale: multiply canonical mcg/mL curve values before passing to chart
@@ -493,13 +498,20 @@ function boot() {
       }
 
       if (type === 'ceTarget') {
-        // TCI target — pass selected planning mode
-        mode.setCeTarget(selectedDrug, canonicalValue);
         const tciMode = setup.getTciMode ? setup.getTciMode() : 'stepped';
-        model.planTCI(selectedDrug, t, canonicalValue, { tciMode });
-        mode.set(selectedDrug, 'tci', `TCI target Ce=${canonicalValue.toFixed(1)} μg/mL`);
-        // TCI plan starts immediately, advance by a small offset
-        if (!controls.isCaseStarted()) advancePreStartClock(selectedDrug, 0.01);
+        if (controls.isCaseStarted()) {
+          // During running case: show delay modal so user can pre-set the pump.
+          // planTCI is deferred to when the user confirms the delay.
+          pendingTCI = { drugId: selectedDrug, ceTarget: canonicalValue, tciMode };
+          showTciDelayModal(canonicalValue);
+          return; // skip refreshChart — nothing committed yet
+        } else {
+          // Pre-case: plan immediately, no delay needed
+          mode.setCeTarget(selectedDrug, canonicalValue);
+          model.planTCI(selectedDrug, t, canonicalValue, { tciMode });
+          mode.set(selectedDrug, 'tci', `TCI target Ce=${canonicalValue.toFixed(1)} μg/mL`);
+          advancePreStartClock(selectedDrug, 0.01);
+        }
       } else if (type === 'rate') {
         // Manual rate — drops out of TCI
         if (mode.get(selectedDrug) === 'tci') {
@@ -707,14 +719,39 @@ function boot() {
     closeModal('modal-new-case');
   });
 
+  // Wire TCI delay modal
+  const btnTciDelayConfirm = $('tci-delay-confirm');
+  if (btnTciDelayConfirm) btnTciDelayConfirm.addEventListener('click', () => commitTciDelay());
+  const btnTciDelayCancel = $('tci-delay-cancel');
+  if (btnTciDelayCancel) btnTciDelayCancel.addEventListener('click', () => {
+    pendingTCI = null;
+    closeModal('modal-tci-delay');
+  });
+
+  // Wire TCI first-step countdown modal
+  const btnTciFsOk = $('tci-fs-ok');
+  if (btnTciFsOk) btnTciFsOk.addEventListener('click', () => {
+    if (tciCountdownInterval) { clearInterval(tciCountdownInterval); tciCountdownInterval = null; }
+    closeModal('modal-tci-firststep');
+  });
+
   // Wire modal close (click overlay or Escape)
   document.querySelectorAll('.modal-overlay').forEach(o => {
     o.addEventListener('click', e => {
-      if (e.target === o) o.classList.remove('open');
+      if (e.target !== o) return;
+      if (o.id === 'modal-tci-delay') pendingTCI = null;
+      if (o.id === 'modal-tci-firststep' && tciCountdownInterval) {
+        clearInterval(tciCountdownInterval); tciCountdownInterval = null;
+      }
+      o.classList.remove('open');
     });
   });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+      if ($('modal-tci-delay').classList.contains('open')) pendingTCI = null;
+      if ($('modal-tci-firststep').classList.contains('open') && tciCountdownInterval) {
+        clearInterval(tciCountdownInterval); tciCountdownInterval = null;
+      }
       document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
     }
   });
@@ -735,6 +772,90 @@ function boot() {
 
 function closeModal(id) {
   $(id).classList.remove('open');
+}
+
+// ---- TCI Delay Modal ----
+
+const TCI_DELAY_OPTIONS = [5, 10, 15, 20, 30]; // seconds
+
+function showTciDelayModal(ceTarget) {
+  $('tci-delay-subtitle').textContent = `Ce = ${ceTarget.toFixed(1)} µg/mL`;
+
+  // Render delay option pills
+  const container = $('tci-delay-options');
+  container.innerHTML = '';
+  TCI_DELAY_OPTIONS.forEach(sec => {
+    const btn = document.createElement('button');
+    btn.className = 'tci-delay-opt' + (sec === tciDelaySeconds ? ' active' : '');
+    btn.textContent = `${sec}s`;
+    btn.addEventListener('click', () => {
+      tciDelaySeconds = sec;
+      container.querySelectorAll('.tci-delay-opt').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+    container.appendChild(btn);
+  });
+
+  $('modal-tci-delay').classList.add('open');
+}
+
+function commitTciDelay() {
+  if (!pendingTCI) return;
+  const { drugId, ceTarget, tciMode } = pendingTCI;
+  pendingTCI = null;
+
+  const futureTime = timer.getElapsedMinutes() + tciDelaySeconds / 60;
+  mode.setCeTarget(drugId, ceTarget);
+  const { scheme } = model.planTCI(drugId, futureTime, ceTarget, { tciMode });
+  mode.set(drugId, 'tci', `TCI target Ce=${ceTarget.toFixed(1)} μg/mL`);
+  refreshChart();
+
+  closeModal('modal-tci-delay');
+  showTciFirstStepModal(scheme, drugId, tciDelaySeconds);
+}
+
+// ---- TCI First-Step Countdown Modal ----
+
+function showTciFirstStepModal(scheme, drugId, delaySeconds) {
+  const firstStep = scheme && scheme[0];
+  if (!firstStep) return;
+
+  const patient = model.getPatient();
+  const ps = getPumpSettings(drugId);
+  let actionText;
+
+  if (firstStep.type === 'bolus') {
+    const mg = firstStep.value;
+    const mcgPerKg = Math.round(mg * 1000 / patient.weight);
+    const ml = (mg / ps.concentration).toFixed(1);
+    actionText = `Bolus ${mcgPerKg} mcg/kg = ${ml} mL`;
+  } else {
+    // Rate step (maintenance or decay hold at 0)
+    const mlPerHr = Math.round(firstStep.value / ps.concentration * 60);
+    actionText = firstStep.value === 0 ? 'Hold infusion (pump off)' : `Set rate to ${mlPerHr} mL/hr`;
+  }
+
+  $('tci-fs-action').textContent = actionText;
+  $('modal-tci-firststep').classList.add('open');
+
+  // Clear any existing countdown
+  if (tciCountdownInterval) clearInterval(tciCountdownInterval);
+
+  let remainingMs = delaySeconds * 1000;
+  const intervalMs = 100;
+
+  function tick() {
+    const secs = remainingMs / 1000;
+    $('tci-fs-countdown').textContent = secs > 0 ? `in ${secs.toFixed(1)}s` : 'Now!';
+    if (remainingMs <= 0) {
+      clearInterval(tciCountdownInterval);
+      tciCountdownInterval = null;
+      setTimeout(() => closeModal('modal-tci-firststep'), 1500);
+    }
+    remainingMs -= intervalMs;
+  }
+  tick();
+  tciCountdownInterval = setInterval(tick, intervalMs);
 }
 
 function setView(v) {
