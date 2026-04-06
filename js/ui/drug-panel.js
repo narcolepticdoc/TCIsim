@@ -25,6 +25,7 @@ let getDrugId                = null;   // () => selected drug id
 let getDrugIds                        = null;   // () => string[] all drug ids with cards
 let getModeForDrug                    = null;   // (drugId) => mode string for any drug
 let getIntermittentThresholdForDrug   = null;   // (drugId) => canonical mcg/mL threshold
+let getCeTargetForDrug                = null;   // (drugId) => TCI Ce target (mcg/mL canonical)
 let rafId                    = null;
 let onFrame                  = null;   // callback: (elapsedMinutes) => void
 
@@ -88,10 +89,10 @@ let _approachCache = {
 // Format: { [drugId]: { arrivalMin: number|null, eventCount: number } }
 const _nonSelectedCache = {};
 
-// Per-drug cache for non-selected manual steady-state line.
-// Re-scans only when the event count changes; arrivalMin updates live each frame.
-// Format: { [drugId]: { eventCount: number, ssResult: {ssCe, ssMin}|null, arrivalMin: number|null } }
-const _nonSelectedSsCache = {};
+// Per-drug cache for non-selected approach line (all non-intermittent modes).
+// Invalidates when eventCount, mode, ceTarget, or rate changes, or countdown expires.
+// Format: { [drugId]: { eventCount, mode, ceTarget, rate, prefix, arrivalMin, staticText } }
+const _nonSelectedApproachCache = {};
 
 // ──────────────────────────────────────────────────────────────────
 // Init / lifecycle
@@ -107,6 +108,7 @@ export function init(opts = {}) {
   getDrugIds               = opts.getDrugIds     || (() => ['propofol', 'fentanyl', 'ketamine']);
   getModeForDrug                  = opts.getModeForDrug                  || null;
   getIntermittentThresholdForDrug = opts.getIntermittentThresholdForDrug || null;
+  getCeTargetForDrug              = opts.getCeTargetForDrug              || null;
   onFrame                         = opts.onFrame                         || null;
   loop();
 }
@@ -200,18 +202,26 @@ function fmtRateInline(drugId, rate) {
 // ──────────────────────────────────────────────────────────────────
 
 /**
- * Find when Ce first comes within 0.05 of ceTarget by scanning _sharedCurve.
+ * Find when Ce first comes within 0.05 of ceTarget by scanning the given curve.
  * Returns delta-minutes from t, or null if not found.
  */
-function estimateTimeToTarget(t, Ce, ceTarget) {
-  if (!_sharedCurve) return null;
+function _estimateTimeToTarget(curve, t, Ce, ceTarget) {
+  if (!curve) return null;
   const approaching = Ce < ceTarget;
-  for (const pt of _sharedCurve) {
+  for (const pt of curve) {
     if (pt.time <= t) continue;
     if (approaching  && pt.Ce >= ceTarget - 0.05) return pt.time - t;
     if (!approaching && pt.Ce <= ceTarget + 0.05) return pt.time - t;
   }
   return null;
+}
+
+/**
+ * Find when Ce first comes within 0.05 of ceTarget by scanning _sharedCurve.
+ * Returns delta-minutes from t, or null if not found.
+ */
+function estimateTimeToTarget(t, Ce, ceTarget) {
+  return _estimateTimeToTarget(_sharedCurve, t, Ce, ceTarget);
 }
 
 /**
@@ -264,6 +274,61 @@ function _scanSteadyState(curve, t) {
 
 function estimateSteadyState(t) {
   return _scanSteadyState(_sharedCurve, t);
+}
+
+/**
+ * Compute approach line data for a non-selected drug using an explicit curve.
+ * Mirrors computeApproachData logic but without lockedSsCe (not needed off-screen).
+ * Returns { prefix, arrivalMin, staticText }.
+ */
+function _computeApproachFromCurve(drugId, t, m, Ce, ceTarget, rate, curve) {
+  const noData = { prefix: '', arrivalMin: null, staticText: '' };
+
+  // Pump stopped / paused non-TCI — emergence countdown
+  if (m === 'none' || (rate === 0 && m !== 'tci' && m !== 'intermittent')) {
+    if (Ce <= EMERGENCE_CE + 0.05) return noData;
+    try {
+      const result = model.predictTrough(drugId, t, EMERGENCE_CE);
+      if (result && result.time !== null && result.time > t) {
+        return {
+          prefix: `Emergence <span class="appr-val">${EMERGENCE_CE.toFixed(1)}</span> in `,
+          arrivalMin: result.time, staticText: '',
+        };
+      }
+    } catch(e) {}
+    return noData;
+  }
+
+  // TCI mode — time to reach target (curve-based)
+  if (m === 'tci' && ceTarget > 0) {
+    if (Math.abs(Ce - ceTarget) < 0.05) {
+      return { prefix: '', arrivalMin: null,
+        staticText: `At Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
+    }
+    const dt = _estimateTimeToTarget(curve, t, Ce, ceTarget);
+    if (dt !== null && dt > 0) {
+      return {
+        prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
+        arrivalMin: t + dt, staticText: '',
+      };
+    }
+    return { prefix: '', arrivalMin: null,
+      staticText: `Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
+  }
+
+  // Manual infusion — time to steady state (curve-based)
+  if (m === 'manual' && rate > 0) {
+    const ss = _scanSteadyState(curve, t);
+    if (ss) {
+      const ceStr = `<span class="appr-val">${ss.ssCe.toFixed(1)}</span>`;
+      if (ss.ssMin > 0.5) {
+        return { prefix: `Steady state ≈ ${ceStr} in `, arrivalMin: t + ss.ssMin, staticText: '' };
+      }
+      return { prefix: '', arrivalMin: null, staticText: `Steady state ≈ ${ceStr}` };
+    }
+  }
+
+  return noData;
 }
 
 /**
@@ -559,49 +624,8 @@ function update() {
 
       // Step-bar + approach line for non-selected drug
       const approachEl2 = $(dId + '-approach');
-      if (dMode !== 'intermittent') {
-        updateStepBar(dId, t);
-        // Show steady-state countdown for manual infusions
-        let ssHtml = '';
-        if (dMode === 'manual' && dRate > 0 && approachEl2) {
-          let evtCount2ss = 0;
-          try { evtCount2ss = model.getEvents(dId).length; } catch(e2) {}
-          const ssCache = _nonSelectedSsCache[dId];
-          if (ssCache && ssCache.eventCount === evtCount2ss) {
-            // Re-use cached result; update live countdown from stored arrivalMin
-            if (ssCache.arrivalMin !== null) {
-              const rem2 = ssCache.arrivalMin - t;
-              if (rem2 > 0.5) {
-                const ceStr2 = `<span class="appr-val">${ssCache.ssResult.ssCe.toFixed(1)}</span>`;
-                ssHtml = `Steady state ≈ ${ceStr2} in <span class="appr-time">${fmtCountdown(rem2)}</span>`;
-              } else if (ssCache.ssResult) {
-                ssHtml = `Steady state ≈ <span class="appr-val">${ssCache.ssResult.ssCe.toFixed(1)}</span>`;
-              }
-            }
-          } else {
-            let ss2 = null;
-            try {
-              const curve2 = model.computeCurve(dId, 0, 120, 1 / 6);
-              ss2 = _scanSteadyState(curve2, t);
-            } catch(e2) {}
-            _nonSelectedSsCache[dId] = {
-              eventCount: evtCount2ss,
-              ssResult: ss2,
-              arrivalMin: ss2 ? t + ss2.ssMin : null,
-            };
-            if (ss2) {
-              const ceStr2 = `<span class="appr-val">${ss2.ssCe.toFixed(1)}</span>`;
-              if (ss2.ssMin > 0.5) {
-                ssHtml = `Steady state ≈ ${ceStr2} in <span class="appr-time">${fmtCountdown(ss2.ssMin)}</span>`;
-              } else {
-                ssHtml = `Steady state ≈ ${ceStr2}`;
-              }
-            }
-          }
-        }
-        if (approachEl2 && approachEl2.innerHTML !== ssHtml) approachEl2.innerHTML = ssHtml;
-      } else {
-        // Intermittent: show bolus progress or redose countdown
+      if (dMode === 'intermittent') {
+        // Intermittent: show bolus progress bar, or below-threshold / redose countdown
         const barEl2 = $(dId + '-bar');
         const cntEl2 = $(dId + '-bar-countdown');
         let hasNextEvt2 = false;
@@ -654,6 +678,44 @@ function update() {
           }
           if (cntEl2) cntEl2.textContent = cntText;
           if (approachEl2 && approachEl2.innerHTML !== approachHtml) approachEl2.innerHTML = approachHtml;
+        }
+      } else {
+        // Non-intermittent: step-bar + general approach line (TCI, emergence, steady state)
+        updateStepBar(dId, t);
+        if (approachEl2) {
+          const dCeTarget = getCeTargetForDrug ? getCeTargetForDrug(dId) : 0;
+          let evtCount2 = 0;
+          try { evtCount2 = model.getEvents(dId).length; } catch(e2) {}
+          const ac = _nonSelectedApproachCache[dId];
+          const stale = !ac ||
+            ac.eventCount !== evtCount2 ||
+            ac.mode       !== dMode     ||
+            Math.abs((ac.ceTarget || 0) - dCeTarget) > 0.001 ||
+            Math.abs((ac.rate     || 0) - dRate)     > 0.01  ||
+            (ac.arrivalMin !== null && ac.arrivalMin <= t);  // countdown expired
+          if (stale) {
+            // Compute curve for modes that need one (TCI target / manual SS)
+            let curve2 = null;
+            if (dMode === 'tci' || dMode === 'manual') {
+              try { curve2 = model.computeCurve(dId, 0, 120, 1 / 6); } catch(e2) {}
+            }
+            const result = _computeApproachFromCurve(dId, t, dMode, conc.Ce, dCeTarget, dRate, curve2);
+            _nonSelectedApproachCache[dId] = {
+              eventCount: evtCount2, mode: dMode, ceTarget: dCeTarget, rate: dRate,
+              prefix: result.prefix, arrivalMin: result.arrivalMin, staticText: result.staticText,
+            };
+          }
+          const nac = _nonSelectedApproachCache[dId];
+          let html = '';
+          if (nac.arrivalMin !== null) {
+            const rem = nac.arrivalMin - t;
+            if (rem > 0) {
+              html = nac.prefix + `<span class="appr-time">${fmtCountdown(rem)}</span>`;
+            }
+          } else {
+            html = nac.staticText || '';
+          }
+          if (approachEl2.innerHTML !== html) approachEl2.innerHTML = html;
         }
       }
     } catch (e) {}
