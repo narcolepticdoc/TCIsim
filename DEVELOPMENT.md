@@ -2,6 +2,36 @@
 
 ## Session History
 
+### Session 19 (2026-04-06) — Emulation Planner Ce Overshoot Fix (v0.5.3 → v0.5.4)
+
+Two targeted changes to `planTCISchemeEmulation` in `js/sim/tci-planner.js`:
+
+**Fix 1 — `cpOvershoot` guard:**
+For mid-range step-ups (e.g. 3.5→4.0), a bolus is delivered and `hadBolus=true` makes
+`needsCeBoost=false`, so `ceBoostIntervals=0` and Cp-targeting starts immediately. The
+`correctionRatio` inflates the bolus beyond what the analytical pause duration accounts
+for, leaving `cpAtMaint > ceTarget` at maintenance start. The Cp-targeting eigenstate then
+schedules infusion while Ce is still equilibrating upward — producing a ~4.125 Ce peak at
+~1 hour (3% overshoot within the 5% clinical band but measurable).
+
+Fix: when `hadBolus && cpAtMaint > ceTarget × 1.02`, use 2 Ce-boost intervals before
+entering Cp-targeting. Ce-boost does binary search targeting Ce directly, preventing the
+lag-driven overshoot. Inserted as a third case in `ceBoostIntervals` computation:
+`needsCeBoost ? 3 : cpLiftIntervals > 0 ? cpLiftIntervals : cpOvershoot ? 2 : 0`.
+
+**Fix 2 — Dynamic threshold with `stepMagnitude`:**
+For small step-ups (<20% Ce increase), the long-term V3-equilibration rate correction is a
+gradual 4–6% decline over hours — below the 8% `cptThreshold` and therefore silently
+skipped. Ce drifts to ~4.155 by 4 hours. Fix: compute
+`stepMagnitude = (ceTarget − currentCe) / ceTarget`; if `earlyRateMlH ≥ 30 AND
+stepMagnitude > 0.20`, use original 8%/0.667 values; otherwise use 5%/0.62 to catch the
+subtle correction. Uses existing `currentCe` (captured right after `engine.setState(startState)`)
+— no new variable needed.
+
+359 tests across 12 suites, all passing.
+
+---
+
 ### Sessions 1-6 (2026-03-19 to 2026-03-30)
 
 Built the core application:
