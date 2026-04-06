@@ -659,12 +659,14 @@ function update() {
 
         if (hasNextEvt2) {
           updateStepBar(dId, t);
+          if (barEl2) barEl2.parentElement?.classList.remove('step-bar-below');
           if (approachEl2 && approachEl2.innerHTML !== '') approachEl2.innerHTML = '';
         } else {
           // cntHtml → step-bar-countdown; approachHtml → approach line; barPct → bar width
           let cntHtml = '';
           let approachHtml = '';
           let barPct = 0;
+          let isBelowThreshold = false;
           if (getIntermittentThresholdForDrug) {
             const thr = getIntermittentThresholdForDrug(dId);
             if (thr > 0) {
@@ -673,6 +675,7 @@ function update() {
                 // Below threshold: flash in approach line, bar full
                 approachHtml = '<span class="appr-below">Below Threshold</span>';
                 barPct = 100;
+                isBelowThreshold = true;
               } else {
                 // Counting down: "Redose in M:SS" in step-bar, bar fills toward threshold
                 const cached = _nonSelectedCache[dId];
@@ -699,6 +702,7 @@ function update() {
             }
           }
           if (barEl2) barEl2.style.width = barPct + '%';
+          if (barEl2) barEl2.parentElement?.classList.toggle('step-bar-below', isBelowThreshold);
           if (cntEl2 && cntEl2.innerHTML !== cntHtml) cntEl2.innerHTML = cntHtml;
           if (approachEl2 && approachEl2.innerHTML !== approachHtml) approachEl2.innerHTML = approachHtml;
         }
@@ -833,8 +837,10 @@ function update() {
 
       if (hasNextEvt) {
         updateStepBar(drugId, t);                     // bolus delivery in progress
+        barEl?.parentElement?.classList.remove('step-bar-below');
       } else if (_approachCache.arrivalMin !== null) {
         const rem = _approachCache.arrivalMin - t;
+        barEl?.parentElement?.classList.remove('step-bar-below');
         if (barEl) barEl.style.width = _intermittentBarPct(drugId, t, _approachCache.arrivalMin) + '%';
         if (cntEl) {
           const newHtml = rem > 0
@@ -843,6 +849,8 @@ function update() {
           if (cntEl.innerHTML !== newHtml) cntEl.innerHTML = newHtml;
         }
       } else {
+        // Ce is below threshold — no predicted threshold crossing
+        barEl?.parentElement?.classList.add('step-bar-below');
         if (barEl) barEl.style.width = '0%';
         if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
       }
