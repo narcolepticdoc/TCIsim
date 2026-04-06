@@ -88,6 +88,11 @@ let _approachCache = {
 // Format: { [drugId]: { arrivalMin: number|null, eventCount: number } }
 const _nonSelectedCache = {};
 
+// Per-drug cache for non-selected manual steady-state line.
+// Re-scans only when the event count changes; arrivalMin updates live each frame.
+// Format: { [drugId]: { eventCount: number, ssResult: {ssCe, ssMin}|null, arrivalMin: number|null } }
+const _nonSelectedSsCache = {};
+
 // ──────────────────────────────────────────────────────────────────
 // Init / lifecycle
 // ──────────────────────────────────────────────────────────────────
@@ -238,23 +243,27 @@ function estimateTimeToThreshold(t, ceTarget) {
  *
  * Returns { ssCe, ssMin } or null.
  */
-function estimateSteadyState(t) {
-  if (!_sharedCurve || _sharedCurve.length < 2) return null;
+function _scanSteadyState(curve, t) {
+  if (!curve || curve.length < 2) return null;
 
-  const stepMin     = _sharedCurve[1].time - _sharedCurve[0].time;
+  const stepMin     = curve[1].time - curve[0].time;
   const windowSteps = Math.max(1, Math.round(SS_WINDOW_MIN / stepMin));
 
   // Find start index: first sample at or after t
   let startIdx = 0;
-  while (startIdx < _sharedCurve.length && _sharedCurve[startIdx].time < t) startIdx++;
+  while (startIdx < curve.length && curve[startIdx].time < t) startIdx++;
 
-  for (let i = startIdx; i + windowSteps < _sharedCurve.length; i++) {
-    const drift = Math.abs(_sharedCurve[i + windowSteps].Ce - _sharedCurve[i].Ce);
+  for (let i = startIdx; i + windowSteps < curve.length; i++) {
+    const drift = Math.abs(curve[i + windowSteps].Ce - curve[i].Ce);
     if (drift < SS_DRIFT_THRESHOLD) {
-      return { ssCe: _sharedCurve[i].Ce, ssMin: _sharedCurve[i].time - t };
+      return { ssCe: curve[i].Ce, ssMin: curve[i].time - t };
     }
   }
   return null;
+}
+
+function estimateSteadyState(t) {
+  return _scanSteadyState(_sharedCurve, t);
 }
 
 /**
@@ -272,7 +281,7 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
   // Intermittent bolus mode — countdown to redose threshold
   if (m === 'intermittent' && ceTarget > 0) {
     if (Ce <= ceTarget) {
-      return { prefix: '', arrivalMin: null, staticText: 'Redose now', newLockedSsCe: null };
+      return { prefix: '', arrivalMin: null, staticText: '<span class="appr-below">Below Threshold</span>', newLockedSsCe: null };
     }
     // Use predictTrough for unlimited lookahead — not limited by chart curve length.
     // Essential for ketamine where Ce decay can extend far beyond the 120-min curve.
@@ -552,7 +561,45 @@ function update() {
       const approachEl2 = $(dId + '-approach');
       if (dMode !== 'intermittent') {
         updateStepBar(dId, t);
-        if (approachEl2 && approachEl2.innerHTML !== '') approachEl2.innerHTML = '';
+        // Show steady-state countdown for manual infusions
+        let ssHtml = '';
+        if (dMode === 'manual' && dRate > 0 && approachEl2) {
+          let evtCount2ss = 0;
+          try { evtCount2ss = model.getEvents(dId).length; } catch(e2) {}
+          const ssCache = _nonSelectedSsCache[dId];
+          if (ssCache && ssCache.eventCount === evtCount2ss) {
+            // Re-use cached result; update live countdown from stored arrivalMin
+            if (ssCache.arrivalMin !== null) {
+              const rem2 = ssCache.arrivalMin - t;
+              if (rem2 > 0.5) {
+                const ceStr2 = `<span class="appr-val">${ssCache.ssResult.ssCe.toFixed(1)}</span>`;
+                ssHtml = `Steady state ≈ ${ceStr2} in <span class="appr-time">${fmtCountdown(rem2)}</span>`;
+              } else if (ssCache.ssResult) {
+                ssHtml = `Steady state ≈ <span class="appr-val">${ssCache.ssResult.ssCe.toFixed(1)}</span>`;
+              }
+            }
+          } else {
+            let ss2 = null;
+            try {
+              const curve2 = model.computeCurve(dId, 0, 120, 1 / 6);
+              ss2 = _scanSteadyState(curve2, t);
+            } catch(e2) {}
+            _nonSelectedSsCache[dId] = {
+              eventCount: evtCount2ss,
+              ssResult: ss2,
+              arrivalMin: ss2 ? t + ss2.ssMin : null,
+            };
+            if (ss2) {
+              const ceStr2 = `<span class="appr-val">${ss2.ssCe.toFixed(1)}</span>`;
+              if (ss2.ssMin > 0.5) {
+                ssHtml = `Steady state ≈ ${ceStr2} in <span class="appr-time">${fmtCountdown(ss2.ssMin)}</span>`;
+              } else {
+                ssHtml = `Steady state ≈ ${ceStr2}`;
+              }
+            }
+          }
+        }
+        if (approachEl2 && approachEl2.innerHTML !== ssHtml) approachEl2.innerHTML = ssHtml;
       } else {
         // Intermittent: show bolus progress or redose countdown
         const barEl2 = $(dId + '-bar');
@@ -575,9 +622,10 @@ function update() {
           if (getIntermittentThresholdForDrug) {
             const thr = getIntermittentThresholdForDrug(dId);
             if (thr > 0) {
+              warnings.checkBelowThreshold(dId, conc.Ce <= thr);
               if (conc.Ce <= thr) {
-                cntText = 'Redose now';
-                approachHtml = 'Redose now';
+                cntText = 'Below Threshold';
+                approachHtml = '<span class="appr-below">Below Threshold</span>';
               } else {
                 // Use cached arrivalMin to avoid calling predictTrough every frame.
                 // Invalidate only when the event list changes (new bolus, reset, etc.).
@@ -633,6 +681,8 @@ function update() {
   // ── Approach line ───────────────────────────────────────────────
   if (caseStarted) {
     updateApproachLine(drugId, t, m, Ce, ceTarget, rate);
+    warnings.checkBelowThreshold(drugId,
+      m === 'intermittent' && ceTarget > 0 && Ce <= ceTarget);
   } else {
     const el = $(drugId + '-approach');
     if (el) el.innerHTML = '';

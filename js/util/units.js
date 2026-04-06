@@ -112,7 +112,7 @@ export function formatValue(value, unit) {
   if (unit === 'mcg/kg') return value.toFixed(1);
   if (unit === 'mg/min') return value.toFixed(2);
   if (unit === 'mg') return value.toFixed(1);
-  if (unit === 'mcg') return value.toFixed(0);
+  if (unit === 'mcg') return value.toFixed(1);
   if (unit === 'mL') return value.toFixed(1);
   if (unit === 'mcg/mL') return value.toFixed(2);
   if (unit === 'ng/mL') return value.toFixed(1);

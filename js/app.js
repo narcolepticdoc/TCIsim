@@ -632,30 +632,34 @@ function boot() {
     const alertVal       = $('set-alert-val');
     const prepSoundChk   = $('set-prep-sound');
     const alertSoundChk  = $('set-alert-sound');
+    const redoseSoundChk = $('set-redose-sound');
     if (!prepSlider || !alertSlider) return;
 
     // Populate controls from saved settings
     prepSlider.value  = savedSettings.prepSec;
     alertSlider.value = savedSettings.alertSec;
-    if (prepVal)       prepVal.textContent      = savedSettings.prepSec   + 's';
-    if (alertVal)      alertVal.textContent     = savedSettings.alertSec  + 's';
-    if (prepSoundChk)  prepSoundChk.checked     = savedSettings.prepSound;
-    if (alertSoundChk) alertSoundChk.checked    = savedSettings.alertSound;
+    if (prepVal)        prepVal.textContent       = savedSettings.prepSec    + 's';
+    if (alertVal)       alertVal.textContent      = savedSettings.alertSec   + 's';
+    if (prepSoundChk)   prepSoundChk.checked      = savedSettings.prepSound;
+    if (alertSoundChk)  alertSoundChk.checked     = savedSettings.alertSound;
+    if (redoseSoundChk) redoseSoundChk.checked    = savedSettings.redoseSound ?? true;
 
     function saveAll() {
-      const prepSec    = parseInt(prepSlider.value,  10);
-      const alertSec   = parseInt(alertSlider.value, 10);
-      const prepSound  = prepSoundChk  ? prepSoundChk.checked  : false;
-      const alertSound = alertSoundChk ? alertSoundChk.checked : true;
+      const prepSec     = parseInt(prepSlider.value,  10);
+      const alertSec    = parseInt(alertSlider.value, 10);
+      const prepSound   = prepSoundChk   ? prepSoundChk.checked   : false;
+      const alertSound  = alertSoundChk  ? alertSoundChk.checked  : true;
+      const redoseSound = redoseSoundChk ? redoseSoundChk.checked : true;
       if (prepVal)  prepVal.textContent  = prepSec  + 's';
       if (alertVal) alertVal.textContent = alertSec + 's';
-      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound });
+      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound });
     }
 
     prepSlider.addEventListener('input',    saveAll);
     alertSlider.addEventListener('input',   saveAll);
-    if (prepSoundChk)  prepSoundChk.addEventListener('change',  saveAll);
-    if (alertSoundChk) alertSoundChk.addEventListener('change', saveAll);
+    if (prepSoundChk)   prepSoundChk.addEventListener('change',   saveAll);
+    if (alertSoundChk)  alertSoundChk.addEventListener('change',  saveAll);
+    if (redoseSoundChk) redoseSoundChk.addEventListener('change', saveAll);
 
     const btnSettingsOpen  = $('btn-settings');
     const btnSettingsClose = $('btn-settings-close');

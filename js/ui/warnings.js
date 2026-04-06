@@ -17,7 +17,7 @@ import { fromCanonical, formatValue, getDefaultUnit, getAllowedUnits, getPrefKey
 import { unlockAudio, playAlert } from './alert-sound.js';
 
 const STORAGE_KEY = 'tci-warn-settings';
-const DEFAULTS     = { prepSec: 30, prepSound: false, alertSec: 10, alertSound: true };
+const DEFAULTS     = { prepSec: 30, prepSound: false, alertSec: 10, alertSound: true, redoseSound: true };
 
 const DRUG_NAMES = {
   propofol:     'Propofol',
@@ -37,6 +37,10 @@ const _alertFired     = new Set();
 // Active popups — eventId → HTMLElement
 const _activePopups = new Map();
 
+// Tracks which drugIds are currently below their intermittent redose threshold.
+// Used to fire the chime once on the above→below transition.
+const _belowThresholdActive = new Set();
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 export function getSettings() {
@@ -45,18 +49,19 @@ export function getSettings() {
     if (raw) {
       const p = JSON.parse(raw);
       return {
-        prepSec:   (typeof p.prepSec   === 'number'  && p.prepSec  >= 0) ? p.prepSec   : DEFAULTS.prepSec,
-        prepSound: (typeof p.prepSound === 'boolean')                    ? p.prepSound  : DEFAULTS.prepSound,
-        alertSec:  (typeof p.alertSec  === 'number'  && p.alertSec >= 0) ? p.alertSec  : DEFAULTS.alertSec,
-        alertSound:(typeof p.alertSound=== 'boolean')                    ? p.alertSound : DEFAULTS.alertSound,
+        prepSec:    (typeof p.prepSec    === 'number'  && p.prepSec  >= 0) ? p.prepSec    : DEFAULTS.prepSec,
+        prepSound:  (typeof p.prepSound  === 'boolean')                    ? p.prepSound   : DEFAULTS.prepSound,
+        alertSec:   (typeof p.alertSec   === 'number'  && p.alertSec >= 0) ? p.alertSec   : DEFAULTS.alertSec,
+        alertSound: (typeof p.alertSound === 'boolean')                    ? p.alertSound  : DEFAULTS.alertSound,
+        redoseSound:(typeof p.redoseSound=== 'boolean')                    ? p.redoseSound : DEFAULTS.redoseSound,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -76,9 +81,25 @@ export function reset() {
   _activePopups.clear();
   _prepSoundFired.clear();
   _alertFired.clear();
+  _belowThresholdActive.clear();
   document.querySelectorAll('.drug-card.warn-prep').forEach(el => el.classList.remove('warn-prep'));
   const topbar = document.querySelector('.sim-topbar');
   if (topbar) topbar.classList.remove('warn-header');
+}
+
+/**
+ * Call each frame for each intermittent drug.
+ * Fires a one-shot chime on the above→below threshold transition.
+ * Clears state on the below→above transition so the next drop re-fires.
+ */
+export function checkBelowThreshold(drugId, isBelow) {
+  const wasBelow = _belowThresholdActive.has(drugId);
+  if (isBelow && !wasBelow) {
+    _belowThresholdActive.add(drugId);
+    if (getSettings().redoseSound) playAlert('info');
+  } else if (!isBelow && wasBelow) {
+    _belowThresholdActive.delete(drugId);
+  }
 }
 
 // ── Per-frame check (call every rAF frame) ────────────────────────────────────
