@@ -141,10 +141,31 @@
     .drug-card .drug-bis{font-family:var(--font-mono);font-size:11px}
     /* Progress bar + countdown */
     .drug-card .step-bar-area{margin-top:2px}
-    .drug-card .step-bar-countdown{font-family:var(--font-mono);font-size:9px;color:var(--text-muted);text-align:right;min-height:11px}
+    .drug-card .step-bar-countdown{font-family:var(--font-mono);font-size:9px;color:var(--text-muted);text-align:left;min-height:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .drug-card .step-bar-wrap{height:3px;background:var(--drug-color,var(--blue));border-radius:2px;overflow:hidden}
     .drug-card .step-bar{height:100%;background:var(--bg-deep);border-radius:2px;transition:width .5s linear}
 
+    /* ── Warning system ─────────────────────────────────────────────── */
+    /* Prep pulse: amber glow on drug card edge */
+    @keyframes warn-prep-pulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}50%{box-shadow:0 0 0 5px rgba(245,158,11,0.3)}}
+    .drug-card.warn-prep{animation:warn-prep-pulse 1.4s ease-in-out infinite}
+    /* Warning popup container — fixed above bottom controls */
+    #warnings-container{position:fixed;bottom:68px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:200;width:min(360px,92vw);pointer-events:none}
+    .warn-popup{background:var(--bg-card);border:1px solid var(--amber);border-radius:var(--radius-md);padding:11px 13px;pointer-events:all;animation:fadeIn .15s ease}
+    .warn-drug{font-size:9px;color:var(--amber);text-transform:uppercase;letter-spacing:.06em;font-family:var(--font-mono)}
+    .warn-desc{font-size:14px;color:var(--text-primary);font-family:var(--font-display);margin:3px 0 2px;font-weight:500}
+    .warn-countdown{font-size:12px;color:var(--text-secondary);font-family:var(--font-mono)}
+    .warn-dismiss{margin-top:9px;width:100%;padding:7px;background:var(--amber);color:#000;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-display)}
+    .warn-dismiss:active{opacity:.85}
+    /* Settings button in topbar */
+    .btn-settings{background:none;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);padding:3px 8px;cursor:pointer;font-size:14px;line-height:1;margin-right:4px}
+    .btn-settings:hover{color:var(--text-primary);border-color:var(--border-focus)}
+    /* Settings modal content */
+    .settings-row{margin:10px 0}
+    .settings-row label{display:block;font-size:11px;color:var(--text-secondary);margin-bottom:5px;font-family:var(--font-mono)}
+    .settings-control{display:flex;align-items:center;gap:10px}
+    .settings-control input[type=range]{flex:1;accent-color:var(--amber)}
+    .settings-control span{font-family:var(--font-mono);font-size:12px;color:var(--amber);min-width:32px;text-align:right}
     /* Content area */
     .sim-content{flex:1;display:flex;flex-direction:column;min-width:0}
 
@@ -475,6 +496,7 @@
           </div>
         </div>
       </div>
+      <button class="btn-settings" id="btn-settings" title="Warning settings">&#9881;</button>
       <button class="btn-new-case" id="btn-new-case">New Case</button>
     </div>
     <div class="sim-main">
@@ -703,6 +725,30 @@
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="tci-warn-cancel">Cancel</button>
         <button class="modal-btn-danger" id="tci-warn-confirm">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========== SETTINGS MODAL =========== -->
+  <div class="modal-overlay" id="modal-settings">
+    <div class="modal-box">
+      <h3>Warning Settings</h3>
+      <div class="settings-row">
+        <label>Prep alert — visual pulse (seconds before event)</label>
+        <div class="settings-control">
+          <input type="range" id="set-prep" min="5" max="120" step="5" value="30">
+          <span id="set-prep-val">30s</span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <label>Alert — sound &amp; popup (seconds before event)</label>
+        <div class="settings-control">
+          <input type="range" id="set-alert" min="5" max="60" step="5" value="10">
+          <span id="set-alert-val">10s</span>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="btn-settings-close">Done</button>
       </div>
     </div>
   </div>
