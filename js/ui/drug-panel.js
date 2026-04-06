@@ -672,9 +672,8 @@ function update() {
             if (thr > 0) {
               warnings.checkBelowThreshold(dId, conc.Ce <= thr);
               if (conc.Ce <= thr) {
-                // Below threshold: flash in approach line, bar full
+                // Below threshold: flash in approach line, bar at 0% so red wrap shows
                 approachHtml = '<span class="appr-below">Below Threshold</span>';
-                barPct = 100;
                 isBelowThreshold = true;
               } else {
                 // Counting down: "Redose in M:SS" in step-bar, bar fills toward threshold
