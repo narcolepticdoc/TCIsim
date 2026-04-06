@@ -17,7 +17,7 @@ import { fromCanonical, formatValue, getDefaultUnit, getAllowedUnits, getPrefKey
 import { unlockAudio, playAlert } from './alert-sound.js';
 
 const STORAGE_KEY = 'tci-warn-settings';
-const DEFAULTS     = { prepSec: 30, alertSec: 10 };
+const DEFAULTS     = { prepSec: 30, prepSound: false, alertSec: 10, alertSound: true };
 
 const DRUG_NAMES = {
   propofol:     'Propofol',
@@ -31,7 +31,8 @@ let _getDrugIds = null;
 let _getPatient = null;
 
 // One-shot guards — sets of event IDs that have already fired
-const _alertFired = new Set();
+const _prepSoundFired = new Set();
+const _alertFired     = new Set();
 
 // Active popups — eventId → HTMLElement
 const _activePopups = new Map();
@@ -44,16 +45,18 @@ export function getSettings() {
     if (raw) {
       const p = JSON.parse(raw);
       return {
-        prepSec:  (typeof p.prepSec  === 'number' && p.prepSec  >= 0) ? p.prepSec  : DEFAULTS.prepSec,
-        alertSec: (typeof p.alertSec === 'number' && p.alertSec >= 0) ? p.alertSec : DEFAULTS.alertSec,
+        prepSec:   (typeof p.prepSec   === 'number'  && p.prepSec  >= 0) ? p.prepSec   : DEFAULTS.prepSec,
+        prepSound: (typeof p.prepSound === 'boolean')                    ? p.prepSound  : DEFAULTS.prepSound,
+        alertSec:  (typeof p.alertSec  === 'number'  && p.alertSec >= 0) ? p.alertSec  : DEFAULTS.alertSec,
+        alertSound:(typeof p.alertSound=== 'boolean')                    ? p.alertSound : DEFAULTS.alertSound,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, alertSec }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, alertSec })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -71,15 +74,19 @@ export function init(opts = {}) {
 export function reset() {
   for (const el of _activePopups.values()) el.remove();
   _activePopups.clear();
+  _prepSoundFired.clear();
   _alertFired.clear();
   document.querySelectorAll('.drug-card.warn-prep').forEach(el => el.classList.remove('warn-prep'));
+  const topbar = document.querySelector('.sim-topbar');
+  if (topbar) topbar.classList.remove('warn-header');
 }
 
 // ── Per-frame check (call every rAF frame) ────────────────────────────────────
 
 export function check(t) {
   if (!_model) return;
-  const { prepSec, alertSec } = getSettings();
+  const { prepSec, prepSound, alertSec, alertSound } = getSettings();
+  let anyPrep = false;
 
   for (const drugId of _getDrugIds()) {
     try {
@@ -99,14 +106,22 @@ export function check(t) {
       }
 
       const remSec = (nextEvt.time - t) * 60;
+      const inPrep = remSec <= prepSec;
 
-      // ── Prep: visual pulse (set/clear every frame based on current state) ──
-      if (cardEl) cardEl.classList.toggle('warn-prep', remSec <= prepSec);
+      // ── Prep: visual pulse + optional one-shot chime ──────────────────────
+      if (cardEl) cardEl.classList.toggle('warn-prep', inPrep);
+      if (inPrep) {
+        anyPrep = true;
+        if (prepSound && !_prepSoundFired.has(nextEvt.id)) {
+          _prepSoundFired.add(nextEvt.id);
+          playAlert('info');
+        }
+      }
 
-      // ── Alert: one-shot per event ID ──────────────────────────────────────
+      // ── Alert: one-shot popup + optional chime ────────────────────────────
       if (remSec <= alertSec && !_alertFired.has(nextEvt.id)) {
         _alertFired.add(nextEvt.id);
-        playAlert('warning');
+        if (alertSound) playAlert('warning');
         _showPopup(drugId, nextEvt, t);
       }
 
@@ -120,6 +135,10 @@ export function check(t) {
       }
     } catch (e) {}
   }
+
+  // ── Topbar header flash: active whenever any drug has a prep warning ──────
+  const topbar = document.querySelector('.sim-topbar');
+  if (topbar) topbar.classList.toggle('warn-header', anyPrep);
 }
 
 // ── Dismiss ───────────────────────────────────────────────────────────────────

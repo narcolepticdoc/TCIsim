@@ -624,29 +624,37 @@ function boot() {
 
   // Wire settings modal
   (function initSettings() {
-    const savedSettings = warnings.getSettings();
-    const prepSlider  = $('set-prep');
-    const alertSlider = $('set-alert');
-    const prepVal     = $('set-prep-val');
-    const alertVal    = $('set-alert-val');
+    const savedSettings  = warnings.getSettings();
+    const prepSlider     = $('set-prep');
+    const alertSlider    = $('set-alert');
+    const prepVal        = $('set-prep-val');
+    const alertVal       = $('set-alert-val');
+    const prepSoundChk   = $('set-prep-sound');
+    const alertSoundChk  = $('set-alert-sound');
     if (!prepSlider || !alertSlider) return;
 
-    // Populate sliders from saved settings
+    // Populate controls from saved settings
     prepSlider.value  = savedSettings.prepSec;
     alertSlider.value = savedSettings.alertSec;
-    if (prepVal)  prepVal.textContent  = savedSettings.prepSec  + 's';
-    if (alertVal) alertVal.textContent = savedSettings.alertSec + 's';
+    if (prepVal)       prepVal.textContent      = savedSettings.prepSec   + 's';
+    if (alertVal)      alertVal.textContent     = savedSettings.alertSec  + 's';
+    if (prepSoundChk)  prepSoundChk.checked     = savedSettings.prepSound;
+    if (alertSoundChk) alertSoundChk.checked    = savedSettings.alertSound;
 
-    function saveSliders() {
-      const prepSec  = parseInt(prepSlider.value,  10);
-      const alertSec = parseInt(alertSlider.value, 10);
+    function saveAll() {
+      const prepSec    = parseInt(prepSlider.value,  10);
+      const alertSec   = parseInt(alertSlider.value, 10);
+      const prepSound  = prepSoundChk  ? prepSoundChk.checked  : false;
+      const alertSound = alertSoundChk ? alertSoundChk.checked : true;
       if (prepVal)  prepVal.textContent  = prepSec  + 's';
       if (alertVal) alertVal.textContent = alertSec + 's';
-      warnings.setSettings({ prepSec, alertSec });
+      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound });
     }
 
-    prepSlider.addEventListener('input',  saveSliders);
-    alertSlider.addEventListener('input', saveSliders);
+    prepSlider.addEventListener('input',    saveAll);
+    alertSlider.addEventListener('input',   saveAll);
+    if (prepSoundChk)  prepSoundChk.addEventListener('change',  saveAll);
+    if (alertSoundChk) alertSoundChk.addEventListener('change', saveAll);
 
     const btnSettingsOpen  = $('btn-settings');
     const btnSettingsClose = $('btn-settings-close');
