@@ -283,6 +283,53 @@ All four values persist to localStorage under `'tci-warn-settings'`.
 
 ---
 
+### Session 18 (2026-04-06) — Drug Card Polish & Intermittent UX (v0.5.3)
+
+**Bug fix — event editor broken for non-propofol drugs (`js/app.js`):**
+`eventEditor.setDrug()` was never called when switching drug cards, so `_selectedDrug` in `event-editor.js` stayed `'propofol'`. `openEdit()` looked up the event ID in the wrong drug's event list, found nothing, and returned silently. Fix: call `eventEditor.setDrug(drugId)` alongside the existing `keypad.setDrug()` and `history.setDrug()` calls in the drug-card click handler.
+
+**Fentanyl mcg display precision (`js/util/units.js`):**
+`formatValue` for `'mcg'` changed from `toFixed(0)` to `toFixed(1)`, allowing doses like 12.5 mcg to round-trip through the event editor without being displayed as 13.
+
+**Non-selected drug card approach line (`js/ui/drug-panel.js`):**
+The background rAF loop previously cleared the approach line element for all non-selected, non-intermittent drugs. Approach lines now render for all modes:
+
+- Extracted `_estimateTimeToTarget(curve, t, Ce, ceTarget)` helper (takes any curve, not just `_sharedCurve`).
+- Added `_computeApproachFromCurve(drugId, t, m, Ce, ceTarget, rate, curve)` — mirrors the selected-drug `computeApproachData` logic (TCI target, emergence, manual steady state) using an explicit curve instead of the shared one.
+- Added `_nonSelectedApproachCache` keyed on `{eventCount, mode, ceTarget, rate}`. On stale: computes a 120-min per-drug curve and stores `arrivalMin`; live countdown rendered from the cache each frame. Emergence uses `predictTrough` directly (no curve needed).
+- `getCeTargetForDrug` callback added to `drugPanel.init` (wired in `app.js`) to read TCI targets for non-selected drugs.
+
+| Mode (non-selected) | Approach line |
+|---|---|
+| TCI approaching target | `Target → X.X in M:SS` |
+| TCI at target | `At Target X.X` |
+| Manual + infusing | `Steady state ≈ X.X in M:SS` |
+| Stopped / Ce above emergence | `Emergence 1.5 in M:SS` |
+| Intermittent | `Redose in M:SS` / `Below Threshold` |
+
+**Intermittent UX — "Below Threshold" indicator:**
+- Renamed "Redose now" → `<span class="appr-below">Below Threshold</span>` with amber pulsing animation (`below-thresh-pulse`, 1.4s fade).
+- `warnings.checkBelowThreshold(drugId, isBelow)` — fires a one-shot `'info'` chime on the above→below transition; resets on recovery so each new dip re-fires.
+- New `redoseSound` setting (default `true`) in `warnings.js` with corresponding checkbox in the settings modal ("Intermittent — below-threshold chime"). Stored alongside the existing four TCI warning prefs.
+
+**Intermittent UX — redose countdown in step-bar row:**
+- "Redose in M:SS" moved from the approach line to the step-bar-countdown, matching TCI's "Rate → x in M:SS" position. Approach line is now reserved for "Below Threshold" only.
+- Selected drug: `updateApproachLine` suppresses output when `m === 'intermittent' && arrivalMin !== null`; the step-bar block renders "Redose in `<appr-time>`M:SS`</appr-time>`" via `innerHTML`.
+- Non-selected: same split — step-bar-countdown gets the labeled countdown HTML, approach line gets the "Below Threshold" flash.
+
+**Intermittent progress bar (`js/ui/drug-panel.js`):**
+`_intermittentBarPct(drugId, t, arrivalMin)` fills the bar from 0% (at last bolus time) to 100% (at predicted threshold crossing), giving the same countdown-style progress as the TCI step-bar. Below-threshold state pins bar at 100%.
+
+**Bug fix — non-selected intermittent cache stale on threshold change:**
+`_nonSelectedCache` was keyed on `{eventCount}` only. Changing the redose threshold (without adding events) left the old `arrivalMin` cached. Added `threshold` to the cache key; any threshold change triggers a `predictTrough` recompute.
+
+**Visual hierarchy corrections (`index.html`):**
+`.drug-approach` and `.step-bar-countdown` both promoted from `var(--text-muted)` to `var(--text-secondary)` to match the inline rate display. Added `.step-bar-countdown .appr-time { color: var(--amber) }` — the amber timer rule previously only covered spans inside `.drug-approach`.
+
+359 tests across 12 suites, all passing.
+
+---
+
 ## Known Issues
 
 ### Emulation Planner
