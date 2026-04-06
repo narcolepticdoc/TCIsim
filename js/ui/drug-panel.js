@@ -530,6 +530,24 @@ function fmtNextEvtLabel(evt, drugId) {
   return null;
 }
 
+/**
+ * Bar fill % for intermittent redose countdown.
+ * Counts from the last bolus time (0%) to the predicted threshold crossing (100%).
+ */
+function _intermittentBarPct(drugId, t, arrivalMin) {
+  if (!arrivalMin || arrivalMin <= t) return 100;
+  let prevTime = 0;
+  try {
+    const evts = model.getEvents(drugId);
+    for (let i = evts.length - 1; i >= 0; i--) {
+      if (evts[i].time <= t + 0.0001) { prevTime = evts[i].time; break; }
+    }
+  } catch(e) {}
+  const total = arrivalMin - prevTime;
+  const elapsed = t - prevTime;
+  return total > 0 ? Math.min(100, Math.max(0, (elapsed / total) * 100)) : 0;
+}
+
 function updateStepBar(drugId, t) {
   const barEl       = $(drugId + '-bar');
   const countdownEl = $(drugId + '-bar-countdown');
@@ -643,19 +661,20 @@ function update() {
           updateStepBar(dId, t);
           if (approachEl2 && approachEl2.innerHTML !== '') approachEl2.innerHTML = '';
         } else {
-          if (barEl2) barEl2.style.width = '0%';
-          // cntHtml goes into step-bar-countdown (innerHTML); approachHtml into approach line
+          // cntHtml → step-bar-countdown; approachHtml → approach line; barPct → bar width
           let cntHtml = '';
           let approachHtml = '';
+          let barPct = 0;
           if (getIntermittentThresholdForDrug) {
             const thr = getIntermittentThresholdForDrug(dId);
             if (thr > 0) {
               warnings.checkBelowThreshold(dId, conc.Ce <= thr);
               if (conc.Ce <= thr) {
-                // Below threshold: flash in approach line, clear step-bar countdown
+                // Below threshold: flash in approach line, bar full
                 approachHtml = '<span class="appr-below">Below Threshold</span>';
+                barPct = 100;
               } else {
-                // Counting down: show "Redose in M:SS" in step-bar, leave approach line blank
+                // Counting down: "Redose in M:SS" in step-bar, bar fills toward threshold
                 const cached = _nonSelectedCache[dId];
                 let arrivalMin = null;
                 if (cached && cached.eventCount === evtCount2 &&
@@ -672,11 +691,13 @@ function update() {
                   const rem = arrivalMin - t;
                   if (rem > 0) {
                     cntHtml = `Redose in <span class="appr-time">${fmtCountdown(rem)}</span>`;
+                    barPct = _intermittentBarPct(dId, t, arrivalMin);
                   }
                 }
               }
             }
           }
+          if (barEl2) barEl2.style.width = barPct + '%';
           if (cntEl2 && cntEl2.innerHTML !== cntHtml) cntEl2.innerHTML = cntHtml;
           if (approachEl2 && approachEl2.innerHTML !== approachHtml) approachEl2.innerHTML = approachHtml;
         }
@@ -813,7 +834,7 @@ function update() {
         updateStepBar(drugId, t);                     // bolus delivery in progress
       } else if (_approachCache.arrivalMin !== null) {
         const rem = _approachCache.arrivalMin - t;
-        if (barEl) barEl.style.width = '0%';
+        if (barEl) barEl.style.width = _intermittentBarPct(drugId, t, _approachCache.arrivalMin) + '%';
         if (cntEl) {
           const newHtml = rem > 0
             ? `Redose in <span class="appr-time">${fmtCountdown(rem)}</span>`
