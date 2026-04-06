@@ -857,7 +857,11 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   const cpLiftIntervals = needsCpLift
     ? Math.min(8, Math.ceil(cpGap / (ceTarget * 0.1)))
     : 0;
-  const ceBoostIntervals = needsCeBoost ? 3 : cpLiftIntervals;
+  const cpOvershoot = hadBolus && cpAtMaint > ceTarget * 1.02;
+  const ceBoostIntervals = needsCeBoost ? 3
+    : cpLiftIntervals > 0 ? cpLiftIntervals
+    : cpOvershoot ? 2
+    : 0;
 
   for (let i = 0; i < cptIntervalCount; i++) {
     if (ps1 === 0 && ps2 === 0 && ps3 === 0) {
@@ -904,8 +908,9 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   // SimTIVA lines 1250-1259: propofol with cpt_rates[5]*360 >= 30 uses 0.08/0.667,
   // lower rates use 0.05/0.62
   const earlyRateMlH = (cptRates[5] || cptRates[0]) * 3600 / concentration;
-  const cptThreshold = earlyRateMlH >= 30 ? 0.08 : 0.05;
-  const cptAvgFactor = earlyRateMlH >= 30 ? 0.667 : 0.62;
+  const stepMagnitude = currentCe > 0 ? (ceTarget - currentCe) / ceTarget : 1;
+  const cptThreshold = (earlyRateMlH >= 30 && stepMagnitude > 0.20) ? 0.08 : 0.05;
+  const cptAvgFactor = (earlyRateMlH >= 30 && stepMagnitude > 0.20) ? 0.667 : 0.62;
   const rf = 360; // round mg/sec to nearest 1 mL/h
   const rnd = (r) => Math.round(r * rf) / rf;
 
