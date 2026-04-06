@@ -14,6 +14,7 @@
  */
 
 import { fromCanonical, formatValue, getDefaultUnit, getAllowedUnits, getPrefKey } from '../util/units.js';
+import { unlockAudio, playAlert } from './alert-sound.js';
 
 const STORAGE_KEY = 'tci-warn-settings';
 const DEFAULTS     = { prepSec: 30, alertSec: 10 };
@@ -62,6 +63,8 @@ export function init(opts = {}) {
   _getDrugIds = opts.getDrugIds || (() => ['propofol', 'fentanyl', 'ketamine']);
   _getPatient = opts.getPatient || (() => null);
   _ensureContainer();
+  // Unlock AudioContext on first user gesture anywhere in the document
+  document.addEventListener('click', unlockAudio, { once: true });
 }
 
 /** Clear all state and dismiss popups — call on new case. */
@@ -103,7 +106,7 @@ export function check(t) {
       // ── Alert: one-shot per event ID ──────────────────────────────────────
       if (remSec <= alertSec && !_alertFired.has(nextEvt.id)) {
         _alertFired.add(nextEvt.id);
-        _playAlert();
+        playAlert('warning');
         _showPopup(drugId, nextEvt, t);
       }
 
@@ -196,24 +199,6 @@ function _getPreferredUnit(drugId, task) {
     } catch (e) {}
   }
   return getDefaultUnit(drugId, task);
-}
-
-function _playAlert() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [[0, 880], [0.2, 880]].forEach(([offset, freq]) => {
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.3, ctx.currentTime + offset);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.1);
-      osc.start(ctx.currentTime + offset);
-      osc.stop(ctx.currentTime + offset + 0.12);
-    });
-    setTimeout(() => { try { ctx.close(); } catch (e) {} }, 600);
-  } catch (e) {}
 }
 
 function _fmtCountdown(minutes) {

@@ -147,8 +147,8 @@
 
     /* ── Warning system ─────────────────────────────────────────────── */
     /* Prep pulse: amber glow on drug card edge */
-    @keyframes warn-prep-pulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}50%{box-shadow:0 0 0 5px rgba(245,158,11,0.3)}}
-    .drug-card.warn-prep{animation:warn-prep-pulse 1.4s ease-in-out infinite}
+    @keyframes warn-prep-pulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}40%,60%{box-shadow:0 0 0 4px rgba(245,158,11,0.9),0 0 18px rgba(245,158,11,0.4)}}
+    .drug-card.warn-prep{animation:warn-prep-pulse 1.0s ease-in-out infinite}
     /* Warning popup container — fixed above bottom controls */
     #warnings-container{position:fixed;bottom:68px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:200;width:min(360px,92vw);pointer-events:none}
     .warn-popup{background:var(--bg-card);border:1px solid var(--amber);border-radius:var(--radius-md);padding:11px 13px;pointer-events:all;animation:fadeIn .15s ease}
