@@ -546,6 +546,7 @@ function boot() {
       const drugId = card.id.replace('drug-', '');
       selectedDrug = drugId;
       keypad.setDrug(drugId);
+      eventEditor.setDrug(drugId);
       mode.refreshUI(drugId);
       history.setBolusOnly(mode.get(drugId) === 'intermittent');
       history.setDrug(drugId);
