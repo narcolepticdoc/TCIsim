@@ -254,6 +254,35 @@ SimTIVA's `deliver_cpt` step extraction skips `cptRates[0]` (the high initial ra
 
 ---
 
+### Session 17 (2026-04-06) — Event Warning System (v0.5.3)
+
+Advance warnings for upcoming TCI and manually-planned pump events. Fires for `source:'tci'` and `source:'manual'` events; `source:'system'` rate-restores are excluded (auto-applied, no human action needed).
+
+**Descriptive step bar labels (`js/ui/drug-panel.js`):**
+`updateStepBar()` now formats a human-readable description for the next upcoming event — e.g. `"Rate → 140 mcg/kg/min in 1:30"` — with the countdown highlighted in amber. Value is converted using the user's persisted unit preference (same lookup as the keypad). System events retain a bare countdown. CSS updated to `text-align: left` + `text-overflow: ellipsis` so descriptions are readable at the card's narrow width.
+
+**Two-tier warning system (`js/ui/warnings.js`, new file):**
+
+- **Prep stage** (default 30s before event): inset amber border glow on the drug card + amber background pulse on the topbar. Inset box-shadow is used because `.drug-panel` has `overflow-y: auto`, which clips outward shadows. Optional chime (`playAlert('info')`) disabled by default.
+- **Alert stage** (default 10s before event): three-tone chime (`playAlert('warning')` — 880/880/1100 Hz) + a persistent popup stacked above the bottom controls. Popup shows drug name, event description, live countdown, and requires "Got it" to dismiss. Multiple concurrent popups stack per-drug. Optional chime enabled by default.
+
+State: `_prepSoundFired` and `_alertFired` sets guard one-shot triggers per event ID. Both sets clear on `reset()`. The prep visual (card class + topbar class) is set/cleared every rAF frame based on current state, not as a one-shot.
+
+**Audio (`js/ui/alert-sound.js`, new file):**
+Persistent `AudioContext` created on first user gesture (`unlockAudio()`, registered as a one-shot `click` listener in `warnings.init()`). Fixes silent alerts caused by browser autoplay policy. Three severity levels: `info` (single soft tone), `warning` (two 880 Hz + 1100 Hz), `urgent` (alternating 1200/900 Hz pattern).
+
+**Settings (⚙ gear button in topbar → modal):**
+- Prep threshold slider: 5–120s (default 30s)
+- Prep sound checkbox: off by default
+- Alert threshold slider: 5–60s (default 10s)
+- Alert sound checkbox: on by default
+
+All four values persist to localStorage under `'tci-warn-settings'`.
+
+359 tests across 12 suites, all passing.
+
+---
+
 ## Known Issues
 
 ### Emulation Planner
@@ -306,6 +335,6 @@ SimTIVA's `deliver_cpt` step extraction skips `cptRates[0]` (the high initial ra
 | `test-units.js` | 39 | Unit conversion, display formatting |
 | `test-fentanyl-pk.js` | 28 | Shafer 1990 parameters, Shibutani 2004 pkMass, BMI criteria |
 | `test-ketamine-pk.js` | 23 | Domino/Navarrete fixed-Kij parameters, V1 scaling |
-| **Total** | **308** | |
+| **Total** | **359** | |
 
-All tests passing as of 2026-04-05 (v0.4.6).
+All tests passing as of 2026-04-06 (v0.5.3).

@@ -113,3 +113,22 @@ Single-page app with two screens (setup and simulation), no framework. All UI mo
 - Sim screen: drug panel (Ce/Cp display), chart (Chart.js), history panel, keypad modal, event editor modal
 - Timer: elapsed time with optional wall-clock sync, dual-mode popover (Start Time / Elapsed Time)
 - History: all events visible including system events (dimmed italic with ↩ prefix), tappable timestamps toggle ET/RT
+
+## Event Warning System (`js/ui/warnings.js`, `js/ui/alert-sound.js`)
+
+Two-tier advance warnings for upcoming pump events (`source:'tci'` and `source:'manual'`). `source:'system'` events are excluded — they are automatically applied and require no human action.
+
+**Prep stage** (configurable, default 30s before event):
+- Inset amber border glow on the relevant drug card (`.warn-prep` CSS class). Inset box-shadow is required because `.drug-panel` has `overflow-y: auto`, which clips outward shadows on all sides.
+- Amber background pulse on `.sim-topbar` (`.warn-header` CSS class) — full-width, always visible.
+- Optional chime (`playAlert('info')`), off by default.
+
+**Alert stage** (configurable, default 10s before event):
+- Three-tone chime (`playAlert('warning')`) if sound is enabled (on by default).
+- Persistent popup appended to `#warnings-container` (fixed position, stacked above bottom controls). Shows drug name, event description in display units, live countdown. Requires manual "Got it" to dismiss.
+
+**Per-frame check:** `warnings.check(t)` is called every rAF frame from the `onFrame` callback in `app.js`. Prep visual (card class + topbar class) is toggled each frame based on current `remSec <= prepSec`. Alert and prep-sound are one-shot per event ID, guarded by `_alertFired` and `_prepSoundFired` Sets. Both sets clear on `reset()` (called on new case).
+
+**Audio:** `alert-sound.js` holds a single persistent `AudioContext`. `unlockAudio()` is registered as a one-shot `click` listener in `warnings.init()` to satisfy browser autoplay policy. Three levels: `info` (single 880 Hz), `warning` (880/880/1100 Hz), `urgent` (alternating 1200/900 Hz).
+
+**Settings:** Stored in localStorage under `'tci-warn-settings'`. Four fields: `prepSec` (default 30), `prepSound` (default false), `alertSec` (default 10), `alertSound` (default true). Accessible via the ⚙ gear button in the topbar.
