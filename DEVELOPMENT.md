@@ -330,6 +330,43 @@ The background rAF loop previously cleared the approach line element for all non
 
 ---
 
+### Session 19 (2026-04-06) — Audit Remediation (v0.5.4)
+
+External code audit reviewed and independently verified against source. Four audit claims were false positives (file not truncated, Ce-boost engine correctly restored, CET small-deficit path intentional design, units.js `checkAllowed` not bypassed). The following issues were confirmed and fixed:
+
+**`onPumpPause` targeted wrong drug (`js/app.js`):**
+`model.addPause(model.primaryDrug, ...)` hardcoded to `'propofol'`. If a fentanyl or ketamine card was selected and Pump Stopped was pressed, the pause was silently applied to propofol. Fixed: `selectedDrug` (already used two lines below for `clearAfter`).
+
+**IV push duration fixed to 10 s regardless of volume (`js/sim/events.js`):**
+`PUSH_DURATION = 10/60` applied to all push boluses. For 0.5–2 mL fentanyl/ketamine boluses (typical intermittent mode), 10 s is actually *slower* than pump bolus delivery (2–10 s at 750 mL/h). Replaced with volume-derived duration at `PUSH_RATE_MLH = 3600` mL/h (1 mL/s rapid push), 1-second minimum. Gives: 0.5 mL → 1 s, 1 mL → 1 s, 2 mL → 2 s, 5 mL propofol → 5 s.
+
+**`_nextId` module-scoped across all EventList instances (`js/sim/events.js`):**
+`let _nextId = 1` was declared at module level; `clearAll()` on any instance reset the counter for all instances. Moved inside `createEventList()` factory so each instance has its own counter and `clearAll()` resets only that instance.
+
+**`planTCIFromEvents` called non-existent method (`js/sim/tci-planner.js`):**
+Called `eventList.getLastExecutedState()` which does not exist. Renamed to `eventList.getStateAtLastEvent()` (the actual exported method). Function was not reachable from any call site so no runtime impact, but a latent error.
+
+**`setPumpSettings` fragile maxRate computation (`js/util/constants.js`):**
+When both `concentration` and `bolusRateMlH` were updated together, the first block computed `maxRate` with a stale rate before the second block wrote `bolusRateMlH`. Final value was correct (second block overwrote), but intermediate state was wrong. Refactored: both fields written first, `maxRate` computed once from `getPumpSettings()`.
+
+**`addAnnotation` used innerHTML for description text (`js/app.js`):**
+Both render sites (live + case-restore) injected text via template-literal `innerHTML`. Annotations are currently system-generated strings only (no user input path), so XSS risk is theoretical. Fixed anyway: description span populated via `textContent`.
+
+**`getActiveRateForDrug` parameter renamed (`js/sim/events.js`):**
+`beforeIdx` renamed to `beforeGlobalIdx` to clarify it is a global event-array index, not a drug-scoped index.
+
+**`e_udf` decay ceiling extended 3600 → 21600 s (`js/sim/simtiva-reference.js`):**
+The iterative trial-dose peak-finder in `planTCISchemeEmulation` was clamped to 3600 entries. For drugs with very slow ke0, the Ce peak beyond 3600 s would produce an undersized bolus. Extended to 21600 s (6 hours) to match `p_udf`. No impact on propofol (peak < 60 s).
+
+**Ketamine y-axis default raised (`js/app.js`):**
+`yDefault: 2000` ng/mL (= 2 mcg/mL) clipped induction-dose curves. Changed to `10000` ng/mL (10 mcg/mL), covering 3000–8000 ng/mL induction range.
+
+**Remifentanil persistence deferred:** Remifentanil is a stub (not yet clinically implemented); adding it to persistence loops is premature. To be addressed when remifentanil is fully implemented.
+
+359 tests across 12 suites, all passing.
+
+---
+
 ## Known Issues
 
 ### Emulation Planner

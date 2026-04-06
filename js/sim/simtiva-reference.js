@@ -123,11 +123,13 @@ function computeUDFs(pkParams, deltaSec = 1) {
   }
 
   // Phase 2: no infusion — decay only, find peak.
-  // FIX #2: ceiling extended from 1000 to 3600 to correctly handle drugs
-  // with slow ke0 (opioids, dexmedetomidine) whose Ce peak may exceed 1000s.
+  // Ceiling set to 21600 (6 h) to match p_udf and correctly handle any drug
+  // whose Ce peak exceeds 3600 s (e.g. very slow ke0). Without this, the
+  // iterative trial-dose loop in planTCISchemeEmulation would clamp tempPeak
+  // prematurely and produce an undersized bolus.
   let peak_time = deltaSec;
   let prior = e_udf[deltaSec];
-  for (let i = deltaSec + 1; i < 3600; i++) {
+  for (let i = deltaSec + 1; i < 21600; i++) {
     t1 *= l1; t2 *= l2; t3 *= l3; t4 *= l4;
     e_udf[i] = t1 + t2 + t3 + t4;
     if (prior >= e_udf[i]) {
