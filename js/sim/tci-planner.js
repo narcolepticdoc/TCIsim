@@ -1012,6 +1012,6 @@ export function planTCIFromEvents(eventList, drugId, ceTarget, config = {}) {
   const engine = eventList.getEngine(drugId);
   if (!engine) return [];
 
-  const { state, time } = eventList.getLastExecutedState(drugId);
+  const { state, time } = eventList.getStateAtLastEvent(drugId);
   return planTCIScheme(engine, state, time, ceTarget, config);
 }

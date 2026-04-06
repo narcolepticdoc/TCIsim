@@ -64,18 +64,12 @@ export function getPumpSettings(drugId) {
  */
 export function setPumpSettings(drugId, settings) {
   if (!_pumpSettings[drugId]) _pumpSettings[drugId] = {};
-  if (settings.concentration != null) {
-    _pumpSettings[drugId].concentration = settings.concentration;
-    // Derive maxRate from pump speed: (mL/h * mg/mL) / 60 = mg/min
-    const rateMlH = settings.bolusRateMlH ?? getPumpSettings(drugId).bolusRateMlH;
-    _pumpSettings[drugId].maxRate = rateMlH * settings.concentration / 60;
-  }
-  if (settings.bolusRateMlH != null) {
-    _pumpSettings[drugId].bolusRateMlH = settings.bolusRateMlH;
-    // Re-derive maxRate
-    const conc = _pumpSettings[drugId].concentration ?? getPumpSettings(drugId).concentration;
-    _pumpSettings[drugId].maxRate = settings.bolusRateMlH * conc / 60;
-  }
+  // Write fields first, then derive maxRate once — avoids stale intermediate
+  // values when both concentration and bolusRateMlH are updated together.
+  if (settings.concentration != null) _pumpSettings[drugId].concentration = settings.concentration;
+  if (settings.bolusRateMlH  != null) _pumpSettings[drugId].bolusRateMlH  = settings.bolusRateMlH;
+  const ps = getPumpSettings(drugId);
+  _pumpSettings[drugId].maxRate = ps.bolusRateMlH * ps.concentration / 60;
 }
 
 /**

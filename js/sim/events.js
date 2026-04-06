@@ -19,7 +19,7 @@
  * Bolus delivery modes:
  *   'pump' (default) — delivered at the drug's configured pump bolus
  *                       rate (e.g. 750 mL/h). Duration depends on dose.
- *   'push'           — rapid IV push, delivered over ~10 seconds.
+ *   'push'           — rapid IV push at 3600 mL/h (1 mL/s), min 1 second.
  * 
  * Each event stores a snapshot of its drug's engine state, computed
  * during replay. Snapshots are a performance optimization — they
@@ -27,10 +27,11 @@
  * replaying from t=0.
  */
 
-let _nextId = 1;
-function genId() { return 'evt_' + String(_nextId++).padStart(5, '0'); }
-
-const PUSH_DURATION = 10 / 60; // 10 seconds in minutes
+// PUSH_RATE_MLH: rapid IV push delivery rate (1 mL/s = 3600 mL/h).
+// Push duration is volume-derived with a 1-second minimum.
+// Pump boluses use the drug's configured bolusRateMlH (typically 750 mL/h)
+// with a 3-second minimum — a different, slower rate by design.
+const PUSH_RATE_MLH = 3600;
 
 /**
  * Create an event object.
@@ -54,6 +55,8 @@ function createEvent(drug, time, type, value, opts = {}) {
  */
 export function createEventList() {
   let events = [];
+  let _nextId = 1; // instance-scoped so clearAll() only resets this instance
+  function genId() { return 'evt_' + String(_nextId++).padStart(5, '0'); }
   const engines = {};      // { drugId: engineInstance }
   const drugConfigs = {};  // { drugId: { concentration, bolusRateMlH } }
 
@@ -88,15 +91,20 @@ export function createEventList() {
    * @returns {{ duration: number, rate: number }} duration in minutes, rate in mg/min
    */
   function getBolusDelivery(evt) {
-    if (evt.deliveryMode === 'push') {
-      return { duration: PUSH_DURATION, rate: evt.value / PUSH_DURATION };
-    }
     const cfg = drugConfigs[evt.drug];
-    if (!cfg || !cfg.bolusRateMlH || !cfg.concentration) {
-      // Fallback: 10-second delivery if no config
-      return { duration: PUSH_DURATION, rate: evt.value / PUSH_DURATION };
+    const concentration = cfg?.concentration || 10;
+    const volumeMl = evt.value / concentration;
+    if (evt.deliveryMode === 'push') {
+      // Rapid IV push: volume-derived at 3600 mL/h (1 mL/s), minimum 1 second
+      const duration = Math.max(1 / 60, volumeMl / PUSH_RATE_MLH * 60);
+      return { duration, rate: evt.value / duration };
     }
-    const volumeMl = evt.value / cfg.concentration;
+    if (!cfg || !cfg.bolusRateMlH) {
+      // Fallback: pump rate unknown, use push rate
+      const duration = Math.max(1 / 60, volumeMl / PUSH_RATE_MLH * 60);
+      return { duration, rate: evt.value / duration };
+    }
+    // Pump bolus: volume / pump bolus rate, minimum 3 seconds
     const durationMin = volumeMl / cfg.bolusRateMlH * 60;
     const duration = Math.max(0.05, durationMin); // minimum 3 seconds
     return { duration, rate: evt.value / duration };
@@ -210,8 +218,8 @@ export function createEventList() {
    * Get the active infusion rate for a drug at a given event index.
    * Walks backward through that drug's events.
    */
-  function getActiveRateForDrug(drugId, beforeIdx) {
-    for (let i = beforeIdx; i >= 0; i--) {
+  function getActiveRateForDrug(drugId, beforeGlobalIdx) {
+    for (let i = beforeGlobalIdx; i >= 0; i--) {
       if (events[i].drug !== drugId) continue;
       if (events[i].type === 'rate') return events[i].value;
       if (events[i].type === 'pause') return 0;

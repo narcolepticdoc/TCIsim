@@ -43,7 +43,7 @@ const CHART_DRUG_CONFIG = {
   propofol:     { yScale: 1,    yLabel: 'μg/mL', yDefault: 10 },
   remifentanil: { yScale: 1,    yLabel: 'μg/mL', yDefault: 10 },
   fentanyl:     { yScale: 1000, yLabel: 'ng/mL',  yDefault: 10 },
-  ketamine:     { yScale: 1000, yLabel: 'ng/mL',  yDefault: 2000 },
+  ketamine:     { yScale: 1000, yLabel: 'ng/mL',  yDefault: 10000 },
 };
 function getChartDrugConfig(drugId) {
   return CHART_DRUG_CONFIG[drugId] || { yScale: 1, yLabel: 'μg/mL', yDefault: 10 };
@@ -150,8 +150,9 @@ function addAnnotation(text) {
     const row = document.createElement('div');
     row.className = 'history-row';
     row.innerHTML = `<span class="h-step">${annotations.length - 1}</span>` +
-      `<span class="h-desc">${text}</span>` +
+      `<span class="h-desc"></span>` +
       `<span class="h-time">${ts}</span>`;
+    row.querySelector('.h-desc').textContent = text;
     list.appendChild(row);
   }
 }
@@ -369,8 +370,9 @@ function restoreCase() {
           const row = document.createElement('div');
           row.className = 'history-row';
           row.innerHTML = `<span class="h-step">${i}</span>` +
-            `<span class="h-desc">${a.text}</span>` +
+            `<span class="h-desc"></span>` +
             `<span class="h-time">${a.time}</span>`;
+          row.querySelector('.h-desc').textContent = a.text;
           list.appendChild(row);
         });
       }
@@ -453,7 +455,7 @@ function boot() {
         if (conc.rate === 0 && mode.get(selectedDrug) !== 'tci') return;
       } catch (e) {}
 
-      model.addPause(model.primaryDrug, t, 'Pump stopped');
+      model.addPause(selectedDrug, t, 'Pump stopped');
       addAnnotation('Pump stopped');
       // Stop drops out of TCI and clears future events
       if (mode.get(selectedDrug) === 'tci') {
