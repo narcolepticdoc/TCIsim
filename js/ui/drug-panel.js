@@ -12,6 +12,7 @@
  */
 
 import { fromCanonical, formatValue, getAllowedUnits, getDefaultUnit, getPrefKey } from '../util/units.js';
+import * as warnings from './warnings.js';
 
 const $ = id => document.getElementById(id);
 
@@ -409,6 +410,49 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
 // Step bar + countdown
 // ──────────────────────────────────────────────────────────────────
 
+/**
+ * Format a short description for the next event shown in the step bar.
+ * Returns null for system events (bare countdown only) or on error.
+ * Respects the user's persisted unit preference (same as fmtRateInline).
+ */
+function fmtNextEvtLabel(evt, drugId) {
+  if (!evt || evt.source === 'system') return null;
+  try {
+    if (evt.type === 'pause' || (evt.type === 'rate' && evt.value === 0)) {
+      return 'Pause';
+    }
+    const ctx = { weightKg: model.getPatient().weight };
+    if (evt.type === 'rate') {
+      const prefKey = getPrefKey(drugId, 'rate');
+      let unit = getDefaultUnit(drugId, 'rate');
+      if (prefKey) {
+        try {
+          const saved = localStorage.getItem(prefKey);
+          const allowed = getAllowedUnits(drugId, 'rate');
+          if (saved && allowed.includes(saved)) unit = saved;
+        } catch (e) {}
+      }
+      const v = fromCanonical(evt.value, unit, drugId, 'rate', ctx);
+      return `Rate \u2192 ${formatValue(v, unit)} ${unit}`;
+    }
+    if (evt.type === 'bolus') {
+      const prefKey = getPrefKey(drugId, 'bolus');
+      let unit = getDefaultUnit(drugId, 'bolus');
+      if (prefKey) {
+        try {
+          const saved = localStorage.getItem(prefKey);
+          const allowed = getAllowedUnits(drugId, 'bolus');
+          if (saved && allowed.includes(saved)) unit = saved;
+        } catch (e) {}
+      }
+      const v = fromCanonical(evt.value, unit, drugId, 'bolus', ctx);
+      const label = evt.deliveryMode === 'push' ? 'IV Push' : 'Bolus';
+      return `${label} ${formatValue(v, unit)} ${unit}`;
+    }
+  } catch (e) {}
+  return null;
+}
+
 function updateStepBar(drugId, t) {
   const barEl       = $(drugId + '-bar');
   const countdownEl = $(drugId + '-bar-countdown');
@@ -436,11 +480,18 @@ function updateStepBar(drugId, t) {
     const pct       = span > 0 ? Math.min(100, Math.max(0, (elapsed / span) * 100)) : 0;
     const remaining = nextEvt.time - t;
 
-    barEl.style.width       = pct + '%';
-    countdownEl.textContent = remaining > 0 ? fmtCountdown(remaining) : '';
+    barEl.style.width = pct + '%';
+    if (remaining > 0) {
+      const label = fmtNextEvtLabel(nextEvt, drugId);
+      const timeStr = `<span class="appr-time">${fmtCountdown(remaining)}</span>`;
+      const html = label ? `${label} in ${timeStr}` : timeStr;
+      if (countdownEl.innerHTML !== html) countdownEl.innerHTML = html;
+    } else {
+      if (countdownEl.innerHTML !== '') countdownEl.innerHTML = '';
+    }
   } catch (e) {
     barEl.style.width = '0%';
-    if (countdownEl) countdownEl.textContent = '';
+    if (countdownEl) countdownEl.innerHTML = '';
   }
 }
 
@@ -650,10 +701,13 @@ function update() {
       } else if (_approachCache.arrivalMin !== null) {
         const rem = _approachCache.arrivalMin - t;
         if (barEl) barEl.style.width = '0%';
-        if (cntEl) cntEl.textContent = rem > 0 ? fmtCountdown(rem) : '';
+        if (cntEl) {
+          const newText = rem > 0 ? fmtCountdown(rem) : '';
+          if (cntEl.textContent !== newText) cntEl.textContent = newText;
+        }
       } else {
         if (barEl) barEl.style.width = '0%';
-        if (cntEl) cntEl.textContent = '';
+        if (cntEl && cntEl.textContent !== '') cntEl.textContent = '';
       }
     }
   }

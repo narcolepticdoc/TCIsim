@@ -20,6 +20,7 @@ import { createChart } from './ui/chart.js';
 import { ceForBIS } from './pk/pd.js';
 import { bolusDeliveryMinutes, setPumpSettings, APP_VERSION } from './util/constants.js';
 import * as persist from './ui/persist.js';
+import * as warnings from './ui/warnings.js';
 
 const $ = id => document.getElementById(id);
 
@@ -273,6 +274,7 @@ function handleNewCase() {
   if (model) model.reset();
   confirmedPatient = null;
   annotations = [];
+  warnings.reset();
 
   // Destroy chart
   if (chart) { chart.destroy(); chart = null; }
@@ -591,6 +593,8 @@ function boot() {
           history.updateDimming();
         }
       }
+      // Check for upcoming events requiring advance warning
+      if (t > 0) warnings.check(t);
     },
   });
 
@@ -610,6 +614,45 @@ function boot() {
     refreshChart,
     getPatient: () => model ? model.getPatient() : { weight: 70 },
   });
+
+  // Initialize warnings
+  warnings.init({
+    model,
+    getDrugIds: () => ['propofol', 'fentanyl', 'ketamine'],
+    getPatient:  () => model ? model.getPatient() : null,
+  });
+
+  // Wire settings modal
+  (function initSettings() {
+    const savedSettings = warnings.getSettings();
+    const prepSlider  = $('set-prep');
+    const alertSlider = $('set-alert');
+    const prepVal     = $('set-prep-val');
+    const alertVal    = $('set-alert-val');
+    if (!prepSlider || !alertSlider) return;
+
+    // Populate sliders from saved settings
+    prepSlider.value  = savedSettings.prepSec;
+    alertSlider.value = savedSettings.alertSec;
+    if (prepVal)  prepVal.textContent  = savedSettings.prepSec  + 's';
+    if (alertVal) alertVal.textContent = savedSettings.alertSec + 's';
+
+    function saveSliders() {
+      const prepSec  = parseInt(prepSlider.value,  10);
+      const alertSec = parseInt(alertSlider.value, 10);
+      if (prepVal)  prepVal.textContent  = prepSec  + 's';
+      if (alertVal) alertVal.textContent = alertSec + 's';
+      warnings.setSettings({ prepSec, alertSec });
+    }
+
+    prepSlider.addEventListener('input',  saveSliders);
+    alertSlider.addEventListener('input', saveSliders);
+
+    const btnSettingsOpen  = $('btn-settings');
+    const btnSettingsClose = $('btn-settings-close');
+    if (btnSettingsOpen)  btnSettingsOpen.addEventListener('click',  () => $('modal-settings').classList.add('open'));
+    if (btnSettingsClose) btnSettingsClose.addEventListener('click', () => $('modal-settings').classList.remove('open'));
+  })();
 
   // Wire new case dialog
   const btnNewCase = $('btn-new-case');
