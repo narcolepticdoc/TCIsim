@@ -681,6 +681,15 @@ function boot() {
   if (btnChartReset) btnChartReset.addEventListener('click', () => {
     if (chart) chart.resetView();
   });
+  const btnChartExpand = $('btn-chart-expand');
+  if (btnChartExpand) btnChartExpand.addEventListener('click', () => {
+    const sc = $('sim-content');
+    const expanded = sc.classList.toggle('chart-expanded');
+    btnChartExpand.textContent = expanded ? '⤡' : '⤢';
+    btnChartExpand.title = expanded ? 'Restore split view' : 'Expand chart';
+    btnChartExpand.classList.toggle('active', expanded);
+    if (chart) setTimeout(() => chart.chart.resize(), 0);
+  });
   const btnChartTooltip = $('btn-chart-tooltip');
   if (btnChartTooltip) btnChartTooltip.addEventListener('click', () => {
     if (chart) {
@@ -729,12 +738,14 @@ function closeModal(id) {
 }
 
 function setView(v) {
-  // Tab buttons
+  // Tab buttons (kept in sync even on tablet in case of resize back to phone)
   $('view-chart').classList.toggle('active', v === 'chart');
   $('view-history').classList.toggle('active', v === 'history');
-  // Content panels
-  $('panel-chart').classList.toggle('active', v === 'chart');
-  $('panel-history').classList.toggle('active', v === 'history');
+  // On tablet (split layout ≥1020px), both panels are always visible via CSS
+  if (window.innerWidth < 1020) {
+    $('panel-chart').classList.toggle('active', v === 'chart');
+    $('panel-history').classList.toggle('active', v === 'history');
+  }
 }
 
 // ---- Expose for shim compatibility and debugging ----
