@@ -843,9 +843,21 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
 
   // Check if Ce is below target at maintenance start (rate-only step-up)
   const ceAtMaint = engine.getConcentrations().Ce;
-  const needsCeBoost = ceAtMaint < ceTarget * 0.95 && !scheme.find(e => e.type === 'bolus');
-  // Number of Ce-targeting intervals: enough to get Ce close to target
-  const ceBoostIntervals = needsCeBoost ? 3 : 0; // 3 intervals = 6 min of Ce-targeting
+  const cpAtMaint = engine.getConcentrations().Cp;
+  const hadBolus = !!scheme.find(e => e.type === 'bolus');
+  const needsCeBoost = ceAtMaint < ceTarget * 0.95 && !hadBolus;
+
+  // For large target decreases: Cp falls much faster than Ce during the decay pause.
+  // When Ce reaches upperBound, Cp may be far below target. ke0 equilibration then
+  // pulls Ce below the lower band before Cp-targeting can raise Cp fast enough.
+  // Activate Ce-targeting intervals (same mechanism as needsCeBoost) to hold Ce near
+  // target while Cp recovers, preventing the undershoot.
+  const cpGap = Math.max(0, ceTarget - cpAtMaint);
+  const needsCpLift = !needsCeBoost && cpGap > ceTarget * 0.1; // Cp >10% below target
+  const cpLiftIntervals = needsCpLift
+    ? Math.min(8, Math.ceil(cpGap / (ceTarget * 0.1)))
+    : 0;
+  const ceBoostIntervals = needsCeBoost ? 3 : cpLiftIntervals;
 
   for (let i = 0; i < cptIntervalCount; i++) {
     if (ps1 === 0 && ps2 === 0 && ps3 === 0) {
