@@ -476,6 +476,9 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
     html = _approachCache.staticText;
   }
 
+  // Intermittent countdown is shown in the step-bar row instead
+  if (m === 'intermittent' && _approachCache.arrivalMin !== null) html = '';
+
   const el = $(drugId + '-approach');
   if (el && el.innerHTML !== html) el.innerHTML = html;
 }
@@ -641,18 +644,18 @@ function update() {
           if (approachEl2 && approachEl2.innerHTML !== '') approachEl2.innerHTML = '';
         } else {
           if (barEl2) barEl2.style.width = '0%';
-          let cntText = '';
+          // cntHtml goes into step-bar-countdown (innerHTML); approachHtml into approach line
+          let cntHtml = '';
           let approachHtml = '';
           if (getIntermittentThresholdForDrug) {
             const thr = getIntermittentThresholdForDrug(dId);
             if (thr > 0) {
               warnings.checkBelowThreshold(dId, conc.Ce <= thr);
               if (conc.Ce <= thr) {
-                cntText = 'Below Threshold';
+                // Below threshold: flash in approach line, clear step-bar countdown
                 approachHtml = '<span class="appr-below">Below Threshold</span>';
               } else {
-                // Use cached arrivalMin to avoid calling predictTrough every frame.
-                // Invalidate only when the event list changes (new bolus, reset, etc.).
+                // Counting down: show "Redose in M:SS" in step-bar, leave approach line blank
                 const cached = _nonSelectedCache[dId];
                 let arrivalMin = null;
                 if (cached && cached.eventCount === evtCount2 &&
@@ -668,15 +671,13 @@ function update() {
                 if (arrivalMin !== null) {
                   const rem = arrivalMin - t;
                   if (rem > 0) {
-                    const fmtd = fmtCountdown(rem);
-                    cntText = fmtd;
-                    approachHtml = `Redose in <span class="appr-time">${fmtd}</span>`;
+                    cntHtml = `Redose in <span class="appr-time">${fmtCountdown(rem)}</span>`;
                   }
                 }
               }
             }
           }
-          if (cntEl2) cntEl2.textContent = cntText;
+          if (cntEl2 && cntEl2.innerHTML !== cntHtml) cntEl2.innerHTML = cntHtml;
           if (approachEl2 && approachEl2.innerHTML !== approachHtml) approachEl2.innerHTML = approachHtml;
         }
       } else {
@@ -814,12 +815,14 @@ function update() {
         const rem = _approachCache.arrivalMin - t;
         if (barEl) barEl.style.width = '0%';
         if (cntEl) {
-          const newText = rem > 0 ? fmtCountdown(rem) : '';
-          if (cntEl.textContent !== newText) cntEl.textContent = newText;
+          const newHtml = rem > 0
+            ? `Redose in <span class="appr-time">${fmtCountdown(rem)}</span>`
+            : '';
+          if (cntEl.innerHTML !== newHtml) cntEl.innerHTML = newHtml;
         }
       } else {
         if (barEl) barEl.style.width = '0%';
-        if (cntEl && cntEl.textContent !== '') cntEl.textContent = '';
+        if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
       }
     }
   }
