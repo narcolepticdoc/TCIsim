@@ -250,6 +250,66 @@
       .sim-controls{padding:4px 8px;gap:3px}.btn-ctrl{padding:6px 10px;font-size:11px}
     }
 
+    /* Expand button — hidden on phones, shown on tablets via media query below */
+    #btn-chart-expand{display:none}
+
+    /* ==== TABLET LAYOUT (≥1020px) — iPad 10th gen+ and iPad mini 7th gen+ ==== */
+    @media(min-width:1020px){
+      /* Setup screen */
+      .setup-brand{width:260px}.setup-brand h1{font-size:28px}.setup-brand .subtitle{font-size:12px}
+      .setup-form{padding:18px 24px;gap:12px}
+      .form-row label{font-size:12px}
+      .form-row input[type="number"],.form-row select{font-size:16px;padding:8px 11px}
+      .btn-confirm{font-size:15px;padding:12px}
+
+      /* Topbar */
+      .sim-topbar{height:42px;padding:0 16px;gap:12px}
+      .sim-topbar .app-name{font-size:12px}
+      .patient-summary{font-size:12px;gap:10px}
+      .elapsed-timer{font-size:19px}
+
+      /* Drug panel */
+      .drug-panel{width:250px}
+      .drug-card{padding:11px 13px;gap:4px}
+      .drug-card .drug-name{font-size:13px}
+      .drug-card .ce-current{font-size:26px}
+      .drug-card .drug-approach{font-size:10.5px}
+      .drug-card .drug-status{font-size:11px}
+      .drug-card .drug-rate{font-size:11px}
+
+      /* Controls bar */
+      .btn-ctrl{font-size:13px;padding:9px 18px}
+      .mode-label{font-size:11px}
+
+      /* === Split layout: chart left, history right === */
+      /* Hide the tab toggle — both panels always visible on tablet */
+      .content-tabs{display:none}
+      /* Put panels side by side */
+      .sim-content{flex-direction:row}
+      /* Make both content-views visible */
+      .content-view{display:flex;flex-direction:column}
+      /* Chart takes 2/3 width, history takes 1/3 */
+      #panel-chart{flex:2;min-width:0}
+      #panel-history{flex:1;min-width:200px;border-left:1px solid var(--border-subtle)}
+      /* Show the expand toggle button */
+      #btn-chart-expand{display:flex}
+
+      /* Expanded state: chart fills full width, history hidden */
+      .sim-content.chart-expanded #panel-history{display:none}
+      .sim-content.chart-expanded #panel-chart{flex:1}
+    }
+
+    /* ==== LARGE TABLET (≥1200px) — iPad Air, iPad Pro 11"/13" ==== */
+    @media(min-width:1200px){
+      .setup-brand{width:280px}.setup-brand h1{font-size:30px}
+      .setup-form{max-width:600px}
+      .drug-panel{width:285px}
+      .drug-card .ce-current{font-size:30px}
+      .drug-card .drug-name{font-size:14px}
+      .elapsed-timer{font-size:21px}
+      .btn-ctrl{font-size:14px;padding:10px 20px}
+    }
+
     /* Timer wrap & popover */
     .timer-wrap{position:relative;display:flex;flex-direction:column;align-items:flex-end}
     .elapsed-timer{font-family:var(--font-mono);font-size:16px;font-weight:500;color:var(--green);letter-spacing:1px;cursor:pointer;padding:2px 6px;border-radius:var(--radius-sm);transition:background .15s}
@@ -578,7 +638,7 @@
           </div>
         </div>
       </div>
-      <div class="sim-content">
+      <div class="sim-content" id="sim-content">
         <div class="content-tabs">
           <button class="content-tab active" id="view-chart">Chart</button>
           <button class="content-tab" id="view-history">History</button>
@@ -590,6 +650,7 @@
             <div class="chart-controls" id="chart-controls" style="display:none">
               <button class="chart-btn" id="btn-chart-reset" title="Reset zoom (or double-tap chart)">⟳</button>
               <button class="chart-btn" id="btn-chart-tooltip" title="Toggle crosshair values">╋</button>
+              <button class="chart-btn" id="btn-chart-expand" title="Expand chart">⤢</button>
             </div>
           </div>
         </div>
