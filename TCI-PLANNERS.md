@@ -70,14 +70,20 @@ testRate = (target - trialCp) / p_udf[120]
 ```
 Eigenstate is advanced by 120 seconds at the computed rate. Produces a 180-element rate array.
 
-**Ce-boost phase:** When Ce is below target at maintenance start and no bolus was given, the first 3 intervals use a 5-minute Ce-targeting binary search via the engine instead of the analytical Cp formula. After each such interval, `refitEigenstate()` resyncs `ps1/ps2/ps3` from the engine via Cramér's rule. This prevents eigenstate divergence at the Ce→Cp handoff. Without this refit, the first Cp-targeting step is overestimated by ~10–15 mL/h.
+**Ce-boost phase:** Three cases activate Ce-targeting intervals at maintenance start instead of immediately using the Cp-targeting formula:
+- **No bolus, Ce below target** (`needsCeBoost`): 3 intervals of 5-minute Ce-targeting binary search
+- **Large target decrease** (`needsCpLift`): Cp may be far below target after decay; 1–8 intervals hold Ce near target while Cp recovers
+- **Post-bolus Cp overshoot** (`cpOvershoot`): when a bolus was delivered and `cpAtMaint > ceTarget × 1.02`, 2 intervals of Ce-targeting prevent the Cp-eigenstate lag from driving Ce above target
+
+After each Ce-boost interval, `refitEigenstate()` resyncs `ps1/ps2/ps3` from the engine via Cramér's rule. Without this refit, the first Cp-targeting step is overestimated by ~10–15 mL/h.
 
 **Second pass:** Step extraction scanning the rate array:
-- 8% threshold (`cpt_threshold`) — emit a new step when rate has dropped >8% from the last emitted step
-- 0.667 weighted average (`cpt_avgfactor`) — step rate = blend of last step rate and current rate
+- Dynamic threshold and avgfactor based on early maintenance rate AND step magnitude:
+  - `earlyRateMlH ≥ 30 AND stepMagnitude > 20%` → 8% threshold, 0.667 avgfactor (SimTIVA default for high-rate large step-ups)
+  - Otherwise → 5% threshold, 0.62 avgfactor (catches subtle V3-equilibration corrections missed by 8%)
+- `stepMagnitude = (ceTarget − Ce₀) / ceTarget` using Ce at plan start; small step-ups (<20% Ce increase, e.g. 3.5→4.0) use the tighter threshold even at high early rates
 - 1 mL/h rounding (`roundingfactor = 360`)
 - `wait_peak` handling for initial rate oscillation after CET bolus-pause
-- Dynamic threshold: if early rate < 30 mL/h, uses 5% threshold / 0.62 avgfactor
 
 ### Eigenstate Reconstruction
 
@@ -125,13 +131,13 @@ Typical factors: ~0.92 at 700–750 mL/h, ~0.97–0.99 at 1200 mL/h.
 
 **3.5→4.0 step-up at 1000 mL/h:**
 
-| Mode | Bolus | Time to 95% | Overshoot |
-|---|---|---|---|
-| Stepped | 75mg | 2.0 min | +0% |
-| CET | 57mg | 1.0 min | -0% |
-| CET(C) | 55mg | 1.3 min | -2% |
-| **Emulation** | **38mg** | **0.8 min** | **+0%** |
-| SimTIVA | 33mg | ~1 min | ~0% |
+| Mode | Bolus | Time to 95% | Ce at +60 min | Ce at +240 min |
+|---|---|---|---|---|
+| Stepped | 75mg | 2.0 min | ≤4.05 | ≤4.05 |
+| CET | 57mg | 1.0 min | ≤4.05 | ≤4.05 |
+| CET(C) | 55mg | 1.3 min | ≤4.05 | ≤4.05 |
+| **Emulation** | **38mg** | **0.8 min** | **≤4.05** | **≤4.05** |
+| SimTIVA | 33mg | ~1 min | ~4.0 | ~4.0 |
 
 ## Remaining Gap vs SimTIVA
 
