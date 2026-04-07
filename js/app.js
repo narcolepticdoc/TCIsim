@@ -122,7 +122,7 @@ function initSimScreen(patient) {
   // Create new chart
   if (canvas) {
     try {
-      chart = createChart(canvas, { drugId: selectedDrug, showCp: true, showCe: true, legendEl: $('chart-legend') });
+      chart = createChart(canvas, { drugId: selectedDrug, showCp: true, showCe: true });
       // Give chart access to PD model for BIS in tooltips
       const pd = model.getPDModel(selectedDrug);
       if (pd) chart.setPDModel(pd);

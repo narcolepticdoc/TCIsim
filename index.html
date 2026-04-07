@@ -197,11 +197,6 @@
     .chart-area canvas{width:100%!important;height:100%!important}
     .chart-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px}
     .chart-controls{position:absolute;top:4px;right:4px;display:flex;gap:3px;z-index:5}
-    .chart-legend{position:absolute;top:6px;left:8px;z-index:4;pointer-events:none;line-height:1}
-    .chart-legend-name{font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:4px}
-    .chart-legend-items{display:flex;gap:10px}
-    .chart-legend-item{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-muted)}
-    .chart-legend-swatch{width:16px;height:2px;border-radius:1px;flex-shrink:0}
     .chart-btn{width:28px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--bg-card);color:var(--text-muted);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:.6;transition:opacity .15s}
     .chart-btn:hover{opacity:1}
     .chart-btn.active{color:var(--blue);opacity:1}
@@ -676,7 +671,6 @@
           <div class="chart-area">
             <div class="chart-placeholder" id="chart-placeholder"><div class="ph-icon">📈</div><div>Set a target or rate to begin</div></div>
             <canvas id="chart-canvas" style="display:none"></canvas>
-            <div class="chart-legend" id="chart-legend" style="display:none"></div>
             <div class="chart-controls" id="chart-controls" style="display:none">
               <button class="chart-btn" id="btn-chart-reset" title="Reset zoom (or double-tap chart)">⟳</button>
               <button class="chart-btn" id="btn-chart-tooltip" title="Toggle crosshair values">╋</button>
