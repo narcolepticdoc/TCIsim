@@ -641,6 +641,35 @@ function update() {
         }
       }
     }
+
+    // ── Right-side status indicator ───────────────────────────────
+    const cardEl = document.getElementById('drug-' + dId);
+    if (cardEl) {
+      let status = 'off';
+      if (caseStarted && m !== 'none') {
+        if (m === 'intermittent' && ceTarget > 0 && Ce <= ceTarget) {
+          status = 'alert';                      // below redose threshold
+        } else if (rate === 0 && m !== 'intermittent') {
+          status = 'alert';                      // pump paused / stopped
+        } else {
+          const warnMin = warnings.getSettings().statusWarnMinutes ?? 2;
+          let isWarn = false;
+          // Next scheduled manual event (rate change, bolus, pause, TCI step)
+          try {
+            const evts    = model.getEvents(dId);
+            const nextEvt = evts.find(e => e.time > t + 0.0001 && e.source !== 'system');
+            if (nextEvt && (nextEvt.time - t) <= warnMin) isWarn = true;
+          } catch (e) {}
+          // Intermittent redose due within warn window
+          if (!isWarn && m === 'intermittent') {
+            const cache = _getApproachCache(dId);
+            if (cache.arrivalMin !== null && (cache.arrivalMin - t) <= warnMin) isWarn = true;
+          }
+          status = isWarn ? 'warn' : 'ok';
+        }
+      }
+      if (cardEl.dataset.status !== status) cardEl.dataset.status = status;
+    }
   }
 
   // ── Notify app.js for chart cursor ─────────────────────────────

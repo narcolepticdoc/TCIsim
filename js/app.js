@@ -640,41 +640,48 @@ function boot() {
 
   // Wire settings modal
   (function initSettings() {
-    const savedSettings  = warnings.getSettings();
-    const prepSlider     = $('set-prep');
-    const alertSlider    = $('set-alert');
-    const prepVal        = $('set-prep-val');
-    const alertVal       = $('set-alert-val');
-    const prepSoundChk   = $('set-prep-sound');
-    const alertSoundChk  = $('set-alert-sound');
-    const redoseSoundChk = $('set-redose-sound');
+    const savedSettings    = warnings.getSettings();
+    const prepSlider       = $('set-prep');
+    const alertSlider      = $('set-alert');
+    const prepVal          = $('set-prep-val');
+    const alertVal         = $('set-alert-val');
+    const prepSoundChk     = $('set-prep-sound');
+    const alertSoundChk    = $('set-alert-sound');
+    const redoseSoundChk   = $('set-redose-sound');
+    const statusWarnSlider = $('set-status-warn');
+    const statusWarnVal    = $('set-status-warn-val');
     if (!prepSlider || !alertSlider) return;
 
     // Populate controls from saved settings
     prepSlider.value  = savedSettings.prepSec;
     alertSlider.value = savedSettings.alertSec;
-    if (prepVal)        prepVal.textContent       = savedSettings.prepSec    + 's';
-    if (alertVal)       alertVal.textContent      = savedSettings.alertSec   + 's';
-    if (prepSoundChk)   prepSoundChk.checked      = savedSettings.prepSound;
-    if (alertSoundChk)  alertSoundChk.checked     = savedSettings.alertSound;
-    if (redoseSoundChk) redoseSoundChk.checked    = savedSettings.redoseSound ?? true;
+    if (prepVal)          prepVal.textContent          = savedSettings.prepSec    + 's';
+    if (alertVal)         alertVal.textContent         = savedSettings.alertSec   + 's';
+    if (prepSoundChk)     prepSoundChk.checked         = savedSettings.prepSound;
+    if (alertSoundChk)    alertSoundChk.checked        = savedSettings.alertSound;
+    if (redoseSoundChk)   redoseSoundChk.checked       = savedSettings.redoseSound ?? true;
+    if (statusWarnSlider) statusWarnSlider.value        = savedSettings.statusWarnMinutes ?? 2;
+    if (statusWarnVal)    statusWarnVal.textContent     = (savedSettings.statusWarnMinutes ?? 2) + ' min';
 
     function saveAll() {
-      const prepSec     = parseInt(prepSlider.value,  10);
-      const alertSec    = parseInt(alertSlider.value, 10);
-      const prepSound   = prepSoundChk   ? prepSoundChk.checked   : false;
-      const alertSound  = alertSoundChk  ? alertSoundChk.checked  : true;
-      const redoseSound = redoseSoundChk ? redoseSoundChk.checked : true;
-      if (prepVal)  prepVal.textContent  = prepSec  + 's';
-      if (alertVal) alertVal.textContent = alertSec + 's';
-      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound });
+      const prepSec          = parseInt(prepSlider.value,  10);
+      const alertSec         = parseInt(alertSlider.value, 10);
+      const prepSound        = prepSoundChk      ? prepSoundChk.checked      : false;
+      const alertSound       = alertSoundChk     ? alertSoundChk.checked     : true;
+      const redoseSound      = redoseSoundChk    ? redoseSoundChk.checked    : true;
+      const statusWarnMinutes = statusWarnSlider ? parseInt(statusWarnSlider.value, 10) : 2;
+      if (prepVal)         prepVal.textContent         = prepSec           + 's';
+      if (alertVal)        alertVal.textContent        = alertSec          + 's';
+      if (statusWarnVal)   statusWarnVal.textContent   = statusWarnMinutes + ' min';
+      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes });
     }
 
     prepSlider.addEventListener('input',    saveAll);
     alertSlider.addEventListener('input',   saveAll);
-    if (prepSoundChk)   prepSoundChk.addEventListener('change',   saveAll);
-    if (alertSoundChk)  alertSoundChk.addEventListener('change',  saveAll);
-    if (redoseSoundChk) redoseSoundChk.addEventListener('change', saveAll);
+    if (prepSoundChk)     prepSoundChk.addEventListener('change',     saveAll);
+    if (alertSoundChk)    alertSoundChk.addEventListener('change',    saveAll);
+    if (redoseSoundChk)   redoseSoundChk.addEventListener('change',   saveAll);
+    if (statusWarnSlider) statusWarnSlider.addEventListener('input',  saveAll);
 
     const btnSettingsOpen  = $('btn-settings');
     const btnSettingsClose = $('btn-settings-close');

@@ -104,15 +104,15 @@
 
     /* Drug panel */
     .drug-panel{width:210px;min-width:170px;flex-shrink:0;display:flex;flex-direction:column;gap:1px;background:var(--border-subtle);border-right:1px solid var(--border-subtle);overflow-y:auto}
-    .drug-card{background:var(--bg-card);padding:9px 11px;cursor:pointer;transition:background .15s;display:flex;flex-direction:column;gap:3px}
+    .drug-card{background:var(--bg-card);padding:9px 11px;cursor:pointer;transition:background .15s;display:flex;flex-direction:column;gap:3px;border-left:4px solid var(--drug-color-muted,rgba(59,130,246,.25));position:relative}
     .drug-card:hover{background:var(--bg-hover)}
-    .drug-card.active{background:var(--bg-input);border-left:3px solid var(--drug-color,var(--blue))}
+    .drug-card.active{background:var(--bg-input);border-left:4px solid var(--drug-color,var(--blue))}
     .drug-card.disabled{opacity:.3;cursor:default;pointer-events:none}
-    /* Drug-type color strips */
-    #drug-propofol{--drug-color:#f59e0b}
-    #drug-ketamine{--drug-color:#f59e0b}
-    #drug-fentanyl{--drug-color:#3b82f6}
-    #drug-remifentanil{--drug-color:#3b82f6}
+    /* Drug-type color strips — yellow for hypnotics, blue for narcotics */
+    #drug-propofol    {--drug-color:#eab308;--drug-color-muted:rgba(234,179,8,.25)}
+    #drug-ketamine    {--drug-color:#eab308;--drug-color-muted:rgba(234,179,8,.25)}
+    #drug-fentanyl    {--drug-color:#3b82f6;--drug-color-muted:rgba(59,130,246,.25)}
+    #drug-remifentanil{--drug-color:#3b82f6;--drug-color-muted:rgba(59,130,246,.25)}
     .drug-card .drug-name{font-family:var(--font-mono);font-size:13px;font-weight:500;color:var(--text-primary);text-transform:uppercase;letter-spacing:.5px}
     .drug-card .drug-model{font-size:9px;color:var(--text-muted)}
     /* Combined Cp / Ce row */
@@ -151,6 +151,11 @@
     /* Prep pulse: inset border glow on drug card (inset is not clipped by overflow-y:auto on .drug-panel) */
     @keyframes warn-prep-pulse{0%,100%{box-shadow:inset 0 0 0 0 rgba(245,158,11,0)}40%,60%{box-shadow:inset 0 0 0 3px rgba(245,158,11,0.9),inset 0 0 14px rgba(245,158,11,0.2)}}
     .drug-card.warn-prep{animation:warn-prep-pulse 1.0s ease-in-out infinite}
+    /* Right-side status indicator */
+    .drug-card::after{content:'';position:absolute;right:0;top:4px;bottom:4px;width:3px;border-radius:2px;background:transparent;transition:background-color .3s}
+    .drug-card[data-status="ok"]::after   {background:rgba(34,197,94,.75)}
+    .drug-card[data-status="warn"]::after {background:var(--amber)}
+    .drug-card[data-status="alert"]::after{background:var(--red)}
     /* Below-threshold pulse on intermittent approach line */
     @keyframes below-thresh-pulse{0%,100%{opacity:1}50%{opacity:0.3}}
     .drug-approach .appr-below{color:var(--amber);animation:below-thresh-pulse 1.4s ease-in-out infinite}
@@ -875,6 +880,13 @@
           <input type="checkbox" id="set-redose-sound" checked>
           Play chime when Ce drops below threshold
         </label>
+      </div>
+      <div class="settings-row">
+        <label>Status indicator — warn window (minutes before event)</label>
+        <div class="settings-control">
+          <input type="range" id="set-status-warn" min="1" max="10" step="1" value="2">
+          <span id="set-status-warn-val">2 min</span>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="btn-settings-close">Done</button>
