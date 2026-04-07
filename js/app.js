@@ -19,7 +19,7 @@ import * as eventEditor from './ui/event-editor.js';
 import { createChart } from './ui/chart.js';
 import { ceForBIS } from './pk/pd.js';
 import { bolusDeliveryMinutes, setPumpSettings, getPumpSettings, APP_VERSION } from './util/constants.js';
-import { fromCanonical, getAllowedUnits, formatValue } from './util/units.js';
+import { fromCanonical, getAllowedUnits, getDefaultUnit, formatValue } from './util/units.js';
 import { playAlert } from './ui/alert-sound.js';
 import * as persist from './ui/persist.js';
 import * as warnings from './ui/warnings.js';
@@ -835,20 +835,32 @@ function showTciFirstStepModal(scheme, drugId, delaySeconds) {
 
   const patient = model.getPatient();
   const ps = getPumpSettings(drugId);
-  let actionText;
+  const ctx = { weightKg: patient.weight, concentration: ps.concentration };
 
-  if (firstStep.type === 'bolus') {
-    const mg = firstStep.value;
-    const mcgPerKg = Math.round(mg * 1000 / patient.weight);
-    const ml = (mg / ps.concentration).toFixed(1);
-    actionText = `Bolus ${mcgPerKg} mcg/kg = ${ml} mL`;
-  } else {
-    // Rate step (maintenance or decay hold at 0)
-    const mlPerHr = Math.round(firstStep.value / ps.concentration * 60);
-    actionText = firstStep.value === 0 ? 'Hold infusion (pump off)' : `Set rate to ${mlPerHr} mL/hr`;
+  function buildActionHtml(task, canonicalValue, prefix) {
+    const allowed = getAllowedUnits(drugId, task);
+    const primary = getDefaultUnit(drugId, task) || allowed[0];
+    const primaryVal = fromCanonical(canonicalValue, primary, drugId, task, ctx);
+    const primaryStr = `${prefix}${formatValue(primaryVal, primary)} ${primary}`;
+    const secondaryParts = allowed
+      .filter(u => u !== primary)
+      .map(u => `${formatValue(fromCanonical(canonicalValue, u, drugId, task, ctx), u)} ${u}`);
+    const secondaryHtml = secondaryParts.length
+      ? `<span class="tci-fs-secondary">= ${secondaryParts.join(' · ')}</span>`
+      : '';
+    return `${primaryStr}${secondaryHtml}`;
   }
 
-  $('tci-fs-action').textContent = actionText;
+  let actionHtml;
+  if (firstStep.type === 'bolus') {
+    actionHtml = buildActionHtml('bolus', firstStep.value, 'Bolus ');
+  } else if (firstStep.value === 0) {
+    actionHtml = 'Hold infusion (pump off)';
+  } else {
+    actionHtml = buildActionHtml('rate', firstStep.value, 'Set rate: ');
+  }
+
+  $('tci-fs-action').innerHTML = actionHtml;
   $('modal-tci-firststep').classList.add('open');
 
   // Clear any existing countdown
