@@ -2,6 +2,27 @@
 
 ## Session History
 
+### Session 21 (2026-04-07) — TCI Target Popup with Delay & Countdown (v0.5.6 → v0.5.7)
+
+New UX for setting a TCI target during a running case. Previously `planTCI` fired from "now" the instant the keypad was confirmed, giving the user no time to prepare the pump before the first step executed. Now:
+
+1. **Delay selector modal** (`#modal-tci-delay`) — shown immediately after keypad confirm (running case only). Displays the Ce target and pill buttons for 5 / 10 / 15 / 20 / 30 seconds (default 10s, selection persists within session).
+
+2. **First-step countdown modal** (`#modal-tci-firststep`) — shown after the user confirms the delay. `planTCI` is called with `futureTime = now + delaySeconds / 60` so the plan starts in the future. The first element of the returned `scheme` array is inspected and described in plain clinical terms:
+   - Bolus step: `Bolus {mcgPerKg} mcg/kg = {ml} mL` — mg × 1000 / weight for mcg/kg, mg / concentration for mL
+   - Rate step (> 0): `Set rate to {mlPerHr} mL/hr`
+   - Rate step (= 0): `Hold infusion (pump off)`
+
+   A large amber ticker counts down from the selected delay at 100 ms intervals, shows "Now!" at zero, then auto-dismisses after 1.5 s. "Got it" dismisses early.
+
+**Pre-case behavior unchanged** — when the case has not started, the keypad confirm commits the plan immediately with no delay modal.
+
+**Files changed:** `index.html` (two new modals + CSS), `js/app.js` (import `getPumpSettings`, three new state vars, three new functions, updated `onConfirm` handler, extended Escape/click-outside cleanup). `simulation.js` unchanged.
+
+359 tests across 12 suites, all passing.
+
+---
+
 ### Session 19 (2026-04-06) — Emulation Planner Ce Overshoot Fix (v0.5.3 → v0.5.4)
 
 Two targeted changes to `planTCISchemeEmulation` in `js/sim/tci-planner.js`:
