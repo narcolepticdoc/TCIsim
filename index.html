@@ -147,7 +147,7 @@
     .drug-card .step-bar-wrap.step-bar-below{background:var(--red)}
     .drug-card .step-bar{height:100%;background:var(--bg-deep);border-radius:2px;transition:width .5s linear}
 
-    .drug-card.active .drug-name  { font-size: 14px }
+    .drug-card.active .drug-name  { font-size: 17px }
     .drug-card.active .ce-current { font-size: 27px }
     /* ── Warning system ─────────────────────────────────────────────── */
     /* Prep pulse: inset border glow on drug card (inset is not clipped by overflow-y:auto on .drug-panel) */
@@ -198,8 +198,8 @@
     .chart-area{flex:1;position:relative;background:var(--bg-deep);overflow:hidden}
     .chart-area canvas{width:100%!important;height:100%!important}
     .chart-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px}
-    .chart-controls{position:absolute;top:50%;right:4px;transform:translateY(-50%);display:flex;flex-direction:column;gap:5px;z-index:5}
-    .chart-btn{width:34px;height:34px;border:1px solid var(--border-subtle);border-radius:6px;background:var(--bg-card);color:var(--text-secondary);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s,background .15s}
+    .chart-controls{position:absolute;top:8px;left:8px;display:flex;flex-direction:column;gap:10px;z-index:5}
+    .chart-btn{width:38px;height:38px;border:1px solid var(--border-subtle);border-radius:6px;background:var(--bg-card);color:var(--text-secondary);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s,background .15s}
     .chart-btn:hover{color:var(--text-primary);background:var(--bg-hover)}
     .chart-btn.active{color:var(--blue)}
     .chart-placeholder .ph-icon{font-size:28px;margin-bottom:6px;opacity:.4}
@@ -255,7 +255,7 @@
     @media(max-height:380px){
       .sim-topbar{height:28px}.elapsed-timer{font-size:14px}
       .timer-wall-hint{font-size:8px}
-      .drug-panel{width:175px;min-width:140px}.drug-card{padding:6px 8px;gap:2px}.drug-card .drug-name{font-size:11px}.drug-card .ce-current{font-size:18px}.drug-card.active .ce-current{font-size:22px}
+      .drug-panel{width:175px;min-width:140px}.drug-card{padding:6px 8px;gap:2px}.drug-card .drug-name{font-size:11px}.drug-card .ce-current{font-size:18px}.drug-card.active .drug-name{font-size:14px}.drug-card.active .ce-current{font-size:22px}
       .content-tab{padding:5px 12px;font-size:10px}
       .sim-controls{padding:4px 8px;gap:3px}.btn-ctrl{padding:6px 10px;font-size:11px}
     }
@@ -283,7 +283,7 @@
       .drug-card{padding:11px 13px;gap:4px}
       .drug-card .drug-name{font-size:14px}
       .drug-card .ce-current{font-size:26px}
-      .drug-card.active .drug-name{font-size:15px}
+      .drug-card.active .drug-name{font-size:18px}
       .drug-card.active .ce-current{font-size:31px}
       .drug-card .ce-label,.drug-card .cp-label,.drug-card .bis-label{font-size:10.5px}
       .drug-card .cp-current{font-size:13px}
@@ -321,7 +321,7 @@
       .drug-panel{width:285px}
       .drug-card .drug-name{font-size:15px}
       .drug-card .ce-current{font-size:30px}
-      .drug-card.active .drug-name{font-size:16px}
+      .drug-card.active .drug-name{font-size:20px}
       .drug-card.active .ce-current{font-size:35px}
       .drug-card .drug-approach{font-size:12px}
       .drug-card .step-bar-countdown{font-size:12px}
@@ -678,9 +678,9 @@
             <div class="chart-placeholder" id="chart-placeholder"><div class="ph-icon">📈</div><div>Set a target or rate to begin</div></div>
             <canvas id="chart-canvas" style="display:none"></canvas>
             <div class="chart-controls" id="chart-controls" style="display:none">
-              <button class="chart-btn" id="btn-chart-reset" title="Reset zoom (or double-tap chart)">⟳</button>
-              <button class="chart-btn" id="btn-chart-tooltip" title="Toggle crosshair values">╋</button>
               <button class="chart-btn" id="btn-chart-expand" title="Expand chart">⤢</button>
+              <button class="chart-btn" id="btn-chart-tooltip" title="Toggle crosshair values">╋</button>
+              <button class="chart-btn" id="btn-chart-reset" title="Reset zoom (or double-tap chart)">⟳</button>
             </div>
           </div>
         </div>
