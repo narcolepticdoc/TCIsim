@@ -820,6 +820,14 @@ export function createEventList() {
 
     const drugId = evt.drug;
     const timeChanged = changes.time != null && changes.time !== evt.time;
+    const wasBolus = evt.type === 'bolus';
+
+    // Capture old bolus end BEFORE applying any changes
+    let oldBolusEnd = null;
+    if (wasBolus) {
+      const { duration: oldDuration } = getBolusDelivery(evt);
+      oldBolusEnd = evt.time + oldDuration;
+    }
 
     if (changes.value != null) evt.value = changes.value;
     if (changes.type != null) evt.type = changes.type;
@@ -832,6 +840,26 @@ export function createEventList() {
       const idx = events.indexOf(evt);
       if (idx !== -1) events.splice(idx, 1);
       insert(evt);
+    }
+
+    // If this was (and remains) a bolus, sync the associated rate-restore event
+    if (wasBolus && evt.type === 'bolus') {
+      const newBolusEnd = evt.time + getBolusDelivery(evt).duration;
+      if (Math.abs(newBolusEnd - oldBolusEnd) > 1e-9) {
+        const restoreEvt = events.find(e =>
+          e.drug === drugId &&
+          e.type === 'rate' &&
+          e.source === 'system' &&
+          e.annotation === 'Rate restored after bolus' &&
+          Math.abs(e.time - oldBolusEnd) < 0.001
+        );
+        if (restoreEvt) {
+          const ri = events.indexOf(restoreEvt);
+          if (ri !== -1) events.splice(ri, 1);
+          restoreEvt.time = newBolusEnd;
+          insert(restoreEvt);
+        }
+      }
     }
 
     replayDrug(drugId);
