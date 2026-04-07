@@ -45,9 +45,11 @@ let _curveVersion = 0;   // incremented on every setCurveData call
 export function setCurveData(curve) {
   _sharedCurve  = curve;
   _curveVersion++;
-  // Invalidate approach cache so next frame rescans with fresh data
-  _approachCache.computedVersion = -1;
-  _approachCache.lockedSsCe      = null;
+  // Invalidate all per-drug approach caches so next frame rescans with fresh data
+  for (const cache of Object.values(_approachCache)) {
+    cache.computedVersion = -1;
+    cache.lockedSsCe      = null;
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -66,7 +68,7 @@ const SS_WINDOW_MIN      = 10;    // minutes
 const EMERGENCE_CE = 1.5;
 
 // ──────────────────────────────────────────────────────────────────
-// Approach line cache (selected drug)
+// Per-drug approach cache — keyed by drugId, same shape for every drug.
 //   prefix          — HTML label ending with "in " when countdown follows
 //   arrivalMin      — absolute elapsed-minutes of arrival (null = no countdown)
 //   staticText      — full HTML for no-countdown states
@@ -75,24 +77,21 @@ const EMERGENCE_CE = 1.5;
 //                     value stays stable while Ce is rapidly changing.
 //   computedVersion — _curveVersion at last compute; mismatch → rescan
 //   mode/rate/target — pump-state snapshot at last compute
+//   curve           — cached PK curve for non-selected drugs (null for selected)
 // ──────────────────────────────────────────────────────────────────
-let _approachCache = {
-  prefix: '', arrivalMin: null, staticText: '',
-  lockedSsCe: null,
-  computedVersion: -1,
-  mode: '', rate: 0, target: 0,
-};
+const _approachCache = {};
 
-// Per-drug cache for non-selected intermittent approach/bar countdown.
-// Avoids calling predictTrough every rAF frame — invalidates only when
-// the event count changes (i.e. after a new bolus or a reset).
-// Format: { [drugId]: { arrivalMin: number|null, eventCount: number } }
-const _nonSelectedCache = {};
-
-// Per-drug cache for non-selected approach line (all non-intermittent modes).
-// Invalidates when eventCount, mode, ceTarget, or rate changes, or countdown expires.
-// Format: { [drugId]: { eventCount, mode, ceTarget, rate, prefix, arrivalMin, staticText } }
-const _nonSelectedApproachCache = {};
+function _getApproachCache(drugId) {
+  if (!_approachCache[drugId]) {
+    _approachCache[drugId] = {
+      prefix: '', arrivalMin: null, staticText: '',
+      lockedSsCe: null, computedVersion: -1,
+      mode: '', rate: 0, target: 0,
+      curve: null,
+    };
+  }
+  return _approachCache[drugId];
+}
 
 // ──────────────────────────────────────────────────────────────────
 // Init / lifecycle
@@ -217,30 +216,7 @@ function _estimateTimeToTarget(curve, t, Ce, ceTarget) {
 }
 
 /**
- * Find when Ce first comes within 0.05 of ceTarget by scanning _sharedCurve.
- * Returns delta-minutes from t, or null if not found.
- */
-function estimateTimeToTarget(t, Ce, ceTarget) {
-  return _estimateTimeToTarget(_sharedCurve, t, Ce, ceTarget);
-}
-
-/**
- * Find when Ce first drops AT OR BELOW ceTarget by scanning _sharedCurve.
- * Used for intermittent mode where Ce is always above threshold when counting
- * down — avoids the fixed ±0.05 tolerance that breaks for small fentanyl values.
- * Returns delta-minutes from t, or null if not found.
- */
-function estimateTimeToThreshold(t, ceTarget) {
-  if (!_sharedCurve) return null;
-  for (const pt of _sharedCurve) {
-    if (pt.time <= t) continue;
-    if (pt.Ce <= ceTarget) return pt.time - t;
-  }
-  return null;
-}
-
-/**
- * Find when Ce stabilises by scanning _sharedCurve from current time.
+ * Find when Ce stabilises by scanning a curve from the current time.
  *
  * Stability: Ce changes < SS_DRIFT_THRESHOLD (0.1 mcg/mL) over a
  * SS_WINDOW_MIN (10 min) window. At 10-second chart resolution that
@@ -272,75 +248,17 @@ function _scanSteadyState(curve, t) {
   return null;
 }
 
-function estimateSteadyState(t) {
-  return _scanSteadyState(_sharedCurve, t);
-}
-
 /**
- * Compute approach line data for a non-selected drug using an explicit curve.
- * Mirrors computeApproachData logic but without lockedSsCe (not needed off-screen).
- * Returns { prefix, arrivalMin, staticText }.
- */
-function _computeApproachFromCurve(drugId, t, m, Ce, ceTarget, rate, curve) {
-  const noData = { prefix: '', arrivalMin: null, staticText: '' };
-
-  // Pump stopped / paused non-TCI — emergence countdown
-  if (m === 'none' || (rate === 0 && m !== 'tci' && m !== 'intermittent')) {
-    if (Ce <= EMERGENCE_CE + 0.05) return noData;
-    try {
-      const result = model.predictTrough(drugId, t, EMERGENCE_CE);
-      if (result && result.time !== null && result.time > t) {
-        return {
-          prefix: `Emergence <span class="appr-val">${EMERGENCE_CE.toFixed(1)}</span> in `,
-          arrivalMin: result.time, staticText: '',
-        };
-      }
-    } catch(e) {}
-    return noData;
-  }
-
-  // TCI mode — time to reach target (curve-based)
-  if (m === 'tci' && ceTarget > 0) {
-    if (Math.abs(Ce - ceTarget) < 0.05) {
-      return { prefix: '', arrivalMin: null,
-        staticText: `At Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
-    }
-    const dt = _estimateTimeToTarget(curve, t, Ce, ceTarget);
-    if (dt !== null && dt > 0) {
-      return {
-        prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
-        arrivalMin: t + dt, staticText: '',
-      };
-    }
-    return { prefix: '', arrivalMin: null,
-      staticText: `Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
-  }
-
-  // Manual infusion — time to steady state (curve-based)
-  if (m === 'manual' && rate > 0) {
-    const ss = _scanSteadyState(curve, t);
-    if (ss) {
-      const ceStr = `<span class="appr-val">${ss.ssCe.toFixed(1)}</span>`;
-      if (ss.ssMin > 0.5) {
-        return { prefix: `Steady state ≈ ${ceStr} in `, arrivalMin: t + ss.ssMin, staticText: '' };
-      }
-      return { prefix: '', arrivalMin: null, staticText: `Steady state ≈ ${ceStr}` };
-    }
-  }
-
-  return noData;
-}
-
-/**
- * Compute approach line data by scanning the shared curve.
- * Pure array operations — no model calls except predictTrough for emergence.
+ * Compute approach line data by scanning the provided curve.
+ * Pure array operations — no model calls except predictTrough for emergence/intermittent.
  *
+ * curve:       precomputed PK curve for this drug (may be null for modes that don't need it)
  * lockedSsCe: if non-null, use this Ce for the steady-state label instead
- *   of the freshly scanned value. Released on pump-state change.
+ *              of the freshly scanned value. Released on pump-state change.
  *
  * Returns { prefix, arrivalMin, staticText, newLockedSsCe }.
  */
-function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
+function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve) {
   const noData = { prefix: '', arrivalMin: null, staticText: '', newLockedSsCe: null };
 
   // Intermittent bolus mode — countdown to redose threshold
@@ -381,7 +299,7 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
       return { prefix: '', arrivalMin: null, newLockedSsCe: null,
         staticText: `At Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
     }
-    const dt = estimateTimeToTarget(t, Ce, ceTarget);
+    const dt = _estimateTimeToTarget(curve, t, Ce, ceTarget);
     if (dt !== null && dt > 0) {
       return {
         prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
@@ -394,7 +312,7 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
 
   // Manual infusion — time to steady state
   if (m === 'manual' && rate > 0) {
-    const ss = estimateSteadyState(t);
+    const ss = _scanSteadyState(curve, t);
     if (ss) {
       // lockedSsCe keeps the displayed Ce stable across curve refreshes that
       // occur while Ce is still changing (e.g. during/after a bolus).
@@ -415,7 +333,7 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
 
   // TCI paused, Ce above target — time to decay to target
   if (m === 'tci' && rate === 0 && ceTarget > 0 && Ce > ceTarget + 0.1) {
-    const dt = estimateTimeToTarget(t, Ce, ceTarget);
+    const dt = _estimateTimeToTarget(curve, t, Ce, ceTarget);
     if (dt !== null && dt > 0) {
       return {
         prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
@@ -428,56 +346,75 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe) {
 }
 
 /**
- * Update approach line.
+ * Update approach line for any drug.
  *
- * Rescans the shared curve when:
+ * Rescans when:
  *   a) a new curve has arrived (_curveVersion changed), or
  *   b) the pump state changed (mode / rate / target).
+ *
+ * For the selected drug the shared chart curve is used. For non-selected
+ * drugs in TCI/manual mode a drug-specific curve is computed and cached
+ * so that approach estimates reflect that drug's own PK.
  *
  * The countdown renders live every rAF frame from the cached arrivalMin.
  * lockedSsCe is only released on pump-state change, keeping the displayed
  * Ce stable across curve refreshes that occur mid-bolus.
  */
 function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
-  const displayChanged =
-    _approachCache.mode   !== m ||
-    Math.abs(_approachCache.rate   - rate)     > 0.01 ||
-    Math.abs(_approachCache.target - ceTarget) > 0.01;
+  const cache = _getApproachCache(drugId);
 
-  const curveChanged = _approachCache.computedVersion !== _curveVersion;
+  const displayChanged =
+    cache.mode   !== m ||
+    Math.abs(cache.rate   - rate)     > 0.01 ||
+    Math.abs(cache.target - ceTarget) > 0.01;
+
+  const curveChanged = cache.computedVersion !== _curveVersion;
 
   if (displayChanged || curveChanged) {
-    const lockToPass = displayChanged ? null : _approachCache.lockedSsCe;
-    const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockToPass);
+    // Resolve the PK curve for this drug.
+    // Selected drug uses the precomputed shared curve (free — already computed for chart).
+    // Non-selected drugs in TCI/manual mode need their own curve; compute and cache it.
+    let curve;
+    const isSelected = drugId === (getDrugId ? getDrugId() : null);
+    if (isSelected) {
+      curve = _sharedCurve;
+    } else if (m === 'tci' || m === 'manual') {
+      try { cache.curve = model.computeCurve(drugId, 0, 120, 1 / 6); } catch (e) { cache.curve = null; }
+      curve = cache.curve;
+    } else {
+      curve = null;  // emergence / intermittent use predictTrough, no curve needed
+    }
 
-    _approachCache.prefix          = data.prefix;
-    _approachCache.arrivalMin      = data.arrivalMin;
-    _approachCache.staticText      = data.staticText;
-    _approachCache.computedVersion = _curveVersion;
-    _approachCache.mode            = m;
-    _approachCache.rate            = rate;
-    _approachCache.target          = ceTarget;
+    const lockToPass = displayChanged ? null : cache.lockedSsCe;
+    const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockToPass, curve);
 
-    if (displayChanged) _approachCache.lockedSsCe = data.newLockedSsCe;
+    cache.prefix          = data.prefix;
+    cache.arrivalMin      = data.arrivalMin;
+    cache.staticText      = data.staticText;
+    cache.computedVersion = _curveVersion;
+    cache.mode            = m;
+    cache.rate            = rate;
+    cache.target          = ceTarget;
+
+    if (displayChanged) cache.lockedSsCe = data.newLockedSsCe;
   }
 
   // Render countdown live every frame
   let html = '';
-  if (_approachCache.arrivalMin !== null) {
-    const remaining = _approachCache.arrivalMin - t;
+  if (cache.arrivalMin !== null) {
+    const remaining = cache.arrivalMin - t;
     if (remaining > 0) {
-      html = _approachCache.prefix +
-        `<span class="appr-time">${fmtCountdown(remaining)}</span>`;
+      html = cache.prefix + `<span class="appr-time">${fmtCountdown(remaining)}</span>`;
     } else {
       // Crossed threshold — next curve refresh will trigger a rescan
-      _approachCache.computedVersion = -1;
+      cache.computedVersion = -1;
     }
   } else {
-    html = _approachCache.staticText;
+    html = cache.staticText;
   }
 
   // Intermittent countdown is shown in the step-bar row instead
-  if (m === 'intermittent' && _approachCache.arrivalMin !== null) html = '';
+  if (m === 'intermittent' && cache.arrivalMin !== null) html = '';
 
   const el = $(drugId + '-approach');
   if (el && el.innerHTML !== html) el.innerHTML = html;
@@ -597,261 +534,111 @@ function updateStepBar(drugId, t) {
 function update() {
   if (!model || !timer) return;
 
-  const drugId      = getDrugId();
   const t           = timer.getElapsedMinutes();
-  const m           = getMode();
-  const ceTarget    = getCeTarget();
   const caseStarted = timer.isRunning() || t > 0;
+  const allDrugs    = getDrugIds ? getDrugIds() : [getDrugId()];
 
-  // ── Update ALL drug tiles (not just selected) ───────────────────
-  // Non-selected tiles get Ce/Cp, status label, and step-bar updates
-  // so they stay live when a case starts without requiring a click.
-  const allDrugs = getDrugIds ? getDrugIds() : [drugId];
   for (const dId of allDrugs) {
-    if (dId === drugId) continue;  // selected drug gets full update below
-    const ceEl2    = $(dId + '-ce');
-    const cpEl2    = $(dId + '-cp');
-    const statusEl2 = $(dId + '-status');
-    if (!ceEl2 && !cpEl2 && !statusEl2) continue;
+    const m        = getModeForDrug ? getModeForDrug(dId) : 'none';
+    // For the approach line and warnings, ceTarget is the TCI target or the
+    // intermittent redose threshold, whichever is active for this drug.
+    const ceTarget = m === 'intermittent'
+      ? (getIntermittentThresholdForDrug ? getIntermittentThresholdForDrug(dId) : 0)
+      : (getCeTargetForDrug              ? getCeTargetForDrug(dId)              : 0);
 
-    if (!caseStarted || t <= 0) {
-      if (ceEl2) ceEl2.textContent = fmtCe(0, dId);
-      if (cpEl2) cpEl2.textContent = fmtCe(0, dId);
-      if (statusEl2) { statusEl2.textContent = 'Stopped'; statusEl2.className = 'drug-status stopped'; }
-      continue;
+    let Ce = 0, Cp = 0, rate = 0, bis = null;
+    if (caseStarted && t > 0) {
+      try {
+        const conc = model.getConcentrationsAt(dId, t);
+        Ce = conc.Ce; Cp = conc.Cp; rate = conc.rate;
+        try { bis = model.predictBIS(dId, t); } catch (e) {}
+      } catch (e) {}
     }
-    try {
-      const conc  = model.getConcentrationsAt(dId, t);
-      if (ceEl2) ceEl2.textContent = fmtCe(conc.Ce, dId);
-      if (cpEl2) cpEl2.textContent = fmtCe(conc.Cp, dId);
 
-      // Status label
-      const dMode = getModeForDrug ? getModeForDrug(dId) : 'none';
-      const dRate = conc.rate;
-      let dLabel = 'Stopped', dCls = 'stopped';
-      if (dMode === 'none') {
-        dLabel = 'Stopped'; dCls = 'stopped';
-      } else if (dMode === 'intermittent') {
-        if (isInBolusPhase(dId, t) || dRate > 50) { dLabel = 'Bolus'; dCls = 'bolus'; }
-        else { dLabel = ''; dCls = ''; }
-      } else if (dRate === 0) {
-        dLabel = 'Paused'; dCls = 'paused';
-      } else if (isInBolusPhase(dId, t) || dRate > 50) {
-        dLabel = 'Bolus'; dCls = 'bolus';
-      } else {
-        dLabel = 'Infusing'; dCls = 'infusing';
-      }
-      if (statusEl2) { statusEl2.textContent = dLabel; statusEl2.className = 'drug-status ' + dCls; }
+    // ── Ce / Cp ──────────────────────────────────────────────────
+    const ceEl = $(dId + '-ce');
+    const cpEl = $(dId + '-cp');
+    if (ceEl) ceEl.textContent = fmtCe(Ce, dId);
+    if (cpEl) cpEl.textContent = fmtCe(Cp, dId);
 
-      // Step-bar + approach line for non-selected drug
-      const approachEl2 = $(dId + '-approach');
-      if (dMode === 'intermittent') {
-        // Intermittent: show bolus progress bar, or below-threshold / redose countdown
-        const barEl2 = $(dId + '-bar');
-        const cntEl2 = $(dId + '-bar-countdown');
-        let hasNextEvt2 = false;
-        let evtCount2 = 0;
-        try {
-          const evts2 = model.getEvents(dId);
-          evtCount2 = evts2.length;
-          hasNextEvt2 = evts2.some(e => e.time > t + 0.0001);
-        } catch (e2) {}
+    // ── Approach line ─────────────────────────────────────────────
+    if (caseStarted) {
+      updateApproachLine(dId, t, m, Ce, ceTarget, rate);
+      warnings.checkBelowThreshold(dId, m === 'intermittent' && ceTarget > 0 && Ce <= ceTarget);
+    } else {
+      const el = $(dId + '-approach');
+      if (el) el.innerHTML = '';
+    }
 
-        if (hasNextEvt2) {
-          updateStepBar(dId, t);
-          if (barEl2) barEl2.parentElement?.classList.remove('step-bar-below');
-          if (approachEl2 && approachEl2.innerHTML !== '') approachEl2.innerHTML = '';
-        } else {
-          // cntHtml → step-bar-countdown; approachHtml → approach line; barPct → bar width
-          let cntHtml = '';
-          let approachHtml = '';
-          let barPct = 0;
-          let isBelowThreshold = false;
-          if (getIntermittentThresholdForDrug) {
-            const thr = getIntermittentThresholdForDrug(dId);
-            if (thr > 0) {
-              warnings.checkBelowThreshold(dId, conc.Ce <= thr);
-              if (conc.Ce <= thr) {
-                // Below threshold: flash in approach line, bar at 0% so red wrap shows
-                approachHtml = '<span class="appr-below">Below Threshold</span>';
-                isBelowThreshold = true;
-              } else {
-                // Counting down: "Redose in M:SS" in step-bar, bar fills toward threshold
-                const cached = _nonSelectedCache[dId];
-                let arrivalMin = null;
-                if (cached && cached.eventCount === evtCount2 &&
-                    cached.threshold === thr &&
-                    cached.arrivalMin !== null && cached.arrivalMin > t) {
-                  arrivalMin = cached.arrivalMin;
-                } else {
-                  try {
-                    const res = model.predictTrough(dId, t, thr);
-                    if (res && res.time > t) arrivalMin = res.time;
-                  } catch (e2) {}
-                  _nonSelectedCache[dId] = { arrivalMin, eventCount: evtCount2, threshold: thr };
-                }
-                if (arrivalMin !== null) {
-                  const rem = arrivalMin - t;
-                  if (rem > 0) {
-                    cntHtml = `Redose in <span class="appr-time">${fmtCountdown(rem)}</span>`;
-                    barPct = _intermittentBarPct(dId, t, arrivalMin);
-                  }
-                }
-              }
-            }
-          }
-          if (barEl2) barEl2.style.width = barPct + '%';
-          if (barEl2) barEl2.parentElement?.classList.toggle('step-bar-below', isBelowThreshold);
-          if (cntEl2 && cntEl2.innerHTML !== cntHtml) cntEl2.innerHTML = cntHtml;
-          if (approachEl2 && approachEl2.innerHTML !== approachHtml) approachEl2.innerHTML = approachHtml;
-        }
-      } else {
-        // Non-intermittent: step-bar + general approach line (TCI, emergence, steady state)
-        updateStepBar(dId, t);
-        if (approachEl2) {
-          const dCeTarget = getCeTargetForDrug ? getCeTargetForDrug(dId) : 0;
-          let evtCount2 = 0;
-          try { evtCount2 = model.getEvents(dId).length; } catch(e2) {}
-          const ac = _nonSelectedApproachCache[dId];
-          const stale = !ac ||
-            ac.eventCount !== evtCount2 ||
-            ac.mode       !== dMode     ||
-            Math.abs((ac.ceTarget || 0) - dCeTarget) > 0.001 ||
-            Math.abs((ac.rate     || 0) - dRate)     > 0.01  ||
-            (ac.arrivalMin !== null && ac.arrivalMin <= t);  // countdown expired
-          if (stale) {
-            // Compute curve for modes that need one (TCI target / manual SS)
-            let curve2 = null;
-            if (dMode === 'tci' || dMode === 'manual') {
-              try { curve2 = model.computeCurve(dId, 0, 120, 1 / 6); } catch(e2) {}
-            }
-            const result = _computeApproachFromCurve(dId, t, dMode, conc.Ce, dCeTarget, dRate, curve2);
-            _nonSelectedApproachCache[dId] = {
-              eventCount: evtCount2, mode: dMode, ceTarget: dCeTarget, rate: dRate,
-              prefix: result.prefix, arrivalMin: result.arrivalMin, staticText: result.staticText,
-            };
-          }
-          const nac = _nonSelectedApproachCache[dId];
-          let html = '';
-          if (nac.arrivalMin !== null) {
-            const rem = nac.arrivalMin - t;
-            if (rem > 0) {
-              html = nac.prefix + `<span class="appr-time">${fmtCountdown(rem)}</span>`;
-            }
-          } else {
-            html = nac.staticText || '';
-          }
-          if (approachEl2.innerHTML !== html) approachEl2.innerHTML = html;
-        }
-      }
-    } catch (e) {}
-  }
+    // ── Status + rate ─────────────────────────────────────────────
+    const statusEl = $(dId + '-status');
+    const rateEl   = $(dId + '-rate');
 
-  let Cp = 0, Ce = 0, rate = 0, bis = null;
-  if (caseStarted && t > 0) {
-    try {
-      const conc = model.getConcentrationsAt(drugId, t);
-      Cp   = conc.Cp;
-      Ce   = conc.Ce;
-      rate = conc.rate;
-      bis  = model.predictBIS(drugId, t);
-    } catch (e) {}
-  }
-
-  // ── Ce display (unit-aware: ng/mL for fentanyl, mcg/mL otherwise) ─
-  const ceEl = $(drugId + '-ce');
-  if (ceEl) ceEl.textContent = fmtCe(Ce, drugId);
-
-  // ── Cp display ──────────────────────────────────────────────────
-  const cpEl = $(drugId + '-cp');
-  if (cpEl) cpEl.textContent = fmtCe(Cp, drugId);
-
-  // ── Approach line ───────────────────────────────────────────────
-  if (caseStarted) {
-    updateApproachLine(drugId, t, m, Ce, ceTarget, rate);
-    warnings.checkBelowThreshold(drugId,
-      m === 'intermittent' && ceTarget > 0 && Ce <= ceTarget);
-  } else {
-    const el = $(drugId + '-approach');
-    if (el) el.innerHTML = '';
-  }
-
-  // ── Status + rate ───────────────────────────────────────────────
-  const statusEl = $(drugId + '-status');
-  const rateEl   = $(drugId + '-rate');
-
-  if (statusEl) {
-    let label = 'Stopped', cls = 'stopped';
-    if (!caseStarted || m === 'none') {
-      label = 'Stopped'; cls = 'stopped';
-    } else if (m === 'intermittent') {
-      // Intermittent (bolus-only) mode: show only during active bolus, blank otherwise
-      if (isInBolusPhase(drugId, t) || rate > 50) {
+    if (statusEl) {
+      let label = 'Stopped', cls = 'stopped';
+      if (!caseStarted || m === 'none') {
+        label = 'Stopped'; cls = 'stopped';
+      } else if (m === 'intermittent') {
+        if (isInBolusPhase(dId, t) || rate > 50) { label = 'Bolus'; cls = 'bolus'; }
+        else { label = ''; cls = ''; }
+      } else if (rate === 0) {
+        label = 'Paused'; cls = 'paused';
+      } else if (isInBolusPhase(dId, t) || rate > 50) {
         label = 'Bolus'; cls = 'bolus';
       } else {
-        label = ''; cls = '';
+        label = 'Infusing'; cls = 'infusing';
       }
-    } else if (rate === 0) {
-      label = 'Paused'; cls = 'paused';
-    } else if (isInBolusPhase(drugId, t) || rate > 50) {
-      label = 'Bolus'; cls = 'bolus';
-    } else {
-      label = 'Infusing'; cls = 'infusing';
+      statusEl.textContent = label;
+      statusEl.className   = 'drug-status ' + cls;
     }
-    statusEl.textContent = label;
-    statusEl.className   = 'drug-status ' + cls;
-  }
 
-  if (rateEl) {
-    // Never show rate in intermittent mode — no pump
-    rateEl.textContent = (caseStarted && rate > 0 && m !== 'intermittent') ? fmtRateInline(drugId, rate) : '';
-  }
+    if (rateEl) {
+      rateEl.textContent = (caseStarted && rate > 0 && m !== 'intermittent')
+        ? fmtRateInline(dId, rate) : '';
+    }
 
-  // ── eBIS ─────────────────────────────────────────────────────────
-  const bisEl    = $(drugId + '-bis');
-  const bisLabel = $(drugId + '-bis-label');
-  const bisSep   = $(drugId + '-bis-sep');
-  const bisVis   = bis !== null && caseStarted && t > 0;
-  if (bisEl) {
-    bisEl.textContent  = bisVis ? bis.toFixed(0) : '';
-    bisEl.style.color  = bisVis ? bisColor(bis) : '';
-  }
-  if (bisLabel) bisLabel.style.display = bisVis ? '' : 'none';
-  if (bisSep)   bisSep.style.display   = bisVis ? '' : 'none';
+    // ── eBIS (propofol-only DOM elements; null for other drugs) ──
+    const bisEl    = $(dId + '-bis');
+    const bisLabel = $(dId + '-bis-label');
+    const bisSep   = $(dId + '-bis-sep');
+    if (bisEl) {
+      const bisVis = bis !== null && caseStarted && t > 0;
+      bisEl.textContent = bisVis ? bis.toFixed(0) : '';
+      bisEl.style.color = bisVis ? bisColor(bis) : '';
+      if (bisLabel) bisLabel.style.display = bisVis ? '' : 'none';
+      if (bisSep)   bisSep.style.display   = bisVis ? '' : 'none';
+    }
 
-  // ── Step bar + countdown ────────────────────────────────────────
-  if (caseStarted) {
-    if (m !== 'intermittent') {
-      updateStepBar(drugId, t);
-    } else {
-      // Intermittent mode: during bolus delivery show progress normally;
-      // after delivery show the redose countdown from the approach cache.
-      const barEl = $(drugId + '-bar');
-      const cntEl = $(drugId + '-bar-countdown');
-      let hasNextEvt = false;
-      try {
-        const evts = model.getEvents(drugId);
-        hasNextEvt = evts.some(e => e.time > t + 0.0001);
-      } catch (e) {}
-
-      if (hasNextEvt) {
-        updateStepBar(drugId, t);                     // bolus delivery in progress
-        barEl?.parentElement?.classList.remove('step-bar-below');
-      } else if (_approachCache.arrivalMin !== null) {
-        const rem = _approachCache.arrivalMin - t;
-        barEl?.parentElement?.classList.remove('step-bar-below');
-        if (barEl) barEl.style.width = _intermittentBarPct(drugId, t, _approachCache.arrivalMin) + '%';
-        if (cntEl) {
-          const newHtml = rem > 0
-            ? `Redose in <span class="appr-time">${fmtCountdown(rem)}</span>`
-            : '';
-          if (cntEl.innerHTML !== newHtml) cntEl.innerHTML = newHtml;
-        }
+    // ── Step bar ──────────────────────────────────────────────────
+    if (caseStarted) {
+      if (m !== 'intermittent') {
+        updateStepBar(dId, t);
       } else {
-        // Ce is below threshold — no predicted threshold crossing
-        barEl?.parentElement?.classList.add('step-bar-below');
-        if (barEl) barEl.style.width = '0%';
-        if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
+        // Intermittent: during bolus delivery show progress normally;
+        // after delivery show the redose countdown from the approach cache.
+        const barEl = $(dId + '-bar');
+        const cntEl = $(dId + '-bar-countdown');
+        let hasNextEvt = false;
+        try { hasNextEvt = model.getEvents(dId).some(e => e.time > t + 0.0001); } catch (e) {}
+
+        const cache = _getApproachCache(dId);
+        if (hasNextEvt) {
+          updateStepBar(dId, t);
+          barEl?.parentElement?.classList.remove('step-bar-below');
+        } else if (cache.arrivalMin !== null) {
+          const rem = cache.arrivalMin - t;
+          barEl?.parentElement?.classList.remove('step-bar-below');
+          if (barEl) barEl.style.width = _intermittentBarPct(dId, t, cache.arrivalMin) + '%';
+          if (cntEl) {
+            const newHtml = rem > 0
+              ? `Redose in <span class="appr-time">${fmtCountdown(rem)}</span>` : '';
+            if (cntEl.innerHTML !== newHtml) cntEl.innerHTML = newHtml;
+          }
+        } else {
+          barEl?.parentElement?.classList.add('step-bar-below');
+          if (barEl) barEl.style.width = '0%';
+          if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
+        }
       }
     }
   }
@@ -862,7 +649,9 @@ function update() {
 
 /** Force an immediate update (after a model mutation). */
 export function forceUpdate() {
-  _approachCache.computedVersion = -1;
-  _approachCache.lockedSsCe      = null;
+  for (const cache of Object.values(_approachCache)) {
+    cache.computedVersion = -1;
+    cache.lockedSsCe      = null;
+  }
   update();
 }
