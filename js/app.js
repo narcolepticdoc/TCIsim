@@ -19,6 +19,8 @@ import * as eventEditor from './ui/event-editor.js';
 import { createChart } from './ui/chart.js';
 import { ceForBIS } from './pk/pd.js';
 import { bolusDeliveryMinutes, setPumpSettings, getPumpSettings, APP_VERSION } from './util/constants.js';
+import { fromCanonical, getAllowedUnits, formatValue } from './util/units.js';
+import { playAlert } from './ui/alert-sound.js';
 import * as persist from './ui/persist.js';
 import * as warnings from './ui/warnings.js';
 
@@ -503,7 +505,7 @@ function boot() {
           // During running case: show delay modal so user can pre-set the pump.
           // planTCI is deferred to when the user confirms the delay.
           pendingTCI = { drugId: selectedDrug, ceTarget: canonicalValue, tciMode };
-          showTciDelayModal(canonicalValue);
+          showTciDelayModal(canonicalValue, selectedDrug);
           return; // skip refreshChart — nothing committed yet
         } else {
           // Pre-case: plan immediately, no delay needed
@@ -785,8 +787,12 @@ function closeModal(id) {
 
 const TCI_DELAY_OPTIONS = [5, 10, 15, 20, 30]; // seconds
 
-function showTciDelayModal(ceTarget) {
-  $('tci-delay-subtitle').textContent = `Ce = ${ceTarget.toFixed(1)} µg/mL`;
+function showTciDelayModal(ceTarget, drugId) {
+  const allowed = getAllowedUnits(drugId || 'propofol', 'ceTarget');
+  const ceText = allowed.length
+    ? allowed.map(u => `${formatValue(fromCanonical(ceTarget, u, drugId, 'ceTarget', {}), u)} ${u}`).join(' / ')
+    : `${ceTarget.toFixed(2)} µg/mL`;
+  $('tci-delay-subtitle').textContent = `Ce = ${ceText}`;
 
   // Render delay option pills
   const container = $('tci-delay-options');
@@ -851,10 +857,15 @@ function showTciFirstStepModal(scheme, drugId, delaySeconds) {
   let remainingMs = delaySeconds * 1000;
   const intervalMs = 100;
 
+  let _zeroChimeFired = false;
   function tick() {
     const secs = remainingMs / 1000;
     $('tci-fs-countdown').textContent = secs > 0 ? `in ${secs.toFixed(1)}s` : 'Now!';
     if (remainingMs <= 0) {
+      if (!_zeroChimeFired) {
+        _zeroChimeFired = true;
+        playAlert('info');
+      }
       clearInterval(tciCountdownInterval);
       tciCountdownInterval = null;
       setTimeout(() => closeModal('modal-tci-firststep'), 1500);

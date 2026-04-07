@@ -97,7 +97,7 @@ export function checkBelowThreshold(drugId, isBelow) {
   const wasBelow = _belowThresholdActive.has(drugId);
   if (isBelow && !wasBelow) {
     _belowThresholdActive.add(drugId);
-    if (getSettings().redoseSound) playAlert('info');
+    if (getSettings().redoseSound) playAlert('redose');
   } else if (!isBelow && wasBelow) {
     _belowThresholdActive.delete(drugId);
   }

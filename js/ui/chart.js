@@ -16,6 +16,13 @@
 
 import { COLORS } from '../util/constants.js';
 
+const DRUG_DISPLAY_NAMES = {
+  propofol:     'Propofol',
+  fentanyl:     'Fentanyl',
+  ketamine:     'Ketamine',
+  remifentanil: 'Remifentanil',
+};
+
 // Chart.js is loaded globally via CDN
 const Chart = window.Chart;
 
@@ -58,12 +65,17 @@ export function createChart(canvas, config = {}) {
   let _currentDrugId = cfg.drugId || 'propofol';
   let _yScale = 1;          // scale factor applied to curve data (1 for mcg/mL, 1000 for ng/mL)
 
+  function _drugName(id) {
+    return DRUG_DISPLAY_NAMES[id] || (id.charAt(0).toUpperCase() + id.slice(1));
+  }
+
   // Build datasets
   const datasets = [];
+  const _initName = _drugName(_currentDrugId);
 
   if (cfg.showCp) {
     datasets.push({
-      label: 'Cp (μg/mL)',
+      label: `${_initName} Cp (μg/mL)`,
       data: [],
       borderColor: COLORS.cp,
       backgroundColor: COLORS.cp + '18',
@@ -77,7 +89,7 @@ export function createChart(canvas, config = {}) {
 
   if (cfg.showCe) {
     datasets.push({
-      label: 'Ce (μg/mL)',
+      label: `${_initName} Ce (μg/mL)`,
       data: [],
       borderColor: COLORS.ce,
       backgroundColor: COLORS.ce + '18',
@@ -537,8 +549,15 @@ export function createChart(canvas, config = {}) {
     _yScale = yScale || 1;
     thresholdCe = null;  // clear stale threshold from previous drug
 
+    // Update dataset labels with new drug name
+    const name = _drugName(drugId);
+    const unitLabel = yLabel || 'μg/mL';
+    let dsIdx = 0;
+    if (cfg.showCp) { datasets[dsIdx].label = `${name} Cp (${unitLabel})`; dsIdx++; }
+    if (cfg.showCe) { datasets[dsIdx].label = `${name} Ce (${unitLabel})`; dsIdx++; }
+
     // Update y-axis label
-    chart.options.scales.y.title.text = yLabel || 'μg/mL';
+    chart.options.scales.y.title.text = unitLabel;
 
     // Restore saved y-max for new drug, or use auto-scale with suggestedMax
     let saved = NaN;
