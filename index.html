@@ -147,6 +147,7 @@
     .drug-card .step-bar-wrap.step-bar-below{background:var(--red)}
     .drug-card .step-bar{height:100%;background:var(--bg-deep);border-radius:2px;transition:width .5s linear}
 
+    .drug-card.active::before{content:'';position:absolute;left:4px;top:50%;transform:translateY(-50%);width:0;height:0;border-top:7px solid transparent;border-bottom:7px solid transparent;border-left:6px solid var(--drug-color,var(--blue));z-index:1}
     .drug-card.active .drug-name  { font-size: 17px }
     .drug-card.active .ce-current { font-size: 27px }
     /* ── Warning system ─────────────────────────────────────────────── */
