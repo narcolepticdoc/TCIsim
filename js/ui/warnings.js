@@ -17,7 +17,7 @@ import { fromCanonical, formatValue, getDefaultUnit, getAllowedUnits, getPrefKey
 import { unlockAudio, playAlert } from './alert-sound.js';
 
 const STORAGE_KEY = 'tci-warn-settings';
-const DEFAULTS     = { prepSec: 30, prepSound: false, alertSec: 10, alertSound: true, redoseSound: true };
+const DEFAULTS     = { prepSec: 30, prepSound: false, alertSec: 10, alertSound: true, redoseSound: true, statusWarnMinutes: 2 };
 
 const DRUG_NAMES = {
   propofol:     'Propofol',
@@ -49,19 +49,20 @@ export function getSettings() {
     if (raw) {
       const p = JSON.parse(raw);
       return {
-        prepSec:    (typeof p.prepSec    === 'number'  && p.prepSec  >= 0) ? p.prepSec    : DEFAULTS.prepSec,
-        prepSound:  (typeof p.prepSound  === 'boolean')                    ? p.prepSound   : DEFAULTS.prepSound,
-        alertSec:   (typeof p.alertSec   === 'number'  && p.alertSec >= 0) ? p.alertSec   : DEFAULTS.alertSec,
-        alertSound: (typeof p.alertSound === 'boolean')                    ? p.alertSound  : DEFAULTS.alertSound,
-        redoseSound:(typeof p.redoseSound=== 'boolean')                    ? p.redoseSound : DEFAULTS.redoseSound,
+        prepSec:           (typeof p.prepSec           === 'number'  && p.prepSec  >= 0) ? p.prepSec           : DEFAULTS.prepSec,
+        prepSound:         (typeof p.prepSound         === 'boolean')                    ? p.prepSound          : DEFAULTS.prepSound,
+        alertSec:          (typeof p.alertSec          === 'number'  && p.alertSec >= 0) ? p.alertSec          : DEFAULTS.alertSec,
+        alertSound:        (typeof p.alertSound        === 'boolean')                    ? p.alertSound         : DEFAULTS.alertSound,
+        redoseSound:       (typeof p.redoseSound       === 'boolean')                    ? p.redoseSound        : DEFAULTS.redoseSound,
+        statusWarnMinutes: (typeof p.statusWarnMinutes === 'number'  && p.statusWarnMinutes >= 0) ? p.statusWarnMinutes : DEFAULTS.statusWarnMinutes,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
