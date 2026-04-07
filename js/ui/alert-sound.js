@@ -21,6 +21,7 @@ export function playAlert(level = 'warning') {
 
   const patterns = {
     info:    [{ freq: 880, dur: 0.15, gap: 0.05 }],
+    redose:  [{ freq: 880, dur: 0.1, gap: 0.05 }, { freq: 880, dur: 0.1, gap: 0 }],
     warning: [
       { freq: 880, dur: 0.2, gap: 0.1 },
       { freq: 880, dur: 0.2, gap: 0.1 },
