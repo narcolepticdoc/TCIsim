@@ -64,18 +64,28 @@ export function createChart(canvas, config = {}) {
   let tooltipEnabled = true;
   let _currentDrugId = cfg.drugId || 'propofol';
   let _yScale = 1;          // scale factor applied to curve data (1 for mcg/mL, 1000 for ng/mL)
+  const _legendEl = cfg.legendEl || null;
 
   function _drugName(id) {
     return DRUG_DISPLAY_NAMES[id] || (id.charAt(0).toUpperCase() + id.slice(1));
   }
 
+  function _updateLegend(drugId) {
+    if (!_legendEl) return;
+    const name = _drugName(drugId);
+    let html = `<div class="chart-legend-name">${name}</div><div class="chart-legend-items">`;
+    if (cfg.showCe) html += `<span class="chart-legend-item"><span class="chart-legend-swatch" style="background:${COLORS.ce}"></span>Ce</span>`;
+    if (cfg.showCp) html += `<span class="chart-legend-item"><span class="chart-legend-swatch" style="background:${COLORS.cp}"></span>Cp</span>`;
+    html += '</div>';
+    _legendEl.innerHTML = html;
+  }
+
   // Build datasets
   const datasets = [];
-  const _initName = _drugName(_currentDrugId);
 
   if (cfg.showCp) {
     datasets.push({
-      label: `${_initName} Cp (μg/mL)`,
+      label: 'Cp (μg/mL)',
       data: [],
       borderColor: COLORS.cp,
       backgroundColor: COLORS.cp + '18',
@@ -89,7 +99,7 @@ export function createChart(canvas, config = {}) {
 
   if (cfg.showCe) {
     datasets.push({
-      label: `${_initName} Ce (μg/mL)`,
+      label: 'Ce (μg/mL)',
       data: [],
       borderColor: COLORS.ce,
       backgroundColor: COLORS.ce + '18',
@@ -234,11 +244,7 @@ export function createChart(canvas, config = {}) {
         } : {}),
       },
       plugins: {
-        legend: {
-          display: true,
-          position: 'top',
-          labels: { color: '#9ca3af', font: { size: 10 }, boxWidth: 12, padding: 8 },
-        },
+        legend: { display: false },
         tooltip: {
           enabled: tooltipEnabled,
           backgroundColor: '#1e293bee',
@@ -401,10 +407,11 @@ export function createChart(canvas, config = {}) {
     chart.options.scales.x.min = viewMin;
     chart.options.scales.x.max = viewMax;
 
-    // Show the canvas, hide placeholder
+    // Show the canvas, hide placeholder; show HTML legend
     canvas.style.display = 'block';
     const placeholder = document.getElementById('chart-placeholder');
     if (placeholder) placeholder.style.display = 'none';
+    if (_legendEl) _legendEl.style.display = '';
 
     chart.update('none');
   }
@@ -549,12 +556,12 @@ export function createChart(canvas, config = {}) {
     _yScale = yScale || 1;
     thresholdCe = null;  // clear stale threshold from previous drug
 
-    // Update dataset labels with new drug name
-    const name = _drugName(drugId);
+    // Update dataset labels (used in tooltips) and HTML legend
     const unitLabel = yLabel || 'μg/mL';
     let dsIdx = 0;
-    if (cfg.showCp) { datasets[dsIdx].label = `${name} Cp (${unitLabel})`; dsIdx++; }
-    if (cfg.showCe) { datasets[dsIdx].label = `${name} Ce (${unitLabel})`; dsIdx++; }
+    if (cfg.showCp) { datasets[dsIdx].label = `Cp (${unitLabel})`; dsIdx++; }
+    if (cfg.showCe) { datasets[dsIdx].label = `Ce (${unitLabel})`; dsIdx++; }
+    _updateLegend(drugId);
 
     // Update y-axis label
     chart.options.scales.y.title.text = unitLabel;
@@ -679,6 +686,9 @@ export function createChart(canvas, config = {}) {
     }
     lastTap = now;
   });
+
+  // Initialise HTML legend content for the starting drug (shown when first data arrives)
+  _updateLegend(_currentDrugId);
 
   return {
     setCurveData,
