@@ -17,7 +17,14 @@ import { fromCanonical, formatValue, getDefaultUnit, getAllowedUnits, getPrefKey
 import { unlockAudio, playAlert } from './alert-sound.js';
 
 const STORAGE_KEY = 'tci-warn-settings';
-const DEFAULTS     = { prepSec: 30, prepSound: false, alertSec: 10, alertSound: true, redoseSound: true, statusWarnMinutes: 2, ssFraction: 0.95 };
+const DEFAULTS     = {
+  prepSec: 30, prepSound: false,
+  alertSec: 10, alertSound: true,
+  redoseSound: true,
+  statusWarnMinutes: 2,
+  tciFraction: 0.95,   // TCI "time to target" — tight (0.90–0.99)
+  ssFraction:  0.50,   // Manual-mode steady-state — loose (0.50–0.95)
+};
 
 const DRUG_NAMES = {
   propofol:     'Propofol',
@@ -48,6 +55,23 @@ export function getSettings() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const p = JSON.parse(raw);
+
+      // Legacy migration: v0.5.8 stored a single `ssFraction` field (range 0.90–0.99)
+      // that drove both TCI and manual-SS convergence. v0.5.9 splits these.
+      // If we see a legacy blob (no tciFraction, ssFraction in the old tight range),
+      // re-home the stored value to tciFraction and reset ssFraction to the new default.
+      const hasTciFraction = (typeof p.tciFraction === 'number');
+      const legacySsFraction = (!hasTciFraction
+                                && typeof p.ssFraction === 'number'
+                                && p.ssFraction >= 0.90 && p.ssFraction <= 0.99);
+      const tciFraction = hasTciFraction
+        ? (p.tciFraction >= 0.90 && p.tciFraction <= 0.99 ? p.tciFraction : DEFAULTS.tciFraction)
+        : (legacySsFraction ? p.ssFraction : DEFAULTS.tciFraction);
+      const ssFraction = legacySsFraction
+        ? DEFAULTS.ssFraction
+        : (typeof p.ssFraction === 'number' && p.ssFraction >= 0.50 && p.ssFraction <= 0.95
+           ? p.ssFraction : DEFAULTS.ssFraction);
+
       return {
         prepSec:           (typeof p.prepSec           === 'number'  && p.prepSec  >= 0) ? p.prepSec           : DEFAULTS.prepSec,
         prepSound:         (typeof p.prepSound         === 'boolean')                    ? p.prepSound          : DEFAULTS.prepSound,
@@ -55,15 +79,16 @@ export function getSettings() {
         alertSound:        (typeof p.alertSound        === 'boolean')                    ? p.alertSound         : DEFAULTS.alertSound,
         redoseSound:       (typeof p.redoseSound       === 'boolean')                    ? p.redoseSound        : DEFAULTS.redoseSound,
         statusWarnMinutes: (typeof p.statusWarnMinutes === 'number'  && p.statusWarnMinutes >= 0) ? p.statusWarnMinutes : DEFAULTS.statusWarnMinutes,
-        ssFraction:        (typeof p.ssFraction        === 'number'  && p.ssFraction >= 0.9 && p.ssFraction <= 0.99) ? p.ssFraction : DEFAULTS.ssFraction,
+        tciFraction,
+        ssFraction,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ssFraction }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ssFraction })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssFraction }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssFraction })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────

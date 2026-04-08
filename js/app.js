@@ -599,7 +599,8 @@ function boot() {
     getModeForDrug: (drugId) => mode.get(drugId),
     getIntermittentThresholdForDrug: (drugId) => mode.getIntermittentThreshold(drugId),
     getCeTargetForDrug: (drugId) => mode.getCeTarget(drugId),
-    getSsFraction: () => warnings.getSettings().ssFraction,
+    getTciFraction: () => warnings.getSettings().tciFraction,
+    getSsFraction:  () => warnings.getSettings().ssFraction,
     onFrame(t) {
       // Update chart cursor — throttled to every 500ms
       if (chart && t > 0) {
@@ -648,56 +649,64 @@ function boot() {
 
   // Wire settings modal
   (function initSettings() {
-    const savedSettings    = warnings.getSettings();
-    const prepSlider       = $('set-prep');
-    const alertSlider      = $('set-alert');
-    const prepVal          = $('set-prep-val');
-    const alertVal         = $('set-alert-val');
-    const prepSoundChk     = $('set-prep-sound');
-    const alertSoundChk    = $('set-alert-sound');
-    const redoseSoundChk   = $('set-redose-sound');
-    const statusWarnSlider = $('set-status-warn');
-    const statusWarnVal    = $('set-status-warn-val');
-    const ssFractionSlider = $('set-ss-fraction');
-    const ssFractionVal    = $('set-ss-fraction-val');
+    const savedSettings     = warnings.getSettings();
+    const prepSlider        = $('set-prep');
+    const alertSlider       = $('set-alert');
+    const prepVal           = $('set-prep-val');
+    const alertVal          = $('set-alert-val');
+    const prepSoundChk      = $('set-prep-sound');
+    const alertSoundChk     = $('set-alert-sound');
+    const redoseSoundChk    = $('set-redose-sound');
+    const statusWarnSlider  = $('set-status-warn');
+    const statusWarnVal     = $('set-status-warn-val');
+    const tciFractionSlider = $('set-tci-fraction');
+    const tciFractionVal    = $('set-tci-fraction-val');
+    const ssFractionSlider  = $('set-ss-fraction');
+    const ssFractionVal     = $('set-ss-fraction-val');
     if (!prepSlider || !alertSlider) return;
 
     // Populate controls from saved settings
     prepSlider.value  = savedSettings.prepSec;
     alertSlider.value = savedSettings.alertSec;
-    if (prepVal)          prepVal.textContent          = savedSettings.prepSec    + 's';
-    if (alertVal)         alertVal.textContent         = savedSettings.alertSec   + 's';
-    if (prepSoundChk)     prepSoundChk.checked         = savedSettings.prepSound;
-    if (alertSoundChk)    alertSoundChk.checked        = savedSettings.alertSound;
-    if (redoseSoundChk)   redoseSoundChk.checked       = savedSettings.redoseSound ?? true;
-    if (statusWarnSlider) statusWarnSlider.value        = savedSettings.statusWarnMinutes ?? 2;
-    if (statusWarnVal)    statusWarnVal.textContent     = (savedSettings.statusWarnMinutes ?? 2) + ' min';
-    if (ssFractionSlider) ssFractionSlider.value        = Math.round((savedSettings.ssFraction ?? 0.95) * 100);
-    if (ssFractionVal)    ssFractionVal.textContent     = Math.round((savedSettings.ssFraction ?? 0.95) * 100) + '%';
+    if (prepVal)           prepVal.textContent           = savedSettings.prepSec    + 's';
+    if (alertVal)          alertVal.textContent          = savedSettings.alertSec   + 's';
+    if (prepSoundChk)      prepSoundChk.checked          = savedSettings.prepSound;
+    if (alertSoundChk)     alertSoundChk.checked         = savedSettings.alertSound;
+    if (redoseSoundChk)    redoseSoundChk.checked        = savedSettings.redoseSound ?? true;
+    if (statusWarnSlider)  statusWarnSlider.value        = savedSettings.statusWarnMinutes ?? 2;
+    if (statusWarnVal)     statusWarnVal.textContent     = (savedSettings.statusWarnMinutes ?? 2) + ' min';
+    if (tciFractionSlider) tciFractionSlider.value       = Math.round((savedSettings.tciFraction ?? 0.95) * 100);
+    if (tciFractionVal)    tciFractionVal.textContent    = Math.round((savedSettings.tciFraction ?? 0.95) * 100) + '%';
+    if (ssFractionSlider)  ssFractionSlider.value        = Math.round((savedSettings.ssFraction ?? 0.50) * 100);
+    if (ssFractionVal)     ssFractionVal.textContent     = Math.round((savedSettings.ssFraction ?? 0.50) * 100) + '%';
 
     function saveAll() {
-      const prepSec          = parseInt(prepSlider.value,  10);
-      const alertSec         = parseInt(alertSlider.value, 10);
-      const prepSound        = prepSoundChk      ? prepSoundChk.checked      : false;
-      const alertSound       = alertSoundChk     ? alertSoundChk.checked     : true;
-      const redoseSound      = redoseSoundChk    ? redoseSoundChk.checked    : true;
+      const prepSec           = parseInt(prepSlider.value,  10);
+      const alertSec          = parseInt(alertSlider.value, 10);
+      const prepSound         = prepSoundChk      ? prepSoundChk.checked      : false;
+      const alertSound        = alertSoundChk     ? alertSoundChk.checked     : true;
+      const redoseSound       = redoseSoundChk    ? redoseSoundChk.checked    : true;
       const statusWarnMinutes = statusWarnSlider ? parseInt(statusWarnSlider.value, 10) : 2;
-      const ssFractionPct    = ssFractionSlider ? parseInt(ssFractionSlider.value, 10) : 95;
-      const ssFraction       = ssFractionPct / 100;
+      const tciFractionPct    = tciFractionSlider ? parseInt(tciFractionSlider.value, 10) : 95;
+      const tciFraction       = tciFractionPct / 100;
+      const ssFractionPct     = ssFractionSlider ? parseInt(ssFractionSlider.value, 10) : 50;
+      const ssFraction        = ssFractionPct / 100;
       if (prepVal)         prepVal.textContent         = prepSec           + 's';
       if (alertVal)        alertVal.textContent        = alertSec          + 's';
       if (statusWarnVal)   statusWarnVal.textContent   = statusWarnMinutes + ' min';
+      if (tciFractionVal)  tciFractionVal.textContent  = tciFractionPct    + '%';
       if (ssFractionVal)   ssFractionVal.textContent   = ssFractionPct     + '%';
-      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ssFraction });
+      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssFraction });
     }
 
     prepSlider.addEventListener('input',    saveAll);
     alertSlider.addEventListener('input',   saveAll);
-    if (prepSoundChk)     prepSoundChk.addEventListener('change',     saveAll);
-    if (alertSoundChk)    alertSoundChk.addEventListener('change',    saveAll);
-    if (redoseSoundChk)   redoseSoundChk.addEventListener('change',   saveAll);
-    if (statusWarnSlider) statusWarnSlider.addEventListener('input',  saveAll);
-    if (ssFractionSlider) ssFractionSlider.addEventListener('input',  saveAll);
+    if (prepSoundChk)      prepSoundChk.addEventListener('change',     saveAll);
+    if (alertSoundChk)     alertSoundChk.addEventListener('change',    saveAll);
+    if (redoseSoundChk)    redoseSoundChk.addEventListener('change',   saveAll);
+    if (statusWarnSlider)  statusWarnSlider.addEventListener('input',  saveAll);
+    if (tciFractionSlider) tciFractionSlider.addEventListener('input', saveAll);
+    if (ssFractionSlider)  ssFractionSlider.addEventListener('input',  saveAll);
 
     const btnSettingsOpen  = $('btn-settings');
     const btnSettingsClose = $('btn-settings-close');
