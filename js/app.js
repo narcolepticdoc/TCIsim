@@ -75,7 +75,8 @@ function initSimScreen(patient) {
     `<span class="ps-val">${p.height}cm</span> ` +
     `BMI <span class="ps-val">${bmi}</span>`;
 
-  // Update drug model labels
+  // Update drug model labels. Model names come from model.getModelName()
+  // so swapping in a different PK model later is a one-place change.
   const modelLabel = $('propofol-model-label');
   if (modelLabel) {
     const conc = $('input-concentration')?.value || '10';
@@ -84,18 +85,18 @@ function initSimScreen(patient) {
     const modeLabel = tciMode === 'cet' ? ' · CET' :
                       tciMode === 'cet-conservative' ? ' · CET(C)' :
                       tciMode === 'cet-emulation' ? ' · CET(E)' : '';
-    modelLabel.textContent = `Eleveld 2018 · ${conc} mg/mL${opioid}${modeLabel}`;
+    modelLabel.textContent = `${model.getModelName('propofol')} · ${conc} mg/mL${opioid}${modeLabel}`;
   }
   const fentLabel = $('fentanyl-model-label');
   if (fentLabel) {
     const fConc = $('input-fentanyl-concentration')?.value || '0.05';
     const fConcMcg = (parseFloat(fConc) * 1000).toFixed(0);
-    fentLabel.textContent = `Shafer 1990 · ${fConcMcg} mcg/mL`;
+    fentLabel.textContent = `${model.getModelName('fentanyl')} · ${fConcMcg} mcg/mL`;
   }
   const ketLabel = $('ketamine-model-label');
   if (ketLabel) {
     const kConc = $('input-ketamine-concentration')?.value || '10';
-    ketLabel.textContent = `Domino/Navarrete · ${kConc} mg/mL`;
+    ketLabel.textContent = `${model.getModelName('ketamine')} · ${kConc} mg/mL`;
   }
 
   // Reset modules
@@ -184,6 +185,10 @@ function refreshChart() {
   const chartCurve = yScale === 1 ? rawCurve : rawCurve.map(pt => ({
     ...pt, Ce: pt.Ce * yScale, Cp: pt.Cp * yScale,
   }));
+  // Keep the chart's PD model in sync with the currently selected drug
+  // so the eBIS tooltip line reflects the right drug (null clears it
+  // for fentanyl/ketamine which have no PD model).
+  chart.setPDModel(model.getPDModel(selectedDrug));
   chart.setCurveData(chartCurve);
   drugPanel.setCurveData(rawCurve);  // drug-panel uses canonical mcg/mL for threshold comparisons
   computeEffectOverlay();  // clears BIS bands for drugs without a PD model

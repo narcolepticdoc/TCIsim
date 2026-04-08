@@ -165,8 +165,9 @@ export function createChart(canvas, config = {}) {
     return annotations;
   }
 
-  // Store BIS and rate values alongside curve for tooltip lookup
-  let bisValues = [];       // parallel array: bisValues[i] = BIS at curveData[i].time
+  // Store rate values alongside curve for tooltip lookup.
+  // BIS is computed on the fly from the hovered Ce dataset item,
+  // so no parallel bisValues cache is needed.
   let rateValues = [];      // parallel array: rateValues[i] = rate (mg/min) at curveData[i].time
   let patientWeightKg = null;
   let pdModel = null; // set via setPDModel()
@@ -251,9 +252,21 @@ export function createChart(canvas, config = {}) {
                   lines.push(`Rate: ${rateMgMin.toFixed(2)} mg/min`);
                 }
               }
-              // BIS line
-              if (bisValues.length > idx && bisValues[idx] !== null) {
-                lines.push(`BIS: ${bisValues[idx].toFixed(0)}`);
+              // eBIS line — computed on the fly from the hovered Ce dataset
+              // item so it works even if setCurveData ran before setPDModel.
+              // Label matches the drug card readout ("eBIS").
+              if (pdModel) {
+                const ceItem = items.find(it => {
+                  const lbl = it.dataset && it.dataset.label;
+                  return typeof lbl === 'string' && lbl.startsWith('Ce');
+                });
+                if (ceItem) {
+                  try {
+                    const ce  = ceItem.parsed.y / (_yScale || 1);
+                    const bis = pdModel.predict(ce);
+                    if (Number.isFinite(bis)) lines.push(`eBIS: ${bis.toFixed(0)}`);
+                  } catch (e) {}
+                }
               }
               return lines;
             },
@@ -365,17 +378,6 @@ export function createChart(canvas, config = {}) {
 
     // Store rate values for tooltip
     rateValues = curveData.map(p => p.rate);
-
-    // Compute BIS for each point (for tooltip).
-    // curveData Ce values may be pre-scaled (×_yScale) by app.js; unscale before
-    // passing to pdModel.predict() which expects canonical mcg/mL.
-    if (pdModel) {
-      bisValues = curveData.map(p => {
-        try { return pdModel.predict(p.Ce / _yScale); } catch (e) { return null; }
-      });
-    } else {
-      bisValues = [];
-    }
 
     // Auto-scale Y axis (unless user has manually set it)
     if (yMaxManual === null && curveData.length > 0) {
@@ -507,7 +509,7 @@ export function createChart(canvas, config = {}) {
    * @param {Object|null} pd - PD model with .predict(ce) method
    */
   function setPDModel(pd) {
-    pdModel = pd;
+    pdModel = pd || null;
   }
 
   /**

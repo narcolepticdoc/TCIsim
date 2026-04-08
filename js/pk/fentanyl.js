@@ -25,6 +25,12 @@
  * Rate constants are in per-MINUTE units (engine invariant).
  */
 
+/**
+ * Display name shown in the fentanyl drug card header.
+ * Kept short; the UI appends the runtime concentration suffix.
+ */
+export const MODEL_NAME = 'Shafer 1990';
+
 // Reference patient weight for parameter scaling
 const REF_WEIGHT = 70; // kg
 

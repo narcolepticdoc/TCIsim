@@ -21,9 +21,9 @@
  *   getEvents, getParams, getRateAtTime
  */
 
-import { calcEleveldParams } from '../pk/eleveld.js';
-import { calcFentanylParams } from '../pk/fentanyl.js';
-import { calcKetamineParams } from '../pk/ketamine.js';
+import { calcEleveldParams, MODEL_NAME as ELEVELD_MODEL_NAME } from '../pk/eleveld.js';
+import { calcFentanylParams, MODEL_NAME as FENTANYL_MODEL_NAME } from '../pk/fentanyl.js';
+import { calcKetamineParams, MODEL_NAME as KETAMINE_MODEL_NAME } from '../pk/ketamine.js';
 import { createEngine } from '../pk/engine.js';
 import { createPDModel } from '../pk/pd.js';
 import { createEventList } from './events.js';
@@ -60,6 +60,16 @@ export function createModel(config = {}) {
   let pdModels = {};               // { drugId: pdModel | null }
   let patient = { age: 35, weight: 70, height: 170, male: true, opioid: false, ce50OpioidCorrection: false };
   let params = null;               // PK-PD params for primary drug
+
+  // Registry of the PK model currently active for each drug.
+  // When model-choice is added later, swap the entries here (and the
+  // matching `calcFn` in init/setPatient) — the UI reads names only
+  // through getModelName(drugId), so no UI changes are needed.
+  const modelNames = {
+    [cfg.primaryDrug]: ELEVELD_MODEL_NAME,
+    fentanyl:          FENTANYL_MODEL_NAME,
+    ketamine:          KETAMINE_MODEL_NAME,
+  };
 
   // ---- Initialization ----
 
@@ -350,6 +360,17 @@ export function createModel(config = {}) {
   }
 
   /**
+   * Get the display name of the PK model currently active for a drug
+   * (e.g. "Eleveld 2018"). Returns '' for unknown drugs. UI code should
+   * read model names through this instead of hard-coding literals, so
+   * that swapping models later is a one-place change.
+   */
+  function getModelName(drugId) {
+    const id = drugId || cfg.primaryDrug;
+    return modelNames[id] || '';
+  }
+
+  /**
    * Get the event list (for direct access if needed).
    */
   function getEventList() {
@@ -398,7 +419,7 @@ export function createModel(config = {}) {
 
     // Queries
     getConcentrationsAt, computeCurve, predictBIS,
-    getRateAtTime, getEvents, getPDModel,
+    getRateAtTime, getEvents, getPDModel, getModelName,
     getEventList, predictTrough,
 
     // Multi-drug

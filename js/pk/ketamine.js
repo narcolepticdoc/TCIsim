@@ -29,6 +29,12 @@
  * Rate constants are in per-MINUTE units (engine invariant).
  */
 
+/**
+ * Display name shown in the ketamine drug card header.
+ * Kept short; the UI appends the runtime concentration suffix.
+ */
+export const MODEL_NAME = 'Domino/Navarrete';
+
 // Fixed micro-rate constants (min⁻¹) — population values, not weight-scaled
 const K10 = 0.4381;  // Central elimination
 const K12 = 0.5921;  // Central → fast peripheral

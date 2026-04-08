@@ -56,13 +56,29 @@ export function setCurveData(curve) {
 // Stability criteria (for "Steady state" display)
 // ──────────────────────────────────────────────────────────────────
 
-// Ce must change less than SS_DRIFT_THRESHOLD over a SS_WINDOW_MIN window.
-// At 10-second chart resolution, SS_WINDOW_MIN = 10 min → 60 samples.
-// A 0.1 mcg/mL change over 10 minutes (0.01 mcg/mL/min) is below the
-// noise floor of any clinical monitor and below clinical significance
-// for moment-to-moment dosing decisions.
-const SS_DRIFT_THRESHOLD = 0.1;   // mcg/mL
-const SS_WINDOW_MIN      = 10;    // minutes
+// Ce must change less than the per-drug drift threshold over a
+// SS_WINDOW_MIN window. At 10-second chart resolution, SS_WINDOW_MIN
+// = 10 min → 60 samples.
+//
+// Thresholds are expressed in canonical mcg/mL and chosen to be below
+// clinical significance for each drug's therapeutic range:
+//   propofol     0.1   mcg/mL  ≈  3% of a typical 3 mcg/mL target
+//   fentanyl     0.0001 mcg/mL = 0.1 ng/mL  (range 1–5 ng/mL)
+//   remifentanil 0.0001 mcg/mL = 0.1 ng/mL  (range 1–8 ng/mL)
+//   ketamine     0.005  mcg/mL = 5   ng/mL  (range 100–4000 ng/mL)
+//
+// A single absolute threshold (the old 0.1 mcg/mL) latches the very
+// first scan sample as "steady state" for fentanyl and ketamine
+// because their entire therapeutic Ce range is below that threshold,
+// which shows up in the UI as "Steady state ≈ 0.0".
+const SS_DRIFT_BY_DRUG = {
+  propofol:     0.1,
+  fentanyl:     0.0001,
+  remifentanil: 0.0001,
+  ketamine:     0.005,
+};
+const SS_DRIFT_DEFAULT = 0.1;     // mcg/mL — fallback for unknown drugs
+const SS_WINDOW_MIN    = 10;      // minutes
 
 // Emergence Ce level (mcg/mL). Could become a user setting later.
 const EMERGENCE_CE = 1.5;
@@ -218,7 +234,7 @@ function _estimateTimeToTarget(curve, t, Ce, ceTarget) {
 /**
  * Find when Ce stabilises by scanning a curve from the current time.
  *
- * Stability: Ce changes < SS_DRIFT_THRESHOLD (0.1 mcg/mL) over a
+ * Stability: Ce changes < the per-drug drift threshold over a
  * SS_WINDOW_MIN (10 min) window. At 10-second chart resolution that
  * is 60 samples per window.
  *
@@ -229,9 +245,10 @@ function _estimateTimeToTarget(curve, t, Ce, ceTarget) {
  *
  * Returns { ssCe, ssMin } or null.
  */
-function _scanSteadyState(curve, t) {
+function _scanSteadyState(curve, t, drugId) {
   if (!curve || curve.length < 2) return null;
 
+  const threshold   = SS_DRIFT_BY_DRUG[drugId] ?? SS_DRIFT_DEFAULT;
   const stepMin     = curve[1].time - curve[0].time;
   const windowSteps = Math.max(1, Math.round(SS_WINDOW_MIN / stepMin));
 
@@ -241,7 +258,7 @@ function _scanSteadyState(curve, t) {
 
   for (let i = startIdx; i + windowSteps < curve.length; i++) {
     const drift = Math.abs(curve[i + windowSteps].Ce - curve[i].Ce);
-    if (drift < SS_DRIFT_THRESHOLD) {
+    if (drift < threshold) {
       return { ssCe: curve[i].Ce, ssMin: curve[i].time - t };
     }
   }
@@ -312,13 +329,16 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve
 
   // Manual infusion — time to steady state
   if (m === 'manual' && rate > 0) {
-    const ss = _scanSteadyState(curve, t);
+    const ss = _scanSteadyState(curve, t, drugId);
     if (ss) {
       // lockedSsCe keeps the displayed Ce stable across curve refreshes that
       // occur while Ce is still changing (e.g. during/after a bolus).
       // Released on any pump-state change so the value stays clinically current.
       const displayCe = (lockedSsCe !== null) ? lockedSsCe : ss.ssCe;
-      const ceStr = `<span class="appr-val">${displayCe.toFixed(1)}</span>`;
+      // fmtCe handles per-drug unit conversion (e.g. mcg/mL → ng/mL for
+      // fentanyl/ketamine); a raw .toFixed(1) on canonical mcg/mL would
+      // display "0.0" for any ng/mL drug.
+      const ceStr = `<span class="appr-val">${fmtCe(displayCe, drugId)}</span>`;
       if (ss.ssMin > 0.5) {
         return {
           prefix: `Steady state ≈ ${ceStr} in `,
@@ -379,7 +399,11 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
     if (isSelected) {
       curve = _sharedCurve;
     } else if (m === 'tci' || m === 'manual') {
-      try { cache.curve = model.computeCurve(drugId, 0, 120, 1 / 6); } catch (e) { cache.curve = null; }
+      // Extend to at least t + 120 so the steady-state scan has enough
+      // forward lookahead at any elapsed time (mirrors the shared chart
+      // curve's endTime in refreshChart).
+      const endTime = Math.max(120, t + 120);
+      try { cache.curve = model.computeCurve(drugId, 0, endTime, 1 / 6); } catch (e) { cache.curve = null; }
       curve = cache.curve;
     } else {
       curve = null;  // emergence / intermittent use predictTrough, no curve needed
