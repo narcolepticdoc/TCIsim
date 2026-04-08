@@ -184,6 +184,10 @@ function refreshChart() {
   const chartCurve = yScale === 1 ? rawCurve : rawCurve.map(pt => ({
     ...pt, Ce: pt.Ce * yScale, Cp: pt.Cp * yScale,
   }));
+  // Keep the chart's PD model in sync with the currently selected drug
+  // so the eBIS tooltip line reflects the right drug (null clears it
+  // for fentanyl/ketamine which have no PD model).
+  chart.setPDModel(model.getPDModel(selectedDrug));
   chart.setCurveData(chartCurve);
   drugPanel.setCurveData(rawCurve);  // drug-panel uses canonical mcg/mL for threshold comparisons
   computeEffectOverlay();  // clears BIS bands for drugs without a PD model
