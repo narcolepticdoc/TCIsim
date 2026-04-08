@@ -44,9 +44,9 @@
     .setup-brand h1{font-family:var(--font-mono);font-weight:500;font-size:24px;letter-spacing:3px;text-transform:uppercase}
     .setup-brand h1 span{color:var(--blue)}
     .setup-brand .subtitle{font-size:11px;color:var(--text-muted);letter-spacing:.4px;text-align:center}
-    .setup-brand .model-tag{display:inline-block;padding:2px 9px;font-family:var(--font-mono);font-size:10px;color:var(--amber);border:1px solid var(--amber);border-radius:99px;opacity:.8}
     .setup-brand .version-tag{font-family:var(--font-mono);font-size:9px;color:var(--text-muted);letter-spacing:.5px;opacity:.6}
-    .setup-brand .disclaimer{font-size:9px;color:var(--text-muted);text-align:center;line-height:1.5;margin-top:auto}
+    .setup-brand .disclaimer{font-size:10px;color:var(--amber);text-align:center;line-height:1.55;letter-spacing:.2px;margin-top:auto;padding:8px 10px;border:1px solid var(--amber);border-radius:6px;opacity:.9}
+    .setup-brand .disclaimer strong{display:block;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
     .setup-form{flex:1;display:flex;flex-direction:column;padding:14px 20px;gap:10px;overflow-y:auto;min-width:0}
     .setup-toprow{display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
     .setup-toprow .card-title{font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px}
@@ -462,7 +462,7 @@
 
   <!-- =========== SETUP SCREEN =========== -->
   <div id="setup-screen" class="screen active">
-    <div class="setup-brand"><h1>TCI <span>Sim</span></h1><div class="subtitle">Target-Controlled Infusion Simulator</div><div class="model-tag">Eleveld 2018 Propofol</div><div id="app-version-tag" class="version-tag"></div><div class="disclaimer">Simulation only — not a medical device.<br>Do not use to guide clinical drug administration.</div></div>
+    <div class="setup-brand"><h1>TCI <span>Sim</span></h1><div class="subtitle">Target-Controlled Infusion Simulator</div><div id="app-version-tag" class="version-tag"></div><div class="disclaimer"><strong>Not for clinical use</strong>Teaching &amp; simulation only.<br>Not a medical device.</div></div>
     <div class="setup-form">
       <div class="setup-toprow"><span class="card-title">Patient Demographics</span><div class="unit-toggle"><button id="btn-metric" class="active">Metric</button><button id="btn-imperial">Imperial</button></div></div>
       <div class="input-grid">
