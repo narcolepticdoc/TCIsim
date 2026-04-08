@@ -599,6 +599,7 @@ function boot() {
     getModeForDrug: (drugId) => mode.get(drugId),
     getIntermittentThresholdForDrug: (drugId) => mode.getIntermittentThreshold(drugId),
     getCeTargetForDrug: (drugId) => mode.getCeTarget(drugId),
+    getSsFraction: () => warnings.getSettings().ssFraction,
     onFrame(t) {
       // Update chart cursor — throttled to every 500ms
       if (chart && t > 0) {
@@ -657,6 +658,8 @@ function boot() {
     const redoseSoundChk   = $('set-redose-sound');
     const statusWarnSlider = $('set-status-warn');
     const statusWarnVal    = $('set-status-warn-val');
+    const ssFractionSlider = $('set-ss-fraction');
+    const ssFractionVal    = $('set-ss-fraction-val');
     if (!prepSlider || !alertSlider) return;
 
     // Populate controls from saved settings
@@ -669,6 +672,8 @@ function boot() {
     if (redoseSoundChk)   redoseSoundChk.checked       = savedSettings.redoseSound ?? true;
     if (statusWarnSlider) statusWarnSlider.value        = savedSettings.statusWarnMinutes ?? 2;
     if (statusWarnVal)    statusWarnVal.textContent     = (savedSettings.statusWarnMinutes ?? 2) + ' min';
+    if (ssFractionSlider) ssFractionSlider.value        = Math.round((savedSettings.ssFraction ?? 0.95) * 100);
+    if (ssFractionVal)    ssFractionVal.textContent     = Math.round((savedSettings.ssFraction ?? 0.95) * 100) + '%';
 
     function saveAll() {
       const prepSec          = parseInt(prepSlider.value,  10);
@@ -677,10 +682,13 @@ function boot() {
       const alertSound       = alertSoundChk     ? alertSoundChk.checked     : true;
       const redoseSound      = redoseSoundChk    ? redoseSoundChk.checked    : true;
       const statusWarnMinutes = statusWarnSlider ? parseInt(statusWarnSlider.value, 10) : 2;
+      const ssFractionPct    = ssFractionSlider ? parseInt(ssFractionSlider.value, 10) : 95;
+      const ssFraction       = ssFractionPct / 100;
       if (prepVal)         prepVal.textContent         = prepSec           + 's';
       if (alertVal)        alertVal.textContent        = alertSec          + 's';
       if (statusWarnVal)   statusWarnVal.textContent   = statusWarnMinutes + ' min';
-      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes });
+      if (ssFractionVal)   ssFractionVal.textContent   = ssFractionPct     + '%';
+      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ssFraction });
     }
 
     prepSlider.addEventListener('input',    saveAll);
@@ -689,6 +697,7 @@ function boot() {
     if (alertSoundChk)    alertSoundChk.addEventListener('change',    saveAll);
     if (redoseSoundChk)   redoseSoundChk.addEventListener('change',   saveAll);
     if (statusWarnSlider) statusWarnSlider.addEventListener('input',  saveAll);
+    if (ssFractionSlider) ssFractionSlider.addEventListener('input',  saveAll);
 
     const btnSettingsOpen  = $('btn-settings');
     const btnSettingsClose = $('btn-settings-close');

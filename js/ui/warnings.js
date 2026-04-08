@@ -17,7 +17,7 @@ import { fromCanonical, formatValue, getDefaultUnit, getAllowedUnits, getPrefKey
 import { unlockAudio, playAlert } from './alert-sound.js';
 
 const STORAGE_KEY = 'tci-warn-settings';
-const DEFAULTS     = { prepSec: 30, prepSound: false, alertSec: 10, alertSound: true, redoseSound: true, statusWarnMinutes: 2 };
+const DEFAULTS     = { prepSec: 30, prepSound: false, alertSec: 10, alertSound: true, redoseSound: true, statusWarnMinutes: 2, ssFraction: 0.95 };
 
 const DRUG_NAMES = {
   propofol:     'Propofol',
@@ -55,14 +55,15 @@ export function getSettings() {
         alertSound:        (typeof p.alertSound        === 'boolean')                    ? p.alertSound         : DEFAULTS.alertSound,
         redoseSound:       (typeof p.redoseSound       === 'boolean')                    ? p.redoseSound        : DEFAULTS.redoseSound,
         statusWarnMinutes: (typeof p.statusWarnMinutes === 'number'  && p.statusWarnMinutes >= 0) ? p.statusWarnMinutes : DEFAULTS.statusWarnMinutes,
+        ssFraction:        (typeof p.ssFraction        === 'number'  && p.ssFraction >= 0.9 && p.ssFraction <= 0.99) ? p.ssFraction : DEFAULTS.ssFraction,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ssFraction }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ssFraction })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────

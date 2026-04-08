@@ -29,6 +29,7 @@ import { createPDModel } from '../pk/pd.js';
 import { createEventList } from './events.js';
 import { planTCIScheme, planTCISchemeCET, planTCISchemeCETConservative, planTCISchemeEmulation } from './tci-planner.js';
 import { predictTroughTime } from '../pk/decay-predictor.js';
+import { predictSteadyState as _predictSteadyState } from '../pk/steady-state-predictor.js';
 import { DRUG_DEFS, getPumpSettings } from '../util/constants.js';
 
 /**
@@ -396,6 +397,28 @@ export function createModel(config = {}) {
     return result;
   }
 
+  /**
+   * Predict when Ce will settle within a (1 − fraction) tolerance band
+   * around its asymptote under a constant infusion rate. Used for the
+   * manual-mode "Steady state ≈ X in M:SS" label.
+   *
+   * Returns { ssCeAsymptote, timeToSsMin } or null if rate <= 0 or the
+   * asymptote is indistinguishable from zero.
+   */
+  function predictSteadyState(drugId, time, rate, fraction) {
+    const engine = eventList.getEngine(drugId);
+    if (!engine) return null;
+
+    const state = eventList.getStateAtTime(drugId, time);
+    const result = _predictSteadyState(engine, state, time, rate, fraction);
+
+    // Defensive: predictor restores state itself, but match the predictTrough
+    // pattern so any accidental drift is erased.
+    eventList.replayDrug(drugId);
+
+    return result;
+  }
+
   // ---- Multi-drug ----
 
   /**
@@ -420,7 +443,7 @@ export function createModel(config = {}) {
     // Queries
     getConcentrationsAt, computeCurve, predictBIS,
     getRateAtTime, getEvents, getPDModel, getModelName,
-    getEventList, predictTrough,
+    getEventList, predictTrough, predictSteadyState,
 
     // Multi-drug
     registerDrug,

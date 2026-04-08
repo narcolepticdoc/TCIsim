@@ -53,35 +53,28 @@ export function setCurveData(curve) {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Stability criteria (for "Steady state" display)
+// Convergence tolerance (for "Steady state" and "Target → X" labels)
 // ──────────────────────────────────────────────────────────────────
-
-// Ce must change less than the per-drug drift threshold over a
-// SS_WINDOW_MIN window. At 10-second chart resolution, SS_WINDOW_MIN
-// = 10 min → 60 samples.
 //
-// Thresholds are expressed in canonical mcg/mL and chosen to be below
-// clinical significance for each drug's therapeutic range:
-//   propofol     0.1   mcg/mL  ≈  3% of a typical 3 mcg/mL target
-//   fentanyl     0.0001 mcg/mL = 0.1 ng/mL  (range 1–5 ng/mL)
-//   remifentanil 0.0001 mcg/mL = 0.1 ng/mL  (range 1–8 ng/mL)
-//   ketamine     0.005  mcg/mL = 5   ng/mL  (range 100–4000 ng/mL)
+// A single user-selectable fraction (0.9–0.99, default 0.95) drives
+// both labels. Tolerance = 1 − fraction is interpreted as a relative
+// band around the target (TCI) or asymptote (manual SS), so the same
+// setting scales across drugs with wildly different Ce ranges.
 //
-// A single absolute threshold (the old 0.1 mcg/mL) latches the very
-// first scan sample as "steady state" for fentanyl and ketamine
-// because their entire therapeutic Ce range is below that threshold,
-// which shows up in the UI as "Steady state ≈ 0.0".
-const SS_DRIFT_BY_DRUG = {
-  propofol:     0.1,
-  fentanyl:     0.0001,
-  remifentanil: 0.0001,
-  ketamine:     0.005,
-};
-const SS_DRIFT_DEFAULT = 0.1;     // mcg/mL — fallback for unknown drugs
-const SS_WINDOW_MIN    = 10;      // minutes
+// For manual mode SS we call model.predictSteadyState which simulates
+// the engine forward to find the actual asymptotic Ce, then returns
+// the time at which Ce settles inside the band. For TCI we still scan
+// the precomputed chart curve, but with a relative rather than
+// absolute tolerance.
 
 // Emergence Ce level (mcg/mL). Could become a user setting later.
 const EMERGENCE_CE = 1.5;
+
+// Fallback fraction when no getter is wired. Matches DEFAULTS.ssFraction
+// in warnings.js.
+const SS_FRACTION_DEFAULT = 0.95;
+
+let getSsFraction = () => SS_FRACTION_DEFAULT;
 
 // ──────────────────────────────────────────────────────────────────
 // Per-drug approach cache — keyed by drugId, same shape for every drug.
@@ -102,7 +95,7 @@ function _getApproachCache(drugId) {
     _approachCache[drugId] = {
       prefix: '', arrivalMin: null, staticText: '',
       lockedSsCe: null, computedVersion: -1,
-      mode: '', rate: 0, target: 0,
+      mode: '', rate: 0, target: 0, ssFraction: 0,
       curve: null,
     };
   }
@@ -125,6 +118,7 @@ export function init(opts = {}) {
   getIntermittentThresholdForDrug = opts.getIntermittentThresholdForDrug || null;
   getCeTargetForDrug              = opts.getCeTargetForDrug              || null;
   onFrame                         = opts.onFrame                         || null;
+  getSsFraction                   = opts.getSsFraction                   || (() => SS_FRACTION_DEFAULT);
   loop();
 }
 
@@ -217,65 +211,39 @@ function fmtRateInline(drugId, rate) {
 // ──────────────────────────────────────────────────────────────────
 
 /**
- * Find when Ce first comes within 0.05 of ceTarget by scanning the given curve.
- * Returns delta-minutes from t, or null if not found.
+ * Find when Ce first enters a (1 − fraction) tolerance band around ceTarget
+ * by scanning the given curve. Returns delta-minutes from t, or null if not
+ * found within the curve. Exported for tests.
+ *
+ * The tolerance is relative, so the same fraction value works for
+ * mcg/mL-scale drugs (propofol) and ng/mL-scale drugs (fentanyl,
+ * remifentanil) without a drug-specific magic number.
  */
-function _estimateTimeToTarget(curve, t, Ce, ceTarget) {
+export function _estimateTimeToTarget(curve, t, Ce, ceTarget, fraction) {
   if (!curve) return null;
+  if (!(ceTarget > 0)) return null;
+  const tol = (1 - fraction) * ceTarget;
   const approaching = Ce < ceTarget;
   for (const pt of curve) {
     if (pt.time <= t) continue;
-    if (approaching  && pt.Ce >= ceTarget - 0.05) return pt.time - t;
-    if (!approaching && pt.Ce <= ceTarget + 0.05) return pt.time - t;
+    if (approaching  && pt.Ce >= ceTarget - tol) return pt.time - t;
+    if (!approaching && pt.Ce <= ceTarget + tol) return pt.time - t;
   }
   return null;
 }
 
 /**
- * Find when Ce stabilises by scanning a curve from the current time.
+ * Compute approach line data.
  *
- * Stability: Ce changes < the per-drug drift threshold over a
- * SS_WINDOW_MIN (10 min) window. At 10-second chart resolution that
- * is 60 samples per window.
- *
- * ssCe is the Ce value AT the stability point — not the distant
- * 2-hour equilibrium. Ce will continue drifting slowly after this
- * point as V3 fills (τ ≈ 246 min for propofol), but at a rate below
- * the threshold and below clinical significance.
- *
- * Returns { ssCe, ssMin } or null.
- */
-function _scanSteadyState(curve, t, drugId) {
-  if (!curve || curve.length < 2) return null;
-
-  const threshold   = SS_DRIFT_BY_DRUG[drugId] ?? SS_DRIFT_DEFAULT;
-  const stepMin     = curve[1].time - curve[0].time;
-  const windowSteps = Math.max(1, Math.round(SS_WINDOW_MIN / stepMin));
-
-  // Find start index: first sample at or after t
-  let startIdx = 0;
-  while (startIdx < curve.length && curve[startIdx].time < t) startIdx++;
-
-  for (let i = startIdx; i + windowSteps < curve.length; i++) {
-    const drift = Math.abs(curve[i + windowSteps].Ce - curve[i].Ce);
-    if (drift < threshold) {
-      return { ssCe: curve[i].Ce, ssMin: curve[i].time - t };
-    }
-  }
-  return null;
-}
-
-/**
- * Compute approach line data by scanning the provided curve.
- * Pure array operations — no model calls except predictTrough for emergence/intermittent.
- *
- * curve:       precomputed PK curve for this drug (may be null for modes that don't need it)
- * lockedSsCe: if non-null, use this Ce for the steady-state label instead
- *              of the freshly scanned value. Released on pump-state change.
+ * curve:       precomputed PK curve for this drug (used only for TCI branches;
+ *              manual-mode SS goes directly to model.predictSteadyState)
+ * lockedSsCe:  if non-null, use this Ce for the steady-state label instead
+ *              of the freshly computed asymptote. Released on pump-state change.
+ * ssFraction:  0.9–0.99 tolerance fraction (symmetric band = 1 − fraction).
  *
  * Returns { prefix, arrivalMin, staticText, newLockedSsCe }.
  */
-function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve) {
+function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve, ssFraction) {
   const noData = { prefix: '', arrivalMin: null, staticText: '', newLockedSsCe: null };
 
   // Intermittent bolus mode — countdown to redose threshold
@@ -310,13 +278,15 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve
     return noData;
   }
 
-  // TCI mode — time to reach target
+  // TCI mode — time to reach target. Tolerance is relative to target so
+  // ng/mL-scale drugs don't latch the first sample as "at target".
   if (m === 'tci' && ceTarget > 0) {
-    if (Math.abs(Ce - ceTarget) < 0.05) {
+    const relDev = Math.abs(Ce - ceTarget) / ceTarget;
+    if (relDev <= (1 - ssFraction)) {
       return { prefix: '', arrivalMin: null, newLockedSsCe: null,
         staticText: `At Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
     }
-    const dt = _estimateTimeToTarget(curve, t, Ce, ceTarget);
+    const dt = _estimateTimeToTarget(curve, t, Ce, ceTarget, ssFraction);
     if (dt !== null && dt > 0) {
       return {
         prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
@@ -327,33 +297,36 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve
       staticText: `Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
   }
 
-  // Manual infusion — time to steady state
+  // Manual infusion — time to steady state. Ask the model to simulate
+  // forward and compute the asymptotic Ce plus time-to-band directly;
+  // no curve scan is needed here.
   if (m === 'manual' && rate > 0) {
-    const ss = _scanSteadyState(curve, t, drugId);
-    if (ss) {
+    let ss = null;
+    try { ss = model.predictSteadyState(drugId, t, rate, ssFraction); } catch (e) {}
+    if (ss && ss.ssCeAsymptote > 0) {
       // lockedSsCe keeps the displayed Ce stable across curve refreshes that
       // occur while Ce is still changing (e.g. during/after a bolus).
       // Released on any pump-state change so the value stays clinically current.
-      const displayCe = (lockedSsCe !== null) ? lockedSsCe : ss.ssCe;
+      const displayCe = (lockedSsCe !== null) ? lockedSsCe : ss.ssCeAsymptote;
       // fmtCe handles per-drug unit conversion (e.g. mcg/mL → ng/mL for
       // fentanyl/ketamine); a raw .toFixed(1) on canonical mcg/mL would
       // display "0.0" for any ng/mL drug.
       const ceStr = `<span class="appr-val">${fmtCe(displayCe, drugId)}</span>`;
-      if (ss.ssMin > 0.5) {
+      if (ss.timeToSsMin > 0.5) {
         return {
           prefix: `Steady state ≈ ${ceStr} in `,
-          arrivalMin: t + ss.ssMin,
-          staticText: '', newLockedSsCe: ss.ssCe,
+          arrivalMin: t + ss.timeToSsMin,
+          staticText: '', newLockedSsCe: ss.ssCeAsymptote,
         };
       }
-      return { prefix: '', arrivalMin: null, newLockedSsCe: ss.ssCe,
+      return { prefix: '', arrivalMin: null, newLockedSsCe: ss.ssCeAsymptote,
         staticText: `Steady state ≈ ${ceStr}` };
     }
   }
 
   // TCI paused, Ce above target — time to decay to target
-  if (m === 'tci' && rate === 0 && ceTarget > 0 && Ce > ceTarget + 0.1) {
-    const dt = _estimateTimeToTarget(curve, t, Ce, ceTarget);
+  if (m === 'tci' && rate === 0 && ceTarget > 0 && Ce > ceTarget * (1 + (1 - ssFraction))) {
+    const dt = _estimateTimeToTarget(curve, t, Ce, ceTarget, ssFraction);
     if (dt !== null && dt > 0) {
       return {
         prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
@@ -382,35 +355,35 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve
  */
 function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
   const cache = _getApproachCache(drugId);
+  const ssFraction = getSsFraction();
 
   const displayChanged =
     cache.mode   !== m ||
     Math.abs(cache.rate   - rate)     > 0.01 ||
-    Math.abs(cache.target - ceTarget) > 0.01;
+    Math.abs(cache.target - ceTarget) > 0.01 ||
+    Math.abs(cache.ssFraction - ssFraction) > 1e-6;
 
   const curveChanged = cache.computedVersion !== _curveVersion;
 
   if (displayChanged || curveChanged) {
     // Resolve the PK curve for this drug.
     // Selected drug uses the precomputed shared curve (free — already computed for chart).
-    // Non-selected drugs in TCI/manual mode need their own curve; compute and cache it.
+    // Non-selected drugs in TCI mode need their own curve for _estimateTimeToTarget.
+    // Manual mode uses model.predictSteadyState directly, so no curve is needed there.
     let curve;
     const isSelected = drugId === (getDrugId ? getDrugId() : null);
     if (isSelected) {
       curve = _sharedCurve;
-    } else if (m === 'tci' || m === 'manual') {
-      // Extend to at least t + 120 so the steady-state scan has enough
-      // forward lookahead at any elapsed time (mirrors the shared chart
-      // curve's endTime in refreshChart).
+    } else if (m === 'tci') {
       const endTime = Math.max(120, t + 120);
       try { cache.curve = model.computeCurve(drugId, 0, endTime, 1 / 6); } catch (e) { cache.curve = null; }
       curve = cache.curve;
     } else {
-      curve = null;  // emergence / intermittent use predictTrough, no curve needed
+      curve = null;
     }
 
     const lockToPass = displayChanged ? null : cache.lockedSsCe;
-    const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockToPass, curve);
+    const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockToPass, curve, ssFraction);
 
     cache.prefix          = data.prefix;
     cache.arrivalMin      = data.arrivalMin;
@@ -419,6 +392,7 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
     cache.mode            = m;
     cache.rate            = rate;
     cache.target          = ceTarget;
+    cache.ssFraction      = ssFraction;
 
     if (displayChanged) cache.lockedSsCe = data.newLockedSsCe;
   }

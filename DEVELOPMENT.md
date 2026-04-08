@@ -4,6 +4,37 @@
 
 ## Session History
 
+### Session 22 (2026-04-08) — Steady-state predictor & unified convergence tolerance (v0.5.8)
+
+**Problem.** The manual-mode "Steady state ≈ X in M:SS" label used a drift-scan heuristic (`_scanSteadyState` in `js/ui/drug-panel.js`) that walked the precomputed chart curve looking for a window where Ce drifted less than a hardcoded per-drug absolute threshold (`SS_DRIFT_BY_DRUG = { propofol: 0.1, fentanyl: 0.0001, remifentanil: 0.0001, ketamine: 0.005 }`). Three structural issues:
+1. Arbitrary drug-dependent thresholds; ng-scale drugs latched at the first sample as "steady state ≈ 0.0".
+2. The reported `ssCe` was "Ce at the first stable-ish window point", not a defined fraction of the true equilibrium.
+3. Scan was clipped to the 120-min chart curve — propofol's slow V3 (τ ≈ 316 min at standard covariates) meant the curve often never contained a genuinely stable window.
+
+TCI had the same root-cause disease in a parallel function: `_estimateTimeToTarget` used a hardcoded `0.05 mcg/mL` absolute tolerance. Fine for propofol at 3 mcg/mL (≈1.67%), latent-broken for any ng-scale TCI (fentanyl target 3 ng/mL vs 50 ng/mL tolerance = 1667%, so the first curve sample would latch as "at target" the moment TCI was extended to a non-propofol drug).
+
+**Fix.** A single user-selectable convergence fraction (0.9–0.99, default 0.95) defines a symmetric relative tolerance band `|Ce − target| / target ≤ (1 − fraction)`. One slider drives both labels.
+
+- **`js/pk/steady-state-predictor.js` (NEW).** Mirrors `decay-predictor.js`. Given engine, start-state, rate, and fraction:
+  1. Save engine state (try/finally).
+  2. Compute `ssCeAsymptote` by advancing with horizon doubling (60 → 120 → … up to ~30 h cumulatively) until successive Ce samples agree within 1e-6 relative.
+  3. If starting Ce is already inside the `(1 − fraction) * asymptote` band, return `timeToSsMin: 0`.
+  4. Forward-scan at 0.5-min resolution up to 2880 min (48 h — enough for 99% with propofol's slow V3), recording the greatest index where Ce was still outside the band. Return `(lastOutside + 1) * 0.5`. This is "first time after which Ce stays inside the band for the remainder of the scan", which survives post-bolus transient overshoots (Ce rising to catch a declining Cp) and arbitrary starting states (above, below, or oscillating through the asymptote). The 4-compartment linear system with negative real eigenvalues guarantees that once Ce enters the band it never leaves.
+  5. Restore engine state in finally.
+- **`js/sim/simulation.js`.** New `predictSteadyState(drugId, time, rate, fraction)` facade — pulls the engine and state at `time` out of the event list, calls the predictor, then `replayDrug` as a defensive state reset (same pattern as `predictTrough`).
+- **`js/ui/drug-panel.js`.** `_scanSteadyState`, `SS_DRIFT_BY_DRUG`, `SS_DRIFT_DEFAULT`, `SS_WINDOW_MIN` deleted. The `manual && rate > 0` branch now calls `model.predictSteadyState(drugId, t, rate, fraction)` directly (no curve needed). `_estimateTimeToTarget` signature gains a `fraction` parameter and uses `(1 − fraction) * ceTarget` as a relative band on both approach directions; exported for tests. The TCI "already at target" guard now uses `Math.abs(Ce − ceTarget) / ceTarget ≤ (1 − fraction)` instead of `< 0.05`. The `_approachCache` tracks `ssFraction` so slider changes invalidate the cache and trigger a recompute on the next frame. Non-selected drugs in manual mode no longer need a per-drug PK curve (saves one `computeCurve` call per rescan).
+- **`js/ui/warnings.js`.** Added `ssFraction: 0.95` to `DEFAULTS`, validated in `getSettings()` (accepts 0.9–0.99), persisted via `setSettings()` through the existing `tci-warn-settings` localStorage key — no new storage key.
+- **`index.html` + `js/app.js`.** New "Convergence tolerance (% of target / asymptote)" slider in the settings modal, range 90–99, step 1, default 95. `app.js:initSettings()` wires it; `drugPanel.init(...)` receives a `getSsFraction` callback.
+- **`tests/test-steady-state-predictor.js` (NEW).** 39 assertions across 15 test blocks: asymptote accuracy vs 96-h reference (< 0.01% relative error), fraction monotonicity (`t(0.90) < t(0.95) < t(0.99)`), drug independence (fentanyl, ketamine) with no per-drug magic numbers, state restoration (byte-identical before/after), approach from above (rate lowered from a settled high state), post-bolus overshoot (Ce rises past asymptote on the way up, then settles), already-inside-band short-circuit, tolerance symmetry, and 4 TCI-tolerance tests (default 95%, fentanyl-scale non-latching, approach from above, fraction monotonicity for TCI).
+
+**Why the same fraction drives both TCI and SS labels.** Clinicians reason about "within X% of target/asymptote" the same way across modes and drugs. One slider is less clutter than two and matches the clinical mental model. At the 95% default, propofol TCI's effective tolerance becomes ±0.15 mcg/mL (up from ±0.05), slightly looser than previous; users who want tighter can set 99% (±0.03 mcg/mL, tighter than previous).
+
+**Asymptote math.** For propofol under standard covariates, the Eleveld-model slow-compartment time constant is τ ≈ 316 min. Time to reach 95% of the asymptote from zero ≈ 3τ ≈ 950 min; to reach 99%, ≈ 4.6τ ≈ 1460 min. The predictor's 48-h scan horizon comfortably covers both. The horizon-doubling asymptote search runs cumulatively up to ~30 h which puts Ce within floating-point precision of the true asymptote.
+
+398 tests across 13 suites, all passing.
+
+---
+
 ### Session 21 (2026-04-07) — UI Polish: Drug Cards, TCI Modals, Chart Controls (v0.5.7)
 
 **Bug fix — `editEvent` bolus sync (`js/sim/events.js`):**
