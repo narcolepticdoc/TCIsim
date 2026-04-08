@@ -4,6 +4,27 @@
 
 ## Session History
 
+### Session 23 (2026-04-08) — Split TCI target and manual-SS convergence tolerances (v0.5.9)
+
+**Problem.** v0.5.8 introduced a single "Convergence tolerance" slider (90–99%, default 95%) driving both TCI "time to target" and manual-mode "Steady state ≈ X in M:SS". Mathematically clean but clinically wrong: the two modes operate on completely different timescales. TCI delivers a front-loaded plan that reaches target in minutes, so 95% is a reasonable "close enough". A plain constant-rate infusion approaches the asymptote on the slowest compartmental time constant — for propofol τ ≈ 316 min, meaning 950 min to 95%, 730 min to 90%, 220 min even to 50%. With the shared 95% default the manual-SS countdown showed 15+ hours, which is useless.
+
+**Fix.** Split the setting. TCI slider keeps the tight 90–99% range at 95% default. Manual-SS gets its own 50–95% slider at 50% default (5% steps). Both live in the same `tci-warn-settings` localStorage blob under new keys `tciFraction` and `ssFraction`.
+
+- **`js/ui/warnings.js`** — `DEFAULTS` now has `tciFraction: 0.95` and `ssFraction: 0.50`. `getSettings()` validates each against its own range (TCI: 0.90–0.99, SS: 0.50–0.95) and includes inline migration: if a legacy v0.5.8 blob is detected (no `tciFraction`, `ssFraction` in the old tight 0.90–0.99 range), the stored value is re-homed to `tciFraction` and `ssFraction` is reset to the new default. `setSettings()` persists both fields.
+- **`index.html`** — the single "Convergence tolerance" row was replaced with two rows: "TCI target tolerance (% of target)" (`set-tci-fraction`, 90–99, step 1) and "Infusion steady-state tolerance (% of asymptote)" (`set-ss-fraction`, 50–95, step 5). The SS slider uses 5% steps because integer-percent granularity has no clinical meaning in a range that already spans half a magnitude of equilibration time.
+- **`js/app.js`** — `initSettings()` wires both sliders, populates from `savedSettings.tciFraction/ssFraction`, and passes both values through `warnings.setSettings(...)` in `saveAll()`. `drugPanel.init(...)` receives two independent callbacks: `getTciFraction` and `getSsFraction`.
+- **`js/ui/drug-panel.js`** — module-scope `getTciFraction` / `getSsFraction` getters with independent defaults (0.95 / 0.50). `init(opts)` accepts both. `_approachCache` now tracks both `ssFraction` and `tciFraction` so slider changes on either invalidate the cache within one rAF frame. `computeApproachData(...)` signature takes both fractions; the main TCI branch, the "already at target" guard, and the "TCI paused, Ce above target" decay branch all use `tciFraction`, while the manual-mode SS branch passes `ssFraction` straight to `model.predictSteadyState`.
+- **Label display unchanged** — the manual-SS label still shows the true asymptote `ssCeAsymptote`, not `fraction * asymp`. When fraction = 50%, a 3.0 mcg/mL propofol asymptote displays as "Steady state ≈ 3.0 in M:SS"; the countdown ends when Ce reaches 1.5, but the displayed 3.0 is still a clinically useful anchor for where Ce is heading.
+- **No predictor/facade/test changes** — `js/pk/steady-state-predictor.js` and `js/sim/simulation.js` take `fraction` as an opaque parameter and have no knowledge of what it represents. `tests/test-steady-state-predictor.js` exercises the predictor with a range of fractions (0.50 through 0.99 across existing assertions) and all 39 cases still pass.
+
+**Effect on manual propofol.** At the new 50% default, "Steady state ≈ 3.2 in M:SS" for a typical maintenance rate lands around 3.5 h — still not fast, but inside the "useful planning horizon" clinicians actually care about. Users who want tighter can slide up toward 95%. The displayed asymptote value doesn't change with the slider, only the countdown does.
+
+**TCI users see no change.** TCI slider and default are identical to v0.5.8. The SS slider has no effect on TCI countdowns.
+
+398 tests across 13 suites, all passing.
+
+---
+
 ### Session 22 (2026-04-08) — Steady-state predictor & unified convergence tolerance (v0.5.8)
 
 **Problem.** The manual-mode "Steady state ≈ X in M:SS" label used a drift-scan heuristic (`_scanSteadyState` in `js/ui/drug-panel.js`) that walked the precomputed chart curve looking for a window where Ce drifted less than a hardcoded per-drug absolute threshold (`SS_DRIFT_BY_DRUG = { propofol: 0.1, fentanyl: 0.0001, remifentanil: 0.0001, ketamine: 0.005 }`). Three structural issues:
