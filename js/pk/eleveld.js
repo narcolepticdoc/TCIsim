@@ -37,6 +37,13 @@
  *   otherwise it uses the same age-to-PMA conversion we do.
  */
 
+/**
+ * Display name shown in the propofol drug card header.
+ * Kept short; the UI appends runtime suffixes (concentration,
+ * opioid flag, TCI mode).
+ */
+export const MODEL_NAME = 'Eleveld 2018';
+
 // ============================================================
 // HELPER FUNCTIONS (matched to SimTIVA's fcentral, fageing, etc.)
 // ============================================================
