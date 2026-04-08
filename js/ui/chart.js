@@ -251,9 +251,9 @@ export function createChart(canvas, config = {}) {
                   lines.push(`Rate: ${rateMgMin.toFixed(2)} mg/min`);
                 }
               }
-              // BIS line
+              // eBIS line (label matches the drug card readout)
               if (bisValues.length > idx && bisValues[idx] !== null) {
-                lines.push(`BIS: ${bisValues[idx].toFixed(0)}`);
+                lines.push(`eBIS: ${bisValues[idx].toFixed(0)}`);
               }
               return lines;
             },
