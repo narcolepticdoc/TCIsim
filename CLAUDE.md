@@ -65,6 +65,5 @@ Test files live in `tests/test-*.js`. The runner executes all of them and prints
 
 - `ARCHITECTURE.md` — engine, event system, module responsibilities
 - `TCI-PLANNERS.md` — planner algorithms, validation data, remaining gaps
-- `DEVELOPMENT.md` — session history, known issues, roadmap
-- `SESSION-HISTORY.md` — detailed per-session log
+- `DEVELOPMENT.md` — complete session log, known issues, roadmap (single source of truth)
 - `LICENSE-NOTES.md` — clean-room implementation notes, file audit

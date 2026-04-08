@@ -1,23 +1,50 @@
 # Development History & Roadmap
 
+> Single source of truth for session history. SESSION-HISTORY.md has been retired and its content merged here.
+
 ## Session History
 
-### Session 21 (2026-04-07) — TCI Target Popup with Delay & Countdown (v0.5.6 → v0.5.7)
+### Session 21 (2026-04-07) — UI Polish: Drug Cards, TCI Modals, Chart Controls (v0.5.7)
 
-New UX for setting a TCI target during a running case. Previously `planTCI` fired from "now" the instant the keypad was confirmed, giving the user no time to prepare the pump before the first step executed. Now:
+**Bug fix — `editEvent` bolus sync (`js/sim/events.js`):**
+When editing a fentanyl (or any) bolus in planning mode, the associated `source:'system'` rate-restore event at the old bolus-end time was not being relocated to the new end time. `getConcentrationsAt` replayed with a rate-restore at the wrong time, producing a wildly wrong predicted curve. Fix: `editEvent` now captures `oldBolusEnd` before any mutation, recomputes `newBolusEnd` after, and moves the rate-restore event using tolerance-based time matching (< 0.001 min) consistent with the rest of the codebase.
 
-1. **Delay selector modal** (`#modal-tci-delay`) — shown immediately after keypad confirm (running case only). Displays the Ce target and pill buttons for 5 / 10 / 15 / 20 / 30 seconds (default 10s, selection persists within session).
+**Drug card rendering unification (`js/ui/drug-panel.js`):**
+Replaced the two-path `update()` function (separate non-selected loop + selected block) with a single loop over all drugs. Every card — selected or not — now renders Ce/Cp, status, rate, approach line, and step-bar each frame. Eliminated stale values on non-selected cards and made the code easier to audit. Per-drug `_approachCache` dict (keyed by drugId) replaces the old single `_approachCache`; non-selected TCI/manual drugs compute their own PK curve lazily when rescan is triggered.
 
-2. **First-step countdown modal** (`#modal-tci-firststep`) — shown after the user confirms the delay. `planTCI` is called with `futureTime = now + delaySeconds / 60` so the plan starts in the future. The first element of the returned `scheme` array is inspected and described in plain clinical terms:
-   - Bolus step: `Bolus {mcgPerKg} mcg/kg = {ml} mL` — mg × 1000 / weight for mcg/kg, mg / concentration for mL
-   - Rate step (> 0): `Set rate to {mlPerHr} mL/hr`
-   - Rate step (= 0): `Hold infusion (pump off)`
+**Drug card status indicators (`index.html`, `js/ui/drug-panel.js`, `js/ui/warnings.js`):**
+- *Left border*: always-present 4px strip, muted (25% opacity) when inactive, bright when selected. Yellow (`#eab308`) for hypnotics (propofol/ketamine), blue (`#3b82f6`) for narcotics (fentanyl/remifentanil). CSS custom properties `--drug-color` / `--drug-color-muted` scoped per drug ID.
+- *Right indicator* (`::after` pseudo-element): 3px strip. Green = running OK; amber = next event within warn window; red = pump paused/stopped or intermittent Ce below threshold.
+- *Active card `::before` arrow*: CSS triangle at the inner edge of the left border, forming a `>` pointer shape.
+- *Warn window*: user-configurable 1–10 min slider in Warning Settings modal (`statusWarnMinutes`, default 2 min, persisted to localStorage).
 
-   A large amber ticker counts down from the selected delay at 100 ms intervals, shows "Now!" at zero, then auto-dismisses after 1.5 s. "Got it" dismisses early.
+**TCI delay modal unit fix (`js/app.js`):**
+`showTciDelayModal()` previously always displayed `Ce = X.X µg/mL` in canonical units — useless for fentanyl (target of 4 ng/mL showed as `Ce = 0.0 µg/mL`). Now converts via `fromCanonical` to the drug's allowed display units using `getAllowedUnits`/`formatValue`.
 
-**Pre-case behavior unchanged** — when the case has not started, the keypad confirm commits the plan immediately with no delay modal.
+**TCI first-step modal multi-unit display (`js/app.js`, `index.html`):**
+`showTciFirstStepModal()` previously hardcoded unit conversions (mcg/kg + mL for bolus; mL/hr for rate). Replaced with `buildActionHtml()` using `getDefaultUnit`/`getAllowedUnits`/`fromCanonical`/`formatValue` — primary unit large, all other allowed units smaller below it (`.tci-fs-secondary` span). Drug-specific: propofol shows `mg / mcg/kg · mL`, fentanyl shows `mcg/kg/min · mcg/h · mL/h`, etc.
 
-**Files changed:** `index.html` (two new modals + CSS), `js/app.js` (import `getPumpSettings`, three new state vars, three new functions, updated `onConfirm` handler, extended Escape/click-outside cleanup). `simulation.js` unchanged.
+**TCI countdown chime (`js/app.js`):**
+`showTciFirstStepModal` tick now fires `playAlert('info')` once when `remainingMs ≤ 0` ("Now!"). One-shot guard prevents repeated firing on subsequent ticks.
+
+**Redose chime redesign (`js/ui/alert-sound.js`, `js/ui/warnings.js`):**
+Added `redose` pattern: two quick 880 Hz beeps (100ms each, 50ms gap) — more distinctive than the previous single `info` beep. `checkBelowThreshold()` now calls `playAlert('redose')`.
+
+**Drug card font size (`index.html`):**
+Active card renders `.drug-name` and `.ce-current` visibly larger than inactive cards at every breakpoint (e.g. drug-name 13→17px, Ce 22→27px at base). No layout shift — font size only.
+
+**Chart controls restyle (`index.html`):**
+Moved from small muted top-right row to a vertical column at top-right, fully visible at rest. Reordered top-to-bottom: Expand (zoom) → Tooltip → Reset. 34→38px buttons, 16→18px icons, gap 5→10px. Removed opacity muting; replaced with colour+background hover transitions.
+
+359 tests across 12 suites, all passing.
+
+---
+
+### Session 20 (2026-04-06) — Responsive Tablet Layout & UI Polish (v0.5.6)
+
+Added `@media(min-width:1020px)` breakpoint (iPad 10th gen / iPad mini 7th gen and larger). At ≥1020px: `.sim-content` switches to `flex-direction:row`, both chart and history panels shown side-by-side (chart `flex:2`, history `flex:1`), tab buttons hidden via CSS. New `⤢/⤡` expand button toggles `.chart-expanded` to hide history and fill chart width. `@media(min-width:1200px)` added for iPad Air/Pro. Drug panel width 210→250→285px; Ce font 22→26→30px; topbar 34→42px.
+
+Font sizes enlarged throughout: `drug-name` 12→13px, approach 9.5→10.5px, status/rate 10→11px, countdown 9→10px. Step-bar countdown `text-align:right`. Step-bar below-threshold: `.step-bar-wrap.step-bar-below` red; non-selected path `barPct` fixed 100→0. History two-line layout (type first line, bold value second). IV push delivery time corrected (`pushDeliveryMinutes`). History timestamp color promoted.
 
 359 tests across 12 suites, all passing.
 
@@ -381,19 +408,23 @@ The background rAF loop previously cleared the approach line element for all non
 
 ---
 
-### Session 20 (2026-04-06) — Restore Bug Fix (v0.5.5)
+### Interim — Restore Bug Fix (v0.5.5)
 
-**Root cause:** Session 19 moved `genId` inside `createEventList()` for instance-scoped ID counters (audit issue #6). But `createEvent` — a module-level function — still called `genId()`. In the browser, every call to `addBolus`/`addRate`/`addPause` threw `ReferenceError: genId is not defined`. The restore try-catch caught this, but `addAnnotation` also failed (timer not started yet), so the failure was completely silent.
+*Between Sessions 19 and 20. Not tracked in session numbering.*
 
-**Why tests passed:** Every test file inlines its own `genId`/`createEventList` copy rather than importing from `events.js`, so the broken module was never exercised.
+**Root cause:** The audit session moved `genId` inside `createEventList()` for instance-scoped ID counters. But `createEvent` — a module-level function — still called `genId()`. In the browser, every `addBolus`/`addRate`/`addPause` threw `ReferenceError: genId is not defined`. The restore try-catch caught this silently.
 
-**Fix:** Moved `createEvent` inside `createEventList()`, immediately after `genId`, so it is within the closure and can see the instance-scoped counter. Removed the now-inaccessible `export { createEvent }` line. No external callers existed.
+**Why tests passed:** Every test file inlines its own `genId`/`createEventList` copy rather than importing from `events.js`.
+
+**Fix:** Moved `createEvent` inside the factory closure immediately after `genId`. Removed now-inaccessible `export { createEvent }`. No external callers existed.
 
 359 tests across 12 suites, all passing.
 
 ---
 
-### Session 19 (2026-04-06) — Audit Remediation (v0.5.4)
+### Interim — Audit Remediation (v0.5.4)
+
+*Between Sessions 18 and 19. Not tracked in session numbering.*
 
 External code audit reviewed and independently verified against source. Four audit claims were false positives (file not truncated, Ce-boost engine correctly restored, CET small-deficit path intentional design, units.js `checkAllowed` not bypassed). The following issues were confirmed and fixed:
 
