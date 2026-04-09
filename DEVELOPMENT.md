@@ -4,6 +4,35 @@
 
 ## Session History
 
+### Session 24 (2026-04-09) — Analytical steady state + slope-reversal plateau detection (v0.5.14)
+
+**Problem.** The slope-based plateau detector (v0.5.10–0.5.13) conflated two distinct clinical concepts: true pharmacokinetic steady state and local transient plateaus. A propofol constant infusion from zero shows a sustained low-slope region as Ce approaches its asymptote, but this is not a "plateau" — it is monotonic convergence. The detector reported "Plateau 2.05" for a scenario that should show "Steady State 2.05 in 2:44:00". Meanwhile, true plateaus (e.g. fentanyl bolus + maintenance where Ce declines from bolus peak, flattens as V3 equilibrates, then rises) went undetected because no reversal check existed.
+
+**Fix.** Split into two independent systems in `js/pk/steady-state-predictor.js`:
+
+1. **Analytical Steady State** — computes true Ce_ss via `−A⁻¹·B·rate` (pure matrix math, no simulation). Forward-simulates at 1-min resolution to find time to reach 95% of Ce_ss. Uses backward scan from horizon end to find the last minute outside the 5% band, rejecting transient crossings (e.g. Ce passing through the band on the way down after a rate reduction, then undershooting before slowly recovering). Always active in manual mode. Green dashed line on chart + "Steady State X.XX in M:SS" text.
+
+2. **Plateau Detection** — slope-based entry (sustained low-slope window of 15 consecutive minutes) with mandatory slope reversal. Pre-entry direction (sign of `ce[entryIdx] − ce[lookback]`) must differ from post-entry direction (scanned past the sustained window up to EXIT_HORIZON minutes for any opposite-sign movement). Monotonic approach to steady state returns `noPlateau: true`. Amber bounding box on chart + separate text line.
+
+**Files changed:**
+
+- **`js/pk/steady-state-predictor.js`** — Complete rewrite. Three exported functions: `predictSteadyStateCe(engine, rate)` (pure matrix math), `predictTimeToSteadyState(engine, startState, rate, opts)` (backward-scan time detection), `predictPlateau(engine, startState, rate, slopeTol, opts)` (entry + reversal + exit). Plateau entry is marked at the START of the 15-minute sustained window.
+- **`js/sim/simulation.js`** — Two wrapper methods: `predictSteadyState(drugId, time, rate, opts)` and `predictPlateau(drugId, time, rate, slopeTol, opts)`.
+- **`js/ui/drug-panel.js`** — Two-line approach display. Cache expanded with SS and plateau fields. New accessor `getSteadyStateCe(drugId)` for the chart SS line.
+- **`js/ui/chart.js`** — Green dashed SS line annotation (`rgba(34, 197, 94, 0.6)`, borderDash [8,4]), "SS" right-margin label, `setSteadyStateLine(ce)` setter.
+- **`js/app.js`** — Wires SS line in onFrame alongside plateau box, applies yScale per drug.
+- **`tests/test-steady-state-predictor.js`** — Complete rewrite, 62 assertions: analytical Ce_ss (propofol, fentanyl, ketamine), time to 95%, transient band crossing rejection (backward scan), no plateau for monotonic rise, fentanyl bolus+infusion plateau with reversal, rate-lowered plateau, bad input handling, engine state restoration, band monotonicity.
+
+**Key algorithmic decisions:**
+
+- **Backward scan for SS time:** Forward scan (first entry into 95% band) gives false positives when Ce transiently crosses the band on the way down after a rate reduction, then undershoots below before slowly recovering. Backward scan finds the last minute Ce was outside the band — the minute after that is when Ce has truly settled.
+- **Scan-based reversal detection:** Fixed-window lookahead (e.g. 5 or 30 minutes past sustain end) misses slow V3 reversals. The scan checks ALL minutes from sustain end to EXIT_HORIZON for any opposite-direction movement, reliably catching delayed turnarounds (e.g. propofol rate-lowered: entry t=87, sustain ends t=102, Ce minimum at t≈117, reversal detectable by t≈152).
+- **Plateau entry at window start:** When a 15-minute sustained low-slope window is detected starting at minute i, `entryIdx = i` (not `i + 15`). The plateau Ce value and chart region start are anchored at `ce[i]`.
+
+421 tests across 13 suites, all passing.
+
+---
+
 ### Session 23 (2026-04-08) — Split TCI target and manual-SS convergence tolerances (v0.5.9)
 
 **Problem.** v0.5.8 introduced a single "Convergence tolerance" slider (90–99%, default 95%) driving both TCI "time to target" and manual-mode "Steady state ≈ X in M:SS". Mathematically clean but clinically wrong: the two modes operate on completely different timescales. TCI delivers a front-loaded plan that reaches target in minutes, so 95% is a reasonable "close enough". A plain constant-rate infusion approaches the asymptote on the slowest compartmental time constant — for propofol τ ≈ 316 min, meaning 950 min to 95%, 730 min to 90%, 220 min even to 50%. With the shared 95% default the manual-SS countdown showed 15+ hours, which is useless.

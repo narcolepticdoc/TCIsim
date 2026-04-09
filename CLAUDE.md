@@ -14,6 +14,7 @@ js/sim/tci-planner.js     Four TCI planners (stepped, CET, CET-conservative, emu
 js/sim/simtiva-reference.js  SimTIVA eigenvalue math (clean-room, no GPL code)
 js/util/constants.js      DRUG_DEFS, pump settings (getPumpSettings/setPumpSettings)
 js/util/units.js          Bidirectional unit conversion
+js/pk/steady-state-predictor.js  Analytical SS + slope-reversal plateau detection
 js/ui/warnings.js         Two-tier event warning system (prep pulse + alert popup)
 js/ui/alert-sound.js      Persistent AudioContext; unlockAudio() + playAlert(level)
 js/app.js                 Entry point, wires all modules
@@ -59,7 +60,7 @@ setPumpSettings('propofol', { concentration: 10, bolusRateMlH: 750 })
 node tests/run-tests.js
 ```
 
-Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 359 tests across 12 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
+Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 421 tests across 13 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
 
 ## Versioning Scheme
 
