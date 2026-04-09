@@ -38,11 +38,12 @@ function predictSteadyState(engine, startState, startTime, rate, slopeTol, opts 
   if (rate <= 0) return null;
   if (!(slopeTol > 0 && slopeTol < 1)) return null;
 
-  const STEP         = opts.step        ?? 1;
-  const HORIZON      = opts.horizon     ?? 360;
-  const SUSTAIN      = opts.sustain     ?? 15;
-  const EXIT_HORIZON = opts.exitHorizon ?? HORIZON;
-  const N            = HORIZON + EXIT_HORIZON + SUSTAIN;
+  const STEP          = opts.step         ?? 1;
+  const HORIZON       = opts.horizon      ?? 360;
+  const SUSTAIN       = opts.sustain      ?? 15;
+  const EXIT_HORIZON  = opts.exitHorizon  ?? HORIZON;
+  const EXIT_BAND_PCT = opts.exitBandPct  ?? 0.05;
+  const N             = HORIZON + EXIT_HORIZON + SUSTAIN;
 
   const savedState = engine.getState();
   try {
@@ -70,28 +71,27 @@ function predictSteadyState(engine, startState, startTime, rate, slopeTol, opts 
     if (entryIdx < 0) {
       return {
         plateauCe: null, timeToSsMin: null, exitMin: null,
-        plateauCeMin: null, plateauCeMax: null, noSteadyState: true,
+        bandLow: null, bandHigh: null, noSteadyState: true,
       };
     }
 
+    const pCe     = ce[entryIdx];
+    const bandLow  = pCe * (1 - EXIT_BAND_PCT);
+    const bandHigh = pCe * (1 + EXIT_BAND_PCT);
     let exitIdx = -1;
-    let ceMin = ce[entryIdx], ceMax = ce[entryIdx];
-    for (let j = entryIdx; j < N; j++) {
-      ceMin = Math.min(ceMin, ce[j]);
-      ceMax = Math.max(ceMax, ce[j]);
-      if (j >= entryIdx + SUSTAIN) {
-        const base = Math.max(ce[j], EPS);
-        const rel  = Math.abs(ce[j + 1] - ce[j]) / base;
-        if (rel >= slopeTol) { exitIdx = j; break; }
+    for (let j = entryIdx + SUSTAIN; j <= N; j++) {
+      if (ce[j] < bandLow || ce[j] > bandHigh) {
+        exitIdx = j;
+        break;
       }
     }
 
     return {
-      plateauCe:    ce[entryIdx],
-      timeToSsMin:  entryIdx,
-      exitMin:      exitIdx >= 0 ? exitIdx : null,
-      plateauCeMin: ceMin,
-      plateauCeMax: ceMax,
+      plateauCe:   pCe,
+      timeToSsMin: entryIdx,
+      exitMin:     exitIdx >= 0 ? exitIdx : null,
+      bandLow,
+      bandHigh,
       noSteadyState: false,
     };
   } finally {
@@ -141,11 +141,11 @@ console.log('\n=== TEST 1: Propofol from zero at default 0.10 %/min (regression 
   assert(result.timeToSsMin === 146, `timeToSsMin = 146 (got ${result.timeToSsMin})`);
   assert(Math.abs(result.plateauCe - 2.068589) < 1e-4,
     `plateauCe ≈ 2.069 mcg/mL (got ${result.plateauCe.toFixed(6)})`);
-  assert(result.exitMin === null, 'Propofol permanent plateau: exitMin === null');
-  assert(result.plateauCeMin <= result.plateauCe,
-    `plateauCeMin (${result.plateauCeMin.toFixed(4)}) <= plateauCe`);
-  assert(result.plateauCeMax >= result.plateauCe,
-    `plateauCeMax (${result.plateauCeMax.toFixed(4)}) >= plateauCe`);
+  assert(result.exitMin === 201, `Propofol exit at 201 min with ±5% band (got ${result.exitMin})`);
+  assert(result.bandLow < result.plateauCe,
+    `bandLow (${result.bandLow.toFixed(4)}) < plateauCe`);
+  assert(result.bandHigh > result.plateauCe,
+    `bandHigh (${result.bandHigh.toFixed(4)}) > plateauCe`);
 }
 
 console.log('\n=== TEST 2: Propofol from zero at strictest 0.02 %/min → noSteadyState ===');
@@ -159,8 +159,8 @@ console.log('\n=== TEST 2: Propofol from zero at strictest 0.02 %/min → noStea
   assert(result.plateauCe === null && result.timeToSsMin === null,
     'plateauCe and timeToSsMin are null when no plateau');
   assert(result.exitMin === null, 'exitMin is null when noSteadyState');
-  assert(result.plateauCeMin === null && result.plateauCeMax === null,
-    'plateauCeMin/Max are null when noSteadyState');
+  assert(result.bandLow === null && result.bandHigh === null,
+    'bandLow/High are null when noSteadyState');
 }
 
 console.log('\n=== TEST 3: Fentanyl — slow PK reflected in thresholds ===');
@@ -184,8 +184,8 @@ console.log('\n=== TEST 3: Fentanyl — slow PK reflected in thresholds ===');
     `Fentanyl plateauCe in ng-scale range (${rLoosest.plateauCe.toExponential(2)} mcg/mL)`);
   assert(rLoosest.timeToSsMin === 239,
     `Fentanyl 0.18 %/min timeToSsMin = 239 (got ${rLoosest.timeToSsMin})`);
-  assert(rLoosest.exitMin === null,
-    'Fentanyl from-zero at loosest: permanent plateau (exitMin null)');
+  assert(rLoosest.exitMin === 268,
+    `Fentanyl from-zero exit at 268 min with ±5% band (got ${rLoosest.exitMin})`);
 }
 
 console.log('\n=== TEST 4: Ketamine from zero at default 0.10 %/min ===');
@@ -355,22 +355,44 @@ console.log('\n=== TEST 12: Fentanyl bolus + infusion — local plateau with exi
     'Local plateau found for fentanyl bolus + infusion');
   assert(result.timeToSsMin === 40,
     `Entry at 40 min (got ${result.timeToSsMin})`);
-  assert(result.exitMin === 87,
-    `Exit at 87 min (got ${result.exitMin})`);
-  assert(result.plateauCeMin < result.plateauCeMax,
-    `Non-degenerate bounding box: ceMin (${result.plateauCeMin.toExponential(3)}) < ceMax (${result.plateauCeMax.toExponential(3)})`);
+  assert(result.exitMin === 98,
+    `Exit at 98 min with ±5% band (got ${result.exitMin})`);
+  assert(result.bandLow < result.bandHigh,
+    `Non-degenerate band: bandLow (${result.bandLow.toExponential(3)}) < bandHigh (${result.bandHigh.toExponential(3)})`);
 }
 
-console.log('\n=== TEST 13: ceMin/ceMax bounds for propofol permanent plateau ===');
+console.log('\n=== TEST 13: band bounds for propofol plateau ===');
 {
   const eng = createEngine(propParams);
   const result = predictSteadyState(eng, eng.getState(), 0, 5.4, TOL_STD);
-  assert(result.plateauCeMin <= result.plateauCe,
-    `ceMin (${result.plateauCeMin.toFixed(4)}) <= plateauCe (${result.plateauCe.toFixed(4)})`);
-  assert(result.plateauCeMax >= result.plateauCe,
-    `ceMax (${result.plateauCeMax.toFixed(4)}) >= plateauCe (${result.plateauCe.toFixed(4)})`);
-  assert(result.plateauCeMin > 0 && result.plateauCeMax > 0,
-    'ceMin and ceMax are positive');
+  assert(result.bandLow < result.plateauCe,
+    `bandLow (${result.bandLow.toFixed(4)}) < plateauCe (${result.plateauCe.toFixed(4)})`);
+  assert(result.bandHigh > result.plateauCe,
+    `bandHigh (${result.bandHigh.toFixed(4)}) > plateauCe (${result.plateauCe.toFixed(4)})`);
+  assert(result.bandLow > 0 && result.bandHigh > 0,
+    'bandLow and bandHigh are positive');
+  // Verify band is exactly ±5% of plateauCe
+  assert(Math.abs(result.bandLow - result.plateauCe * 0.95) < 1e-9,
+    'bandLow = plateauCe × 0.95');
+  assert(Math.abs(result.bandHigh - result.plateauCe * 1.05) < 1e-9,
+    'bandHigh = plateauCe × 1.05');
+}
+
+console.log('\n=== TEST 14b: Exit band width monotonicity — wider band → later exit ===');
+{
+  const eng = createEngine(propParams);
+  const state = eng.getState();
+  const r2 = predictSteadyState(eng, state, 0, 5.4, TOL_STD, { exitBandPct: 0.02 });
+  const r5 = predictSteadyState(eng, state, 0, 5.4, TOL_STD, { exitBandPct: 0.05 });
+  const r10 = predictSteadyState(eng, state, 0, 5.4, TOL_STD, { exitBandPct: 0.10 });
+  assert(r2.exitMin === 167, `±2% band exit at 167 (got ${r2.exitMin})`);
+  assert(r5.exitMin === 201, `±5% band exit at 201 (got ${r5.exitMin})`);
+  assert(r10.exitMin === 266, `±10% band exit at 266 (got ${r10.exitMin})`);
+  assert(r2.exitMin < r5.exitMin && r5.exitMin < r10.exitMin,
+    'Wider band → later exit');
+  // Entry time unchanged (slope-based, not affected by band)
+  assert(r2.timeToSsMin === r5.timeToSsMin && r5.timeToSsMin === r10.timeToSsMin,
+    'Entry time independent of exit band');
 }
 
 // ============ TCI TIME-TO-TARGET TESTS ============

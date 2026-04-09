@@ -173,10 +173,10 @@ export function createChart(canvas, config = {}) {
         xMax: plateauRegion.endMin ?? viewMax,
         yMin: plateauRegion.ceMin,
         yMax: plateauRegion.ceMax,
-        backgroundColor: 'rgba(34, 197, 94, 0.08)',
-        borderColor: 'rgba(34, 197, 94, 0.25)',
-        borderWidth: 1,
-        drawTime: 'beforeDatasetsDraw',
+        backgroundColor: 'rgba(245, 158, 11, 0.12)',  // amber tint
+        borderColor: '#f59e0b',                        // amber — matches threshold line
+        borderWidth: 2,
+        drawTime: 'afterDatasetsDraw',
       };
     }
 
