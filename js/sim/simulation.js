@@ -398,19 +398,25 @@ export function createModel(config = {}) {
   }
 
   /**
-   * Predict when Ce will settle within a (1 − fraction) tolerance band
-   * around its asymptote under a constant infusion rate. Used for the
-   * manual-mode "Steady state ≈ X in M:SS" label.
+   * Predict when Ce will enter a sustained low-slope plateau under a
+   * constant infusion rate. Used for the manual-mode "Steady state ≈ X
+   * in M:SS" label.
    *
-   * Returns { ssCeAsymptote, timeToSsMin } or null if rate <= 0 or the
-   * asymptote is indistinguishable from zero.
+   * slopeTol is a dimensionless per-minute relative slope threshold
+   * (e.g. 0.0010 = 0.10 %/min).
+   *
+   * Returns:
+   *   null                                              if rate <= 0 or bad input
+   *   { plateauCe, timeToSsMin, noSteadyState: false }  on success
+   *   { plateauCe: null, timeToSsMin: null, noSteadyState: true }
+   *                                                     if no plateau within horizon
    */
-  function predictSteadyState(drugId, time, rate, fraction) {
+  function predictSteadyState(drugId, time, rate, slopeTol) {
     const engine = eventList.getEngine(drugId);
     if (!engine) return null;
 
     const state = eventList.getStateAtTime(drugId, time);
-    const result = _predictSteadyState(engine, state, time, rate, fraction);
+    const result = _predictSteadyState(engine, state, time, rate, slopeTol);
 
     // Defensive: predictor restores state itself, but match the predictTrough
     // pattern so any accidental drift is erased.

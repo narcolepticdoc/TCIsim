@@ -77,13 +77,13 @@ export function setCurveData(curve) {
 // Emergence Ce level (mcg/mL). Could become a user setting later.
 const EMERGENCE_CE = 1.5;
 
-// Fallback fractions when no getter is wired. Match the DEFAULTS in
-// warnings.js (tciFraction: 0.95, ssFraction: 0.50).
+// Fallback values when no getter is wired. Match the DEFAULTS in
+// warnings.js (tciFraction: 0.95, ssSlopeTol: 0.0010).
 const TCI_FRACTION_DEFAULT = 0.95;
-const SS_FRACTION_DEFAULT  = 0.50;
+const SS_SLOPE_DEFAULT     = 0.0010;
 
 let getTciFraction = () => TCI_FRACTION_DEFAULT;
-let getSsFraction  = () => SS_FRACTION_DEFAULT;
+let getSsSlopeTol  = () => SS_SLOPE_DEFAULT;
 
 // ──────────────────────────────────────────────────────────────────
 // Per-drug approach cache — keyed by drugId, same shape for every drug.
@@ -105,7 +105,7 @@ function _getApproachCache(drugId) {
       prefix: '', arrivalMin: null, staticText: '',
       lockedSsCe: null, computedVersion: -1,
       mode: '', rate: 0, target: 0,
-      ssFraction: 0, tciFraction: 0,
+      ssSlopeTol: 0, tciFraction: 0,
       curve: null,
     };
   }
@@ -129,7 +129,7 @@ export function init(opts = {}) {
   getCeTargetForDrug              = opts.getCeTargetForDrug              || null;
   onFrame                         = opts.onFrame                         || null;
   getTciFraction                  = opts.getTciFraction                  || (() => TCI_FRACTION_DEFAULT);
-  getSsFraction                   = opts.getSsFraction                   || (() => SS_FRACTION_DEFAULT);
+  getSsSlopeTol                   = opts.getSsSlopeTol                   || (() => SS_SLOPE_DEFAULT);
   loop();
 }
 
@@ -249,13 +249,14 @@ export function _estimateTimeToTarget(curve, t, Ce, ceTarget, fraction) {
  * curve:        precomputed PK curve for this drug (used only for TCI branches;
  *               manual-mode SS goes directly to model.predictSteadyState)
  * lockedSsCe:   if non-null, use this Ce for the steady-state label instead
- *               of the freshly computed asymptote. Released on pump-state change.
- * ssFraction:   0.50–0.95 tolerance fraction for manual-mode SS band.
+ *               of the freshly computed plateau. Released on pump-state change.
+ * ssSlopeTol:   per-minute relative slope threshold for manual-mode plateau
+ *               detection (e.g. 0.0010 = 0.10 %/min).
  * tciFraction:  0.90–0.99 tolerance fraction for TCI target band.
  *
  * Returns { prefix, arrivalMin, staticText, newLockedSsCe }.
  */
-function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve, ssFraction, tciFraction) {
+function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve, ssSlopeTol, tciFraction) {
   const noData = { prefix: '', arrivalMin: null, staticText: '', newLockedSsCe: null };
 
   // Intermittent bolus mode — countdown to redose threshold
@@ -309,30 +310,36 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve
       staticText: `Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
   }
 
-  // Manual infusion — time to steady state. Ask the model to simulate
-  // forward and compute the asymptotic Ce plus time-to-band directly;
-  // no curve scan is needed here.
+  // Manual infusion — time to a sustained low-slope plateau. Ask the model
+  // to scan forward and detect the first 15-min flat run; no curve scan
+  // is needed here.
   if (m === 'manual' && rate > 0) {
     let ss = null;
-    try { ss = model.predictSteadyState(drugId, t, rate, ssFraction); } catch (e) {}
-    if (ss && ss.ssCeAsymptote > 0) {
-      // lockedSsCe keeps the displayed Ce stable across curve refreshes that
-      // occur while Ce is still changing (e.g. during/after a bolus).
-      // Released on any pump-state change so the value stays clinically current.
-      const displayCe = (lockedSsCe !== null) ? lockedSsCe : ss.ssCeAsymptote;
-      // fmtCe handles per-drug unit conversion (e.g. mcg/mL → ng/mL for
-      // fentanyl/ketamine); a raw .toFixed(1) on canonical mcg/mL would
-      // display "0.0" for any ng/mL drug.
-      const ceStr = `<span class="appr-val">${fmtCe(displayCe, drugId)}</span>`;
-      if (ss.timeToSsMin > 0.5) {
-        return {
-          prefix: `Steady state ≈ ${ceStr} in `,
-          arrivalMin: t + ss.timeToSsMin,
-          staticText: '', newLockedSsCe: ss.ssCeAsymptote,
-        };
+    try { ss = model.predictSteadyState(drugId, t, rate, ssSlopeTol); } catch (e) {}
+    if (ss) {
+      if (ss.noSteadyState) {
+        return { prefix: '', arrivalMin: null, newLockedSsCe: null,
+          staticText: 'No steady state in 6h' };
       }
-      return { prefix: '', arrivalMin: null, newLockedSsCe: ss.ssCeAsymptote,
-        staticText: `Steady state ≈ ${ceStr}` };
+      if (ss.plateauCe > 0) {
+        // lockedSsCe keeps the displayed Ce stable across curve refreshes that
+        // occur while Ce is still changing (e.g. during/after a bolus).
+        // Released on any pump-state change so the value stays clinically current.
+        const displayCe = (lockedSsCe !== null) ? lockedSsCe : ss.plateauCe;
+        // fmtCe handles per-drug unit conversion (e.g. mcg/mL → ng/mL for
+        // fentanyl/ketamine); a raw .toFixed(1) on canonical mcg/mL would
+        // display "0.0" for any ng/mL drug.
+        const ceStr = `<span class="appr-val">${fmtCe(displayCe, drugId)}</span>`;
+        if (ss.timeToSsMin > 0.5) {
+          return {
+            prefix: `Steady state ≈ ${ceStr} in `,
+            arrivalMin: t + ss.timeToSsMin,
+            staticText: '', newLockedSsCe: ss.plateauCe,
+          };
+        }
+        return { prefix: '', arrivalMin: null, newLockedSsCe: ss.plateauCe,
+          staticText: `Steady state ≈ ${ceStr}` };
+      }
     }
   }
 
@@ -367,14 +374,14 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve
  */
 function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
   const cache = _getApproachCache(drugId);
-  const ssFraction  = getSsFraction();
+  const ssSlopeTol  = getSsSlopeTol();
   const tciFraction = getTciFraction();
 
   const displayChanged =
     cache.mode   !== m ||
     Math.abs(cache.rate   - rate)     > 0.01 ||
     Math.abs(cache.target - ceTarget) > 0.01 ||
-    Math.abs(cache.ssFraction  - ssFraction)  > 1e-6 ||
+    Math.abs(cache.ssSlopeTol  - ssSlopeTol)  > 1e-7 ||
     Math.abs(cache.tciFraction - tciFraction) > 1e-6;
 
   const curveChanged = cache.computedVersion !== _curveVersion;
@@ -397,7 +404,7 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
     }
 
     const lockToPass = displayChanged ? null : cache.lockedSsCe;
-    const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockToPass, curve, ssFraction, tciFraction);
+    const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockToPass, curve, ssSlopeTol, tciFraction);
 
     cache.prefix          = data.prefix;
     cache.arrivalMin      = data.arrivalMin;
@@ -406,7 +413,7 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
     cache.mode            = m;
     cache.rate            = rate;
     cache.target          = ceTarget;
-    cache.ssFraction      = ssFraction;
+    cache.ssSlopeTol      = ssSlopeTol;
     cache.tciFraction     = tciFraction;
 
     if (displayChanged) cache.lockedSsCe = data.newLockedSsCe;

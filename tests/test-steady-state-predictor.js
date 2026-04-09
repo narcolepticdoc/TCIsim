@@ -1,7 +1,7 @@
 /**
- * test-steady-state-predictor.js — Tests for the asymptote-fraction
- * steady-state predictor used by the manual-mode SS label and (via
- * _estimateTimeToTarget) the TCI time-to-target label.
+ * test-steady-state-predictor.js — Tests for the slope-based plateau
+ * detector used by the manual-mode SS label, and for the
+ * relative-tolerance curve scan used by the TCI time-to-target label.
  *
  * Inline copies of math, Eleveld/Fentanyl parameter calculators, the
  * PK engine, and the predictor mirror the CommonJS pattern used by
@@ -34,57 +34,36 @@ function buildSysMat(p){const{V1,V2,V3,CL,Q2,Q3,ke0}=p;const A=mat4();A[0]=-(CL+
 function createEngine(p){const A=buildSysMat(p);const{V1,V2,V3}=p;let st=new Float64Array(4);function adv(dt,R){if(dt<=0)return;const e=expm4(scale4(A,dt));const xH=mulVec4(e,st);if(R===0){st=xH;return}const Ai=inv4(A);if(!Ai){st=xH;return}const M=mul4(Ai,sub4(e,eye4()));for(let i=0;i<4;i++)st[i]=xH[i]+M[i*4]*R}function gc(){return{Cp:st[0]/V1,C2:st[1]/V2,C3:st[2]/V3,Ce:st[3],A1:st[0],A2:st[1],A3:st[2]}}function reset(){st=new Float64Array(4)}function getState(){return new Float64Array(st)}function setState(s){st=new Float64Array(s)}return{advance:adv,getConcentrations:gc,reset,getState,setState,get params(){return p}}}
 
 // ============ INLINE PREDICTOR (mirror of js/pk/steady-state-predictor.js) ============
-function predictSteadyState(engine, startState, startTime, rate, fraction, opts = {}) {
+function predictSteadyState(engine, startState, startTime, rate, slopeTol, opts = {}) {
   if (rate <= 0) return null;
-  if (!(fraction > 0 && fraction < 1)) return null;
-  const scanStep       = opts.scanStep       ?? 0.5;
-  const maxScanMin     = opts.maxScanMin     ?? 2880;
-  const asympHorizon0  = opts.asympHorizon   ?? 60;
-  const asympDoublings = opts.asympDoublings ?? 10;
-  const asympRelTol    = opts.asympRelTol    ?? 1e-6;
+  if (!(slopeTol > 0 && slopeTol < 1)) return null;
+
+  const STEP    = opts.step    ?? 1;
+  const HORIZON = opts.horizon ?? 360;
+  const SUSTAIN = opts.sustain ?? 15;
+  const N       = HORIZON + SUSTAIN;
 
   const savedState = engine.getState();
   try {
     engine.setState(startState);
-    let horizon = asympHorizon0;
-    engine.advance(horizon, rate);
-    let prevCe = engine.getConcentrations().Ce;
-    let ssCeAsymptote = prevCe;
-    for (let k = 0; k < asympDoublings; k++) {
-      engine.advance(horizon, rate);
-      horizon *= 2;
-      const ce = engine.getConcentrations().Ce;
-      const rel = Math.abs(ce - prevCe) / Math.max(Math.abs(ce), 1e-9);
-      prevCe = ce;
-      ssCeAsymptote = ce;
-      if (rel < asympRelTol) break;
-    }
-    if (ssCeAsymptote <= 1e-9) return null;
-
-    const tolerance = 1 - fraction;
-    const band = tolerance * ssCeAsymptote;
-
-    engine.setState(startState);
-    const startCe = engine.getConcentrations().Ce;
-    if (Math.abs(startCe - ssCeAsymptote) <= band) {
-      return { ssCeAsymptote, timeToSsMin: 0 };
+    const ce = new Float64Array(N + 1);
+    ce[0] = engine.getConcentrations().Ce;
+    for (let i = 1; i <= N; i++) {
+      engine.advance(STEP, rate);
+      ce[i] = engine.getConcentrations().Ce;
     }
 
-    engine.setState(startState);
-    let lastOutside = -1;
-    const nSteps = Math.floor(maxScanMin / scanStep);
-    for (let i = 1; i <= nSteps; i++) {
-      engine.advance(scanStep, rate);
-      const ce = engine.getConcentrations().Ce;
-      if (Math.abs(ce - ssCeAsymptote) > band) lastOutside = i;
+    const EPS = 1e-9;
+    outer:
+    for (let i = 0; i <= HORIZON; i++) {
+      for (let k = 0; k < SUSTAIN; k++) {
+        const base = Math.max(ce[i + k], EPS);
+        const rel  = Math.abs(ce[i + k + 1] - ce[i + k]) / base;
+        if (rel >= slopeTol) continue outer;
+      }
+      return { plateauCe: ce[i], timeToSsMin: i, noSteadyState: false };
     }
-
-    if (lastOutside < 0) return { ssCeAsymptote, timeToSsMin: 0 };
-    const lastOutsideTime = lastOutside * scanStep;
-    if (lastOutsideTime >= maxScanMin - scanStep) {
-      return { ssCeAsymptote, timeToSsMin: maxScanMin };
-    }
-    return { ssCeAsymptote, timeToSsMin: (lastOutside + 1) * scanStep };
+    return { plateauCe: null, timeToSsMin: null, noSteadyState: true };
   } finally {
     engine.setState(savedState);
   }
@@ -114,222 +93,208 @@ function assert(c, m) {
 const patient = { age: 35, weight: 70, height: 170, male: true, opioid: false };
 const propParams = calcEleveldParams(patient);
 
-console.log('\n=== TEST 1: Approach from zero (propofol) ===');
+// Slider-preset thresholds (per-minute relative slope). Default is TOL_STD.
+const TOL_STRICTEST = 0.0002;
+const TOL_STRICT    = 0.0006;
+const TOL_STD       = 0.0010;
+const TOL_LOOSE     = 0.0014;
+const TOL_LOOSEST   = 0.0018;
+
+console.log('\n=== TEST 1: Propofol from zero at default 0.10 %/min (regression lock) ===');
 {
   const eng = createEngine(propParams);
   const state = eng.getState();
-  // Rate that yields ~3 mcg/mL asymptote. Eleveld propofol CL ≈ 1.8 L/min →
-  // Cp_ss ≈ R / CL; Ce tracks Cp. 3 mcg/mL * ~1.8 L/min ≈ 5.4 mg/min.
-  const rate = 5.4;
-  const result = predictSteadyState(eng, state, 0, rate, 0.95);
+  const rate = 5.4;   // ~324 mg/h — typical maintenance for 70 kg adult
+  const result = predictSteadyState(eng, state, 0, rate, TOL_STD);
   assert(result !== null, 'Result returned');
-  assert(result.ssCeAsymptote > 0, `ssCeAsymptote > 0 (got ${result.ssCeAsymptote.toFixed(3)})`);
-  assert(result.timeToSsMin > 0, `timeToSsMin > 0 (got ${result.timeToSsMin.toFixed(1)})`);
-
-  // Verify Ce at the predicted arrival time is inside the ±5% band.
-  eng.setState(state);
-  eng.advance(result.timeToSsMin, rate);
-  const ceAtArrival = eng.getConcentrations().Ce;
-  const band = 0.05 * result.ssCeAsymptote;
-  assert(Math.abs(ceAtArrival - result.ssCeAsymptote) <= band,
-    `Ce at arrival (${ceAtArrival.toFixed(3)}) within ±5% of asymptote (${result.ssCeAsymptote.toFixed(3)})`);
+  assert(result.noSteadyState === false, 'Plateau found within 6h at default threshold');
+  assert(result.timeToSsMin === 146, `timeToSsMin = 146 (got ${result.timeToSsMin})`);
+  assert(Math.abs(result.plateauCe - 2.068589) < 1e-4,
+    `plateauCe ≈ 2.069 mcg/mL (got ${result.plateauCe.toFixed(6)})`);
 }
 
-console.log('\n=== TEST 2: Asymptote matches long forward advance ===');
+console.log('\n=== TEST 2: Propofol from zero at strictest 0.02 %/min → noSteadyState ===');
 {
   const eng = createEngine(propParams);
   const state = eng.getState();
   const rate = 5.4;
-  const result = predictSteadyState(eng, state, 0, rate, 0.95);
-
-  // Propofol's slow V3 has τ ≈ 316 min, so 24 h is only ~99% of asymptote.
-  // Compare to a 96-hour run instead — that's > 18 slow-compartment τ,
-  // which puts Ce within ~1e-8 of the true asymptote.
-  const eng2 = createEngine(propParams);
-  eng2.advance(5760, rate);
-  const trueAsymp = eng2.getConcentrations().Ce;
-  const relErr = Math.abs(result.ssCeAsymptote - trueAsymp) / trueAsymp;
-  assert(relErr < 0.0001, `Asymptote matches 96h advance within 0.01% (rel err ${(relErr*100).toFixed(6)}%)`);
+  const result = predictSteadyState(eng, state, 0, rate, TOL_STRICTEST);
+  assert(result !== null, 'Result returned (not null)');
+  assert(result.noSteadyState === true, 'noSteadyState is true at strictest threshold');
+  assert(result.plateauCe === null && result.timeToSsMin === null,
+    'plateauCe and timeToSsMin are null when no plateau');
 }
 
-console.log('\n=== TEST 3: Fraction monotonicity ===');
+console.log('\n=== TEST 3: Fentanyl — slow PK reflected in thresholds ===');
 {
-  const eng = createEngine(propParams);
-  const state = eng.getState();
-  const rate = 5.4;
-  const r90 = predictSteadyState(eng, state, 0, rate, 0.90);
-  const r95 = predictSteadyState(eng, state, 0, rate, 0.95);
-  const r99 = predictSteadyState(eng, state, 0, rate, 0.99);
-  assert(r90.timeToSsMin < r95.timeToSsMin, `timeTo(0.90)=${r90.timeToSsMin} < timeTo(0.95)=${r95.timeToSsMin}`);
-  assert(r95.timeToSsMin < r99.timeToSsMin, `timeTo(0.95)=${r95.timeToSsMin} < timeTo(0.99)=${r99.timeToSsMin}`);
-}
-
-console.log('\n=== TEST 4: Drug independence (fentanyl, ketamine) ===');
-{
-  // Fentanyl — ng/mL scale. Target ~3 ng/mL = 0.003 mcg/mL. Shafer CL ~ 0.6 L/min.
-  // Rate ≈ 0.003 * 0.6 = 0.0018 mg/min.
+  // Fentanyl's slow V3 makes it harder to flatten than propofol at the
+  // same nominal threshold. At default 0.10 %/min → noSteadyState. At
+  // 0.18 %/min → plateau found. The predictor is drug-agnostic: it just
+  // reports what the Ce curve does.
   const fentParams = calcFentanylParams(patient);
   const eng = createEngine(fentParams);
   const state = eng.getState();
-  const result = predictSteadyState(eng, state, 0, 0.0018, 0.95);
-  assert(result !== null, 'Fentanyl result returned');
-  assert(result.ssCeAsymptote > 0 && result.ssCeAsymptote < 0.02,
-    `Fentanyl asymptote in ng-scale range (${result.ssCeAsymptote.toExponential(2)} mcg/mL)`);
-  assert(result.timeToSsMin > 0, 'Fentanyl time > 0');
 
-  // Ketamine — mcg-scale but different PK.
+  const rDefault = predictSteadyState(eng, state, 0, 0.0018, TOL_STD);
+  assert(rDefault.noSteadyState === true,
+    'Fentanyl at default 0.10 %/min: noSteadyState within 6h');
+
+  const rLoosest = predictSteadyState(eng, state, 0, 0.0018, TOL_LOOSEST);
+  assert(rLoosest.noSteadyState === false,
+    'Fentanyl at 0.18 %/min: plateau found');
+  assert(rLoosest.plateauCe > 0 && rLoosest.plateauCe < 0.02,
+    `Fentanyl plateauCe in ng-scale range (${rLoosest.plateauCe.toExponential(2)} mcg/mL)`);
+  assert(rLoosest.timeToSsMin === 239,
+    `Fentanyl 0.18 %/min timeToSsMin = 239 (got ${rLoosest.timeToSsMin})`);
+}
+
+console.log('\n=== TEST 4: Ketamine from zero at default 0.10 %/min ===');
+{
   const ketParams = calcKetamineParams(patient);
-  const eng2 = createEngine(ketParams);
-  const state2 = eng2.getState();
-  const result2 = predictSteadyState(eng2, state2, 0, 1.5, 0.95);
-  assert(result2 !== null, 'Ketamine result returned');
-  assert(result2.ssCeAsymptote > 0, `Ketamine asymptote > 0 (${result2.ssCeAsymptote.toFixed(3)})`);
-  assert(result2.timeToSsMin > 0, 'Ketamine time > 0');
+  const eng = createEngine(ketParams);
+  const state = eng.getState();
+  const result = predictSteadyState(eng, state, 0, 1.5, TOL_STD);
+  assert(result !== null && result.noSteadyState === false,
+    'Ketamine plateau found within 6h at default threshold');
+  assert(result.timeToSsMin === 276,
+    `Ketamine timeToSsMin = 276 (got ${result.timeToSsMin})`);
+  assert(result.plateauCe > 0,
+    `Ketamine plateauCe > 0 (got ${result.plateauCe.toFixed(3)})`);
 }
 
-console.log('\n=== TEST 5: Zero rate returns null ===');
+console.log('\n=== TEST 5: Primed state reaches plateau faster than zero start ===');
 {
   const eng = createEngine(propParams);
-  const result = predictSteadyState(eng, eng.getState(), 0, 0, 0.95);
-  assert(result === null, 'Rate = 0 returns null');
-  const result2 = predictSteadyState(eng, eng.getState(), 0, -1, 0.95);
-  assert(result2 === null, 'Negative rate returns null');
+  const zeroState = eng.getState();
+  const rate = 5.4;
+  // Use TOL_STRICT — at TOL_STD the primed state is already flat (timeToSsMin=0)
+  // so we wouldn't see any "faster" signal. At TOL_STRICT, from-zero takes 288 min
+  // and primed takes 88 min — a clear 200-min advantage.
+  const fromZero = predictSteadyState(eng, zeroState, 0, rate, TOL_STRICT);
+
+  eng.setState(zeroState);
+  eng.advance(200, rate);   // 200 min of prior infusion
+  const primedState = eng.getState();
+  const fromPrimed = predictSteadyState(eng, primedState, 200, rate, TOL_STRICT);
+
+  assert(fromZero.timeToSsMin === 288 && fromPrimed.timeToSsMin === 88,
+    `from-zero=288, from-primed=88 (got ${fromZero.timeToSsMin}, ${fromPrimed.timeToSsMin})`);
+  assert(fromPrimed.timeToSsMin < fromZero.timeToSsMin - 150,
+    'Primed state reaches plateau >150 min faster');
 }
 
-console.log('\n=== TEST 6: Engine state restoration ===');
+console.log('\n=== TEST 6: Post-bolus overshoot — 15-min sustain window bridges transient ===');
 {
   const eng = createEngine(propParams);
-  // Prime the engine to a non-trivial state so byte-identity is meaningful.
-  eng.advance(7, 5.4);
+
+  // 80 mg loading bolus over 30 sec: Cp spikes high, Ce lags and rises.
+  eng.advance(0.5, 80 / 0.5);
+  const postBolusState = eng.getState();
+
+  // Low maintenance rate — asymptote is far below the Cp transient peak.
+  // The Ce curve rises from ~0.4, overshoots maintenance asymptote briefly
+  // (tracking Cp), then decays. The 15-min sustain window must not trigger
+  // inside the transient.
+  const mainRate = 1.5;
+  const result = predictSteadyState(eng, postBolusState, 0.5, mainRate, TOL_STD);
+  assert(result !== null && result.noSteadyState === false,
+    'Plateau found despite post-bolus overshoot');
+  assert(result.timeToSsMin === 59,
+    `Post-bolus timeToSsMin = 59 (got ${result.timeToSsMin})`);
+
+  // The plateau must be stable: verify the per-minute slope stays below TOL_STD
+  // for the full 15-min sustain window past timeToSsMin (already guaranteed by
+  // the algorithm, but worth a direct check).
+  eng.setState(postBolusState);
+  eng.advance(result.timeToSsMin, mainRate);
+  let prev = eng.getConcentrations().Ce;
+  let maxSlope = 0;
+  for (let k = 0; k < 15; k++) {
+    eng.advance(1, mainRate);
+    const cur = eng.getConcentrations().Ce;
+    const slope = Math.abs(cur - prev) / Math.max(prev, 1e-9);
+    if (slope > maxSlope) maxSlope = slope;
+    prev = cur;
+  }
+  assert(maxSlope < TOL_STD,
+    `Slope stays < 0.10 %/min for 15 min post-arrival (max ${(maxSlope*100).toFixed(4)} %/min)`);
+}
+
+console.log('\n=== TEST 7: Already flat (pre-advanced 10h) → timeToSsMin === 0 ===');
+{
+  const eng = createEngine(propParams);
+  const rate = 5.4;
+  eng.advance(600, rate);   // 10 h — well past propofol's fast transients
+  const deepState = eng.getState();
+  const result = predictSteadyState(eng, deepState, 600, rate, TOL_STD);
+  assert(result !== null && result.noSteadyState === false, 'Result returned');
+  assert(result.timeToSsMin === 0,
+    `timeToSsMin === 0 when already flat (got ${result.timeToSsMin})`);
+}
+
+console.log('\n=== TEST 8: Rate ≤ 0 or bad input returns null ===');
+{
+  const eng = createEngine(propParams);
+  assert(predictSteadyState(eng, eng.getState(), 0, 0,  TOL_STD) === null, 'Rate = 0 returns null');
+  assert(predictSteadyState(eng, eng.getState(), 0, -1, TOL_STD) === null, 'Negative rate returns null');
+  assert(predictSteadyState(eng, eng.getState(), 0, 5.4, 0)   === null, 'slopeTol = 0 returns null');
+  assert(predictSteadyState(eng, eng.getState(), 0, 5.4, 1)   === null, 'slopeTol = 1 returns null');
+}
+
+console.log('\n=== TEST 9: Engine state restoration (byte-identical) ===');
+{
+  const eng = createEngine(propParams);
+  eng.advance(7, 5.4);   // non-trivial prior state
   const beforeState = eng.getState();
   const startStateCopy = eng.getState();
-  predictSteadyState(eng, startStateCopy, 7, 5.4, 0.95);
+  predictSteadyState(eng, startStateCopy, 7, 5.4, TOL_STD);
   const afterState = eng.getState();
   let identical = true;
   for (let i = 0; i < 4; i++) if (beforeState[i] !== afterState[i]) identical = false;
   assert(identical, 'Engine state is byte-identical before and after predict call');
 }
 
-console.log('\n=== TEST 7: Primed state is faster ===');
+console.log('\n=== TEST 10: Threshold monotonicity (looser → earlier plateau) ===');
 {
   const eng = createEngine(propParams);
-  const zeroState = eng.getState();
+  const state = eng.getState();
   const rate = 5.4;
-  const fromZero = predictSteadyState(eng, zeroState, 0, rate, 0.95);
+  const rLoosest  = predictSteadyState(eng, state, 0, rate, TOL_LOOSEST);
+  const rLoose    = predictSteadyState(eng, state, 0, rate, TOL_LOOSE);
+  const rStd      = predictSteadyState(eng, state, 0, rate, TOL_STD);
+  const rStrict   = predictSteadyState(eng, state, 0, rate, TOL_STRICT);
+  const rStrictest = predictSteadyState(eng, state, 0, rate, TOL_STRICTEST);
 
-  // Prime by running 200 min under the same rate — far enough along the
-  // transient that the remaining time-to-band is visibly shorter.
-  eng.setState(zeroState);
-  eng.advance(200, rate);
-  const primedState = eng.getState();
-  const fromPrimed = predictSteadyState(eng, primedState, 200, rate, 0.95);
-
-  assert(fromPrimed.timeToSsMin < fromZero.timeToSsMin - 100,
-    `Primed state reaches SS >100 min faster (${fromPrimed.timeToSsMin} vs ${fromZero.timeToSsMin})`);
+  // All finite results must be monotone non-decreasing as threshold tightens;
+  // tightest can flip to noSteadyState.
+  assert(rLoosest.timeToSsMin <= rLoose.timeToSsMin,
+    `loosest=${rLoosest.timeToSsMin} ≤ loose=${rLoose.timeToSsMin}`);
+  assert(rLoose.timeToSsMin <= rStd.timeToSsMin,
+    `loose=${rLoose.timeToSsMin} ≤ std=${rStd.timeToSsMin}`);
+  assert(rStd.timeToSsMin <= rStrict.timeToSsMin,
+    `std=${rStd.timeToSsMin} ≤ strict=${rStrict.timeToSsMin}`);
+  assert(rStrictest.noSteadyState === true,
+    'strictest threshold flips to noSteadyState');
 }
 
-console.log('\n=== TEST 8: Approach from above (rate lowered) ===');
+console.log('\n=== TEST 11: Rate lowered from high — plateauCe < startCe ===');
 {
   const eng = createEngine(propParams);
 
-  // Prime the engine at a high rate so Ce is well above any low-rate asymptote.
-  // Use a loading bolus then a sustained high rate.
-  eng.advance(0.05, 150 / 0.05);   // ~150 mg bolus (5 mg/min for 30 s)
+  // Prime the engine at a high rate: brief loading bolus + sustained high rate.
+  eng.advance(0.05, 150 / 0.05);   // ~150 mg bolus (5 mg/min for 30 sec equivalent)
   eng.advance(30, 10.0);           // 30 min at 10 mg/min
   const highState = eng.getState();
   const startCe = eng.getConcentrations().Ce;
 
-  // Now predict for a much lower maintenance rate whose asymptote is < startCe.
+  // Now predict under a much lower maintenance rate.
   const lowRate = 2.0;
-  const result = predictSteadyState(eng, highState, 30, lowRate, 0.95);
-  assert(result !== null, 'Result returned for lowered rate');
-  assert(result.ssCeAsymptote < startCe,
-    `New asymptote (${result.ssCeAsymptote.toFixed(3)}) < starting Ce (${startCe.toFixed(3)})`);
-  assert(result.timeToSsMin > 0, `timeToSsMin > 0 (got ${result.timeToSsMin.toFixed(1)})`);
-
-  // Verify: after advancing timeToSsMin from highState under lowRate, Ce is in the ±5% band.
-  eng.setState(highState);
-  eng.advance(result.timeToSsMin, lowRate);
-  const ceAtArrival = eng.getConcentrations().Ce;
-  const band = 0.05 * result.ssCeAsymptote;
-  assert(Math.abs(ceAtArrival - result.ssCeAsymptote) <= band,
-    `Approaches from above: Ce at arrival (${ceAtArrival.toFixed(3)}) within ±5% of ${result.ssCeAsymptote.toFixed(3)}`);
-}
-
-console.log('\n=== TEST 9: Post-bolus overshoot ===');
-{
-  const eng = createEngine(propParams);
-
-  // Loading bolus: 80 mg as a 30-sec push. Immediately after, Ce is still
-  // low (Ce lags Cp), but Cp is very high. Start a low maintenance rate —
-  // Ce will rise toward the Cp peak (briefly overshooting the asymptote of
-  // the low maintenance rate), then decay back to the maintenance asymptote.
-  eng.advance(0.5, 80 / 0.5);       // 80 mg over 30 sec
-  const postBolusState = eng.getState();
-
-  const mainRate = 1.5;  // low maintenance — asymptote well below transient peak
-  const result = predictSteadyState(eng, postBolusState, 0.5, mainRate, 0.95);
-  assert(result !== null, 'Result returned');
-
-  // Verify Ce at the predicted arrival is within the band.
-  eng.setState(postBolusState);
-  eng.advance(result.timeToSsMin, mainRate);
-  const ceAtArrival = eng.getConcentrations().Ce;
-  const band = 0.05 * result.ssCeAsymptote;
-  assert(Math.abs(ceAtArrival - result.ssCeAsymptote) <= band,
-    `Post-bolus: Ce at arrival (${ceAtArrival.toFixed(3)}) within ±5% of ${result.ssCeAsymptote.toFixed(3)}`);
-
-  // Sanity: Ce at the predicted arrival must stay in the band for the next
-  // 30 min — the predictor's "last time outside" semantics should survive
-  // any transient overshoot on the way up.
-  let stayed = true;
-  for (let k = 1; k <= 60; k++) {
-    eng.advance(0.5, mainRate);
-    const ce = eng.getConcentrations().Ce;
-    if (Math.abs(ce - result.ssCeAsymptote) > band * 1.01) { stayed = false; break; }
-  }
-  assert(stayed, 'Ce stays inside band for 30 min after predicted arrival (no re-exit)');
-}
-
-console.log('\n=== TEST 10: Already inside the band ===');
-{
-  const eng = createEngine(propParams);
-  const rate = 5.4;
-  // Advance 2000 min — propofol's slow τ ≈ 316 min, so 2000 = 6.3τ and
-  // Ce is within ~0.2% of asymptote, well inside the 5% band.
-  eng.advance(2000, rate);
-  const deepState = eng.getState();
-  const result = predictSteadyState(eng, deepState, 2000, rate, 0.95);
-  assert(result !== null, 'Result returned');
-  assert(result.timeToSsMin === 0, `timeToSsMin is 0 when already at SS (got ${result.timeToSsMin})`);
-}
-
-console.log('\n=== TEST 11: Tolerance symmetry (startCe slightly above asymp) ===');
-{
-  // Construct a case where the starting Ce is 3% above the asymptote of
-  // the current rate. With fraction=0.95 (band=5%), we're inside the band
-  // and timeToSsMin should be 0.
-  const eng = createEngine(propParams);
-
-  // Find asymptote Ce for rate R1.
-  const R1 = 3.0;
-  const eng1 = createEngine(propParams);
-  eng1.advance(1440, R1);
-  const asymp1 = eng1.getConcentrations().Ce;
-
-  // Start from asymp1 * 1.03 (3% above). To get there, run a slightly higher
-  // rate that reaches exactly 1.03 * asymp1. Since Cp_ss scales linearly with R,
-  // use R = R1 * 1.03 for a long time.
-  eng.advance(1440, R1 * 1.03);
-  const startCe = eng.getConcentrations().Ce;
-  const startState = eng.getState();
-
-  // startCe/asymp1 should be ~1.03 (3% deviation, inside 5% band).
-  const result = predictSteadyState(eng, startState, 1440, R1, 0.95);
-  assert(result !== null, 'Result returned');
-  const rel = Math.abs(startCe - result.ssCeAsymptote) / result.ssCeAsymptote;
-  assert(rel < 0.05, `Starting Ce is within 5% band (rel dev ${(rel*100).toFixed(2)}%)`);
-  assert(result.timeToSsMin === 0, `timeToSsMin is 0 (got ${result.timeToSsMin})`);
+  const result = predictSteadyState(eng, highState, 30, lowRate, TOL_STD);
+  assert(result !== null && result.noSteadyState === false, 'Result returned');
+  assert(result.plateauCe < startCe,
+    `plateauCe (${result.plateauCe.toFixed(3)}) < startCe (${startCe.toFixed(3)})`);
+  assert(result.timeToSsMin === 87,
+    `Rate-lowered timeToSsMin = 87 (got ${result.timeToSsMin})`);
 }
 
 // ============ TCI TIME-TO-TARGET TESTS ============
