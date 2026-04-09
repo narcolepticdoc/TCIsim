@@ -123,7 +123,7 @@ function assert(c, m) {
 const patient = { age: 35, weight: 70, height: 170, male: true, opioid: false };
 const propParams = calcEleveldParams(patient);
 
-// Slider-preset thresholds (per-minute relative slope). Default is TOL_STD.
+// Test tolerance levels (per-minute relative slope). Default is TOL_STD.
 const TOL_STRICTEST = 0.0002;
 const TOL_STRICT    = 0.0006;
 const TOL_STD       = 0.0010;
