@@ -621,15 +621,30 @@ function boot() {
           history.updateDimming();
         }
       }
-      // Plateau region highlight — updated per-frame so it reflects the
+      // Chart annotations — updated per-frame so they reflect the
       // freshly-computed approach data (which runs in the rAF loop BEFORE
       // this callback). Putting it in refreshChart would race: refreshChart
-      // reads the region before updateApproachLine has computed it.
+      // reads the data before updateApproachLine has computed it.
       if (chart) {
         const m = mode.get(selectedDrug);
+        const { yScale: ys } = getChartDrugConfig(selectedDrug);
+
+        // Steady-state horizontal line (manual mode only)
+        const ssCe = drugPanel.getSteadyStateCe(selectedDrug);
+        if (ssCe && m === 'manual') {
+          const scaled = ssCe * ys;
+          if (chart._lastSsCe !== scaled) {
+            chart._lastSsCe = scaled;
+            chart.setSteadyStateLine(scaled);
+          }
+        } else if (chart._lastSsCe) {
+          chart._lastSsCe = null;
+          chart.setSteadyStateLine(null);
+        }
+
+        // Plateau region bounding box (manual mode only)
         const plat = drugPanel.getPlateauRegion(selectedDrug);
         if (plat && m === 'manual') {
-          const { yScale: ys } = getChartDrugConfig(selectedDrug);
           // Compute chart end time for permanent plateaus (endMin === null)
           const events = model ? model.getEvents(selectedDrug) : [];
           const lastEvt = events.length > 0 ? events[events.length - 1].time : 0;
