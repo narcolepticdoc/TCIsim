@@ -169,7 +169,7 @@ export function createChart(canvas, config = {}) {
         label: band.label ? {
           display: true,
           content: band.label,
-          position: { x: 'end', y: 'center' },
+          position: { x: '85%', y: 'center' },
           color: '#ffffff88',
           font: { size: 9 },
         } : undefined,
@@ -212,7 +212,7 @@ export function createChart(canvas, config = {}) {
       maintainAspectRatio: false,
       animation: false,
       layout: {
-        padding: { right: 65 },
+        padding: { right: 5 },
       },
       interaction: {
         mode: 'index',
@@ -343,41 +343,42 @@ export function createChart(canvas, config = {}) {
     },
     plugins: [
       {
-        // Draw target and threshold labels in the right-margin padding,
-        // outside the chart area, so they never overlap curve data.
+        // Draw coloured pill labels straddling the right edge of the chart area.
         id: 'targetCeLabel',
         afterDraw(ch) {
           const yScl = ch.scales.y;
           const ca = ch.chartArea;
           if (!yScl || !ca) return;
 
-          function drawRightLabel(ctx, value, label, color, label2 = null) {
+          function drawPillLabel(ctx, value, text, bgColor) {
             const y = yScl.getPixelForValue(value);
             if (y < ca.top || y > ca.bottom) return;
             ctx.save();
-            ctx.font = '10px sans-serif';
-            const lines = label2 ? [label, label2] : [label];
-            const lineH = 13, pad = 3, x = ca.right + 6;
-            const tw = Math.max(...lines.map(l => ctx.measureText(l).width));
-            const totalH = lines.length * lineH;
-            ctx.fillStyle = color + 'dd';
-            ctx.fillRect(x - pad, y - totalH / 2 - pad, tw + pad * 2, totalH + pad * 2);
-            ctx.fillStyle = '#000';
-            ctx.textAlign = 'left';
+            ctx.font = 'bold 10px sans-serif';
+            const tw = ctx.measureText(text).width;
+            const padH = 5, padV = 3;
+            const pillW = tw + padH * 2;
+            const pillH = 10 + padV * 2;
+            const r = pillH / 2;
+            const x = ca.right - pillW / 2;
+            ctx.beginPath();
+            ctx.roundRect(x, y - pillH / 2, pillW, pillH, r);
+            ctx.fillStyle = bgColor;
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            lines.forEach((line, i) => {
-              ctx.fillText(line, x, y - totalH / 2 + lineH * i + lineH / 2);
-            });
+            ctx.fillText(text, ca.right, y);
             ctx.restore();
           }
 
           const ctx = ch.ctx;
           if (targetCe !== null && targetCe > 0)
-            drawRightLabel(ctx, targetCe, `Ce ${targetCe.toFixed(1)}`, COLORS.target);
+            drawPillLabel(ctx, targetCe, targetCe.toFixed(1), COLORS.target);
           if (thresholdCe !== null && thresholdCe > 0)
-            drawRightLabel(ctx, thresholdCe, 'Threshold', '#f59e0b', thresholdCe.toFixed(2));
+            drawPillLabel(ctx, thresholdCe, thresholdCe.toFixed(2), '#f59e0b');
           if (steadyStateCe !== null && steadyStateCe > 0)
-            drawRightLabel(ctx, steadyStateCe, 'SS', 'rgba(34, 197, 94, 0.8)', steadyStateCe.toFixed(2));
+            drawPillLabel(ctx, steadyStateCe, steadyStateCe.toFixed(2), 'rgba(34, 197, 94, 0.9)');
         },
       },
     ],
