@@ -169,7 +169,8 @@ export function createChart(canvas, config = {}) {
         label: band.label ? {
           display: true,
           content: band.label,
-          position: { x: '80%', y: 'center' },
+          position: { x: 'end', y: 'center' },
+          xAdjust: -36,
           color: '#ffffff88',
           font: { size: 9 },
         } : undefined,
