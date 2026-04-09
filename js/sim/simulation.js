@@ -399,17 +399,21 @@ export function createModel(config = {}) {
 
   /**
    * Predict when Ce will enter a sustained low-slope plateau under a
-   * constant infusion rate. Used for the manual-mode "Steady state ≈ X
-   * in M:SS" label.
+   * constant infusion rate. Used for the manual-mode "Plateau ≈ X in
+   * M:SS" and "Exit Plateau in M:SS" labels.
    *
    * slopeTol is a dimensionless per-minute relative slope threshold
    * (e.g. 0.0010 = 0.10 %/min).
    *
    * Returns:
    *   null                                              if rate <= 0 or bad input
-   *   { plateauCe, timeToSsMin, noSteadyState: false }  on success
-   *   { plateauCe: null, timeToSsMin: null, noSteadyState: true }
-   *                                                     if no plateau within horizon
+   *   { plateauCe, timeToSsMin, exitMin, plateauCeMin, plateauCeMax,
+   *     noSteadyState: false }                          on success
+   *     - exitMin: minutes from scan start when plateau ends (null = permanent)
+   *     - plateauCeMin/Max: Ce range during plateau (for chart bounding box)
+   *   { plateauCe: null, timeToSsMin: null, exitMin: null,
+   *     plateauCeMin: null, plateauCeMax: null,
+   *     noSteadyState: true }                           if no plateau within horizon
    */
   function predictSteadyState(drugId, time, rate, slopeTol) {
     const engine = eventList.getEngine(drugId);

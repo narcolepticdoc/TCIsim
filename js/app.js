@@ -208,6 +208,19 @@ function refreshChart() {
   const threshold = mode.getIntermittentThreshold(selectedDrug);
   chart.setThresholdLine(m === 'intermittent' && threshold > 0 ? threshold * yScale : null);
 
+  // Plateau region highlight (manual mode only)
+  const plat = drugPanel.getPlateauRegion(selectedDrug);
+  if (plat && m === 'manual') {
+    chart.setPlateauRegion({
+      startMin: plat.startMin,
+      endMin:   plat.endMin ?? endTime,
+      ceMin:    plat.ceMin * yScale,
+      ceMax:    plat.ceMax * yScale,
+    });
+  } else {
+    chart.setPlateauRegion(null);
+  }
+
   // Update history panel
   history.render(selectedDrug);
 

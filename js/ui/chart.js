@@ -51,6 +51,7 @@ export function createChart(canvas, config = {}) {
   let targetCe = null;
   let thresholdCe = null;   // intermittent redose threshold line (same scale as targetCe)
   let effectBands = [];     // [{ ceMin, ceMax, color, label }]
+  let plateauRegion = null; // { startMin, endMin, ceMin, ceMax } — chart units
   let viewMin = 0;
   let viewMax = 30;         // default 30-minute view
   let autoScroll = true;
@@ -161,6 +162,23 @@ export function createChart(canvas, config = {}) {
         } : undefined,
       };
     });
+
+    // Plateau region bounding box (manual-mode plateau highlight)
+    if (plateauRegion) {
+      annotations.plateau = {
+        type: 'box',
+        xScaleID: 'x',
+        yScaleID: 'y',
+        xMin: plateauRegion.startMin,
+        xMax: plateauRegion.endMin ?? viewMax,
+        yMin: plateauRegion.ceMin,
+        yMax: plateauRegion.ceMax,
+        backgroundColor: 'rgba(34, 197, 94, 0.08)',
+        borderColor: 'rgba(34, 197, 94, 0.25)',
+        borderWidth: 1,
+        drawTime: 'beforeDatasetsDraw',
+      };
+    }
 
     return annotations;
   }
@@ -445,6 +463,16 @@ export function createChart(canvas, config = {}) {
   }
 
   /**
+   * Set the plateau region bounding box (manual-mode highlight).
+   * @param {Object|null} region - { startMin, endMin, ceMin, ceMax } in chart units, or null
+   */
+  function setPlateauRegion(region) {
+    plateauRegion = region;
+    chart.options.plugins.annotation.annotations = buildAnnotations();
+    chart.update('none');
+  }
+
+  /**
    * Set the horizontal target line.
    * @param {number|null} ce - target Ce, or null to hide
    */
@@ -669,6 +697,7 @@ export function createChart(canvas, config = {}) {
     setEffectOverlay,
     setTargetLine,
     setThresholdLine,
+    setPlateauRegion,
     setViewRange,
     resetView,
     recenter,

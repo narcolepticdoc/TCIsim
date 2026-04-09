@@ -103,7 +103,8 @@ function _getApproachCache(drugId) {
   if (!_approachCache[drugId]) {
     _approachCache[drugId] = {
       prefix: '', arrivalMin: null, staticText: '',
-      lockedSsCe: null, computedVersion: -1,
+      lockedSsCe: null, lockedExitMin: null,
+      plateauRegion: null, computedVersion: -1,
       mode: '', rate: 0, target: 0,
       ssSlopeTol: 0, tciFraction: 0,
       curve: null,
@@ -246,33 +247,34 @@ export function _estimateTimeToTarget(curve, t, Ce, ceTarget, fraction) {
 /**
  * Compute approach line data.
  *
- * curve:        precomputed PK curve for this drug (used only for TCI branches;
- *               manual-mode SS goes directly to model.predictSteadyState)
- * lockedSsCe:   if non-null, use this Ce for the steady-state label instead
- *               of the freshly computed plateau. Released on pump-state change.
- * ssSlopeTol:   per-minute relative slope threshold for manual-mode plateau
- *               detection (e.g. 0.0010 = 0.10 %/min).
- * tciFraction:  0.90–0.99 tolerance fraction for TCI target band.
+ * curve:         precomputed PK curve for this drug (used only for TCI branches;
+ *                manual-mode plateau goes directly to model.predictSteadyState)
+ * lockedSsCe:    if non-null, use this Ce for the plateau label instead
+ *                of the freshly computed value. Released on pump-state change.
+ * lockedExitMin: if non-null, use this absolute exit time instead of freshly
+ *                computed. Released on pump-state change (same pattern).
+ * ssSlopeTol:    per-minute relative slope threshold for manual-mode plateau
+ *                detection (e.g. 0.0010 = 0.10 %/min).
+ * tciFraction:   0.90–0.99 tolerance fraction for TCI target band.
  *
- * Returns { prefix, arrivalMin, staticText, newLockedSsCe }.
+ * Returns { prefix, arrivalMin, staticText, newLockedSsCe, newLockedExitMin, plateauRegion }.
  */
-function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve, ssSlopeTol, tciFraction) {
-  const noData = { prefix: '', arrivalMin: null, staticText: '', newLockedSsCe: null };
+function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, lockedExitMin, curve, ssSlopeTol, tciFraction) {
+  const noData = { prefix: '', arrivalMin: null, staticText: '',
+    newLockedSsCe: null, newLockedExitMin: null, plateauRegion: null };
 
   // Intermittent bolus mode — countdown to redose threshold
   if (m === 'intermittent' && ceTarget > 0) {
     if (Ce <= ceTarget) {
-      return { prefix: '', arrivalMin: null, staticText: '<span class="appr-below">Below Threshold</span>', newLockedSsCe: null };
+      return { ...noData, staticText: '<span class="appr-below">Below Threshold</span>' };
     }
-    // Use predictTrough for unlimited lookahead — not limited by chart curve length.
-    // Essential for ketamine where Ce decay can extend far beyond the 120-min curve.
     try {
       const result = model.predictTrough(drugId, t, ceTarget);
       if (result && result.time !== null && result.time > t) {
-        return { prefix: 'Redose in ', arrivalMin: result.time, staticText: '', newLockedSsCe: null };
+        return { ...noData, prefix: 'Redose in ', arrivalMin: result.time };
       }
     } catch (e) {}
-    return { prefix: '', arrivalMin: null, staticText: '', newLockedSsCe: null };
+    return noData;
   }
 
   // Pump stopped — emergence countdown (uses predictTrough; no curve scan needed)
@@ -281,10 +283,9 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve
     try {
       const result = model.predictTrough(drugId, t, EMERGENCE_CE);
       if (result && result.time !== null && result.time > t) {
-        return {
+        return { ...noData,
           prefix: `Emergence <span class="appr-val">${EMERGENCE_CE.toFixed(1)}</span> in `,
           arrivalMin: result.time,
-          staticText: '', newLockedSsCe: null,
         };
       }
     } catch (e) {}
@@ -296,17 +297,17 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve
   if (m === 'tci' && ceTarget > 0) {
     const relDev = Math.abs(Ce - ceTarget) / ceTarget;
     if (relDev <= (1 - tciFraction)) {
-      return { prefix: '', arrivalMin: null, newLockedSsCe: null,
+      return { ...noData,
         staticText: `At Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
     }
     const dt = _estimateTimeToTarget(curve, t, Ce, ceTarget, tciFraction);
     if (dt !== null && dt > 0) {
-      return {
+      return { ...noData,
         prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
-        arrivalMin: t + dt, staticText: '', newLockedSsCe: null,
+        arrivalMin: t + dt,
       };
     }
-    return { prefix: '', arrivalMin: null, newLockedSsCe: null,
+    return { ...noData,
       staticText: `Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
   }
 
@@ -318,8 +319,7 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve
     try { ss = model.predictSteadyState(drugId, t, rate, ssSlopeTol); } catch (e) {}
     if (ss) {
       if (ss.noSteadyState) {
-        return { prefix: '', arrivalMin: null, newLockedSsCe: null,
-          staticText: 'No steady state in 6h' };
+        return { ...noData, staticText: 'No plateau in 6h' };
       }
       if (ss.plateauCe > 0) {
         // lockedSsCe keeps the displayed Ce stable across curve refreshes that
@@ -330,15 +330,41 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve
         // fentanyl/ketamine); a raw .toFixed(1) on canonical mcg/mL would
         // display "0.0" for any ng/mL drug.
         const ceStr = `<span class="appr-val">${fmtCe(displayCe, drugId)}</span>`;
+
+        // Build chart plateau region (Ce values in canonical mcg/mL)
+        const region = {
+          startMin: t + ss.timeToSsMin,
+          endMin:   ss.exitMin !== null ? t + ss.exitMin : null,
+          ceMin:    ss.plateauCeMin,
+          ceMax:    ss.plateauCeMax,
+        };
+
         if (ss.timeToSsMin > 0.5) {
-          return {
-            prefix: `Steady state ≈ ${ceStr} in `,
+          // Approaching plateau
+          return { ...noData,
+            prefix: `Plateau ≈ ${ceStr} in `,
             arrivalMin: t + ss.timeToSsMin,
-            staticText: '', newLockedSsCe: ss.plateauCe,
+            newLockedSsCe: ss.plateauCe, plateauRegion: region,
           };
         }
-        return { prefix: '', arrivalMin: null, newLockedSsCe: ss.plateauCe,
-          staticText: `Steady state ≈ ${ceStr}` };
+        // At plateau now
+        if (ss.exitMin !== null && ss.exitMin > 0.5) {
+          // Local plateau with known exit — show leaving countdown
+          const exitAbs = lockedExitMin !== null ? lockedExitMin : t + ss.exitMin;
+          return { ...noData,
+            prefix: 'Exit Plateau in ',
+            arrivalMin: exitAbs,
+            newLockedSsCe: ss.plateauCe,
+            newLockedExitMin: t + ss.exitMin,
+            plateauRegion: region,
+          };
+        }
+        // Permanent plateau, no exit
+        return { ...noData,
+          newLockedSsCe: ss.plateauCe,
+          plateauRegion: region,
+          staticText: `Plateau ≈ ${ceStr}`,
+        };
       }
     }
   }
@@ -347,9 +373,9 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, curve
   if (m === 'tci' && rate === 0 && ceTarget > 0 && Ce > ceTarget * (1 + (1 - tciFraction))) {
     const dt = _estimateTimeToTarget(curve, t, Ce, ceTarget, tciFraction);
     if (dt !== null && dt > 0) {
-      return {
+      return { ...noData,
         prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
-        arrivalMin: t + dt, staticText: '', newLockedSsCe: null,
+        arrivalMin: t + dt,
       };
     }
   }
@@ -403,12 +429,14 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
       curve = null;
     }
 
-    const lockToPass = displayChanged ? null : cache.lockedSsCe;
-    const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockToPass, curve, ssSlopeTol, tciFraction);
+    const lockCeToPass   = displayChanged ? null : cache.lockedSsCe;
+    const lockExitToPass = displayChanged ? null : cache.lockedExitMin;
+    const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockCeToPass, lockExitToPass, curve, ssSlopeTol, tciFraction);
 
     cache.prefix          = data.prefix;
     cache.arrivalMin      = data.arrivalMin;
     cache.staticText      = data.staticText;
+    cache.plateauRegion   = data.plateauRegion;
     cache.computedVersion = _curveVersion;
     cache.mode            = m;
     cache.rate            = rate;
@@ -416,7 +444,10 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
     cache.ssSlopeTol      = ssSlopeTol;
     cache.tciFraction     = tciFraction;
 
-    if (displayChanged) cache.lockedSsCe = data.newLockedSsCe;
+    if (displayChanged) {
+      cache.lockedSsCe    = data.newLockedSsCe;
+      cache.lockedExitMin = data.newLockedExitMin ?? null;
+    }
   }
 
   // Render countdown live every frame
@@ -696,11 +727,18 @@ function update() {
   if (onFrame) onFrame(t);
 }
 
+/** Return the current plateau region for a drug (for chart highlight). */
+export function getPlateauRegion(drugId) {
+  const c = _approachCache[drugId];
+  return c ? c.plateauRegion : null;
+}
+
 /** Force an immediate update (after a model mutation). */
 export function forceUpdate() {
   for (const cache of Object.values(_approachCache)) {
     cache.computedVersion = -1;
     cache.lockedSsCe      = null;
+    cache.lockedExitMin   = null;
   }
   update();
 }

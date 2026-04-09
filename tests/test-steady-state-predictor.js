@@ -38,10 +38,11 @@ function predictSteadyState(engine, startState, startTime, rate, slopeTol, opts 
   if (rate <= 0) return null;
   if (!(slopeTol > 0 && slopeTol < 1)) return null;
 
-  const STEP    = opts.step    ?? 1;
-  const HORIZON = opts.horizon ?? 360;
-  const SUSTAIN = opts.sustain ?? 15;
-  const N       = HORIZON + SUSTAIN;
+  const STEP         = opts.step        ?? 1;
+  const HORIZON      = opts.horizon     ?? 360;
+  const SUSTAIN      = opts.sustain     ?? 15;
+  const EXIT_HORIZON = opts.exitHorizon ?? HORIZON;
+  const N            = HORIZON + EXIT_HORIZON + SUSTAIN;
 
   const savedState = engine.getState();
   try {
@@ -54,6 +55,7 @@ function predictSteadyState(engine, startState, startTime, rate, slopeTol, opts 
     }
 
     const EPS = 1e-9;
+    let entryIdx = -1;
     outer:
     for (let i = 0; i <= HORIZON; i++) {
       for (let k = 0; k < SUSTAIN; k++) {
@@ -61,9 +63,37 @@ function predictSteadyState(engine, startState, startTime, rate, slopeTol, opts 
         const rel  = Math.abs(ce[i + k + 1] - ce[i + k]) / base;
         if (rel >= slopeTol) continue outer;
       }
-      return { plateauCe: ce[i], timeToSsMin: i, noSteadyState: false };
+      entryIdx = i;
+      break;
     }
-    return { plateauCe: null, timeToSsMin: null, noSteadyState: true };
+
+    if (entryIdx < 0) {
+      return {
+        plateauCe: null, timeToSsMin: null, exitMin: null,
+        plateauCeMin: null, plateauCeMax: null, noSteadyState: true,
+      };
+    }
+
+    let exitIdx = -1;
+    let ceMin = ce[entryIdx], ceMax = ce[entryIdx];
+    for (let j = entryIdx; j < N; j++) {
+      ceMin = Math.min(ceMin, ce[j]);
+      ceMax = Math.max(ceMax, ce[j]);
+      if (j >= entryIdx + SUSTAIN) {
+        const base = Math.max(ce[j], EPS);
+        const rel  = Math.abs(ce[j + 1] - ce[j]) / base;
+        if (rel >= slopeTol) { exitIdx = j; break; }
+      }
+    }
+
+    return {
+      plateauCe:    ce[entryIdx],
+      timeToSsMin:  entryIdx,
+      exitMin:      exitIdx >= 0 ? exitIdx : null,
+      plateauCeMin: ceMin,
+      plateauCeMax: ceMax,
+      noSteadyState: false,
+    };
   } finally {
     engine.setState(savedState);
   }
@@ -111,6 +141,11 @@ console.log('\n=== TEST 1: Propofol from zero at default 0.10 %/min (regression 
   assert(result.timeToSsMin === 146, `timeToSsMin = 146 (got ${result.timeToSsMin})`);
   assert(Math.abs(result.plateauCe - 2.068589) < 1e-4,
     `plateauCe ≈ 2.069 mcg/mL (got ${result.plateauCe.toFixed(6)})`);
+  assert(result.exitMin === null, 'Propofol permanent plateau: exitMin === null');
+  assert(result.plateauCeMin <= result.plateauCe,
+    `plateauCeMin (${result.plateauCeMin.toFixed(4)}) <= plateauCe`);
+  assert(result.plateauCeMax >= result.plateauCe,
+    `plateauCeMax (${result.plateauCeMax.toFixed(4)}) >= plateauCe`);
 }
 
 console.log('\n=== TEST 2: Propofol from zero at strictest 0.02 %/min → noSteadyState ===');
@@ -123,6 +158,9 @@ console.log('\n=== TEST 2: Propofol from zero at strictest 0.02 %/min → noStea
   assert(result.noSteadyState === true, 'noSteadyState is true at strictest threshold');
   assert(result.plateauCe === null && result.timeToSsMin === null,
     'plateauCe and timeToSsMin are null when no plateau');
+  assert(result.exitMin === null, 'exitMin is null when noSteadyState');
+  assert(result.plateauCeMin === null && result.plateauCeMax === null,
+    'plateauCeMin/Max are null when noSteadyState');
 }
 
 console.log('\n=== TEST 3: Fentanyl — slow PK reflected in thresholds ===');
@@ -146,6 +184,8 @@ console.log('\n=== TEST 3: Fentanyl — slow PK reflected in thresholds ===');
     `Fentanyl plateauCe in ng-scale range (${rLoosest.plateauCe.toExponential(2)} mcg/mL)`);
   assert(rLoosest.timeToSsMin === 239,
     `Fentanyl 0.18 %/min timeToSsMin = 239 (got ${rLoosest.timeToSsMin})`);
+  assert(rLoosest.exitMin === null,
+    'Fentanyl from-zero at loosest: permanent plateau (exitMin null)');
 }
 
 console.log('\n=== TEST 4: Ketamine from zero at default 0.10 %/min ===');
@@ -297,9 +337,45 @@ console.log('\n=== TEST 11: Rate lowered from high — plateauCe < startCe ===')
     `Rate-lowered timeToSsMin = 87 (got ${result.timeToSsMin})`);
 }
 
+// ============ PLATEAU EXIT DETECTION TESTS ============
+
+console.log('\n=== TEST 12: Fentanyl bolus + infusion — local plateau with exit ===');
+{
+  // 100 mcg bolus (0.1 mg over 30 sec), 5 min gap, then 100 mcg/h maintenance.
+  // Creates a local plateau where post-bolus Ce decline balances V3 fill,
+  // followed by exit as V3 equilibration dominates.
+  const fentParams = calcFentanylParams(patient);
+  const eng = createEngine(fentParams);
+  eng.advance(0.5, 0.1 / 0.5);   // bolus
+  eng.advance(5, 0);              // 5 min gap
+  const state = eng.getState();
+  const rate = 0.1 / 60;          // 100 mcg/h = 0.001667 mg/min
+  const result = predictSteadyState(eng, state, 5.5, rate, TOL_LOOSEST);
+  assert(result !== null && result.noSteadyState === false,
+    'Local plateau found for fentanyl bolus + infusion');
+  assert(result.timeToSsMin === 40,
+    `Entry at 40 min (got ${result.timeToSsMin})`);
+  assert(result.exitMin === 87,
+    `Exit at 87 min (got ${result.exitMin})`);
+  assert(result.plateauCeMin < result.plateauCeMax,
+    `Non-degenerate bounding box: ceMin (${result.plateauCeMin.toExponential(3)}) < ceMax (${result.plateauCeMax.toExponential(3)})`);
+}
+
+console.log('\n=== TEST 13: ceMin/ceMax bounds for propofol permanent plateau ===');
+{
+  const eng = createEngine(propParams);
+  const result = predictSteadyState(eng, eng.getState(), 0, 5.4, TOL_STD);
+  assert(result.plateauCeMin <= result.plateauCe,
+    `ceMin (${result.plateauCeMin.toFixed(4)}) <= plateauCe (${result.plateauCe.toFixed(4)})`);
+  assert(result.plateauCeMax >= result.plateauCe,
+    `ceMax (${result.plateauCeMax.toFixed(4)}) >= plateauCe (${result.plateauCe.toFixed(4)})`);
+  assert(result.plateauCeMin > 0 && result.plateauCeMax > 0,
+    'ceMin and ceMax are positive');
+}
+
 // ============ TCI TIME-TO-TARGET TESTS ============
 
-console.log('\n=== TEST 12: Propofol TCI tolerance at default 95% ===');
+console.log('\n=== TEST 14: Propofol TCI tolerance at default 95% ===');
 {
   // Synthetic propofol-scale curve: Ce rises linearly from 0 at t=0 to 3.5
   // at t=20 min, in 0.5-min samples.
@@ -315,7 +391,7 @@ console.log('\n=== TEST 12: Propofol TCI tolerance at default 95% ===');
   assert(Math.abs(dt - 16.5) < 1e-6, `First crossing at t = 16.5 (got ${dt})`);
 }
 
-console.log('\n=== TEST 13: Fentanyl-scale target does not latch at sample 0 ===');
+console.log('\n=== TEST 15: Fentanyl-scale target does not latch at sample 0 ===');
 {
   // Fentanyl-scale: target 0.003 mcg/mL (3 ng/mL), curve starts at 0.0001
   // and rises to 0.005. Old 0.05 mcg/mL absolute tolerance would latch at
@@ -334,7 +410,7 @@ console.log('\n=== TEST 13: Fentanyl-scale target does not latch at sample 0 ===
   assert(Math.abs(dt - 17.0) < 1e-6, `First crossing at t ≈ 17.0 (got ${dt})`);
 }
 
-console.log('\n=== TEST 14: Approach from above (Ce > target) ===');
+console.log('\n=== TEST 16: Approach from above (Ce > target) ===');
 {
   // Curve starts at 5.0 and decays linearly to 2.9 over 30 min.
   const curve = [];
@@ -349,7 +425,7 @@ console.log('\n=== TEST 14: Approach from above (Ce > target) ===');
   assert(Math.abs(dt - 26.5) < 1e-6, `First crossing from above at t ≈ 26.5 (got ${dt})`);
 }
 
-console.log('\n=== TEST 15: TCI fraction monotonicity ===');
+console.log('\n=== TEST 17: TCI fraction monotonicity ===');
 {
   const curve = [];
   for (let t = 0; t <= 40; t += 0.5) curve.push({ time: t, Ce: 4.0 * (t / 40) });
