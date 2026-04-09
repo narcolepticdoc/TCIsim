@@ -36,9 +36,7 @@
     #portrait-overlay .rotate-msg{font-size:17px;font-weight:500;color:var(--text-secondary)}
     #portrait-overlay .rotate-sub{font-size:13px;color:var(--text-muted)}
     @keyframes rotateHint{0%,100%{transform:rotate(0)}25%{transform:rotate(-20deg)}75%{transform:rotate(90deg)}}
-    @media(orientation:portrait){#portrait-overlay{display:flex}}
-    /* On phones in portrait, hide overlay and enable portrait layout */
-    @media(orientation:portrait) and (max-width:500px){#portrait-overlay{display:none !important}}
+    /* Portrait overlay disabled — portrait layout now supported */
 
     /* ==== SETUP SCREEN ==== */
     #setup-screen{flex-direction:row;align-items:stretch;overflow:hidden}
@@ -304,7 +302,9 @@
       .drug-card.active::before{border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:4px solid var(--drug-color,var(--blue))}
     }
 
-    /* ==== PORTRAIT LAYOUT (phones only) — chart top, drugs bottom ==== */
+    /* ==== PORTRAIT LAYOUT — chart top, drugs bottom ==== */
+
+    /* ── Phone portrait ── */
     @media(orientation:portrait) and (max-width:500px){
       /* Setup screen: stack brand above form */
       #setup-screen{flex-direction:column}
@@ -320,32 +320,10 @@
       .patient-summary{margin-left:0;font-size:10px;gap:5px}
       .elapsed-timer{font-size:14px}
 
-      /* Sim main: chart on top, drugs on bottom */
+      /* Layout: chart on top, drug panel on bottom (normal vertical cards) */
       .sim-main{flex-direction:column}
-      .drug-panel{order:1;width:100%;min-width:unset;flex-direction:row;flex-shrink:0;border-right:none;border-top:1px solid var(--border-subtle);overflow-y:visible;overflow-x:auto}
-      .drug-card{flex:1;min-width:0;padding:5px 6px;gap:1px;border-left:none !important;border-top:3px solid var(--drug-color-muted,rgba(59,130,246,.25))}
-      .drug-card.active{border-left:none !important;border-top:3px solid var(--drug-color,var(--blue))}
-      .drug-card.active::before{display:none}
-
-      /* Hide non-essential info — keep name, Ce, BIS, status */
+      .drug-panel{order:1;width:100%;min-width:unset;border-right:none;border-top:1px solid var(--border-subtle);max-height:50%}
       .drug-card .drug-model{display:none}
-      .drug-card .drug-approach{display:none}
-      .drug-card .step-bar-countdown{display:none}
-      .drug-card .cp-sep,.drug-card .cp-label,.drug-card .cp-current{display:none}
-      .drug-card .ce-unit{display:none}
-      .drug-card .bis-sep{display:none}
-
-      .drug-card .drug-name{font-size:10px;letter-spacing:.3px}
-      .drug-card .ce-label{font-size:9px}
-      .drug-card .ce-current{font-size:18px}
-      .drug-card .drug-conc-row{gap:2px;margin-top:1px}
-      .drug-card .drug-status{font-size:9px}
-      .drug-card .drug-rate{font-size:9px}
-      .drug-card .drug-bis{font-size:9px}
-      .drug-card .bis-label{font-size:8px}
-      .drug-card .step-bar-area{margin-top:1px}
-      .drug-card.active .drug-name{font-size:11px}
-      .drug-card.active .ce-current{font-size:22px}
 
       .content-tab{padding:5px 12px;font-size:10px}
       .sim-controls{padding:4px 8px;gap:3px;flex-wrap:wrap}
@@ -420,6 +398,18 @@
       .drug-card .step-bar-countdown{font-size:12px}
       .elapsed-timer{font-size:21px}
       .btn-ctrl{font-size:14px;padding:10px 20px}
+    }
+
+    /* ==== TABLET PORTRAIT — chart top, drugs + history bottom ==== */
+    /* Placed after tablet landscape queries so portrait grid wins on wide iPads */
+    @media(orientation:portrait) and (min-width:700px){
+      .sim-main{display:grid;grid-template-columns:250px 1fr;grid-template-rows:1fr 1fr;min-height:0}
+      .sim-content{display:contents}
+      .content-tabs{display:none}
+      #panel-chart{display:flex;flex-direction:column;grid-column:1/-1;grid-row:1;min-height:0}
+      #panel-history{display:flex;flex-direction:column;grid-column:2;grid-row:2;border-left:1px solid var(--border-subtle);min-height:0}
+      .drug-panel{grid-column:1;grid-row:2;width:auto;min-width:unset;border-right:none;overflow-y:auto}
+      #btn-chart-expand{display:none}
     }
 
     /* Timer wrap & popover */
