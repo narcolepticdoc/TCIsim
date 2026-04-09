@@ -61,6 +61,20 @@ node tests/run-tests.js
 
 Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 359 tests across 12 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
 
+## Versioning Scheme
+
+`js/version.js` is the single source of truth. The scheme is:
+
+- **`1.0`** — reserved for release.
+- **`0.x`** — major revisions or feature additions.
+- **`0.x.x`** — minor revisions and feature changes.
+- **`0.x.x.x`** — bug fixes and tweaks of existing code.
+
+Patch numbers may go into multiple digits as necessary. `0.3.14.15` is a
+perfectly valid version number. **Never bump a higher-level version
+because a lower level looks "full".** `0.5.9` → `0.5.10` → `0.5.11` is
+correct; `0.5.9` → `0.6.0` for a routine patch is not.
+
 ## Docs
 
 - `ARCHITECTURE.md` — engine, event system, module responsibilities
