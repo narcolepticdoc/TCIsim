@@ -29,7 +29,7 @@ import { createPDModel } from '../pk/pd.js';
 import { createEventList } from './events.js';
 import { planTCIScheme, planTCISchemeCET, planTCISchemeCETConservative, planTCISchemeEmulation } from './tci-planner.js';
 import { predictTroughTime } from '../pk/decay-predictor.js';
-import { predictSteadyState as _predictSteadyState } from '../pk/steady-state-predictor.js';
+import { predictTimeToSteadyState as _predictTimeToSS, predictPlateau as _predictPlateau } from '../pk/steady-state-predictor.js';
 import { DRUG_DEFS, getPumpSettings } from '../util/constants.js';
 
 /**
@@ -398,37 +398,54 @@ export function createModel(config = {}) {
   }
 
   /**
-   * Predict when Ce will enter a sustained low-slope plateau under a
-   * constant infusion rate. Used for the manual-mode "Plateau ≈ X in
-   * M:SS" and "Exit Plateau in M:SS" labels.
+   * Predict analytical steady-state Ce and time to reach 95% of it
+   * under a constant infusion rate.
+   *
+   * Returns:
+   *   null                          if rate ≤ 0 or engine unavailable
+   *   { ceSS, timeToSsMin, reachable }
+   *     - ceSS: true analytical Ce_ss (mcg/mL)
+   *     - timeToSsMin: minutes until within 5% of Ce_ss (0 if already there)
+   *     - reachable: true if reached within 6h horizon
+   */
+  function predictSteadyState(drugId, time, rate, opts) {
+    const engine = eventList.getEngine(drugId);
+    if (!engine) return null;
+
+    const state = eventList.getStateAtTime(drugId, time);
+    const result = _predictTimeToSS(engine, state, rate, opts);
+
+    eventList.replayDrug(drugId);
+    return result;
+  }
+
+  /**
+   * Predict when Ce will enter a local plateau with slope reversal
+   * under a constant infusion rate.
+   *
+   * A plateau requires slope reversal (Ce was falling → flattens → rises,
+   * or vice versa). Monotonic approach to SS is NOT a plateau.
    *
    * slopeTol is a dimensionless per-minute relative slope threshold
    * (e.g. 0.0010 = 0.10 %/min).
    *
    * opts.exitBandPct controls the ±% band for exit detection
-   * (e.g. 0.05 = ±5%). Ce leaving this band triggers plateau exit.
+   * (e.g. 0.05 = ±5%).
    *
    * Returns:
-   *   null                                              if rate <= 0 or bad input
-   *   { plateauCe, timeToSsMin, exitMin, bandLow, bandHigh,
-   *     noSteadyState: false }                          on success
-   *     - exitMin: minutes from scan start when Ce leaves the band (null = permanent)
-   *     - bandLow/bandHigh: Ce bounds of the ± band (for chart bounding box)
-   *   { plateauCe: null, timeToSsMin: null, exitMin: null,
-   *     bandLow: null, bandHigh: null,
-   *     noSteadyState: true }                           if no plateau within horizon
+   *   null                                    if rate ≤ 0 or bad input
+   *   { plateauCe, entryMin, exitMin,
+   *     bandLow, bandHigh, noPlateau: false }  on success (reversal found)
+   *   { plateauCe: null, ..., noPlateau: true } if no plateau (no reversal)
    */
-  function predictSteadyState(drugId, time, rate, slopeTol, opts) {
+  function predictPlateau(drugId, time, rate, slopeTol, opts) {
     const engine = eventList.getEngine(drugId);
     if (!engine) return null;
 
     const state = eventList.getStateAtTime(drugId, time);
-    const result = _predictSteadyState(engine, state, time, rate, slopeTol, opts);
+    const result = _predictPlateau(engine, state, rate, slopeTol, opts);
 
-    // Defensive: predictor restores state itself, but match the predictTrough
-    // pattern so any accidental drift is erased.
     eventList.replayDrug(drugId);
-
     return result;
   }
 
@@ -456,7 +473,7 @@ export function createModel(config = {}) {
     // Queries
     getConcentrationsAt, computeCurve, predictBIS,
     getRateAtTime, getEvents, getPDModel, getModelName,
-    getEventList, predictTrough, predictSteadyState,
+    getEventList, predictTrough, predictSteadyState, predictPlateau,
 
     // Multi-drug
     registerDrug,

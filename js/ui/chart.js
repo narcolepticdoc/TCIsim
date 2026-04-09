@@ -52,6 +52,7 @@ export function createChart(canvas, config = {}) {
   let thresholdCe = null;   // intermittent redose threshold line (same scale as targetCe)
   let effectBands = [];     // [{ ceMin, ceMax, color, label }]
   let plateauRegion = null; // { startMin, endMin, ceMin, ceMax } — chart units
+  let steadyStateCe = null; // horizontal line at analytical Ce_ss — chart units
   let viewMin = 0;
   let viewMax = 30;         // default 30-minute view
   let autoScroll = true;
@@ -142,6 +143,18 @@ export function createChart(canvas, config = {}) {
         borderWidth: 1.5,
         borderDash: [4, 3],
         // Label drawn in right margin by targetCeLabel plugin below
+      };
+    }
+
+    // Analytical steady-state line (manual-mode constant infusion)
+    if (steadyStateCe !== null && steadyStateCe > 0) {
+      annotations.ssLine = {
+        type: 'line',
+        yMin: steadyStateCe,
+        yMax: steadyStateCe,
+        borderColor: 'rgba(34, 197, 94, 0.6)',   // green — distinct from amber threshold
+        borderWidth: 1.5,
+        borderDash: [8, 4],
       };
     }
 
@@ -363,6 +376,8 @@ export function createChart(canvas, config = {}) {
             drawRightLabel(ctx, targetCe, `Ce ${targetCe.toFixed(1)}`, COLORS.target);
           if (thresholdCe !== null && thresholdCe > 0)
             drawRightLabel(ctx, thresholdCe, 'Threshold', '#f59e0b', thresholdCe.toFixed(2));
+          if (steadyStateCe !== null && steadyStateCe > 0)
+            drawRightLabel(ctx, steadyStateCe, 'SS', 'rgba(34, 197, 94, 0.8)', steadyStateCe.toFixed(2));
         },
       },
     ],
@@ -468,6 +483,16 @@ export function createChart(canvas, config = {}) {
    */
   function setPlateauRegion(region) {
     plateauRegion = region;
+    chart.options.plugins.annotation.annotations = buildAnnotations();
+    chart.update('none');
+  }
+
+  /**
+   * Set the steady-state horizontal line (manual-mode).
+   * @param {number|null} ce - steady-state Ce in chart units, or null to hide
+   */
+  function setSteadyStateLine(ce) {
+    steadyStateCe = ce;
     chart.options.plugins.annotation.annotations = buildAnnotations();
     chart.update('none');
   }
@@ -698,6 +723,7 @@ export function createChart(canvas, config = {}) {
     setTargetLine,
     setThresholdLine,
     setPlateauRegion,
+    setSteadyStateLine,
     setViewRange,
     resetView,
     recenter,
