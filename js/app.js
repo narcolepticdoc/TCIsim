@@ -603,6 +603,7 @@ function boot() {
     getCeTargetForDrug: (drugId) => mode.getCeTarget(drugId),
     getTciFraction: () => warnings.getSettings().tciFraction,
     getSsSlopeTol:  () => warnings.getSettings().ssSlopeTol,
+    getSsExitBand:  () => warnings.getSettings().exitBandPct,
     onFrame(t) {
       // Update chart cursor — throttled to every 500ms
       if (chart && t > 0) {
@@ -620,29 +621,39 @@ function boot() {
           history.updateDimming();
         }
       }
-      // Plateau region highlight — updated per-frame so it reflects the
+      // Chart annotations — updated per-frame so they reflect the
       // freshly-computed approach data (which runs in the rAF loop BEFORE
       // this callback). Putting it in refreshChart would race: refreshChart
-      // reads the region before updateApproachLine has computed it.
+      // reads the data before updateApproachLine has computed it.
       if (chart) {
         const m = mode.get(selectedDrug);
+        const { yScale: ys } = getChartDrugConfig(selectedDrug);
+
+        // Steady-state horizontal line (manual mode only)
+        const ssCe = drugPanel.getSteadyStateCe(selectedDrug);
+        if (ssCe && m === 'manual') {
+          const scaled = ssCe * ys;
+          if (chart._lastSsCe !== scaled) {
+            chart._lastSsCe = scaled;
+            chart.setSteadyStateLine(scaled);
+          }
+        } else if (chart._lastSsCe) {
+          chart._lastSsCe = null;
+          chart.setSteadyStateLine(null);
+        }
+
+        // Plateau region bounding box (manual mode only)
         const plat = drugPanel.getPlateauRegion(selectedDrug);
         if (plat && m === 'manual') {
-          const { yScale: ys } = getChartDrugConfig(selectedDrug);
           // Compute chart end time for permanent plateaus (endMin === null)
           const events = model ? model.getEvents(selectedDrug) : [];
           const lastEvt = events.length > 0 ? events[events.length - 1].time : 0;
           const chartEnd = Math.max(360, t + 360, lastEvt + 360);
-          // Ensure minimum visible box height (~10% of midpoint Ce)
-          const mid = (plat.ceMin + plat.ceMax) / 2;
-          const minSpan = mid * 0.10;
-          const span = plat.ceMax - plat.ceMin;
-          const pad = span < minSpan ? (minSpan - span) / 2 : 0;
           const region = {
             startMin: plat.startMin,
             endMin:   plat.endMin ?? chartEnd,
-            ceMin:    (plat.ceMin - pad) * ys,
-            ceMax:    (plat.ceMax + pad) * ys,
+            ceMin:    plat.ceMin * ys,
+            ceMax:    plat.ceMax * ys,
           };
           // Only update chart when region actually changed
           const prev = chart._lastPlateauRegion;
@@ -714,6 +725,8 @@ function boot() {
     const tciFractionVal    = $('set-tci-fraction-val');
     const ssSlopeSlider     = $('set-ss-slope');
     const ssSlopeVal        = $('set-ss-slope-val');
+    const exitBandSlider    = $('set-exit-band');
+    const exitBandVal       = $('set-exit-band-val');
     if (!prepSlider || !alertSlider) return;
 
     // Populate controls from saved settings
@@ -730,6 +743,8 @@ function boot() {
     if (tciFractionVal)    tciFractionVal.textContent    = Math.round((savedSettings.tciFraction ?? 0.95) * 100) + '%';
     if (ssSlopeSlider)     ssSlopeSlider.value           = ssSlopeToSlider(savedSettings.ssSlopeTol ?? SS_SLOPE_DEFAULT);
     if (ssSlopeVal)        ssSlopeVal.textContent        = ssSlopeLabel(savedSettings.ssSlopeTol ?? SS_SLOPE_DEFAULT);
+    if (exitBandSlider)    exitBandSlider.value          = Math.round((savedSettings.exitBandPct ?? 0.05) * 100);
+    if (exitBandVal)       exitBandVal.textContent       = '±' + Math.round((savedSettings.exitBandPct ?? 0.05) * 100) + '%';
 
     function saveAll() {
       const prepSec           = parseInt(prepSlider.value,  10);
@@ -742,12 +757,15 @@ function boot() {
       const tciFraction       = tciFractionPct / 100;
       const ssSlopePct        = ssSlopeSlider ? parseFloat(ssSlopeSlider.value) : 0.10;
       const ssSlopeTol        = ssSlopePct / 100;
+      const exitBandInt       = exitBandSlider ? parseInt(exitBandSlider.value, 10) : 5;
+      const exitBandPct       = exitBandInt / 100;
       if (prepVal)         prepVal.textContent         = prepSec           + 's';
       if (alertVal)        alertVal.textContent        = alertSec          + 's';
       if (statusWarnVal)   statusWarnVal.textContent   = statusWarnMinutes + ' min';
       if (tciFractionVal)  tciFractionVal.textContent  = tciFractionPct    + '%';
       if (ssSlopeVal)      ssSlopeVal.textContent      = ssSlopeLabel(ssSlopeTol);
-      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol });
+      if (exitBandVal)     exitBandVal.textContent     = '±' + exitBandInt + '%';
+      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct });
     }
 
     prepSlider.addEventListener('input',    saveAll);
@@ -758,6 +776,7 @@ function boot() {
     if (statusWarnSlider)  statusWarnSlider.addEventListener('input',  saveAll);
     if (tciFractionSlider) tciFractionSlider.addEventListener('input', saveAll);
     if (ssSlopeSlider)     ssSlopeSlider.addEventListener('input',     saveAll);
+    if (exitBandSlider)    exitBandSlider.addEventListener('input',    saveAll);
 
     // Tab switching + info panel
     const infoText = $('settings-info-text');
@@ -862,12 +881,7 @@ function boot() {
   if (viewChart) viewChart.addEventListener('click', () => setView('chart'));
   if (viewHistory) viewHistory.addEventListener('click', () => setView('history'));
 
-  // Orientation lock attempt
-  try {
-    if (screen.orientation && screen.orientation.lock) {
-      screen.orientation.lock('landscape').catch(() => {});
-    }
-  } catch (e) {}
+  // Orientation lock removed — portrait layout now supported on phones
 }
 
 function closeModal(id) {

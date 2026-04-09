@@ -24,6 +24,7 @@ const DEFAULTS     = {
   statusWarnMinutes: 2,
   tciFraction: 0.95,   // TCI "time to target" — tight (0.90–0.99)
   ssSlopeTol:  0.0010, // Manual-mode plateau slope — per-minute relative (0.10 %/min)
+  exitBandPct: 0.05,   // Plateau exit ±% band (0.05 = ±5%)
 };
 
 const DRUG_NAMES = {
@@ -67,6 +68,10 @@ export function getSettings() {
                           && p.ssSlopeTol >= 0.0001 && p.ssSlopeTol <= 0.0100)
         ? p.ssSlopeTol : DEFAULTS.ssSlopeTol;
 
+      const exitBandPct = (typeof p.exitBandPct === 'number'
+                           && p.exitBandPct >= 0.01 && p.exitBandPct <= 0.20)
+        ? p.exitBandPct : DEFAULTS.exitBandPct;
+
       return {
         prepSec:           (typeof p.prepSec           === 'number'  && p.prepSec  >= 0) ? p.prepSec           : DEFAULTS.prepSec,
         prepSound:         (typeof p.prepSound         === 'boolean')                    ? p.prepSound          : DEFAULTS.prepSound,
@@ -76,14 +81,15 @@ export function getSettings() {
         statusWarnMinutes: (typeof p.statusWarnMinutes === 'number'  && p.statusWarnMinutes >= 0) ? p.statusWarnMinutes : DEFAULTS.statusWarnMinutes,
         tciFraction,
         ssSlopeTol,
+        exitBandPct,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────

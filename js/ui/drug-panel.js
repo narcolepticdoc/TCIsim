@@ -47,8 +47,9 @@ export function setCurveData(curve) {
   _curveVersion++;
   // Invalidate all per-drug approach caches so next frame rescans with fresh data
   for (const cache of Object.values(_approachCache)) {
-    cache.computedVersion = -1;
-    cache.lockedSsCe      = null;
+    cache.computedVersion  = -1;
+    cache.lockedSsCeSS     = null;
+    cache.lockedPlateauCe  = null;
   }
 }
 
@@ -56,23 +57,13 @@ export function setCurveData(curve) {
 // Convergence tolerance (for "Steady state" and "Target → X" labels)
 // ──────────────────────────────────────────────────────────────────
 //
-// Two independent user-selectable fractions (one tight for TCI, one
-// loose for manual-mode SS) define symmetric tolerance bands around
-// the target (TCI) or asymptote (manual SS). Using relative rather
-// than absolute tolerances makes the same setting scale across drugs
-// with wildly different Ce ranges.
+// Manual mode uses two independent analyses:
+//   1. Analytical SS: true Ce_ss via −A⁻¹·B·rate, time to reach 95%
+//   2. Plateau: slope-based entry + slope reversal + band-based exit
 //
-// The two values are split because the modes operate on completely
-// different timescales: TCI reaches target in minutes, while a plain
-// constant-rate infusion approaches the asymptote on the slowest
-// compartmental time constant (propofol τ ≈ 316 min). Sharing a tight
-// fraction would make the manual-mode countdown clinically useless
-// (15+ hours at 95%).
-//
-// For manual mode SS we call model.predictSteadyState which simulates
-// the engine forward to find the actual asymptotic Ce, then returns
-// the time at which Ce settles inside the band. For TCI we scan the
-// precomputed chart curve with a relative tolerance.
+// TCI mode uses a relative-tolerance curve scan for "Target → X".
+// The two tolerances are split because the modes operate on completely
+// different timescales.
 
 // Emergence Ce level (mcg/mL). Could become a user setting later.
 const EMERGENCE_CE = 1.5;
@@ -81,32 +72,45 @@ const EMERGENCE_CE = 1.5;
 // warnings.js (tciFraction: 0.95, ssSlopeTol: 0.0010).
 const TCI_FRACTION_DEFAULT = 0.95;
 const SS_SLOPE_DEFAULT     = 0.0010;
+const EXIT_BAND_DEFAULT    = 0.05;
 
 let getTciFraction = () => TCI_FRACTION_DEFAULT;
 let getSsSlopeTol  = () => SS_SLOPE_DEFAULT;
+let getSsExitBand  = () => EXIT_BAND_DEFAULT;
 
 // ──────────────────────────────────────────────────────────────────
 // Per-drug approach cache — keyed by drugId, same shape for every drug.
-//   prefix          — HTML label ending with "in " when countdown follows
-//   arrivalMin      — absolute elapsed-minutes of arrival (null = no countdown)
-//   staticText      — full HTML for no-countdown states
-//   lockedSsCe      — Ce shown in label; only reset on pump-state change
-//                     (mode/rate/target), not on curve updates, so the
-//                     value stays stable while Ce is rapidly changing.
-//   computedVersion — _curveVersion at last compute; mismatch → rescan
-//   mode/rate/target — pump-state snapshot at last compute
-//   curve           — cached PK curve for non-selected drugs (null for selected)
+//
+// Manual mode stores TWO independent results:
+//   ssPrefix/ssArrivalMin/ssStaticText   — analytical steady-state line
+//   platPrefix/platArrivalMin/platStaticText — plateau line (slope reversal)
+//
+// TCI/intermittent modes use a single prefix/arrivalMin/staticText as before.
+//
+// lockedSsCeSS   — locked Ce_ss for SS line (released on pump-state change)
+// lockedPlateauCe — locked plateau Ce for plateau line (same pattern)
+// lockedExitMin  — locked exit time for plateau exit countdown
+// ssLine         — Ce_ss value for chart horizontal SS line annotation
 // ──────────────────────────────────────────────────────────────────
 const _approachCache = {};
 
 function _getApproachCache(drugId) {
   if (!_approachCache[drugId]) {
     _approachCache[drugId] = {
+      // Single-line modes (TCI, intermittent, emergence)
       prefix: '', arrivalMin: null, staticText: '',
-      lockedSsCe: null, lockedExitMin: null,
-      plateauRegion: null, computedVersion: -1,
+      // Manual mode: SS line (line 1)
+      ssPrefix: '', ssArrivalMin: null, ssStaticText: '',
+      lockedSsCeSS: null,
+      ssLine: null,   // Ce_ss for chart annotation
+      // Manual mode: plateau line (line 2)
+      platPrefix: '', platArrivalMin: null, platStaticText: '',
+      lockedPlateauCe: null, lockedExitMin: null,
+      plateauRegion: null,
+      // Cache invalidation
+      computedVersion: -1,
       mode: '', rate: 0, target: 0,
-      ssSlopeTol: 0, tciFraction: 0,
+      ssSlopeTol: 0, tciFraction: 0, exitBandPct: 0,
       curve: null,
     };
   }
@@ -131,6 +135,7 @@ export function init(opts = {}) {
   onFrame                         = opts.onFrame                         || null;
   getTciFraction                  = opts.getTciFraction                  || (() => TCI_FRACTION_DEFAULT);
   getSsSlopeTol                   = opts.getSsSlopeTol                   || (() => SS_SLOPE_DEFAULT);
+  getSsExitBand                   = opts.getSsExitBand                   || (() => EXIT_BAND_DEFAULT);
   loop();
 }
 
@@ -247,21 +252,19 @@ export function _estimateTimeToTarget(curve, t, Ce, ceTarget, fraction) {
 /**
  * Compute approach line data.
  *
- * curve:         precomputed PK curve for this drug (used only for TCI branches;
- *                manual-mode plateau goes directly to model.predictSteadyState)
- * lockedSsCe:    if non-null, use this Ce for the plateau label instead
- *                of the freshly computed value. Released on pump-state change.
- * lockedExitMin: if non-null, use this absolute exit time instead of freshly
- *                computed. Released on pump-state change (same pattern).
- * ssSlopeTol:    per-minute relative slope threshold for manual-mode plateau
- *                detection (e.g. 0.0010 = 0.10 %/min).
- * tciFraction:   0.90–0.99 tolerance fraction for TCI target band.
+ * For manual mode, returns TWO independent results (SS + plateau).
+ * For TCI/intermittent/emergence, returns a single-line result in prefix/arrivalMin/staticText.
  *
- * Returns { prefix, arrivalMin, staticText, newLockedSsCe, newLockedExitMin, plateauRegion }.
+ * Returns { prefix, arrivalMin, staticText,
+ *           ssPrefix, ssArrivalMin, ssStaticText, newLockedSsCeSS, ssLine,
+ *           platPrefix, platArrivalMin, platStaticText, newLockedPlateauCe, newLockedExitMin, plateauRegion }.
  */
-function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, lockedExitMin, curve, ssSlopeTol, tciFraction) {
+function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS, lockedPlateauCe, lockedExitMin, curve, ssSlopeTol, tciFraction, exitBandPct) {
   const noData = { prefix: '', arrivalMin: null, staticText: '',
-    newLockedSsCe: null, newLockedExitMin: null, plateauRegion: null };
+    ssPrefix: '', ssArrivalMin: null, ssStaticText: '',
+    newLockedSsCeSS: null, ssLine: null,
+    platPrefix: '', platArrivalMin: null, platStaticText: '',
+    newLockedPlateauCe: null, newLockedExitMin: null, plateauRegion: null };
 
   // Intermittent bolus mode — countdown to redose threshold
   if (m === 'intermittent' && ceTarget > 0) {
@@ -311,62 +314,60 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCe, locke
       staticText: `Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
   }
 
-  // Manual infusion — time to a sustained low-slope plateau. Ask the model
-  // to scan forward and detect the first 15-min flat run; no curve scan
-  // is needed here.
+  // Manual infusion — two independent analyses: SS + plateau
   if (m === 'manual' && rate > 0) {
-    let ss = null;
-    try { ss = model.predictSteadyState(drugId, t, rate, ssSlopeTol); } catch (e) {}
-    if (ss) {
-      if (ss.noSteadyState) {
-        return { ...noData, staticText: 'No plateau in 6h' };
-      }
-      if (ss.plateauCe > 0) {
-        // lockedSsCe keeps the displayed Ce stable across curve refreshes that
-        // occur while Ce is still changing (e.g. during/after a bolus).
-        // Released on any pump-state change so the value stays clinically current.
-        const displayCe = (lockedSsCe !== null) ? lockedSsCe : ss.plateauCe;
-        // fmtCe handles per-drug unit conversion (e.g. mcg/mL → ng/mL for
-        // fentanyl/ketamine); a raw .toFixed(1) on canonical mcg/mL would
-        // display "0.0" for any ng/mL drug.
-        const ceStr = `<span class="appr-val">${fmtCe(displayCe, drugId)}</span>`;
+    const result = { ...noData };
 
-        // Build chart plateau region (Ce values in canonical mcg/mL)
-        const region = {
-          startMin: t + ss.timeToSsMin,
-          endMin:   ss.exitMin !== null ? t + ss.exitMin : null,
-          ceMin:    ss.plateauCeMin,
-          ceMax:    ss.plateauCeMax,
-        };
+    // ── Line 1: Analytical Steady State ──
+    let ssResult = null;
+    try { ssResult = model.predictSteadyState(drugId, t, rate); } catch (e) {}
+    if (ssResult) {
+      const displayCe = (lockedSsCeSS !== null) ? lockedSsCeSS : ssResult.ceSS;
+      const ceStr = `<span class="appr-val">${fmtCe(displayCe, drugId)}</span>`;
+      result.ssLine = ssResult.ceSS;
+      result.newLockedSsCeSS = ssResult.ceSS;
 
-        if (ss.timeToSsMin > 0.5) {
-          // Approaching plateau
-          return { ...noData,
-            prefix: `Plateau ≈ ${ceStr} in `,
-            arrivalMin: t + ss.timeToSsMin,
-            newLockedSsCe: ss.plateauCe, plateauRegion: region,
-          };
-        }
-        // At plateau now
-        if (ss.exitMin !== null && ss.exitMin > 0.5) {
-          // Local plateau with known exit — show leaving countdown
-          const exitAbs = lockedExitMin !== null ? lockedExitMin : t + ss.exitMin;
-          return { ...noData,
-            prefix: 'Exit Plateau in ',
-            arrivalMin: exitAbs,
-            newLockedSsCe: ss.plateauCe,
-            newLockedExitMin: t + ss.exitMin,
-            plateauRegion: region,
-          };
-        }
-        // Permanent plateau, no exit
-        return { ...noData,
-          newLockedSsCe: ss.plateauCe,
-          plateauRegion: region,
-          staticText: `Plateau ≈ ${ceStr}`,
-        };
+      if (!ssResult.reachable) {
+        result.ssStaticText = `Steady State ${ceStr} &gt;6h`;
+      } else if (ssResult.timeToSsMin > 0.5) {
+        result.ssPrefix = `Steady State ${ceStr} in `;
+        result.ssArrivalMin = t + ssResult.timeToSsMin;
+      } else {
+        result.ssStaticText = `Steady State ${ceStr}`;
       }
     }
+
+    // ── Line 2: Plateau (requires slope reversal) ──
+    let platResult = null;
+    try { platResult = model.predictPlateau(drugId, t, rate, ssSlopeTol, { exitBandPct }); } catch (e) {}
+    if (platResult && !platResult.noPlateau) {
+      const displayCe = (lockedPlateauCe !== null) ? lockedPlateauCe : platResult.plateauCe;
+      const ceStr = `<span class="appr-val">${fmtCe(displayCe, drugId)}</span>`;
+      result.newLockedPlateauCe = platResult.plateauCe;
+
+      // Build chart plateau region (Ce values in canonical mcg/mL)
+      const region = {
+        startMin: t + platResult.entryMin,
+        endMin:   platResult.exitMin !== null ? t + platResult.exitMin : null,
+        ceMin:    platResult.bandLow,
+        ceMax:    platResult.bandHigh,
+      };
+      result.plateauRegion = region;
+
+      if (platResult.entryMin > 0.5) {
+        result.platPrefix = `Plateau ≈ ${ceStr} in `;
+        result.platArrivalMin = t + platResult.entryMin;
+      } else if (platResult.exitMin !== null && platResult.exitMin > 0.5) {
+        const exitAbs = lockedExitMin !== null ? lockedExitMin : t + platResult.exitMin;
+        result.platPrefix = 'Exit Plateau in ';
+        result.platArrivalMin = exitAbs;
+        result.newLockedExitMin = t + platResult.exitMin;
+      } else {
+        result.platStaticText = `Plateau ≈ ${ceStr}`;
+      }
+    }
+
+    return result;
   }
 
   // TCI paused, Ce above target — time to decay to target
@@ -402,21 +403,20 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
   const cache = _getApproachCache(drugId);
   const ssSlopeTol  = getSsSlopeTol();
   const tciFraction = getTciFraction();
+  const exitBandPct = getSsExitBand();
 
   const displayChanged =
     cache.mode   !== m ||
     Math.abs(cache.rate   - rate)     > 0.01 ||
     Math.abs(cache.target - ceTarget) > 0.01 ||
     Math.abs(cache.ssSlopeTol  - ssSlopeTol)  > 1e-7 ||
-    Math.abs(cache.tciFraction - tciFraction) > 1e-6;
+    Math.abs(cache.tciFraction - tciFraction) > 1e-6 ||
+    Math.abs((cache.exitBandPct || 0) - exitBandPct) > 1e-6;
 
   const curveChanged = cache.computedVersion !== _curveVersion;
 
   if (displayChanged || curveChanged) {
     // Resolve the PK curve for this drug.
-    // Selected drug uses the precomputed shared curve (free — already computed for chart).
-    // Non-selected drugs in TCI mode need their own curve for _estimateTimeToTarget.
-    // Manual mode uses model.predictSteadyState directly, so no curve is needed there.
     let curve;
     const isSelected = drugId === (getDrugId ? getDrugId() : null);
     if (isSelected) {
@@ -429,39 +429,90 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
       curve = null;
     }
 
-    const lockCeToPass   = displayChanged ? null : cache.lockedSsCe;
-    const lockExitToPass = displayChanged ? null : cache.lockedExitMin;
-    const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockCeToPass, lockExitToPass, curve, ssSlopeTol, tciFraction);
+    const lockSsCeToPass   = displayChanged ? null : cache.lockedSsCeSS;
+    const lockPlatCeToPass = displayChanged ? null : cache.lockedPlateauCe;
+    const lockExitToPass   = displayChanged ? null : cache.lockedExitMin;
+    const data = computeApproachData(drugId, t, m, Ce, ceTarget, rate,
+      lockSsCeToPass, lockPlatCeToPass, lockExitToPass, curve, ssSlopeTol, tciFraction, exitBandPct);
 
+    // Single-line modes (TCI, intermittent, emergence)
     cache.prefix          = data.prefix;
     cache.arrivalMin      = data.arrivalMin;
     cache.staticText      = data.staticText;
+
+    // Manual mode: SS line
+    cache.ssPrefix        = data.ssPrefix;
+    cache.ssArrivalMin    = data.ssArrivalMin;
+    cache.ssStaticText    = data.ssStaticText;
+    cache.ssLine          = data.ssLine;
+
+    // Manual mode: plateau line
+    cache.platPrefix      = data.platPrefix;
+    cache.platArrivalMin  = data.platArrivalMin;
+    cache.platStaticText  = data.platStaticText;
     cache.plateauRegion   = data.plateauRegion;
+
     cache.computedVersion = _curveVersion;
     cache.mode            = m;
     cache.rate            = rate;
     cache.target          = ceTarget;
     cache.ssSlopeTol      = ssSlopeTol;
     cache.tciFraction     = tciFraction;
+    cache.exitBandPct     = exitBandPct;
 
     if (displayChanged) {
-      cache.lockedSsCe    = data.newLockedSsCe;
-      cache.lockedExitMin = data.newLockedExitMin ?? null;
+      cache.lockedSsCeSS    = data.newLockedSsCeSS;
+      cache.lockedPlateauCe = data.newLockedPlateauCe;
+      cache.lockedExitMin   = data.newLockedExitMin ?? null;
     }
   }
 
   // Render countdown live every frame
   let html = '';
-  if (cache.arrivalMin !== null) {
-    const remaining = cache.arrivalMin - t;
-    if (remaining > 0) {
-      html = cache.prefix + `<span class="appr-time">${fmtCountdown(remaining)}</span>`;
+
+  if (m === 'manual') {
+    // Two-line display: SS (line 1) + Plateau (line 2)
+    let ssHtml = '';
+    if (cache.ssArrivalMin !== null) {
+      const rem = cache.ssArrivalMin - t;
+      if (rem > 0) {
+        ssHtml = cache.ssPrefix + `<span class="appr-time">${fmtCountdown(rem)}</span>`;
+      } else {
+        cache.computedVersion = -1;
+      }
     } else {
-      // Crossed threshold — next curve refresh will trigger a rescan
-      cache.computedVersion = -1;
+      ssHtml = cache.ssStaticText;
+    }
+
+    let platHtml = '';
+    if (cache.platArrivalMin !== null) {
+      const rem = cache.platArrivalMin - t;
+      if (rem > 0) {
+        platHtml = cache.platPrefix + `<span class="appr-time">${fmtCountdown(rem)}</span>`;
+      } else {
+        cache.computedVersion = -1;
+      }
+    } else {
+      platHtml = cache.platStaticText;
+    }
+
+    if (ssHtml && platHtml) {
+      html = ssHtml + '<br>' + platHtml;
+    } else {
+      html = ssHtml || platHtml;
     }
   } else {
-    html = cache.staticText;
+    // Single-line modes
+    if (cache.arrivalMin !== null) {
+      const remaining = cache.arrivalMin - t;
+      if (remaining > 0) {
+        html = cache.prefix + `<span class="appr-time">${fmtCountdown(remaining)}</span>`;
+      } else {
+        cache.computedVersion = -1;
+      }
+    } else {
+      html = cache.staticText;
+    }
   }
 
   // Intermittent countdown is shown in the step-bar row instead
@@ -733,12 +784,19 @@ export function getPlateauRegion(drugId) {
   return c ? c.plateauRegion : null;
 }
 
+/** Return the analytical steady-state Ce for a drug (for chart SS line). */
+export function getSteadyStateCe(drugId) {
+  const c = _approachCache[drugId];
+  return c ? c.ssLine : null;
+}
+
 /** Force an immediate update (after a model mutation). */
 export function forceUpdate() {
   for (const cache of Object.values(_approachCache)) {
-    cache.computedVersion = -1;
-    cache.lockedSsCe      = null;
-    cache.lockedExitMin   = null;
+    cache.computedVersion  = -1;
+    cache.lockedSsCeSS     = null;
+    cache.lockedPlateauCe  = null;
+    cache.lockedExitMin    = null;
   }
   update();
 }
