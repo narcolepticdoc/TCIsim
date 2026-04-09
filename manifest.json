@@ -4,7 +4,7 @@
   "description": "Clinical TCI simulation — Eleveld propofol model",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "landscape",
+  "orientation": "any",
   "background_color": "#060a12",
   "theme_color": "#0a0f1a",
   "icons": [
