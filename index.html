@@ -184,6 +184,21 @@
     .settings-control span{font-family:var(--font-mono);font-size:12px;color:var(--amber);min-width:32px;text-align:right}
     .settings-check{margin-top:5px;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);cursor:pointer}
     .settings-check input[type=checkbox]{accent-color:var(--amber);width:14px;height:14px;cursor:pointer}
+    /* Settings panel — tabbed layout with info sidebar */
+    .settings-panel{max-width:640px}
+    .settings-header{display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+    .settings-header h3{margin:0}
+    .settings-body{display:flex;gap:0;min-height:220px}
+    .settings-nav{display:flex;flex-direction:column;gap:2px;width:110px;flex-shrink:0;border-right:1px solid var(--border-subtle);padding-right:10px;margin-right:2px}
+    .settings-tab{background:none;border:none;text-align:left;padding:6px 9px;font-family:var(--font-mono);font-size:10.5px;color:var(--text-muted);cursor:pointer;border-radius:var(--radius-sm);transition:all .15s;white-space:nowrap}
+    .settings-tab:hover{color:var(--text-secondary);background:var(--bg-hover)}
+    .settings-tab.active{color:var(--text-primary);background:var(--blue-dim)}
+    .settings-content{flex:1;padding:0 14px;overflow-y:auto;max-height:280px;min-width:0}
+    .settings-pane{display:none}
+    .settings-pane.active{display:block}
+    .settings-info{width:175px;flex-shrink:0;border-left:1px solid var(--border-subtle);padding-left:14px;overflow-y:auto;max-height:280px}
+    .settings-info-title{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;font-family:var(--font-mono)}
+    .settings-info-text{font-size:11px;color:var(--text-secondary);line-height:1.55;font-family:var(--font-display)}
     /* Content area */
     .sim-content{flex:1;display:flex;flex-direction:column;min-width:0}
 
@@ -596,7 +611,7 @@
           </div>
         </div>
       </div>
-      <button class="btn-settings" id="btn-settings" title="Warning settings">&#9881;</button>
+      <button class="btn-settings" id="btn-settings" title="Settings">&#9881;</button>
       <button class="btn-new-case" id="btn-new-case">New Case</button>
     </div>
     <div class="sim-main">
@@ -858,57 +873,77 @@
 
   <!-- =========== SETTINGS MODAL =========== -->
   <div class="modal-overlay" id="modal-settings">
-    <div class="modal-box">
-      <h3>Warning Settings</h3>
-      <div class="settings-row">
-        <label>Prep alert — visual pulse (seconds before event)</label>
-        <div class="settings-control">
-          <input type="range" id="set-prep" min="5" max="120" step="5" value="30">
-          <span id="set-prep-val">30s</span>
-        </div>
-        <label class="settings-check">
-          <input type="checkbox" id="set-prep-sound">
-          Play chime
-        </label>
+    <div class="modal-box settings-panel">
+      <div class="settings-header">
+        <h3>Settings</h3>
       </div>
-      <div class="settings-row">
-        <label>Alert — popup (seconds before event)</label>
-        <div class="settings-control">
-          <input type="range" id="set-alert" min="5" max="60" step="5" value="10">
-          <span id="set-alert-val">10s</span>
+      <div class="settings-body">
+        <nav class="settings-nav">
+          <button class="settings-tab active" data-tab="notifications">Notifications</button>
+          <button class="settings-tab" data-tab="simulation">Simulation</button>
+        </nav>
+        <div class="settings-content">
+          <div class="settings-pane active" id="pane-notifications">
+            <div class="settings-row">
+              <label>Prep alert — visual pulse (seconds before event)</label>
+              <div class="settings-control">
+                <input type="range" id="set-prep" min="5" max="120" step="5" value="30">
+                <span id="set-prep-val">30s</span>
+              </div>
+              <label class="settings-check">
+                <input type="checkbox" id="set-prep-sound">
+                Play chime
+              </label>
+            </div>
+            <div class="settings-row">
+              <label>Alert — popup (seconds before event)</label>
+              <div class="settings-control">
+                <input type="range" id="set-alert" min="5" max="60" step="5" value="10">
+                <span id="set-alert-val">10s</span>
+              </div>
+              <label class="settings-check">
+                <input type="checkbox" id="set-alert-sound" checked>
+                Play chime
+              </label>
+            </div>
+            <div class="settings-row">
+              <label>Intermittent — below-threshold chime</label>
+              <label class="settings-check">
+                <input type="checkbox" id="set-redose-sound" checked>
+                Play chime when Ce drops below threshold
+              </label>
+            </div>
+            <div class="settings-row">
+              <label>Status indicator — warn window (minutes before event)</label>
+              <div class="settings-control">
+                <input type="range" id="set-status-warn" min="1" max="10" step="1" value="2">
+                <span id="set-status-warn-val">2 min</span>
+              </div>
+            </div>
+          </div>
+          <div class="settings-pane" id="pane-simulation">
+            <div class="settings-row">
+              <label>TCI target tolerance (% of target)</label>
+              <div class="settings-control">
+                <input type="range" id="set-tci-fraction" min="90" max="99" step="1" value="95">
+                <span id="set-tci-fraction-val">95%</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <label>Plateau slope tolerance</label>
+              <div class="settings-control">
+                <input type="range" id="set-ss-slope" min="0.05" max="0.20" step="0.01" value="0.10">
+                <span id="set-ss-slope-val">0.10 %/min</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <label class="settings-check">
-          <input type="checkbox" id="set-alert-sound" checked>
-          Play chime
-        </label>
-      </div>
-      <div class="settings-row">
-        <label>Intermittent — below-threshold chime</label>
-        <label class="settings-check">
-          <input type="checkbox" id="set-redose-sound" checked>
-          Play chime when Ce drops below threshold
-        </label>
-      </div>
-      <div class="settings-row">
-        <label>Status indicator — warn window (minutes before event)</label>
-        <div class="settings-control">
-          <input type="range" id="set-status-warn" min="1" max="10" step="1" value="2">
-          <span id="set-status-warn-val">2 min</span>
-        </div>
-      </div>
-      <div class="settings-row">
-        <label>TCI target tolerance (% of target)</label>
-        <div class="settings-control">
-          <input type="range" id="set-tci-fraction" min="90" max="99" step="1" value="95">
-          <span id="set-tci-fraction-val">95%</span>
-        </div>
-      </div>
-      <div class="settings-row">
-        <label>Plateau slope tolerance</label>
-        <div class="settings-control">
-          <input type="range" id="set-ss-slope" min="0.05" max="0.20" step="0.01" value="0.10">
-          <span id="set-ss-slope-val">0.10 %/min</span>
-        </div>
+        <aside class="settings-info">
+          <div class="settings-info-title">About</div>
+          <div class="settings-info-text" id="settings-info-text">
+            Configure how the simulator alerts you to upcoming pump events. Prep alerts provide early visual warning with an amber pulse on drug cards. Alert popups appear closer to the event with optional sound cues. The status indicator colors the drug card edge based on event proximity.
+          </div>
+        </aside>
       </div>
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="btn-settings-close">Done</button>

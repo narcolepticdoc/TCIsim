@@ -759,6 +759,23 @@ function boot() {
     if (tciFractionSlider) tciFractionSlider.addEventListener('input', saveAll);
     if (ssSlopeSlider)     ssSlopeSlider.addEventListener('input',     saveAll);
 
+    // Tab switching + info panel
+    const infoText = $('settings-info-text');
+    const INFO_TEXTS = {
+      notifications: 'Configure how the simulator alerts you to upcoming pump events. Prep alerts provide early visual warning with an amber pulse on drug cards. Alert popups appear closer to the event with optional sound cues. The status indicator colors the drug card edge based on event proximity.',
+      simulation: 'Fine-tune how the simulator evaluates targets and steady-state. Target tolerance sets how close the effect-site concentration must get to target before it is considered reached \u2014 lower values are stricter. Plateau slope tolerance determines how flat the concentration curve must be to qualify as steady-state.',
+    };
+    document.querySelectorAll('.settings-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.settings-pane').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        const pane = $('pane-' + tab.dataset.tab);
+        if (pane) pane.classList.add('active');
+        if (infoText) infoText.textContent = INFO_TEXTS[tab.dataset.tab] || '';
+      });
+    });
+
     const btnSettingsOpen  = $('btn-settings');
     const btnSettingsClose = $('btn-settings-close');
     if (btnSettingsOpen)  btnSettingsOpen.addEventListener('click',  () => $('modal-settings').classList.add('open'));
