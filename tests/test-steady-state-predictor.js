@@ -54,18 +54,22 @@ function predictTimeToSteadyState(engine, startState, rate, opts = {}) {
   const savedState = engine.getState();
   try {
     engine.setState(startState);
-    const ce0 = engine.getConcentrations().Ce;
-    if (Math.abs(ce0 - ceSS) / ceSS <= TOL) {
-      return { ceSS, timeToSsMin: 0, reachable: true };
-    }
+    const ce = new Float64Array(HORIZON + 1);
+    ce[0] = engine.getConcentrations().Ce;
     for (let i = 1; i <= HORIZON; i++) {
       engine.advance(STEP, rate);
-      const ce = engine.getConcentrations().Ce;
-      if (Math.abs(ce - ceSS) / ceSS <= TOL) {
-        return { ceSS, timeToSsMin: i, reachable: true };
+      ce[i] = engine.getConcentrations().Ce;
+    }
+    let lastOutside = -1;
+    for (let i = HORIZON; i >= 0; i--) {
+      if (Math.abs(ce[i] - ceSS) / ceSS > TOL) {
+        lastOutside = i;
+        break;
       }
     }
-    return { ceSS, timeToSsMin: null, reachable: false };
+    if (lastOutside === -1) return { ceSS, timeToSsMin: 0, reachable: true };
+    if (lastOutside === HORIZON) return { ceSS, timeToSsMin: null, reachable: false };
+    return { ceSS, timeToSsMin: lastOutside + 1, reachable: true };
   } finally {
     engine.setState(savedState);
   }
@@ -223,6 +227,28 @@ console.log('\n=== TEST 4: Pre-advanced state (at SS) → timeToSsMin = 0 ===');
   assert(result !== null && result.reachable === true, 'Reachable');
   assert(result.timeToSsMin === 0,
     `Already at SS → timeToSsMin = 0 (got ${result.timeToSsMin})`);
+}
+
+console.log('\n=== TEST 4b: Transient crossing rejected — rate lowered, Ce passes through band ===');
+{
+  // Start with Ce well above Ce_ss. Ce decays, passes through the 95% band
+  // transiently on the way down, undershoots, then slowly climbs back.
+  // The predictor must NOT report the transient crossing as "at SS".
+  const eng = createEngine(propParams);
+  eng.advance(0.05, 150 / 0.05);  // loading bolus
+  eng.advance(30, 10.0);          // 30 min at high rate
+  const highState = eng.getState();
+  const lowRate = 2.0;
+
+  const result = predictTimeToSteadyState(eng, highState, lowRate);
+  assert(result !== null, 'Result returned');
+  // Ce_ss ≈ 1.058 for 2.0 mg/min propofol. Ce starts at ~3.26, decays through
+  // the 95% band (~1.00-1.11), undershoots to ~0.92, then climbs back.
+  // At 360 min horizon, Ce hasn't re-entered the band → not reachable.
+  assert(result.reachable === false,
+    'Transient band crossing rejected — Ce undershoots then does not re-enter within 6h');
+  assert(result.ceSS > 1.0 && result.ceSS < 1.1,
+    `Ce_ss correct (${result.ceSS.toFixed(4)})`);
 }
 
 console.log('\n=== TEST 5: Fentanyl Ce_ss analytical computation ===');

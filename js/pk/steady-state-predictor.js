@@ -76,21 +76,39 @@ export function predictTimeToSteadyState(engine, startState, rate, opts = {}) {
   try {
     engine.setState(startState);
 
-    // Check if already at SS
-    const ce0 = engine.getConcentrations().Ce;
-    if (Math.abs(ce0 - ceSS) / ceSS <= TOL) {
-      return { ceSS, timeToSsMin: 0, reachable: true };
-    }
-
+    // Pre-compute Ce at each minute
+    const ce = new Float64Array(HORIZON + 1);
+    ce[0] = engine.getConcentrations().Ce;
     for (let i = 1; i <= HORIZON; i++) {
       engine.advance(STEP, rate);
-      const ce = engine.getConcentrations().Ce;
-      if (Math.abs(ce - ceSS) / ceSS <= TOL) {
-        return { ceSS, timeToSsMin: i, reachable: true };
+      ce[i] = engine.getConcentrations().Ce;
+    }
+
+    // Find the last minute that's OUTSIDE the 5% band.
+    // The minute after that is when Ce truly settles at SS.
+    // This avoids false positives from transient crossings
+    // (e.g. Ce passing through the band on its way down,
+    // undershooting, then slowly climbing back).
+    let lastOutside = -1;
+    for (let i = HORIZON; i >= 0; i--) {
+      if (Math.abs(ce[i] - ceSS) / ceSS > TOL) {
+        lastOutside = i;
+        break;
       }
     }
 
-    return { ceSS, timeToSsMin: null, reachable: false };
+    if (lastOutside === -1) {
+      // Ce was inside the band for the entire horizon
+      return { ceSS, timeToSsMin: 0, reachable: true };
+    }
+
+    if (lastOutside === HORIZON) {
+      // Ce never settled — still outside at the end
+      return { ceSS, timeToSsMin: null, reachable: false };
+    }
+
+    // Ce settled at lastOutside + 1
+    return { ceSS, timeToSsMin: lastOutside + 1, reachable: true };
   } finally {
     engine.setState(savedState);
   }
