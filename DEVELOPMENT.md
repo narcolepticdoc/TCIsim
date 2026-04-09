@@ -4,6 +4,26 @@
 
 ## Session History
 
+### Session 25 (2026-04-09) — Refactor Settings Dialog into Tabbed Panel (v0.5.13)
+
+**Problem.** The settings modal was titled "Warning Settings" and presented all eight controls (prep alert, alert popup, redose chime, status indicator, TCI tolerance, plateau slope) in a single flat list at 400px wide. As more settings accumulated across notification and simulation domains, the modal became cluttered and lacked organisation.
+
+**Fix.** Replaced the flat list with a wider (640px) tabbed settings panel using a three-column layout:
+
+- **Left column** — Vertical tab navigation. Two tabs: "Notifications" (prep/alert timing, sounds, status indicator) and "Simulation" (TCI target tolerance, plateau slope tolerance). Styled with the existing `--blue-dim` active indicator to match the app's tab pattern.
+- **Centre column** — Scrollable content panes. Each tab switches the visible pane; all existing slider/checkbox controls are preserved with their original IDs and `saveAll()` wiring. Max height 280px with overflow-y scroll for future growth.
+- **Right column** — Contextual "About" sidebar (175px). Text updates on tab switch via a `INFO_TEXTS` map in `app.js`, giving users a plain-language explanation of each settings category without cluttering the controls themselves.
+
+**Files changed:**
+- **`index.html`** — New CSS classes (`.settings-panel`, `.settings-header`, `.settings-body`, `.settings-nav`, `.settings-tab`, `.settings-content`, `.settings-pane`, `.settings-info`, `.settings-info-title`, `.settings-info-text`). Modal HTML restructured into `nav > .settings-content > aside` flex layout. Button title changed from "Warning settings" to "Settings".
+- **`js/app.js`** — `initSettings()` gains tab-switching logic: click handler on `.settings-tab` buttons toggles `.active` on both the tab and corresponding `#pane-*` element, and updates `#settings-info-text` from the `INFO_TEXTS` map.
+
+**No functional changes.** All settings IDs, localStorage keys, validation ranges, and `saveAll()` persist logic are identical. The `warnings.js` module is untouched.
+
+415 tests across 13 suites, all passing.
+
+---
+
 ### Session 23 (2026-04-08) — Split TCI target and manual-SS convergence tolerances (v0.5.9)
 
 **Problem.** v0.5.8 introduced a single "Convergence tolerance" slider (90–99%, default 95%) driving both TCI "time to target" and manual-mode "Steady state ≈ X in M:SS". Mathematically clean but clinically wrong: the two modes operate on completely different timescales. TCI delivers a front-loaded plan that reaches target in minutes, so 95% is a reasonable "close enough". A plain constant-rate infusion approaches the asymptote on the slowest compartmental time constant — for propofol τ ≈ 316 min, meaning 950 min to 95%, 730 min to 90%, 220 min even to 50%. With the shared 95% default the manual-SS countdown showed 15+ hours, which is useless.
