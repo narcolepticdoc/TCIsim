@@ -687,26 +687,17 @@ function boot() {
 
   // Wire settings modal
   (function initSettings() {
-    // Steady-state slope tolerance — 9 discrete presets (per-minute relative slope).
-    // Stored value is the resolved fraction so the preset list can evolve without
-    // invalidating saved settings. Geometric-ish spacing spans from clinically
-    // strict (0.02 %/min) to loose enough for slow-PK drugs like fentanyl to
-    // converge within 6 h (0.40 %/min). Intermediate stops give fine control
-    // in the critical 0.05–0.20 %/min range.
-    const SS_SLOPE_PRESETS = [
-      0.0002, 0.0003, 0.0005, 0.0007, 0.0010,
-      0.0014, 0.0020, 0.0030, 0.0040,
-    ];
-    const SS_SLOPE_DEFAULT = 0.0010;
+    // Plateau slope tolerance — continuous range 0.05–0.20 %/min.
+    // Stored as a dimensionless per-minute relative slope (e.g. 0.0010 = 0.10 %/min).
+    // Slider value is in %/min (0.05–0.20); divide by 100 to get the fraction.
+    const SS_SLOPE_DEFAULT = 0.0010;   // 0.10 %/min
+    const SS_SLOPE_MIN     = 0.0005;   // 0.05 %/min
+    const SS_SLOPE_MAX     = 0.0020;   // 0.20 %/min
     const ssSlopeLabel = (tol) => (tol * 100).toFixed(2) + ' %/min';
-    const ssSlopeIndex = (tol) => {
-      // Closest-match 1-based index; tolerates preset list evolution.
-      let best = 0, bestD = Infinity;
-      for (let i = 0; i < SS_SLOPE_PRESETS.length; i++) {
-        const d = Math.abs(SS_SLOPE_PRESETS[i] - tol);
-        if (d < bestD) { bestD = d; best = i; }
-      }
-      return best + 1;
+    const ssSlopeToSlider = (tol) => {
+      // Clamp saved value into slider range, express as %/min
+      const pct = Math.max(SS_SLOPE_MIN, Math.min(SS_SLOPE_MAX, tol)) * 100;
+      return pct.toFixed(2);
     };
 
     const savedSettings     = warnings.getSettings();
@@ -737,7 +728,7 @@ function boot() {
     if (statusWarnVal)     statusWarnVal.textContent     = (savedSettings.statusWarnMinutes ?? 2) + ' min';
     if (tciFractionSlider) tciFractionSlider.value       = Math.round((savedSettings.tciFraction ?? 0.95) * 100);
     if (tciFractionVal)    tciFractionVal.textContent    = Math.round((savedSettings.tciFraction ?? 0.95) * 100) + '%';
-    if (ssSlopeSlider)     ssSlopeSlider.value           = ssSlopeIndex(savedSettings.ssSlopeTol ?? SS_SLOPE_DEFAULT);
+    if (ssSlopeSlider)     ssSlopeSlider.value           = ssSlopeToSlider(savedSettings.ssSlopeTol ?? SS_SLOPE_DEFAULT);
     if (ssSlopeVal)        ssSlopeVal.textContent        = ssSlopeLabel(savedSettings.ssSlopeTol ?? SS_SLOPE_DEFAULT);
 
     function saveAll() {
@@ -749,8 +740,8 @@ function boot() {
       const statusWarnMinutes = statusWarnSlider ? parseInt(statusWarnSlider.value, 10) : 2;
       const tciFractionPct    = tciFractionSlider ? parseInt(tciFractionSlider.value, 10) : 95;
       const tciFraction       = tciFractionPct / 100;
-      const ssSlopeIdx        = ssSlopeSlider ? parseInt(ssSlopeSlider.value, 10) : 5;
-      const ssSlopeTol        = SS_SLOPE_PRESETS[ssSlopeIdx - 1] ?? SS_SLOPE_DEFAULT;
+      const ssSlopePct        = ssSlopeSlider ? parseFloat(ssSlopeSlider.value) : 0.10;
+      const ssSlopeTol        = ssSlopePct / 100;
       if (prepVal)         prepVal.textContent         = prepSec           + 's';
       if (alertVal)        alertVal.textContent        = alertSec          + 's';
       if (statusWarnVal)   statusWarnVal.textContent   = statusWarnMinutes + ' min';
