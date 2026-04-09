@@ -633,13 +633,26 @@ function boot() {
           const events = model ? model.getEvents(selectedDrug) : [];
           const lastEvt = events.length > 0 ? events[events.length - 1].time : 0;
           const chartEnd = Math.max(360, t + 360, lastEvt + 360);
-          chart.setPlateauRegion({
+          // Ensure minimum visible box height (~10% of midpoint Ce)
+          const mid = (plat.ceMin + plat.ceMax) / 2;
+          const minSpan = mid * 0.10;
+          const span = plat.ceMax - plat.ceMin;
+          const pad = span < minSpan ? (minSpan - span) / 2 : 0;
+          const region = {
             startMin: plat.startMin,
             endMin:   plat.endMin ?? chartEnd,
-            ceMin:    plat.ceMin * ys,
-            ceMax:    plat.ceMax * ys,
-          });
-        } else {
+            ceMin:    (plat.ceMin - pad) * ys,
+            ceMax:    (plat.ceMax + pad) * ys,
+          };
+          // Only update chart when region actually changed
+          const prev = chart._lastPlateauRegion;
+          if (!prev || prev.startMin !== region.startMin || prev.endMin !== region.endMin ||
+              Math.abs(prev.ceMin - region.ceMin) > 1e-9 || Math.abs(prev.ceMax - region.ceMax) > 1e-9) {
+            chart._lastPlateauRegion = region;
+            chart.setPlateauRegion(region);
+          }
+        } else if (chart._lastPlateauRegion) {
+          chart._lastPlateauRegion = null;
           chart.setPlateauRegion(null);
         }
       }
