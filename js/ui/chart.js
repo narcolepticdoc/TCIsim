@@ -621,8 +621,8 @@ export function createChart(canvas, config = {}) {
   }
 
   // ---- Y-axis finger drag handler ----
-  // Drag up on the Y-axis area (left ~50px) to increase max Y,
-  // drag down to decrease max Y.
+  // Drag down on the Y-axis area (left ~50px) to increase max Y,
+  // drag up to decrease max Y.
 
   let yDragActive = false;
   let yDragStartY = 0;
@@ -649,7 +649,7 @@ export function createChart(canvas, config = {}) {
     if (!yDragActive || e.touches.length !== 1) return;
     e.preventDefault();
 
-    const deltaY = yDragStartY - e.touches[0].clientY; // positive = dragged up
+    const deltaY = e.touches[0].clientY - yDragStartY; // positive = dragged down
     const chartArea = chart.chartArea;
     const chartHeight = chartArea ? (chartArea.bottom - chartArea.top) : 200;
 
