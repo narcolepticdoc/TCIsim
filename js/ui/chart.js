@@ -169,7 +169,7 @@ export function createChart(canvas, config = {}) {
         label: band.label ? {
           display: true,
           content: band.label,
-          position: { x: '85%', y: 'center' },
+          position: { x: '95%', y: 'center' },
           color: '#ffffff88',
           font: { size: 9 },
         } : undefined,
@@ -360,7 +360,7 @@ export function createChart(canvas, config = {}) {
             const pillW = tw + padH * 2;
             const pillH = 10 + padV * 2;
             const r = pillH / 2;
-            const x = ca.right - pillW / 2;
+            const x = ca.right - pillW - 2;
             ctx.beginPath();
             ctx.roundRect(x, y - pillH / 2, pillW, pillH, r);
             ctx.fillStyle = bgColor;
@@ -368,7 +368,7 @@ export function createChart(canvas, config = {}) {
             ctx.fillStyle = '#fff';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(text, ca.right, y);
+            ctx.fillText(text, x + pillW / 2, y);
             ctx.restore();
           }
 
