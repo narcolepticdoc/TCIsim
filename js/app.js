@@ -208,19 +208,6 @@ function refreshChart() {
   const threshold = mode.getIntermittentThreshold(selectedDrug);
   chart.setThresholdLine(m === 'intermittent' && threshold > 0 ? threshold * yScale : null);
 
-  // Plateau region highlight (manual mode only)
-  const plat = drugPanel.getPlateauRegion(selectedDrug);
-  if (plat && m === 'manual') {
-    chart.setPlateauRegion({
-      startMin: plat.startMin,
-      endMin:   plat.endMin ?? endTime,
-      ceMin:    plat.ceMin * yScale,
-      ceMax:    plat.ceMax * yScale,
-    });
-  } else {
-    chart.setPlateauRegion(null);
-  }
-
   // Update history panel
   history.render(selectedDrug);
 
@@ -633,6 +620,29 @@ function boot() {
           history.updateDimming();
         }
       }
+      // Plateau region highlight — updated per-frame so it reflects the
+      // freshly-computed approach data (which runs in the rAF loop BEFORE
+      // this callback). Putting it in refreshChart would race: refreshChart
+      // reads the region before updateApproachLine has computed it.
+      if (chart) {
+        const m = mode.get(selectedDrug);
+        const plat = drugPanel.getPlateauRegion(selectedDrug);
+        if (plat && m === 'manual') {
+          const { yScale: ys } = getChartDrugConfig(selectedDrug);
+          // Compute chart end time for permanent plateaus (endMin === null)
+          const events = model ? model.getEvents(selectedDrug) : [];
+          const lastEvt = events.length > 0 ? events[events.length - 1].time : 0;
+          const chartEnd = Math.max(360, t + 360, lastEvt + 360);
+          chart.setPlateauRegion({
+            startMin: plat.startMin,
+            endMin:   plat.endMin ?? chartEnd,
+            ceMin:    plat.ceMin * ys,
+            ceMax:    plat.ceMax * ys,
+          });
+        } else {
+          chart.setPlateauRegion(null);
+        }
+      }
       // Check for upcoming events requiring advance warning
       if (t > 0) warnings.check(t);
     },
@@ -664,12 +674,16 @@ function boot() {
 
   // Wire settings modal
   (function initSettings() {
-    // Steady-state slope tolerance — 5 discrete presets (per-minute relative slope).
+    // Steady-state slope tolerance — 9 discrete presets (per-minute relative slope).
     // Stored value is the resolved fraction so the preset list can evolve without
-    // invalidating saved settings. Geometric-ish spacing (ratio ~2) spans from
-    // clinically strict (0.02 %/min) to loose enough for slow-PK drugs like
-    // fentanyl to converge within 6 h (0.40 %/min).
-    const SS_SLOPE_PRESETS = [0.0002, 0.0005, 0.0010, 0.0020, 0.0040];
+    // invalidating saved settings. Geometric-ish spacing spans from clinically
+    // strict (0.02 %/min) to loose enough for slow-PK drugs like fentanyl to
+    // converge within 6 h (0.40 %/min). Intermediate stops give fine control
+    // in the critical 0.05–0.20 %/min range.
+    const SS_SLOPE_PRESETS = [
+      0.0002, 0.0003, 0.0005, 0.0007, 0.0010,
+      0.0014, 0.0020, 0.0030, 0.0040,
+    ];
     const SS_SLOPE_DEFAULT = 0.0010;
     const ssSlopeLabel = (tol) => (tol * 100).toFixed(2) + ' %/min';
     const ssSlopeIndex = (tol) => {
@@ -722,7 +736,7 @@ function boot() {
       const statusWarnMinutes = statusWarnSlider ? parseInt(statusWarnSlider.value, 10) : 2;
       const tciFractionPct    = tciFractionSlider ? parseInt(tciFractionSlider.value, 10) : 95;
       const tciFraction       = tciFractionPct / 100;
-      const ssSlopeIdx        = ssSlopeSlider ? parseInt(ssSlopeSlider.value, 10) : 3;
+      const ssSlopeIdx        = ssSlopeSlider ? parseInt(ssSlopeSlider.value, 10) : 5;
       const ssSlopeTol        = SS_SLOPE_PRESETS[ssSlopeIdx - 1] ?? SS_SLOPE_DEFAULT;
       if (prepVal)         prepVal.textContent         = prepSec           + 's';
       if (alertVal)        alertVal.textContent        = alertSec          + 's';
