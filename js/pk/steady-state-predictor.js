@@ -1,32 +1,28 @@
 /**
- * steady-state-predictor.js — Slope-based plateau detector.
+ * steady-state-predictor.js — Slope-based plateau detector with band exit.
  *
- * Mechanism:
+ * Entry detection (slope-based):
  *   1. Simulate Ce forward from the current engine state at 1-min resolution
- *      for HORIZON + EXIT_HORIZON + SUSTAIN minutes under a constant infusion
- *      rate.
+ *      under a constant infusion rate.
  *   2. At each minute i in [0, HORIZON], check whether the per-minute
  *      relative slope |Ce[i+k+1] − Ce[i+k]| / Ce[i+k] stays below slopeTol
  *      for SUSTAIN consecutive minutes.
- *   3. Return the earliest such i as the time to plateau entry, with
- *      plateauCe = Ce[i] (the Ce at the start of the flat run).
- *   4. After entry, scan forward for the first slope >= slopeTol beyond the
- *      sustained entry window. This is the plateau exit (local plateau).
- *      If no exit is found within the buffer, the plateau is permanent.
+ *   3. The earliest such i is the plateau entry. plateauCe = Ce[i].
+ *
+ * Exit detection (band-based):
+ *   4. After entry + SUSTAIN, scan forward for the first minute where
+ *      Ce departs a ±exitBandPct band around plateauCe:
+ *        |Ce[j] − plateauCe| / plateauCe > exitBandPct
+ *      This is drift-proof: no matter how slowly Ce creeps, once it
+ *      exceeds the band the plateau is over.
  *
  * The 15-min sustained window guards against inflection-point false
- * positives (post-bolus overshoot, V2 refill trough). Under constant input
- * the 4-compartment linear system has negative-real eigenvalues, so once a
- * 15-min flat run appears the slope stays bounded by its envelope
- * thereafter — the first sustained run is well-defined.
- *
- * Exit detection uses single-sample threshold crossing: the PK model's
- * monotone eigenvalue envelopes make single-sample detection reliable,
- * unlike entry where inflection-point false positives require the 15-min
- * sustained guard.
+ * positives (post-bolus overshoot, V2 refill trough). The exit scan
+ * skips the SUSTAIN window (already validated as flat at entry).
  *
  * Time units: minutes (matching the rest of the codebase). slopeTol is a
  * dimensionless per-minute relative slope (e.g. 0.0010 = 0.10 %/min).
+ * exitBandPct is a fractional band width (e.g. 0.05 = ±5%).
  */
 
 /**
@@ -38,33 +34,35 @@
  * @param {number} startTime       Current elapsed time (minutes) — unused in
  *                                 computation; kept for API symmetry.
  * @param {number} rate            Constant infusion rate (mg/min)
- * @param {number} slopeTol        Per-minute relative slope threshold
- *                                 (e.g. 0.0010 = 0.10 %/min)
+ * @param {number} slopeTol        Per-minute relative slope threshold for
+ *                                 entry detection (e.g. 0.0010 = 0.10 %/min)
  * @param {Object} [opts]
- * @param {number} [opts.step=1]         Sample step in minutes
- * @param {number} [opts.horizon=360]    Max plateau-start minute to report
- * @param {number} [opts.sustain=15]     Required flat-run length in minutes
+ * @param {number} [opts.step=1]          Sample step in minutes
+ * @param {number} [opts.horizon=360]     Max plateau-start minute to report
+ * @param {number} [opts.sustain=15]      Required flat-run length in minutes
  * @param {number} [opts.exitHorizon=360] Minutes past entry to scan for exit
+ * @param {number} [opts.exitBandPct=0.05] Fractional ± band for exit (0.05 = ±5%)
  * @returns {Object|null}
  *   null if rate <= 0 or slopeTol is out of range.
  *   On success (plateau found):
- *     { plateauCe, timeToSsMin, exitMin, plateauCeMin, plateauCeMax,
+ *     { plateauCe, timeToSsMin, exitMin, bandLow, bandHigh,
  *       noSteadyState: false }
- *     - exitMin: minutes from scan start when plateau ends (null = permanent)
- *     - plateauCeMin/Max: Ce range during the plateau (for chart bounding box)
+ *     - exitMin: minutes from scan start when Ce leaves the band (null = permanent)
+ *     - bandLow/bandHigh: the ± band bounds (plateauCe × (1 ∓ exitBandPct))
  *   On failure (no plateau within horizon):
  *     { plateauCe: null, timeToSsMin: null, exitMin: null,
- *       plateauCeMin: null, plateauCeMax: null, noSteadyState: true }
+ *       bandLow: null, bandHigh: null, noSteadyState: true }
  */
 export function predictSteadyState(engine, startState, startTime, rate, slopeTol, opts = {}) {
   if (rate <= 0) return null;
   if (!(slopeTol > 0 && slopeTol < 1)) return null;
 
-  const STEP         = opts.step        ?? 1;    // minutes
-  const HORIZON      = opts.horizon     ?? 360;  // latest plateau start we report
-  const SUSTAIN      = opts.sustain     ?? 15;   // required flat-run length
-  const EXIT_HORIZON = opts.exitHorizon ?? HORIZON; // exit scan range past entry
-  const N            = HORIZON + EXIT_HORIZON + SUSTAIN;
+  const STEP          = opts.step         ?? 1;     // minutes
+  const HORIZON       = opts.horizon      ?? 360;   // latest plateau start we report
+  const SUSTAIN       = opts.sustain      ?? 15;    // required flat-run length
+  const EXIT_HORIZON  = opts.exitHorizon  ?? HORIZON;
+  const EXIT_BAND_PCT = opts.exitBandPct  ?? 0.05;  // ±5% default
+  const N             = HORIZON + EXIT_HORIZON + SUSTAIN;
 
   // Save engine state up front; restore in finally.
   const savedState = engine.getState();
@@ -79,7 +77,7 @@ export function predictSteadyState(engine, startState, startTime, rate, slopeTol
     }
 
     const EPS = 1e-9;
-    // Scan for the earliest minute i in [0, HORIZON] where the per-minute
+    // Entry scan: earliest minute i in [0, HORIZON] where the per-minute
     // relative slope stays < slopeTol for SUSTAIN consecutive minutes.
     let entryIdx = -1;
     outer:
@@ -96,29 +94,29 @@ export function predictSteadyState(engine, startState, startTime, rate, slopeTol
     if (entryIdx < 0) {
       return {
         plateauCe: null, timeToSsMin: null, exitMin: null,
-        plateauCeMin: null, plateauCeMax: null, noSteadyState: true,
+        bandLow: null, bandHigh: null, noSteadyState: true,
       };
     }
 
-    // Exit scan: first slope >= slopeTol after the sustained entry window.
+    // Exit scan: first minute Ce departs the ±exitBandPct band around plateauCe.
+    // Starts after the sustained entry window (already validated as flat).
+    const pCe     = ce[entryIdx];
+    const bandLow  = pCe * (1 - EXIT_BAND_PCT);
+    const bandHigh = pCe * (1 + EXIT_BAND_PCT);
     let exitIdx = -1;
-    let ceMin = ce[entryIdx], ceMax = ce[entryIdx];
-    for (let j = entryIdx; j < N; j++) {
-      ceMin = Math.min(ceMin, ce[j]);
-      ceMax = Math.max(ceMax, ce[j]);
-      if (j >= entryIdx + SUSTAIN) {
-        const base = Math.max(ce[j], EPS);
-        const rel  = Math.abs(ce[j + 1] - ce[j]) / base;
-        if (rel >= slopeTol) { exitIdx = j; break; }
+    for (let j = entryIdx + SUSTAIN; j <= N; j++) {
+      if (ce[j] < bandLow || ce[j] > bandHigh) {
+        exitIdx = j;
+        break;
       }
     }
 
     return {
-      plateauCe:    ce[entryIdx],
-      timeToSsMin:  entryIdx,
-      exitMin:      exitIdx >= 0 ? exitIdx : null,
-      plateauCeMin: ceMin,
-      plateauCeMax: ceMax,
+      plateauCe:   pCe,
+      timeToSsMin: entryIdx,
+      exitMin:     exitIdx >= 0 ? exitIdx : null,
+      bandLow,
+      bandHigh,
       noSteadyState: false,
     };
   } finally {

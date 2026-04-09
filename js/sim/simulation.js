@@ -405,22 +405,25 @@ export function createModel(config = {}) {
    * slopeTol is a dimensionless per-minute relative slope threshold
    * (e.g. 0.0010 = 0.10 %/min).
    *
+   * opts.exitBandPct controls the ±% band for exit detection
+   * (e.g. 0.05 = ±5%). Ce leaving this band triggers plateau exit.
+   *
    * Returns:
    *   null                                              if rate <= 0 or bad input
-   *   { plateauCe, timeToSsMin, exitMin, plateauCeMin, plateauCeMax,
+   *   { plateauCe, timeToSsMin, exitMin, bandLow, bandHigh,
    *     noSteadyState: false }                          on success
-   *     - exitMin: minutes from scan start when plateau ends (null = permanent)
-   *     - plateauCeMin/Max: Ce range during plateau (for chart bounding box)
+   *     - exitMin: minutes from scan start when Ce leaves the band (null = permanent)
+   *     - bandLow/bandHigh: Ce bounds of the ± band (for chart bounding box)
    *   { plateauCe: null, timeToSsMin: null, exitMin: null,
-   *     plateauCeMin: null, plateauCeMax: null,
+   *     bandLow: null, bandHigh: null,
    *     noSteadyState: true }                           if no plateau within horizon
    */
-  function predictSteadyState(drugId, time, rate, slopeTol) {
+  function predictSteadyState(drugId, time, rate, slopeTol, opts) {
     const engine = eventList.getEngine(drugId);
     if (!engine) return null;
 
     const state = eventList.getStateAtTime(drugId, time);
-    const result = _predictSteadyState(engine, state, time, rate, slopeTol);
+    const result = _predictSteadyState(engine, state, time, rate, slopeTol, opts);
 
     // Defensive: predictor restores state itself, but match the predictTrough
     // pattern so any accidental drift is erased.
