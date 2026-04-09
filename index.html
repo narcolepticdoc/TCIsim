@@ -37,6 +37,8 @@
     #portrait-overlay .rotate-sub{font-size:13px;color:var(--text-muted)}
     @keyframes rotateHint{0%,100%{transform:rotate(0)}25%{transform:rotate(-20deg)}75%{transform:rotate(90deg)}}
     @media(orientation:portrait){#portrait-overlay{display:flex}}
+    /* On phones in portrait, hide overlay and enable portrait layout */
+    @media(orientation:portrait) and (max-width:500px){#portrait-overlay{display:none !important}}
 
     /* ==== SETUP SCREEN ==== */
     #setup-screen{flex-direction:row;align-items:stretch;overflow:hidden}
@@ -300,6 +302,55 @@
       .drug-card .cp-current{font-size:11px}
       .drug-card .ce-label,.drug-card .cp-label,.drug-card .bis-label{font-size:9px}
       .drug-card.active::before{border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:4px solid var(--drug-color,var(--blue))}
+    }
+
+    /* ==== PORTRAIT LAYOUT (phones only) — chart top, drugs bottom ==== */
+    @media(orientation:portrait) and (max-width:500px){
+      /* Setup screen: stack brand above form */
+      #setup-screen{flex-direction:column}
+      .setup-brand{width:100%;min-width:unset;flex-shrink:0;padding:12px 16px;gap:6px;border-right:none;border-bottom:1px solid var(--border-subtle);flex-direction:row;align-items:center;justify-content:flex-start}
+      .setup-brand h1{font-size:18px}
+      .setup-brand .subtitle{display:none}
+      .setup-brand .disclaimer{display:none}
+      .setup-form{padding:10px 14px;gap:8px}
+
+      /* Sim topbar */
+      .sim-topbar{height:30px;padding:0 8px;gap:6px}
+      .sim-topbar .app-name{display:none}
+      .patient-summary{margin-left:0;font-size:10px;gap:5px}
+      .elapsed-timer{font-size:14px}
+
+      /* Sim main: chart on top, drugs on bottom */
+      .sim-main{flex-direction:column}
+      .drug-panel{order:1;width:100%;min-width:unset;flex-direction:row;flex-shrink:0;border-right:none;border-top:1px solid var(--border-subtle);overflow-y:visible;overflow-x:auto}
+      .drug-card{flex:1;min-width:0;padding:5px 6px;gap:1px;border-left:none !important;border-top:3px solid var(--drug-color-muted,rgba(59,130,246,.25))}
+      .drug-card.active{border-left:none !important;border-top:3px solid var(--drug-color,var(--blue))}
+      .drug-card.active::before{display:none}
+
+      /* Hide non-essential info — keep name, Ce, BIS, status */
+      .drug-card .drug-model{display:none}
+      .drug-card .drug-approach{display:none}
+      .drug-card .step-bar-countdown{display:none}
+      .drug-card .cp-sep,.drug-card .cp-label,.drug-card .cp-current{display:none}
+      .drug-card .ce-unit{display:none}
+      .drug-card .bis-sep{display:none}
+
+      .drug-card .drug-name{font-size:10px;letter-spacing:.3px}
+      .drug-card .ce-label{font-size:9px}
+      .drug-card .ce-current{font-size:18px}
+      .drug-card .drug-conc-row{gap:2px;margin-top:1px}
+      .drug-card .drug-status{font-size:9px}
+      .drug-card .drug-rate{font-size:9px}
+      .drug-card .drug-bis{font-size:9px}
+      .drug-card .bis-label{font-size:8px}
+      .drug-card .step-bar-area{margin-top:1px}
+      .drug-card.active .drug-name{font-size:11px}
+      .drug-card.active .ce-current{font-size:22px}
+
+      .content-tab{padding:5px 12px;font-size:10px}
+      .sim-controls{padding:4px 8px;gap:3px;flex-wrap:wrap}
+      .btn-ctrl{padding:6px 8px;font-size:10px}
+      .mode-label{font-size:10px}
     }
 
     /* Expand button — hidden on phones, shown on tablets via media query below */
