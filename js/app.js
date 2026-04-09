@@ -763,7 +763,7 @@ function boot() {
     const infoText = $('settings-info-text');
     const INFO_TEXTS = {
       notifications: 'Configure how the simulator alerts you to upcoming pump events. Prep alerts provide early visual warning with an amber pulse on drug cards. Alert popups appear closer to the event with optional sound cues. The status indicator colors the drug card edge based on event proximity.',
-      tci: 'Fine-tune how TCI target achievement is evaluated. Target tolerance sets how close the effect-site concentration must get to target before it is considered reached \u2014 lower values are stricter. Plateau slope tolerance determines how flat the concentration curve must be to qualify as steady-state.',
+      simulation: 'Fine-tune how the simulator evaluates targets and steady-state. Target tolerance sets how close the effect-site concentration must get to target before it is considered reached \u2014 lower values are stricter. Plateau slope tolerance determines how flat the concentration curve must be to qualify as steady-state.',
     };
     document.querySelectorAll('.settings-tab').forEach(tab => {
       tab.addEventListener('click', () => {
