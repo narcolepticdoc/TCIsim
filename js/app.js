@@ -600,7 +600,7 @@ function boot() {
     getIntermittentThresholdForDrug: (drugId) => mode.getIntermittentThreshold(drugId),
     getCeTargetForDrug: (drugId) => mode.getCeTarget(drugId),
     getTciFraction: () => warnings.getSettings().tciFraction,
-    getSsFraction:  () => warnings.getSettings().ssFraction,
+    getSsSlopeTol:  () => warnings.getSettings().ssSlopeTol,
     onFrame(t) {
       // Update chart cursor — throttled to every 500ms
       if (chart && t > 0) {
@@ -649,6 +649,22 @@ function boot() {
 
   // Wire settings modal
   (function initSettings() {
+    // Steady-state slope tolerance — 5 discrete presets (per-minute relative slope).
+    // Stored value is the resolved fraction so the preset list can evolve without
+    // invalidating saved settings.
+    const SS_SLOPE_PRESETS = [0.0002, 0.0006, 0.0010, 0.0014, 0.0018];
+    const SS_SLOPE_DEFAULT = 0.0010;
+    const ssSlopeLabel = (tol) => (tol * 100).toFixed(2) + ' %/min';
+    const ssSlopeIndex = (tol) => {
+      // Closest-match 1-based index; tolerates preset list evolution.
+      let best = 0, bestD = Infinity;
+      for (let i = 0; i < SS_SLOPE_PRESETS.length; i++) {
+        const d = Math.abs(SS_SLOPE_PRESETS[i] - tol);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      return best + 1;
+    };
+
     const savedSettings     = warnings.getSettings();
     const prepSlider        = $('set-prep');
     const alertSlider       = $('set-alert');
@@ -661,8 +677,8 @@ function boot() {
     const statusWarnVal     = $('set-status-warn-val');
     const tciFractionSlider = $('set-tci-fraction');
     const tciFractionVal    = $('set-tci-fraction-val');
-    const ssFractionSlider  = $('set-ss-fraction');
-    const ssFractionVal     = $('set-ss-fraction-val');
+    const ssSlopeSlider     = $('set-ss-slope');
+    const ssSlopeVal        = $('set-ss-slope-val');
     if (!prepSlider || !alertSlider) return;
 
     // Populate controls from saved settings
@@ -677,8 +693,8 @@ function boot() {
     if (statusWarnVal)     statusWarnVal.textContent     = (savedSettings.statusWarnMinutes ?? 2) + ' min';
     if (tciFractionSlider) tciFractionSlider.value       = Math.round((savedSettings.tciFraction ?? 0.95) * 100);
     if (tciFractionVal)    tciFractionVal.textContent    = Math.round((savedSettings.tciFraction ?? 0.95) * 100) + '%';
-    if (ssFractionSlider)  ssFractionSlider.value        = Math.round((savedSettings.ssFraction ?? 0.50) * 100);
-    if (ssFractionVal)     ssFractionVal.textContent     = Math.round((savedSettings.ssFraction ?? 0.50) * 100) + '%';
+    if (ssSlopeSlider)     ssSlopeSlider.value           = ssSlopeIndex(savedSettings.ssSlopeTol ?? SS_SLOPE_DEFAULT);
+    if (ssSlopeVal)        ssSlopeVal.textContent        = ssSlopeLabel(savedSettings.ssSlopeTol ?? SS_SLOPE_DEFAULT);
 
     function saveAll() {
       const prepSec           = parseInt(prepSlider.value,  10);
@@ -689,14 +705,14 @@ function boot() {
       const statusWarnMinutes = statusWarnSlider ? parseInt(statusWarnSlider.value, 10) : 2;
       const tciFractionPct    = tciFractionSlider ? parseInt(tciFractionSlider.value, 10) : 95;
       const tciFraction       = tciFractionPct / 100;
-      const ssFractionPct     = ssFractionSlider ? parseInt(ssFractionSlider.value, 10) : 50;
-      const ssFraction        = ssFractionPct / 100;
+      const ssSlopeIdx        = ssSlopeSlider ? parseInt(ssSlopeSlider.value, 10) : 3;
+      const ssSlopeTol        = SS_SLOPE_PRESETS[ssSlopeIdx - 1] ?? SS_SLOPE_DEFAULT;
       if (prepVal)         prepVal.textContent         = prepSec           + 's';
       if (alertVal)        alertVal.textContent        = alertSec          + 's';
       if (statusWarnVal)   statusWarnVal.textContent   = statusWarnMinutes + ' min';
       if (tciFractionVal)  tciFractionVal.textContent  = tciFractionPct    + '%';
-      if (ssFractionVal)   ssFractionVal.textContent   = ssFractionPct     + '%';
-      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssFraction });
+      if (ssSlopeVal)      ssSlopeVal.textContent      = ssSlopeLabel(ssSlopeTol);
+      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol });
     }
 
     prepSlider.addEventListener('input',    saveAll);
@@ -706,7 +722,7 @@ function boot() {
     if (redoseSoundChk)    redoseSoundChk.addEventListener('change',   saveAll);
     if (statusWarnSlider)  statusWarnSlider.addEventListener('input',  saveAll);
     if (tciFractionSlider) tciFractionSlider.addEventListener('input', saveAll);
-    if (ssFractionSlider)  ssFractionSlider.addEventListener('input',  saveAll);
+    if (ssSlopeSlider)     ssSlopeSlider.addEventListener('input',     saveAll);
 
     const btnSettingsOpen  = $('btn-settings');
     const btnSettingsClose = $('btn-settings-close');

@@ -23,7 +23,7 @@ const DEFAULTS     = {
   redoseSound: true,
   statusWarnMinutes: 2,
   tciFraction: 0.95,   // TCI "time to target" — tight (0.90–0.99)
-  ssFraction:  0.50,   // Manual-mode steady-state — loose (0.50–0.95)
+  ssSlopeTol:  0.0010, // Manual-mode plateau slope — per-minute relative (0.10 %/min)
 };
 
 const DRUG_NAMES = {
@@ -56,21 +56,16 @@ export function getSettings() {
     if (raw) {
       const p = JSON.parse(raw);
 
-      // Legacy migration: v0.5.8 stored a single `ssFraction` field (range 0.90–0.99)
-      // that drove both TCI and manual-SS convergence. v0.5.9 splits these.
-      // If we see a legacy blob (no tciFraction, ssFraction in the old tight range),
-      // re-home the stored value to tciFraction and reset ssFraction to the new default.
-      const hasTciFraction = (typeof p.tciFraction === 'number');
-      const legacySsFraction = (!hasTciFraction
-                                && typeof p.ssFraction === 'number'
-                                && p.ssFraction >= 0.90 && p.ssFraction <= 0.99);
-      const tciFraction = hasTciFraction
-        ? (p.tciFraction >= 0.90 && p.tciFraction <= 0.99 ? p.tciFraction : DEFAULTS.tciFraction)
-        : (legacySsFraction ? p.ssFraction : DEFAULTS.tciFraction);
-      const ssFraction = legacySsFraction
-        ? DEFAULTS.ssFraction
-        : (typeof p.ssFraction === 'number' && p.ssFraction >= 0.50 && p.ssFraction <= 0.95
-           ? p.ssFraction : DEFAULTS.ssFraction);
+      const tciFraction = (typeof p.tciFraction === 'number'
+                           && p.tciFraction >= 0.90 && p.tciFraction <= 0.99)
+        ? p.tciFraction : DEFAULTS.tciFraction;
+
+      // Legacy `ssFraction` values (0.50–0.95) fall outside this window and
+      // are silently replaced with the slope-based default — the old
+      // asymptote-band semantic no longer exists.
+      const ssSlopeTol = (typeof p.ssSlopeTol === 'number'
+                          && p.ssSlopeTol >= 0.0001 && p.ssSlopeTol <= 0.0100)
+        ? p.ssSlopeTol : DEFAULTS.ssSlopeTol;
 
       return {
         prepSec:           (typeof p.prepSec           === 'number'  && p.prepSec  >= 0) ? p.prepSec           : DEFAULTS.prepSec,
@@ -80,15 +75,15 @@ export function getSettings() {
         redoseSound:       (typeof p.redoseSound       === 'boolean')                    ? p.redoseSound        : DEFAULTS.redoseSound,
         statusWarnMinutes: (typeof p.statusWarnMinutes === 'number'  && p.statusWarnMinutes >= 0) ? p.statusWarnMinutes : DEFAULTS.statusWarnMinutes,
         tciFraction,
-        ssFraction,
+        ssSlopeTol,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssFraction }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssFraction })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────

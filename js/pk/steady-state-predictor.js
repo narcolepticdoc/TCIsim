@@ -1,114 +1,80 @@
 /**
- * steady-state-predictor.js — Predicts time to approach steady-state Ce
- * under a constant infusion rate.
+ * steady-state-predictor.js — Slope-based plateau detector.
  *
  * Mechanism:
- *   1. Simulate the engine forward until Ce converges to its asymptote.
- *   2. Define a symmetric tolerance band |Ce − asymp| / asymp ≤ (1 − fraction)
- *      around the asymptote.
- *   3. Forward-scan at 0.5-min resolution and return the first time after
- *      which Ce stays inside the band for the remainder of the scan.
+ *   1. Simulate Ce forward from the current engine state at 1-min resolution
+ *      for HORIZON + SUSTAIN minutes under a constant infusion rate.
+ *   2. At each minute i in [0, HORIZON], check whether the per-minute
+ *      relative slope |Ce[i+k+1] − Ce[i+k]| / Ce[i+k] stays below slopeTol
+ *      for SUSTAIN consecutive minutes.
+ *   3. Return the earliest such i as the time to steady state, with
+ *      plateauCe = Ce[i] (the Ce at the start of the flat run).
  *
- * Works regardless of whether Ce starts below, above, or transiently
- * overshoots the asymptote — a 4-compartment linear system with negative
- * real eigenvalues always eventually settles into the band and stays there.
+ * The 15-min sustained window guards against inflection-point false
+ * positives (post-bolus overshoot, V2 refill trough). Under constant input
+ * the 4-compartment linear system has negative-real eigenvalues, so once a
+ * 15-min flat run appears the slope stays bounded by its envelope
+ * thereafter — the first sustained run is well-defined.
  *
- * Time units: minutes (matching the rest of the codebase).
+ * Time units: minutes (matching the rest of the codebase). slopeTol is a
+ * dimensionless per-minute relative slope (e.g. 0.0010 = 0.10 %/min).
  */
 
 /**
- * Predict when Ce will settle into a (1 − fraction) tolerance band around
- * the asymptotic Ce under a constant infusion rate.
+ * Predict when Ce will enter a sustained low-slope plateau under a constant
+ * infusion rate.
  *
  * @param {Object} engine          PK engine instance
  * @param {Float64Array} startState Engine state to start from
- * @param {number} startTime       Current elapsed time (minutes)
+ * @param {number} startTime       Current elapsed time (minutes) — unused in
+ *                                 computation; kept for API symmetry.
  * @param {number} rate            Constant infusion rate (mg/min)
- * @param {number} fraction        0.9–0.99 — "X% of target" tolerance
+ * @param {number} slopeTol        Per-minute relative slope threshold
+ *                                 (e.g. 0.0010 = 0.10 %/min)
  * @param {Object} [opts]
- * @param {number} [opts.scanStep=0.5]      Forward-scan step in minutes
- * @param {number} [opts.maxScanMin=2880]   Hard cap on forward-scan horizon (48 h
- *                                          covers 99% for propofol's slow V3)
- * @param {number} [opts.asympHorizon=60]   Initial horizon for asymptote search (min)
- * @param {number} [opts.asympDoublings=10] Max horizon doublings
- * @param {number} [opts.asympRelTol=1e-6]  Relative tolerance for asymptote convergence
+ * @param {number} [opts.step=1]      Sample step in minutes
+ * @param {number} [opts.horizon=360] Max plateau-start minute to report
+ * @param {number} [opts.sustain=15]  Required flat-run length in minutes
  * @returns {Object|null}
- *   null if rate <= 0 or if an asymptote < epsilon is found (e.g. rate so
- *   small that "steady state" is indistinguishable from zero).
- *   Otherwise: { ssCeAsymptote, timeToSsMin }
+ *   null if rate <= 0 or slopeTol is out of range.
+ *   { plateauCe, timeToSsMin, noSteadyState: false } on success.
+ *   { plateauCe: null, timeToSsMin: null, noSteadyState: true } if no
+ *   sustained flat run is found within the horizon.
  */
-export function predictSteadyState(engine, startState, startTime, rate, fraction, opts = {}) {
+export function predictSteadyState(engine, startState, startTime, rate, slopeTol, opts = {}) {
   if (rate <= 0) return null;
-  if (!(fraction > 0 && fraction < 1)) return null;
+  if (!(slopeTol > 0 && slopeTol < 1)) return null;
 
-  const scanStep       = opts.scanStep       ?? 0.5;
-  const maxScanMin     = opts.maxScanMin     ?? 2880;
-  const asympHorizon0  = opts.asympHorizon   ?? 60;
-  const asympDoublings = opts.asympDoublings ?? 10;
-  const asympRelTol    = opts.asympRelTol    ?? 1e-6;
+  const STEP    = opts.step    ?? 1;    // minutes
+  const HORIZON = opts.horizon ?? 360;  // latest plateau start we report
+  const SUSTAIN = opts.sustain ?? 15;   // required flat-run length
+  const N       = HORIZON + SUSTAIN;    // 375 samples after ce[0]
 
   // Save engine state up front; restore in finally.
   const savedState = engine.getState();
 
   try {
-    // ── Step 1: compute asymptotic Ce by doubling the horizon until it stops moving.
     engine.setState(startState);
-    let horizon = asympHorizon0;
-    engine.advance(horizon, rate);
-    let prevCe = engine.getConcentrations().Ce;
-    let ssCeAsymptote = prevCe;
-
-    for (let k = 0; k < asympDoublings; k++) {
-      engine.advance(horizon, rate);          // advance by another `horizon` minutes
-      horizon *= 2;                           // doubling lives in the next iteration
-      const ce = engine.getConcentrations().Ce;
-      const rel = Math.abs(ce - prevCe) / Math.max(Math.abs(ce), 1e-9);
-      prevCe = ce;
-      ssCeAsymptote = ce;
-      if (rel < asympRelTol) break;
+    const ce = new Float64Array(N + 1);
+    ce[0] = engine.getConcentrations().Ce;
+    for (let i = 1; i <= N; i++) {
+      engine.advance(STEP, rate);        // expm(A·STEP) is cached after first call
+      ce[i] = engine.getConcentrations().Ce;
     }
 
-    // Guard: asymptote too small to meaningfully define a band.
-    if (ssCeAsymptote <= 1e-9) return null;
-
-    // ── Step 2: define the tolerance band.
-    const tolerance = 1 - fraction;
-    const band = tolerance * ssCeAsymptote;
-
-    // ── Step 3: already-inside-band check at t = startTime.
-    engine.setState(startState);
-    const startCe = engine.getConcentrations().Ce;
-    if (Math.abs(startCe - ssCeAsymptote) <= band) {
-      return { ssCeAsymptote, timeToSsMin: 0 };
-    }
-
-    // ── Step 4: forward scan. Record the greatest index where Ce was outside
-    //           the band. "Time to SS" = (lastOutside + 1) * scanStep, i.e.
-    //           the first sample after which Ce stays inside the band.
-    engine.setState(startState);
-    let lastOutside = -1;
-    const nSteps = Math.floor(maxScanMin / scanStep);
-    for (let i = 1; i <= nSteps; i++) {
-      engine.advance(scanStep, rate);
-      const ce = engine.getConcentrations().Ce;
-      if (Math.abs(ce - ssCeAsymptote) > band) {
-        lastOutside = i;
+    const EPS = 1e-9;
+    // Scan for the earliest minute i in [0, HORIZON] where the per-minute
+    // relative slope stays < slopeTol for SUSTAIN consecutive minutes.
+    outer:
+    for (let i = 0; i <= HORIZON; i++) {
+      for (let k = 0; k < SUSTAIN; k++) {
+        const base = Math.max(ce[i + k], EPS);
+        const rel  = Math.abs(ce[i + k + 1] - ce[i + k]) / base;
+        if (rel >= slopeTol) continue outer;
       }
+      return { plateauCe: ce[i], timeToSsMin: i, noSteadyState: false };
     }
-
-    if (lastOutside < 0) {
-      // Never outside the band — already there.
-      return { ssCeAsymptote, timeToSsMin: 0 };
-    }
-
-    const lastOutsideTime = lastOutside * scanStep;
-    if (lastOutsideTime >= maxScanMin - scanStep) {
-      // Horizon exhausted; Ce is still outside the band at the last sample.
-      // Report the scan horizon as a lower bound.
-      return { ssCeAsymptote, timeToSsMin: maxScanMin };
-    }
-
-    return { ssCeAsymptote, timeToSsMin: (lastOutside + 1) * scanStep };
+    return { plateauCe: null, timeToSsMin: null, noSteadyState: true };
   } finally {
     engine.setState(savedState);
   }
