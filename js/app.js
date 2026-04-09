@@ -175,10 +175,12 @@ function refreshChart() {
   if (!chart || !model) return;
   const t = timer.getElapsedMinutes();
 
-  // Compute end time: furthest event + 120 min decay buffer, minimum 120 min
+  // Compute end time: furthest event + 360 min forward buffer, minimum 360 min.
+  // Matches the slope-based steady-state predictor's 6 h search horizon so the
+  // chart can display the full predicted plateau region when users pan out.
   const events = model.getEvents(selectedDrug);
   const lastEventTime = events.length > 0 ? events[events.length - 1].time : 0;
-  const endTime = Math.max(120, t + 120, lastEventTime + 120);
+  const endTime = Math.max(360, t + 360, lastEventTime + 360);
 
   const rawCurve = model.computeCurve(selectedDrug, 0, endTime, 10 / 60);
   const { yScale, yLabel, yDefault } = getChartDrugConfig(selectedDrug);
@@ -651,8 +653,10 @@ function boot() {
   (function initSettings() {
     // Steady-state slope tolerance — 5 discrete presets (per-minute relative slope).
     // Stored value is the resolved fraction so the preset list can evolve without
-    // invalidating saved settings.
-    const SS_SLOPE_PRESETS = [0.0002, 0.0006, 0.0010, 0.0014, 0.0018];
+    // invalidating saved settings. Geometric-ish spacing (ratio ~2) spans from
+    // clinically strict (0.02 %/min) to loose enough for slow-PK drugs like
+    // fentanyl to converge within 6 h (0.40 %/min).
+    const SS_SLOPE_PRESETS = [0.0002, 0.0005, 0.0010, 0.0020, 0.0040];
     const SS_SLOPE_DEFAULT = 0.0010;
     const ssSlopeLabel = (tol) => (tol * 100).toFixed(2) + ' %/min';
     const ssSlopeIndex = (tol) => {

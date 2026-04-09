@@ -396,7 +396,7 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
     if (isSelected) {
       curve = _sharedCurve;
     } else if (m === 'tci') {
-      const endTime = Math.max(120, t + 120);
+      const endTime = Math.max(360, t + 360);
       try { cache.curve = model.computeCurve(drugId, 0, endTime, 1 / 6); } catch (e) { cache.curve = null; }
       curve = cache.curve;
     } else {
