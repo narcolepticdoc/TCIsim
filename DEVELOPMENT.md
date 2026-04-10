@@ -4,6 +4,33 @@
 
 ## Session History
 
+### Session 25 — Configurable Exit Ce & Emergence Fix (v0.5.16)
+
+**Bug fix — emergence readout rendering (`js/ui/drug-panel.js`):**
+The approach line failed to show the emergence countdown when the propofol pump was stopped. Root cause: the `updateApproachLine` rendering branch `if (m === 'manual')` entered the two-line SS+Plateau display even when rate=0. The emergence data was stored in the single-line fields but only rendered in the `else` branch. Fix: `if (m === 'manual' && rate > 0)`.
+
+**Configurable Exit Ce (`js/ui/mode.js`, `js/ui/keypad.js`, `js/app.js`):**
+Per-drug Exit Ce threshold that persists across mode changes. Stored as canonical mcg/mL in `exitCeTargets` with a display label for the button (e.g. "1.5"). Set via a red "Exit Ce" button in the bottom control bar that opens the keypad. The keypad hides the unit toggle and conversion preview for exitCe since no unit conversion is needed. A "Clear" button appears in the keypad when a value is already set. On clear, the value, chart line, and readout are all removed. Persisted in case state alongside modes and ceTargets.
+
+**Chart exit line (`js/ui/chart.js`):**
+Red dashed horizontal annotation line at the Exit Ce level, following the same `buildAnnotations()` pattern as target, threshold, and steady-state lines. Red pill label drawn by the `targetCeLabel` afterDraw plugin. Public API: `setExitLine(ce)` — pass 0/null to clear. Scaled by yScale in `refreshChart` for ng/mL-scale drugs.
+
+**Drug card exit readout (`js/ui/drug-panel.js`):**
+Absolutely-positioned element in the upper-right of each drug card. When Exit Ce is set and Ce > threshold: shows "Exit M:SS" — the predicted time for Ce to decay to the exit threshold if the infusion were hypothetically stopped now. Uses `predictDecayTo()` (rate forced to 0) throttled to every 3 seconds. Shows "Exit reached" (green) when Ce is at or below threshold. Hidden when Exit Ce is not set.
+
+**`predictDecayTo` (`js/sim/simulation.js`):**
+New method identical to `predictTrough` but forces `currentRate = 0` for the decay prediction. Used exclusively by the exit readout for "what-if stopped now" calculations.
+
+**Emergence approach line uses Exit Ce (`js/ui/drug-panel.js`):**
+When Exit Ce is set, the emergence countdown uses it instead of the hardcoded 1.5 µg/mL default. Label changes from "Emergence" to "Exit" when Exit Ce is active.
+
+**Red stop button (`index.html`):**
+`.btn-ctrl-pause.is-running` styled red (#ef4444) with red hover (#dc2626). Start button remains green.
+
+421 tests across 13 suites, all passing.
+
+---
+
 ### Interim — Settings Rename & Pump-Change Popup (v0.5.15.1)
 
 *Between Sessions 24 and 25. Not tracked in session numbering.*

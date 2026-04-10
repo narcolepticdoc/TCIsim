@@ -652,7 +652,7 @@ function updateExitReadout(drugId, t, Ce, caseStarted) {
 
   // Ce already at or below exit threshold
   if (Ce <= exitCe) {
-    const html = '<span style="color:var(--green)">Exit now</span>';
+    const html = '<span style="color:var(--green)">Exit reached</span>';
     if (el.innerHTML !== html) el.innerHTML = html;
     return;
   }
