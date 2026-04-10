@@ -276,12 +276,14 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS, loc
   if (threshold > 0 && ceTarget > 0) {
     let redose = null;
     if (Ce <= ceTarget) {
-      redose = { staticText: '<span class="appr-below">Below Threshold</span>' };
+      const ceStr = `<span class="appr-val">${fmtCe(ceTarget, drugId)}</span>`;
+      redose = { staticText: `<span class="appr-below">Below Threshold ${ceStr}</span>` };
     } else {
       try {
         const result = model.predictTrough(drugId, t, ceTarget);
         if (result && result.time !== null && result.time > t) {
-          redose = { prefix: 'Redose in ', arrivalMin: result.time };
+          const ceStr = `<span class="appr-val">${fmtCe(ceTarget, drugId)}</span>`;
+          redose = { prefix: `Threshold ${ceStr} in `, arrivalMin: result.time };
         }
       } catch (e) {}
     }
@@ -802,8 +804,9 @@ function update() {
           barEl?.parentElement?.classList.remove('step-bar-below');
           if (barEl) barEl.style.width = _intermittentBarPct(dId, t, cache.arrivalMin) + '%';
           if (cntEl) {
+            const ceStr = fmtCe(ceTarget, dId);
             const newHtml = rem > 0
-              ? `Redose in <span class="appr-time">${fmtCountdown(rem)}</span>` : '';
+              ? `Threshold <span class="appr-val">${ceStr}</span> in <span class="appr-time">${fmtCountdown(rem)}</span>` : '';
             if (cntEl.innerHTML !== newHtml) cntEl.innerHTML = newHtml;
           }
         } else if (m === 'manual') {
