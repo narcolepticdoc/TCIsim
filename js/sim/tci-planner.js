@@ -1071,6 +1071,12 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
         const duration = nextTime - step.time;
         if (duration <= 0) continue;
 
+        // Skip correction for early steps during bolus redistribution.
+        // SimTIVA's rate extraction handles rapid Cp redistribution well;
+        // correction is only needed for long steps where cptAvgFactor
+        // bias accumulates (held for 30-120+ min vs SimTIVA's 2 min replan).
+        if (step.time - maintTime < 20) continue;
+
         // Binary search: rate where Ce at step midpoint = ceTarget.
         // Midpoint targeting centers the error within each step:
         // Ce starts near target, drifts slightly above at midpoint,
