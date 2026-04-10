@@ -166,12 +166,12 @@
     @keyframes warn-header-pulse{0%,100%{background-color:var(--bg-card)}40%,60%{background-color:rgba(245,158,11,0.14)}}
     .sim-topbar.warn-header{animation:warn-header-pulse 1.0s ease-in-out infinite}
     /* Warning popup container — fixed above bottom controls */
-    #warnings-container{position:fixed;bottom:68px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:200;width:min(360px,92vw);pointer-events:none}
-    .warn-popup{background:var(--bg-card);border:1px solid var(--amber);border-radius:var(--radius-md);padding:11px 13px;pointer-events:all;animation:fadeIn .15s ease}
-    .warn-drug{font-size:9px;color:var(--amber);text-transform:uppercase;letter-spacing:.06em;font-family:var(--font-mono)}
-    .warn-desc{font-size:14px;color:var(--text-primary);font-family:var(--font-display);margin:3px 0 2px;font-weight:500}
-    .warn-countdown{font-size:12px;color:var(--text-secondary);font-family:var(--font-mono)}
-    .warn-dismiss{margin-top:9px;width:100%;padding:7px;background:var(--amber);color:#000;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font-display)}
+    #warnings-container{position:fixed;bottom:68px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;z-index:200;width:min(400px,92vw);pointer-events:none}
+    .warn-popup{background:var(--bg-card);border:1px solid var(--amber);border-radius:var(--radius-md);padding:16px 18px;pointer-events:all;animation:fadeIn .15s ease}
+    .warn-drug{font-size:10px;color:var(--amber);text-transform:uppercase;letter-spacing:.06em;font-family:var(--font-mono)}
+    .warn-desc{font-size:19px;color:var(--text-primary);font-family:var(--font-display);margin:6px 0 4px;font-weight:600}
+    .warn-countdown{font-size:24px;color:var(--amber);font-family:var(--font-mono);letter-spacing:.5px}
+    .warn-dismiss{margin-top:12px;width:100%;padding:9px;background:var(--amber);color:#000;border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-display)}
     .warn-dismiss:active{opacity:.85}
     /* Settings button in topbar */
     .btn-settings{background:none;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);padding:3px 8px;cursor:pointer;font-size:14px;line-height:1;margin-right:4px}
