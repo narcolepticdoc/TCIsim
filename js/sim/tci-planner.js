@@ -1057,21 +1057,26 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   // This gives tight control when V3 equilibrates fast (~15-30 min steps early)
   // and relaxed control when the rate barely changes (~60-90 min steps late).
   {
-    const CORR_DELAY = 20;    // min: preserve SimTIVA's bolus redistribution phase
     const PROBE      = 15;    // min: binary search lookahead and extension increment
     const MAX_DUR    = 90;    // min: maximum step duration
     const CE_TOL     = 0.015; // 1.5%: max Ce deviation before new step required
 
+    // Start correcting from the first SimTIVA rate at or after maintTime.
+    // Rate steps before maintTime (e.g. zero-rate pause during bolus delivery)
+    // are preserved — they're already reflected in maintState.
     const rateSteps = scheme.filter(s => s.type === 'rate');
-    const firstCorrIdx = rateSteps.findIndex(s => s.time - maintTime >= CORR_DELAY);
+    const firstCorrIdx = rateSteps.findIndex(s => s.time >= maintTime);
 
     if (firstCorrIdx >= 0 && rateSteps.length >= 2) {
       const corrStart = rateSteps[firstCorrIdx].time;
       const corrEnd   = maintTime + cptIntervalCount * cptInterval / 60 + 180;
 
-      // Replay engine through uncorrected early rates to reach corrStart
+      // Replay engine through any uncorrected early rates to reach corrStart.
+      // Skip steps before maintTime — they're from the bolus phase and already
+      // baked into maintState.
       engine.setState(maintState);
       for (let i = 0; i < firstCorrIdx; i++) {
+        if (rateSteps[i].time < maintTime) continue;
         const nextT = (i + 1 < firstCorrIdx) ? rateSteps[i + 1].time : corrStart;
         const gap   = nextT - rateSteps[i].time;
         if (gap > 0) engine.advance(gap, rateSteps[i].value);
