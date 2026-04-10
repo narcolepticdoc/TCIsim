@@ -4,6 +4,43 @@
 
 ## Session History
 
+### Interim — Orthogonal Infusion + Redose Threshold for Non-TCI Drugs (v0.5.17)
+
+*Between Sessions 25 and 26. Not tracked in session numbering.*
+
+For non-TCI drugs (fentanyl, ketamine), intermittent bolus and manual infusion were mutually exclusive mode states. Setting a redose threshold while an infusion was running silently hid the rate display (but the pump kept running). Setting an infusion rate cleared the stored threshold. Button labels changed meaning depending on state, making the UI unpredictable.
+
+**Orthogonal mode model (`js/ui/mode.js`):**
+Infusion rate and redose threshold are now independent properties. `mode.set()` no longer clears `intermittentThresholds` on mode change. The display state is derived from both mode AND threshold:
+
+| Mode | Threshold | Label | btn-target | btn-rate |
+|------|-----------|-------|------------|----------|
+| none | 0 | NO MODE | Set Threshold | Set Rate |
+| none | >0 | INTERMITTENT | Change Threshold | Set Rate |
+| manual | 0 | INFUSION | Set Threshold | Set Rate |
+| manual | >0 | INF + REDOSE | Change Threshold | Set Rate |
+
+Button labels are now action-consistent — btn-rate is always "Set Rate", btn-target toggles between "Set Threshold" / "Change Threshold" based on whether a threshold is set. Added `clearIntermittentThreshold()` export for explicit clearing.
+
+**Mode transitions (`js/app.js`):**
+Setting a redose threshold no longer changes mode — it just stores the threshold and refreshes the UI. Setting a rate while a threshold is set keeps the threshold. For non-TCI drugs, a bolus from 'none' mode no longer auto-sets 'manual' mode. Bolus delivery mode is determined by threshold + infusion state: push-only when threshold is set and no infusion running, pump/push choice when infusing. Old saved sessions with `mode='intermittent'` are migrated to `'none'` on restore.
+
+**Combined state display (`js/ui/drug-panel.js`):**
+Rate display is always visible when rate > 0 (removed intermittent-mode hiding). In the combined INF + REDOSE state, the approach area shows SS/plateau analysis while the step bar shows the redose countdown. When the infusion keeps Ce above the threshold (no redose needed), the step bar falls back to normal display instead of showing the red "below threshold" indicator. All `m === 'intermittent'` checks replaced with threshold-based checks. Redose countdown wording changed to "Redose Threshold X.x in MM:SS" and "Below Redose Threshold X.x" to show the target Ce value.
+
+**Intermittent bolus detection (`js/ui/keypad.js`):**
+The keypad's push-only "Administer" button now triggers when a threshold is set AND no infusion is running, instead of checking for the old 'intermittent' mode value. Wired new `getIntermittentThreshold` callback.
+
+**Chart threshold line (`js/app.js`):**
+The amber dashed threshold line now shows whenever a threshold is set, regardless of mode (previously gated on `m === 'intermittent'`).
+
+**Chart tooltip rate units (`js/ui/chart.js`):**
+The tooltip previously hardcoded `mcg/kg/min` for rate display, which rounded to "0.0" for fentanyl's tiny rates. Now uses the drug's preferred rate unit via the unit system (mcg/kg/min, mcg/h, mL/h for fentanyl; mg/kg/h, mL/h for ketamine), matching the drug card's inline rate display.
+
+421 tests across 13 suites, all passing.
+
+---
+
 ### Interim — Fix Long-Term TCI Ce Drift (v0.5.16.1)
 
 *Between Sessions 25 and 26. Not tracked in session numbering.*
