@@ -4,6 +4,39 @@
 
 ## Session History
 
+### Session 24 (2026-04-10) — Mobile Interface Optimization & Portrait Layout (v0.5.15)
+
+**Y-axis gesture reversal (`js/ui/chart.js`):**
+Reversed the y-axis finger-drag direction: dragging down now increases yMax (zoom out), dragging up decreases it (zoom in). Single sign flip in `handleYTouchMove` — `yDragStartY - clientY` changed to `clientY - yDragStartY`.
+
+**Phone landscape layout (`index.html`):**
+New `@media(max-width:900px) and (max-height:420px)` query targets phone landscape specifically. Drug panel narrowed to 175px, card padding/gap/font sizes tightened (active Ce 20px, inactive 16px), model label hidden. Prevents BIS overflow on the active propofol tile.
+
+**Portrait layout — phones (`index.html`, `js/app.js`, `manifest.json`):**
+New `@media(orientation:portrait) and (max-width:500px)` query. Portrait overlay removed — manifest orientation changed from `"landscape"` to `"any"`, JS orientation lock removed. Layout: `.sim-main` switches to `flex-direction:column`; `.drug-panel` moves to `order:1` (bottom) with `max-height:45%` and `overflow-y:auto`; `.sim-content` gets `flex:1 1 0` + `min-height:0` to properly constrain the 45/55 split. Drug cards use reduced sizes (padding 6px 10px, gap 2px, active Ce 22px, inactive 18px) — full landscape-style vertical cards, not a compact horizontal row. Setup screen stacks brand above form. Topbar hides app name, compacts patient summary.
+
+**Portrait layout — iPad (`index.html`):**
+New `@media(orientation:portrait) and (min-width:700px)` query placed after tablet landscape queries so it wins on wide iPads (Pro 12.9" at 1024px portrait). Uses CSS Grid on `.sim-main` with `display:contents` on `.sim-content` to place chart and history as independent grid items: chart fills top half (`grid-column:1/-1;grid-row:1`), drug panel (250px) and history panel share the bottom half side by side. Content tabs hidden, both panels always visible.
+
+**Chart label pills (`js/ui/chart.js`):**
+Replaced rectangular right-margin text labels with compact pill badges drawn by the `targetCeLabel` afterDraw plugin. Each pill: `ctx.roundRect` with full pill radius, white bold 10px text on coloured background. Target = orange (`COLORS.target`), threshold = amber (`#f59e0b`), steady-state = green (`rgba(34,197,94,0.9)`). Positioned fully inside chart area at `ca.right - pillW - 2`. Chart right padding reduced from 65px to 5px — reclaims ~60px of chart width.
+
+**Nomogram band labels (`js/ui/chart.js`):**
+Repositioned from `position:{x:'end'}` to `position:{x:'end'}, xAdjust:-36` — fixed pixel offset from right edge sits flush with the Ce pills regardless of screen width.
+
+**Chart controls (`index.html`):**
+Switched from vertical column to horizontal row (`flex-direction:row`, gap 6px). Reordered: Reset → Tooltips → Expand. Positioned at `right:4px` to overlap chart fully.
+
+**Keypad modal responsive (`index.html`):**
+Portrait phones: keypad layout stacks vertically (`flex-direction:column`), numpad goes full-width. Modal padding reduced (14px), display font 24px, key font 16px. Event editor gets `max-height:90vh;overflow-y:auto`. Landscape phones: tighter padding (12px), key font 15px.
+
+**Bottom screen padding (`index.html`):**
+6px body bottom padding for rounded phone screen corners. `viewport-fit=cover` was tested but added excessive top inset (~59px on Dynamic Island) — reverted to default `viewport-fit=contain`.
+
+421 tests across 13 suites, all passing.
+
+---
+
 ### Session 23 (2026-04-08) — Split TCI target and manual-SS convergence tolerances (v0.5.9)
 
 **Problem.** v0.5.8 introduced a single "Convergence tolerance" slider (90–99%, default 95%) driving both TCI "time to target" and manual-mode "Steady state ≈ X in M:SS". Mathematically clean but clinically wrong: the two modes operate on completely different timescales. TCI delivers a front-loaded plan that reaches target in minutes, so 95% is a reasonable "close enough". A plain constant-rate infusion approaches the asymptote on the slowest compartmental time constant — for propofol τ ≈ 316 min, meaning 950 min to 95%, 730 min to 90%, 220 min even to 50%. With the shared 95% default the manual-SS countdown showed 15+ hours, which is useless.
