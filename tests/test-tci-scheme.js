@@ -17,11 +17,22 @@ function fatFreeMass(w,h,a,m){const b=w/Math.pow(h/100,2);if(m)return(.88+(1-.88
 const TH={V1:6.28,V2:25.5,V3:273,CL:1.89,Q2:1.75,Q3:1.11,V2_aging:-0.0156,CL_aging_opioid:-0.00286,V3_aging_opioid:-0.00286,V1_E50_WGT:33.6,CL_female:1.30,CL_mat_PMA50:42.3,CL_mat_hill:9.06,Q3_mat_AGE50:68.3,Q3_mat_hill:1.89,ke0_ref:0.146,ke0_wgt_exp:-0.25};
 function calcParams(pt){const{age:a,weight:w,height:h,male:m,opioid:o}=pt;const bmi=w/Math.pow(h/100,2);const ffm=fatFreeMass(w,h,a,m);const pma=(a*52)+40;const of=o?1:0;const WR=70,AR=35;const V1=TH.V1*(sigmoid(w,TH.V1_E50_WGT,1)/sigmoid(WR,TH.V1_E50_WGT,1));const V2=TH.V2*(w/WR)*Math.exp(TH.V2_aging*(a-AR));const fr=fatFreeMass(WR,170,AR,true);const V3=TH.V3*(ffm/fr)*Math.exp(of*TH.V3_aging_opioid*(a-AR));const cm=sigmoid(pma,TH.CL_mat_PMA50,TH.CL_mat_hill)/sigmoid((AR*52+40),TH.CL_mat_PMA50,TH.CL_mat_hill);const CL=TH.CL*Math.pow(w/WR,0.75)*cm*(m?1:TH.CL_female)*Math.exp(of*TH.CL_aging_opioid*(a-AR));const Q2=TH.Q2*Math.pow(V2/TH.V2,0.75);const q3m=sigmoid(a,TH.Q3_mat_AGE50,TH.Q3_mat_hill)/sigmoid(AR,TH.Q3_mat_AGE50,TH.Q3_mat_hill);const Q3=TH.Q3*Math.pow(V3/TH.V3,0.75)*(m?1:q3m);const ke0=TH.ke0_ref*Math.pow(w/WR,TH.ke0_wgt_exp);return{V1,V2,V3,CL,Q2,Q3,ke0}}
 function buildSysMat(p){const{V1,V2,V3,CL,Q2,Q3,ke0}=p;const A=mat4();A[0]=-(CL+Q2+Q3)/V1;A[1]=Q2/V2;A[2]=Q3/V3;A[4]=Q2/V1;A[5]=-Q2/V2;A[8]=Q3/V1;A[10]=-Q3/V3;A[12]=ke0/V1;A[15]=-ke0;return A}
-function createEngine(p){const A=buildSysMat(p);const{V1,V2,V3}=p;let st=new Float64Array(4);function adv(dt,R){if(dt<=0)return;const e=expm4(scale4(A,dt));const xH=mulVec4(e,st);if(R===0){st=xH;return}const Ai=inv4(A);if(!Ai){st=xH;return}const M=mul4(Ai,sub4(e,eye4()));for(let i=0;i<4;i++)st[i]=xH[i]+M[i*4]*R}function gc(){return{Cp:st[0]/V1,C2:st[1]/V2,C3:st[2]/V3,Ce:st[3],A1:st[0],A2:st[1],A3:st[2]}}function pCe(dt,R){const s=new Float64Array(st);adv(dt,R);const ce=st[3];st=s;return ce}function reset(){st=new Float64Array(4)}function getState(){return new Float64Array(st)}function setState(s){st=new Float64Array(s)}return{advance:adv,getConcentrations:gc,predictCe:pCe,reset,getState,setState,get params(){return p}}}
+function createEngine(p){const A=buildSysMat(p);const{V1,V2,V3}=p;let st=new Float64Array(4);function adv(dt,R){if(dt<=0)return;const e=expm4(scale4(A,dt));const xH=mulVec4(e,st);if(R===0){st=xH;return}const Ai=inv4(A);if(!Ai){st=xH;return}const M=mul4(Ai,sub4(e,eye4()));for(let i=0;i<4;i++)st[i]=xH[i]+M[i*4]*R}function gc(){return{Cp:st[0]/V1,C2:st[1]/V2,C3:st[2]/V3,Ce:st[3],A1:st[0],A2:st[1],A3:st[2]}}function pCe(dt,R){const s=new Float64Array(st);adv(dt,R);const ce=st[3];st=s;return ce}function reset(){st=new Float64Array(4)}function getState(){return new Float64Array(st)}function setState(s){st=new Float64Array(s)}function getSystemMatrix(){return new Float64Array(A)}return{advance:adv,getConcentrations:gc,predictCe:pCe,reset,getState,setState,getSystemMatrix,get params(){return p}}}
+
+// ============ INLINE STEADY-STATE RATE ============
+function computeSteadyStateRate(engine, ceTarget) {
+  if (ceTarget <= 0) return null;
+  const A = engine.getSystemMatrix();
+  const Ainv = inv4(A);
+  if (!Ainv) return null;
+  const cePerRate = -Ainv[3 * 4 + 0];
+  if (cePerRate <= 0) return null;
+  return ceTarget / cePerRate;
+}
 
 // ============ INLINE TCI PLANNER ============
 function planTCIScheme(engine, startState, startTime, ceTarget, config={}) {
-  const cfg={tolerancePct:0.05,maxRate:200,maxSteps:8,maxPlanTime:120,simStep:0.1,rateSearchIter:35,minStepDuration:3.0,rateStablePct:0.05,...config};
+  const cfg={tolerancePct:0.05,maxRate:200,maxSteps:12,maxPlanTime:480,simStep:0.1,rateSearchIter:35,minStepDuration:3.0,rateStablePct:0.05,...config};
   const scheme=[];
   if(ceTarget<=0){scheme.push({type:'rate',time:startTime,value:0});return scheme}
   const saved=engine.getState();engine.setState(startState);
@@ -44,6 +55,20 @@ function planTCIScheme(engine, startState, startTime, ceTarget, config={}) {
     scheme.push({type:'rate',time:simTime,value:rate});prevRate=rate;
     const stepEnd=runUntilDrift(engine,ceTarget,rate,simTime,cfg);simTime=stepEnd;
     if(simTime>=startTime+cfg.maxPlanTime)break;
+  }
+  // Append terminal rates for V3 equilibration
+  if(ceTarget>0&&scheme.length>0){
+    const lr=scheme[scheme.length-1];
+    if(lr.type==='rate'){
+      const LONG_LA=300;const fs=engine.getState();
+      let lo2=0,hi2=cfg.maxRate;
+      for(let i=0;i<30;i++){const mid=(lo2+hi2)/2;engine.setState(fs);engine.advance(LONG_LA,mid);if(engine.getConcentrations().Ce<ceTarget)lo2=mid;else hi2=mid}
+      engine.setState(fs);const ltRate=(lo2+hi2)/2;
+      if(Math.abs(ltRate-lr.value)/lr.value>0.005)scheme.push({type:'rate',time:simTime,value:ltRate});
+      const ssRate=computeSteadyStateRate(engine,ceTarget);
+      const cl=scheme[scheme.length-1];
+      if(ssRate!=null&&Math.abs(ssRate-cl.value)/cl.value>0.005)scheme.push({type:'rate',time:simTime+LONG_LA,value:ssRate});
+    }
   }
   engine.setState(saved);return scheme;
 }
@@ -186,7 +211,7 @@ console.log('\n=== TEST 4: Loose Tolerance (±10%) ===');
   console.log(`  Loose scheme: ${scheme.length} steps`);
   fmtScheme(scheme,70);
   
-  assert(scheme.length<=6,'Loose tolerance produces few steps');
+  assert(scheme.length<=8,'Loose tolerance produces few steps');
 }
 
 console.log('\n=== TEST 5: Bolus Dose Is Reasonable ===');
@@ -263,6 +288,80 @@ console.log('\n=== TEST 8: Engine State Preserved ===');
   let ok=true;
   for(let i=0;i<4;i++){if(Math.abs(before[i]-after[i])>1e-10){ok=false;break}}
   assert(ok,'Engine state preserved after planning');
+}
+
+console.log('\n=== TEST 9: Long-Duration Drift — Ce stays within ±5% at t=300,600,900 min ===');
+{
+  const ceTarget = 3.0;
+  const eng = createEngine(params);
+  const scheme = planTCIScheme(eng, eng.getState(), 0, ceTarget);
+
+  console.log(`  Scheme: ${scheme.length} steps`);
+  fmtScheme(scheme, 70);
+
+  // Replay scheme forward to 900 minutes
+  eng.reset();
+  let currentRate = 0, simTime = 0, evtIdx = 0;
+  const checkTimes = [300, 600, 900];
+  const results = {};
+
+  for (let t = 0; t <= 900; t += 0.5) {
+    while (evtIdx < scheme.length && scheme[evtIdx].time <= t) {
+      const evt = scheme[evtIdx];
+      const dt = evt.time - simTime;
+      if (dt > 0) { eng.advance(dt, currentRate); simTime = evt.time; }
+      if (evt.type === 'bolus') { eng.advance(0.05, evt.value / 0.05); simTime += 0.05; }
+      else { currentRate = evt.value; }
+      evtIdx++;
+    }
+    const dt = t - simTime;
+    if (dt > 0) { eng.advance(dt, currentRate); simTime = t; }
+
+    if (checkTimes.includes(t)) {
+      const ce = eng.getConcentrations().Ce;
+      const dev = (ce - ceTarget) / ceTarget;
+      results[t] = { ce, dev };
+      console.log(`  t=${t} min: Ce=${ce.toFixed(4)}, deviation=${(dev*100).toFixed(2)}%`);
+    }
+  }
+
+  for (const t of checkTimes) {
+    const { dev } = results[t];
+    assert(Math.abs(dev) < 0.05, `Ce within ±5% at t=${t} min (actual: ${(dev*100).toFixed(2)}%)`);
+  }
+}
+
+console.log('\n=== TEST 10: Analytical SS Rate Matches True Steady State ===');
+{
+  const ceTarget = 3.5;
+  const eng = createEngine(params);
+  const ssRate = computeSteadyStateRate(eng, ceTarget);
+  console.log(`  SS rate for Ce=${ceTarget}: ${ssRate.toFixed(4)} mg/min (${(ssRate/10*60).toFixed(1)} mL/h)`);
+
+  // Verify: run engine at ssRate for 2000 min (>>V3 tau), check Ce ≈ ceTarget
+  eng.reset();
+  eng.advance(2000, ssRate);
+  const ce = eng.getConcentrations().Ce;
+  const dev = Math.abs(ce - ceTarget) / ceTarget;
+  console.log(`  Ce at t=2000 min: ${ce.toFixed(4)} (deviation: ${(dev*100).toFixed(4)}%)`);
+  assert(dev < 0.005, `SS rate converges Ce to target within 0.5% (actual: ${(dev*100).toFixed(4)}%)`);
+}
+
+console.log('\n=== TEST 11: SS Rate Event Is Emitted In Scheme ===');
+{
+  const ceTarget = 3.0;
+  const eng = createEngine(params);
+  const scheme = planTCIScheme(eng, eng.getState(), 0, ceTarget);
+  const rates = scheme.filter(s => s.type === 'rate');
+
+  // The last rate should be close to the analytical SS rate
+  const ssRate = computeSteadyStateRate(eng, ceTarget);
+  const lastRate = rates[rates.length - 1].value;
+  const dev = Math.abs(lastRate - ssRate) / ssRate;
+  console.log(`  Last emitted rate: ${lastRate.toFixed(4)} mg/min`);
+  console.log(`  Analytical SS rate: ${ssRate.toFixed(4)} mg/min`);
+  console.log(`  Deviation: ${(dev*100).toFixed(2)}%`);
+  assert(dev < 0.02, `Last emitted rate within 2% of analytical SS rate (actual: ${(dev*100).toFixed(2)}%)`);
 }
 
 // ---- SUMMARY ----
