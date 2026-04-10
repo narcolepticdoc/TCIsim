@@ -1048,14 +1048,19 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   // Post-extraction Ce correction pass.
   // SimTIVA's step extraction holds each rate for 30-120+ min via cptAvgFactor
   // averaging. SimTIVA compensates by replanning every 2 min; our one-shot
-  // planner must instead replace long maintenance steps with tighter corrected
-  // steps at regular intervals. Early redistribution steps (<20 min after
-  // maintenance start) are kept from SimTIVA — the extraction handles that
-  // transition well. Beyond that, binary-search corrected rates every MAX_STEP
-  // minutes keep Ce within ±1% of target.
+  // planner must instead replace long maintenance steps with corrected steps.
+  // Early redistribution steps (<20 min after maintenance start) are kept from
+  // SimTIVA — the extraction handles that transition well.
+  //
+  // Adaptive spacing: for each step, binary-search the rate that hits Ce=target
+  // after PROBE minutes, then extend the step as long as Ce stays within ±CE_TOL.
+  // This gives tight control when V3 equilibrates fast (~15-30 min steps early)
+  // and relaxed control when the rate barely changes (~60-90 min steps late).
   {
-    const CORR_DELAY = 20;  // min: preserve SimTIVA's bolus redistribution phase
-    const MAX_STEP   = 15;  // min: interval between rate adjustments
+    const CORR_DELAY = 20;    // min: preserve SimTIVA's bolus redistribution phase
+    const PROBE      = 15;    // min: binary search lookahead and extension increment
+    const MAX_DUR    = 90;    // min: maximum step duration
+    const CE_TOL     = 0.015; // 1.5%: max Ce deviation before new step required
 
     const rateSteps = scheme.filter(s => s.type === 'rate');
     const firstCorrIdx = rateSteps.findIndex(s => s.time - maintTime >= CORR_DELAY);
@@ -1079,22 +1084,35 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
         }
       }
 
-      // Generate corrected rates at regular intervals via binary search.
-      // Midpoint targeting centers the error within each step.
-      for (let t = corrStart; t < corrEnd; t += MAX_STEP) {
-        const dur   = Math.min(MAX_STEP, corrEnd - t);
+      // Generate corrected rates with adaptive spacing.
+      // Each step: binary-search rate for Ce=target at PROBE, then extend
+      // while Ce stays within ±CE_TOL.
+      for (let t = corrStart; t < corrEnd; ) {
         const state = engine.getState();
+
+        // Binary search: rate where Ce = ceTarget after PROBE minutes
         let lo = 0, hi = cfg.maxRate;
         for (let iter = 0; iter < 25; iter++) {
           const mid = (lo + hi) / 2;
           engine.setState(state);
-          engine.advance(dur / 2, mid);
+          engine.advance(PROBE, mid);
           if (engine.getConcentrations().Ce < ceTarget) lo = mid; else hi = mid;
         }
-        const corrRate = (lo + hi) / 2;
-        scheme.push({ type: 'rate', time: t, value: corrRate });
+        const rate = (lo + hi) / 2;
+
+        // Probe forward: extend this rate while Ce stays within tolerance
+        let dur = PROBE;
+        while (dur + PROBE <= MAX_DUR && t + dur + PROBE <= corrEnd) {
+          engine.setState(state);
+          engine.advance(dur + PROBE, rate);
+          if (Math.abs(engine.getConcentrations().Ce - ceTarget) / ceTarget > CE_TOL) break;
+          dur += PROBE;
+        }
+
+        scheme.push({ type: 'rate', time: t, value: rate });
         engine.setState(state);
-        engine.advance(dur, corrRate);
+        engine.advance(dur, rate);
+        t += dur;
       }
     }
   }
