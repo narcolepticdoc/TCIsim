@@ -268,22 +268,38 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS, loc
     platPrefix: '', platArrivalMin: null, platStaticText: '',
     newLockedPlateauCe: null, newLockedExitMin: null, plateauRegion: null };
 
-  // Intermittent bolus mode — countdown to redose threshold
-  if (m === 'intermittent' && ceTarget > 0) {
+  // Redose threshold — compute countdown whenever threshold is set.
+  // For threshold-only (no infusion): return single-line redose data.
+  // For combined (infusion + threshold): store redose in prefix/arrivalMin
+  // and fall through to the manual SS/plateau analysis.
+  const threshold = getIntermittentThresholdForDrug ? getIntermittentThresholdForDrug(drugId) : 0;
+  if (threshold > 0 && ceTarget > 0) {
+    let redose = null;
     if (Ce <= ceTarget) {
-      return { ...noData, staticText: '<span class="appr-below">Below Threshold</span>' };
+      redose = { staticText: '<span class="appr-below">Below Threshold</span>' };
+    } else {
+      try {
+        const result = model.predictTrough(drugId, t, ceTarget);
+        if (result && result.time !== null && result.time > t) {
+          redose = { prefix: 'Redose in ', arrivalMin: result.time };
+        }
+      } catch (e) {}
     }
-    try {
-      const result = model.predictTrough(drugId, t, ceTarget);
-      if (result && result.time !== null && result.time > t) {
-        return { ...noData, prefix: 'Redose in ', arrivalMin: result.time };
-      }
-    } catch (e) {}
-    return noData;
+    // Threshold-only (no infusion running): return redose as the sole result
+    if (!(m === 'manual' && rate > 0)) {
+      return { ...noData, ...(redose || {}) };
+    }
+    // Combined (infusion + threshold): attach redose data, then fall through
+    // to SS/plateau analysis which populates ss*/plat* fields
+    if (redose) {
+      noData.prefix = redose.prefix || '';
+      noData.arrivalMin = redose.arrivalMin || null;
+      noData.staticText = redose.staticText || '';
+    }
   }
 
   // Pump stopped — emergence countdown (uses predictTrough; no curve scan needed)
-  if (m === 'none' || (rate === 0 && m !== 'tci' && m !== 'intermittent')) {
+  if ((m === 'none' || (rate === 0 && m !== 'tci')) && threshold === 0) {
     const emergenceCe = (getExitCeForDrug && getExitCeForDrug(drugId) > 0)
       ? getExitCeForDrug(drugId) : EMERGENCE_CE;
     if (Ce <= emergenceCe + 0.05) return noData;
@@ -520,8 +536,10 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
     }
   }
 
-  // Intermittent countdown is shown in the step-bar row instead
-  if (m === 'intermittent' && cache.arrivalMin !== null) html = '';
+  // Redose countdown is shown in the step-bar row instead (suppress from approach area)
+  // Exception: combined state (infusion + threshold) shows SS/plateau in approach area
+  const _threshold = getIntermittentThresholdForDrug ? getIntermittentThresholdForDrug(drugId) : 0;
+  if (_threshold > 0 && cache.arrivalMin !== null && !(m === 'manual' && rate > 0)) html = '';
 
   const el = $(drugId + '-approach');
   if (el && el.innerHTML !== html) el.innerHTML = html;
@@ -690,11 +708,12 @@ function update() {
 
   for (const dId of allDrugs) {
     const m        = getModeForDrug ? getModeForDrug(dId) : 'none';
+    const threshold = getIntermittentThresholdForDrug ? getIntermittentThresholdForDrug(dId) : 0;
     // For the approach line and warnings, ceTarget is the TCI target or the
-    // intermittent redose threshold, whichever is active for this drug.
-    const ceTarget = m === 'intermittent'
-      ? (getIntermittentThresholdForDrug ? getIntermittentThresholdForDrug(dId) : 0)
-      : (getCeTargetForDrug              ? getCeTargetForDrug(dId)              : 0);
+    // redose threshold, depending on drug type.
+    const ceTarget = (threshold > 0 && m !== 'tci')
+      ? threshold
+      : (getCeTargetForDrug ? getCeTargetForDrug(dId) : 0);
 
     let Ce = 0, Cp = 0, rate = 0, bis = null;
     if (caseStarted && t > 0) {
@@ -714,7 +733,7 @@ function update() {
     // ── Approach line ─────────────────────────────────────────────
     if (caseStarted) {
       updateApproachLine(dId, t, m, Ce, ceTarget, rate);
-      settings.checkBelowThreshold(dId, m === 'intermittent' && ceTarget > 0 && Ce <= ceTarget);
+      settings.checkBelowThreshold(dId, threshold > 0 && Ce <= ceTarget);
     } else {
       const el = $(dId + '-approach');
       if (el) el.innerHTML = '';
@@ -731,7 +750,8 @@ function update() {
       let label = 'Stopped', cls = 'stopped';
       if (!caseStarted || m === 'none') {
         label = 'Stopped'; cls = 'stopped';
-      } else if (m === 'intermittent') {
+      } else if (threshold > 0 && m !== 'manual') {
+        // Threshold-only (no infusion): show bolus status during delivery, blank otherwise
         if (isInBolusPhase(dId, t) || rate > 50) { label = 'Bolus'; cls = 'bolus'; }
         else { label = ''; cls = ''; }
       } else if (rate === 0) {
@@ -746,8 +766,7 @@ function update() {
     }
 
     if (rateEl) {
-      rateEl.textContent = (caseStarted && rate > 0 && m !== 'intermittent')
-        ? fmtRateInline(dId, rate) : '';
+      rateEl.textContent = (caseStarted && rate > 0) ? fmtRateInline(dId, rate) : '';
     }
 
     // ── eBIS (propofol-only DOM elements; null for other drugs) ──
@@ -764,10 +783,10 @@ function update() {
 
     // ── Step bar ──────────────────────────────────────────────────
     if (caseStarted) {
-      if (m !== 'intermittent') {
+      if (threshold === 0) {
         updateStepBar(dId, t);
       } else {
-        // Intermittent: during bolus delivery show progress normally;
+        // Threshold set: during bolus delivery show progress normally;
         // after delivery show the redose countdown from the approach cache.
         const barEl = $(dId + '-bar');
         const cntEl = $(dId + '-bar-countdown');
@@ -799,11 +818,11 @@ function update() {
     const cardEl = document.getElementById('drug-' + dId);
     if (cardEl) {
       let status = 'off';
-      if (caseStarted && m !== 'none') {
-        if (m === 'intermittent' && ceTarget > 0 && Ce <= ceTarget) {
+      if (caseStarted && (m !== 'none' || threshold > 0)) {
+        if (threshold > 0 && ceTarget > 0 && Ce <= ceTarget) {
           status = 'alert';                      // below redose threshold
-        } else if (rate === 0 && m !== 'intermittent') {
-          status = 'alert';                      // pump paused / stopped
+        } else if (rate === 0 && threshold === 0) {
+          status = 'alert';                      // pump paused / stopped (no threshold)
         } else {
           const warnMin = settings.getSettings().statusWarnMinutes ?? 2;
           let isWarn = false;
@@ -813,8 +832,8 @@ function update() {
             const nextEvt = evts.find(e => e.time > t + 0.0001 && e.source !== 'system');
             if (nextEvt && (nextEvt.time - t) <= warnMin) isWarn = true;
           } catch (e) {}
-          // Intermittent redose due within warn window
-          if (!isWarn && m === 'intermittent') {
+          // Redose due within warn window (whenever threshold is set)
+          if (!isWarn && threshold > 0) {
             const cache = _getApproachCache(dId);
             if (cache.arrivalMin !== null && (cache.arrivalMin - t) <= warnMin) isWarn = true;
           }

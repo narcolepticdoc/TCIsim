@@ -15,6 +15,7 @@
  */
 
 import { COLORS } from '../util/constants.js';
+import { fromCanonical, getDefaultUnit, getPrefKey, formatValue, getAllowedUnits } from '../util/units.js';
 
 // Chart.js is loaded globally via CDN
 const Chart = window.Chart;
@@ -287,13 +288,23 @@ export function createChart(canvas, config = {}) {
               if (!items.length) return '';
               const idx = items[0].dataIndex;
               const lines = [];
-              // Rate line
+              // Rate line — use the drug's preferred unit for correct precision
               if (rateValues.length > idx) {
                 const rateMgMin = rateValues[idx];
-                if (patientWeightKg && patientWeightKg > 0) {
-                  const rateUcgKgMin = (rateMgMin * 1000) / patientWeightKg;
-                  lines.push(`Rate: ${rateUcgKgMin.toFixed(1)} mcg/kg/min`);
-                } else {
+                try {
+                  const prefKey = getPrefKey(_currentDrugId, 'rate');
+                  let displayUnit = getDefaultUnit(_currentDrugId, 'rate');
+                  if (prefKey) {
+                    try {
+                      const saved = localStorage.getItem(prefKey);
+                      const allowed = getAllowedUnits(_currentDrugId, 'rate');
+                      if (saved && allowed.includes(saved)) displayUnit = saved;
+                    } catch (e) {}
+                  }
+                  const ctx = { weightKg: patientWeightKg || undefined };
+                  const displayVal = fromCanonical(rateMgMin, displayUnit, _currentDrugId, 'rate', ctx);
+                  lines.push(`Rate: ${formatValue(displayVal, displayUnit)} ${displayUnit}`);
+                } catch (e) {
                   lines.push(`Rate: ${rateMgMin.toFixed(2)} mg/min`);
                 }
               }

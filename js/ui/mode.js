@@ -1,19 +1,27 @@
 /**
  * mode.js — Drug Mode Tracking
- * 
+ *
  * Tracks the current administration mode per drug: 'none', 'tci',
- * 'manual', or 'intermittent'. This is a UI concern — the model
- * layer just sees pump commands.
- * 
+ * or 'manual'. This is a UI concern — the model layer just sees
+ * pump commands.
+ *
+ * For non-TCI drugs (fentanyl, ketamine), the redose threshold is
+ * an independent overlay that persists across mode changes. The
+ * display state is derived from both mode AND threshold:
+ *   none + no threshold  → NO MODE
+ *   none + threshold     → INTERMITTENT
+ *   manual + no threshold → INFUSION
+ *   manual + threshold   → INF + REDOSE
+ *
  * Mode transitions are reported via a callback so app.js can
  * annotate and update the UI.
  */
 
 const $ = id => document.getElementById(id);
 
-const modes = {};  // { drugId: 'none' | 'tci' | 'manual' | 'intermittent' }
+const modes = {};  // { drugId: 'none' | 'tci' | 'manual' }
 let ceTargets = {}; // { drugId: number } — current Ce target per drug
-let intermittentThresholds = {}; // { drugId: number } — Ce redose threshold for intermittent mode
+let intermittentThresholds = {}; // { drugId: number } — Ce redose threshold (persists across mode changes)
 let exitCeTargets = {}; // { drugId: number } — Ce threshold for emergence / exit (persists across modes)
 let exitCeLabels = {};  // { drugId: string } — display label for the button (e.g. "0.2 ng/mL")
 let onModeChange = null;
@@ -39,15 +47,15 @@ export function get(drugId) {
 
 /**
  * Set mode for a drug. Fires onModeChange callback.
+ * Threshold is NOT cleared — it persists across mode changes.
  * @param {string} drugId
- * @param {string} newMode - 'none' | 'tci' | 'manual' | 'intermittent'
+ * @param {string} newMode - 'none' | 'tci' | 'manual'
  * @param {string} [detail] - reason for the change
  */
 export function set(drugId, newMode, detail) {
   const oldMode = modes[drugId] || 'none';
   modes[drugId] = newMode;
   if (newMode !== 'tci') ceTargets[drugId] = 0;
-  if (newMode !== 'intermittent') intermittentThresholds[drugId] = 0;
   if (onModeChange) onModeChange(drugId, newMode, oldMode, detail);
   updateModeUI(drugId);
 }
@@ -67,17 +75,25 @@ export function setCeTarget(drugId, ce) {
 }
 
 /**
- * Get the Ce redose threshold for intermittent mode.
+ * Get the Ce redose threshold for a drug (0 if not set).
  */
 export function getIntermittentThreshold(drugId) {
   return intermittentThresholds[drugId] || 0;
 }
 
 /**
- * Set the Ce redose threshold for intermittent mode.
+ * Set the Ce redose threshold (independent of mode).
  */
 export function setIntermittentThreshold(drugId, ce) {
   intermittentThresholds[drugId] = ce;
+}
+
+/**
+ * Clear the Ce redose threshold for a drug.
+ */
+export function clearIntermittentThreshold(drugId) {
+  intermittentThresholds[drugId] = 0;
+  updateModeUI(drugId);
 }
 
 /**
@@ -181,26 +197,29 @@ function updateModeUI(drugId) {
       bt.textContent = 'Set Target';
     }
   } else {
-    // Non-TCI drug (fentanyl, ketamine): two separate modes — intermittent or infusion
-    if (m === 'intermittent') {
-      // Bolus-only mode; btn-rate visible as a clear "switch to infusion" action
-      ml.textContent = 'INTERMITTENT';
-      ml.className = 'mode-label target-mode';
-      bt.textContent = 'Change Threshold';
+    // Non-TCI drug (fentanyl, ketamine): derive display from mode + threshold
+    const hasThreshold = (intermittentThresholds[resolvedDrug] || 0) > 0;
+    bt.textContent = hasThreshold ? 'Change Threshold' : 'Set Threshold';
+    br.textContent = 'Set Rate';
+
+    if (m === 'manual' && hasThreshold) {
+      ml.textContent = 'INF + REDOSE';
+      ml.className = 'mode-label manual-mode';
       bt.classList.add('active-mode');
-      br.textContent = 'Set Infusion Rate';  // label makes intent clear
+      br.classList.add('active-mode');
+      bb.classList.add('active-mode');
     } else if (m === 'manual') {
       ml.textContent = 'INFUSION';
       ml.className = 'mode-label manual-mode';
-      bt.textContent = 'Intermittent';
-      br.textContent = 'Manual Rate';        // restore default label
       br.classList.add('active-mode');
       bb.classList.add('active-mode');
+    } else if (hasThreshold) {
+      ml.textContent = 'INTERMITTENT';
+      ml.className = 'mode-label target-mode';
+      bt.classList.add('active-mode');
     } else {
       ml.textContent = 'NO MODE';
       ml.className = 'mode-label no-mode';
-      bt.textContent = 'Intermittent';
-      br.textContent = 'Manual Rate';        // restore default label
     }
   }
 }

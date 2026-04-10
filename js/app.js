@@ -204,9 +204,9 @@ function refreshChart() {
   const ce = mode.getCeTarget(selectedDrug);
   chart.setTargetLine(m === 'tci' && ce > 0 ? ce * yScale : null);
 
-  // Intermittent threshold line (amber dashed, analogous to TCI target line)
+  // Intermittent threshold line (amber dashed, shown whenever threshold is set)
   const threshold = mode.getIntermittentThreshold(selectedDrug);
-  chart.setThresholdLine(m === 'intermittent' && threshold > 0 ? threshold * yScale : null);
+  chart.setThresholdLine(threshold > 0 ? threshold * yScale : null);
 
   // Exit Ce line (red dashed, mode-independent)
   const exitCeVal = mode.getExitCe(selectedDrug);
@@ -362,10 +362,10 @@ function restoreCase() {
       timer.setWallClockStart(startDate);
     }
 
-    // Restore modes
+    // Restore modes (migrate old 'intermittent' → 'none'; threshold is restored below)
     if (saved.modes) {
       for (const [drugId, m] of Object.entries(saved.modes)) {
-        mode.set(drugId, m);
+        mode.set(drugId, m === 'intermittent' ? 'none' : m);
       }
     }
     if (saved.ceTargets) {
@@ -378,6 +378,8 @@ function restoreCase() {
         if (thr > 0) mode.setIntermittentThreshold(drugId, thr);
       }
     }
+    // Refresh UI after thresholds are restored so combined states display correctly
+    mode.refreshUI(selectedDrug);
     if (saved.exitCeTargets) {
       for (const [drugId, ce] of Object.entries(saved.exitCeTargets)) {
         if (ce > 0) {
@@ -503,9 +505,11 @@ function boot() {
   mode.init({
     onModeChange(drugId, newMode, oldMode, detail) {
       if (detail) addAnnotation(detail);
-      // Keep history filter in sync with mode changes for the selected drug
+      // Keep history filter in sync — show bolus-only when threshold is set
+      // and no infusion is running (pure intermittent mode)
       if (drugId === selectedDrug) {
-        history.setBolusOnly(newMode === 'intermittent');
+        const hasThreshold = mode.getIntermittentThreshold(drugId) > 0;
+        history.setBolusOnly(hasThreshold && newMode !== 'manual');
       }
     },
   });
@@ -517,6 +521,7 @@ function boot() {
     getCeTarget: () => mode.getCeTarget(selectedDrug),
     isTciDrug: () => !NO_TCI_DRUGS.has(selectedDrug),
     getExitCe: () => mode.getExitCe(selectedDrug),
+    getIntermittentThreshold: () => mode.getIntermittentThreshold(selectedDrug),
     onConfirm(type, canonicalValue, displayText, deliveryMode) {
       let t;
       if (controls.isCaseStarted()) {
@@ -551,9 +556,13 @@ function boot() {
         // Rate change is near-instantaneous
         if (!controls.isCaseStarted()) advancePreStartClock(selectedDrug, 0.01);
       } else if (type === 'intermittent') {
-        // Intermittent bolus mode — store threshold, no model changes
+        // Redose threshold — independent overlay, does not change mode
         mode.setIntermittentThreshold(selectedDrug, canonicalValue);
-        mode.set(selectedDrug, 'intermittent', `Intermittent mode, redose threshold ${displayText}`);
+        addAnnotation(`Redose threshold ${displayText}`);
+        mode.refreshUI(selectedDrug);
+        // Update history filter for the new threshold state
+        const isInfusing = mode.get(selectedDrug) === 'manual';
+        history.setBolusOnly(!isInfusing);
         refreshChart();
         return; // refreshChart already called
       } else if (type === 'exitCe') {
@@ -573,11 +582,14 @@ function boot() {
         if (mode.get(selectedDrug) === 'tci') {
           model.clearAfter(selectedDrug, t);
           mode.set(selectedDrug, 'manual', 'Dropped out of TCI — manual bolus');
-        } else if (mode.get(selectedDrug) === 'none') {
+        } else if (mode.get(selectedDrug) === 'none' && !NO_TCI_DRUGS.has(selectedDrug)) {
+          // TCI-capable drug: bolus from 'none' implies manual mode
           mode.set(selectedDrug, 'manual');
         }
-        // Intermittent mode: stay in intermittent, always use IV Push (no pump)
-        const dm = (mode.get(selectedDrug) === 'intermittent') ? 'push' : (deliveryMode || 'pump');
+        // Threshold set + no infusion → always IV Push; otherwise respect keypad choice
+        const hasThreshold = mode.getIntermittentThreshold(selectedDrug) > 0;
+        const isInfusing = mode.get(selectedDrug) === 'manual';
+        const dm = (hasThreshold && !isInfusing) ? 'push' : (deliveryMode || 'pump');
         const label = dm === 'push' ? 'IV Push' : 'Pump Bolus';
         model.addBolus(selectedDrug, t, canonicalValue, `${label} ${displayText}`, {
           deliveryMode: dm,
@@ -603,7 +615,8 @@ function boot() {
       keypad.setDrug(drugId);
       eventEditor.setDrug(drugId);
       mode.refreshUI(drugId);
-      history.setBolusOnly(mode.get(drugId) === 'intermittent');
+      const hasThreshold = mode.getIntermittentThreshold(drugId) > 0;
+      history.setBolusOnly(hasThreshold && mode.get(drugId) !== 'manual');
       history.setDrug(drugId);
       history.render();
       // Switch chart to new drug's y-axis config (label, scale, persisted range)
@@ -623,8 +636,8 @@ function boot() {
     timer,
     getMode: () => mode.get(selectedDrug),
     getCeTarget: () => {
-      const m = mode.get(selectedDrug);
-      if (m === 'intermittent') return mode.getIntermittentThreshold(selectedDrug);
+      // Non-TCI drugs: ceTarget is the redose threshold (independent of mode)
+      if (NO_TCI_DRUGS.has(selectedDrug)) return mode.getIntermittentThreshold(selectedDrug);
       return mode.getCeTarget(selectedDrug);
     },
     getIntermittentThreshold: () => mode.getIntermittentThreshold(selectedDrug),
