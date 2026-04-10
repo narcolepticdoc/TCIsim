@@ -26,6 +26,7 @@ let getDrugIds                        = null;   // () => string[] all drug ids w
 let getModeForDrug                    = null;   // (drugId) => mode string for any drug
 let getIntermittentThresholdForDrug   = null;   // (drugId) => canonical mcg/mL threshold
 let getCeTargetForDrug                = null;   // (drugId) => TCI Ce target (mcg/mL canonical)
+let getExitCeForDrug                  = null;   // (drugId) => Exit Ce threshold (mcg/mL canonical)
 let rafId                    = null;
 let onFrame                  = null;   // callback: (elapsedMinutes) => void
 
@@ -132,6 +133,7 @@ export function init(opts = {}) {
   getModeForDrug                  = opts.getModeForDrug                  || null;
   getIntermittentThresholdForDrug = opts.getIntermittentThresholdForDrug || null;
   getCeTargetForDrug              = opts.getCeTargetForDrug              || null;
+  getExitCeForDrug                = opts.getExitCeForDrug                || (() => 0);
   onFrame                         = opts.onFrame                         || null;
   getTciFraction                  = opts.getTciFraction                  || (() => TCI_FRACTION_DEFAULT);
   getSsSlopeTol                   = opts.getSsSlopeTol                   || (() => SS_SLOPE_DEFAULT);
@@ -282,12 +284,15 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS, loc
 
   // Pump stopped — emergence countdown (uses predictTrough; no curve scan needed)
   if (m === 'none' || (rate === 0 && m !== 'tci' && m !== 'intermittent')) {
-    if (Ce <= EMERGENCE_CE + 0.05) return noData;
+    const emergenceCe = (getExitCeForDrug && getExitCeForDrug(drugId) > 0)
+      ? getExitCeForDrug(drugId) : EMERGENCE_CE;
+    if (Ce <= emergenceCe + 0.05) return noData;
     try {
-      const result = model.predictTrough(drugId, t, EMERGENCE_CE);
+      const result = model.predictTrough(drugId, t, emergenceCe);
       if (result && result.time !== null && result.time > t) {
+        const label = (getExitCeForDrug && getExitCeForDrug(drugId) > 0) ? 'Exit' : 'Emergence';
         return { ...noData,
-          prefix: `Emergence <span class="appr-val">${EMERGENCE_CE.toFixed(1)}</span> in `,
+          prefix: `${label} <span class="appr-val">${emergenceCe.toFixed(1)}</span> in `,
           arrivalMin: result.time,
         };
       }
@@ -470,7 +475,7 @@ function updateApproachLine(drugId, t, m, Ce, ceTarget, rate) {
   // Render countdown live every frame
   let html = '';
 
-  if (m === 'manual') {
+  if (m === 'manual' && rate > 0) {
     // Two-line display: SS (line 1) + Plateau (line 2)
     let ssHtml = '';
     if (cache.ssArrivalMin !== null) {
@@ -630,6 +635,49 @@ function updateStepBar(drugId, t) {
 }
 
 // ──────────────────────────────────────────────────────────────────
+// Exit readout — "time to Exit Ce if stopped now"
+// ──────────────────────────────────────────────────────────────────
+
+const _exitReadoutCache = {};   // { drugId: { lastUpdate, html } }
+
+function updateExitReadout(drugId, t, Ce, caseStarted) {
+  const el = $(drugId + '-exit');
+  if (!el) return;
+
+  const exitCe = getExitCeForDrug ? getExitCeForDrug(drugId) : 0;
+  if (!exitCe || exitCe <= 0 || !caseStarted || t <= 0) {
+    if (el.innerHTML !== '') el.innerHTML = '';
+    return;
+  }
+
+  // Ce already at or below exit threshold
+  if (Ce <= exitCe) {
+    const html = '<span style="color:var(--green)">Exit now</span>';
+    if (el.innerHTML !== html) el.innerHTML = html;
+    return;
+  }
+
+  // Throttle prediction to every 3 seconds
+  const now = Date.now();
+  const cache = _exitReadoutCache[drugId] || (_exitReadoutCache[drugId] = { lastUpdate: 0, html: '' });
+  if (now - cache.lastUpdate < 3000) {
+    if (el.innerHTML !== cache.html) el.innerHTML = cache.html;
+    return;
+  }
+
+  // Predict decay time assuming rate=0
+  const result = model.predictDecayTo(drugId, t, exitCe);
+  let html = '';
+  if (result && result.time !== null && result.time > t) {
+    const rem = result.time - t;
+    html = `Exit <span class="appr-time">${fmtCountdown(rem)}</span>`;
+  }
+  cache.lastUpdate = now;
+  cache.html = html;
+  if (el.innerHTML !== html) el.innerHTML = html;
+}
+
+// ──────────────────────────────────────────────────────────────────
 // Main update
 // ──────────────────────────────────────────────────────────────────
 
@@ -671,6 +719,9 @@ function update() {
       const el = $(dId + '-approach');
       if (el) el.innerHTML = '';
     }
+
+    // ── Exit Ce readout (upper-right of drug card) ─────────────────
+    updateExitReadout(dId, t, Ce, caseStarted);
 
     // ── Status + rate ─────────────────────────────────────────────
     const statusEl = $(dId + '-status');

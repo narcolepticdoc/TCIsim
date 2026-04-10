@@ -150,6 +150,8 @@
     .drug-card.active::before{content:'';position:absolute;left:4px;top:50%;transform:translateY(-50%);width:0;height:0;border-top:7px solid transparent;border-bottom:7px solid transparent;border-left:6px solid var(--drug-color,var(--blue));z-index:1}
     .drug-card.active .drug-name  { font-size: 17px }
     .drug-card.active .ce-current { font-size: 27px }
+    .exit-readout{position:absolute;top:6px;right:10px;font-family:var(--font-mono);font-size:9.5px;color:#ef4444;white-space:nowrap;letter-spacing:.3px}
+    .exit-readout:empty{display:none}
     /* ── Warning system ─────────────────────────────────────────────── */
     /* Prep pulse: inset border glow on drug card (inset is not clipped by overflow-y:auto on .drug-panel) */
     @keyframes warn-prep-pulse{0%,100%{box-shadow:inset 0 0 0 0 rgba(245,158,11,0)}40%,60%{box-shadow:inset 0 0 0 3px rgba(245,158,11,0.9),inset 0 0 14px rgba(245,158,11,0.2)}}
@@ -261,9 +263,12 @@
     .btn-ctrl-bolus{background:#6d28d9;color:#fff}
     .btn-ctrl-bolus:hover{background:#5b21b6}
     .btn-ctrl-bolus.active-mode{box-shadow:0 0 0 2px var(--purple)}
+    .btn-ctrl-exit{background:#dc2626;color:#fff}
+    .btn-ctrl-exit:hover{background:#b91c1c}
     .btn-ctrl-pause{background:var(--blue);color:#fff;margin-left:auto}
     .btn-ctrl-pause:hover{background:#2563eb}
-    .btn-ctrl-pause.is-running{background:var(--blue)}
+    .btn-ctrl-pause.is-running{background:#ef4444}
+    .btn-ctrl-pause.is-running:hover{background:#dc2626}
     .btn-ctrl-pause.is-stopped{background:var(--green)}
     .btn-ctrl-pause.is-stopped:hover{background:#16a34a}
 
@@ -497,6 +502,8 @@
     .modal-btn-confirm-bolus:hover{background:#6d28d9}
     .modal-btn-confirm-push{background:#a78bfa;color:#1e1b4b;font-size:13px;padding:8px 12px;font-weight:600}
     .modal-btn-confirm-push:hover{background:#8b5cf6}
+    .modal-btn-confirm-exit{background:#ef4444;color:#fff}
+    .modal-btn-confirm-exit:hover{background:#dc2626}
     .modal-btn-danger{background:var(--red);color:#fff}
     .modal-btn-danger:hover{background:#dc2626}
 
@@ -711,6 +718,7 @@
       <div class="drug-panel">
         <div class="drug-card active" id="drug-propofol">
           <div class="drug-name">Propofol</div>
+          <div class="exit-readout" id="propofol-exit"></div>
           <div class="drug-model" id="propofol-model-label"></div>
           <div class="drug-conc-row">
             <span class="ce-label">Ce</span>
@@ -734,6 +742,7 @@
         </div>
         <div class="drug-card" id="drug-fentanyl">
           <div class="drug-name">Fentanyl</div>
+          <div class="exit-readout" id="fentanyl-exit"></div>
           <div class="drug-model" id="fentanyl-model-label"></div>
           <div class="drug-conc-row">
             <span class="ce-label">Ce</span>
@@ -756,6 +765,7 @@
         </div>
         <div class="drug-card" id="drug-ketamine">
           <div class="drug-name">Ketamine</div>
+          <div class="exit-readout" id="ketamine-exit"></div>
           <div class="drug-model" id="ketamine-model-label"></div>
           <div class="drug-conc-row">
             <span class="ce-label">Ce</span>
@@ -805,6 +815,7 @@
       <button class="btn-ctrl btn-ctrl-target" id="btn-target">Set Target</button>
       <button class="btn-ctrl btn-ctrl-rate" id="btn-rate">Manual Rate</button>
       <button class="btn-ctrl btn-ctrl-bolus" id="btn-bolus">Add Bolus</button>
+      <button class="btn-ctrl btn-ctrl-exit" id="btn-exit">Exit Ce</button>
       <button class="btn-ctrl btn-ctrl-pause is-stopped" id="btn-pause">Start</button>
     </div>
   </div>
@@ -841,6 +852,7 @@
       </div>
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="keypad-cancel-btn">Cancel</button>
+        <button id="keypad-clear-btn" class="modal-btn-danger" style="display:none">Clear</button>
         <button id="keypad-push-btn" class="modal-btn-confirm-push" style="display:none">IV Push</button>
         <button id="keypad-confirm-btn" class="modal-btn-confirm-target">Set Target</button>
       </div>
