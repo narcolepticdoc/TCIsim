@@ -4,6 +4,28 @@
 
 ## Session History
 
+### Interim — Fix Long-Term TCI Ce Drift (v0.5.16.1)
+
+*Between Sessions 25 and 26. Not tracked in session numbering.*
+
+All four TCI planners held target Ce well in the near term (0-60 min) but allowed significant upward drift long-term. At t=230 min with Ce target 3.5, Ce read 3.642 (+4%) and kept growing. Root cause: planners are one-shot — they generate a finite set of rate-step events at planning time, and the last emitted rate becomes permanent. As V3 (slow peripheral, τ ≈ 300 min) continues equilibrating, the optimal rate decreases, but no planner was emitting new steps.
+
+**`computeSteadyStateRate()` (`js/pk/steady-state-predictor.js`):**
+Algebraic inverse of `predictSteadyStateCe()`. Computes the exact infusion rate for any Ce target at true steady state: `rate = ceTarget / (-A⁻¹[3,0])`. One matrix inverse, no simulation needed.
+
+**Terminal rate events for Stepped/CET planners (`js/sim/tci-planner.js`):**
+New `appendTerminalRates()` helper emits two final rate events after the maintenance loop exits: (1) a long-lookahead (300 min) binary-search rate from the current engine state, accounting for actual V3 level; (2) the analytical SS rate at +300 min for asymptotic convergence. CET-Conservative inherits this via its CET delegation.
+
+**Emulation planner post-extraction correction pass (`js/sim/tci-planner.js`):**
+SimTIVA's step extraction uses `cptAvgFactor=0.667` which biases rates HIGH. SimTIVA compensates by replanning every 2 min; our one-shot planner held biased rates for 30-120+ min. Fix: a correction pass replaces all SimTIVA maintenance rates (preserving only the zero-rate pause after bolus) with binary-search-corrected steps. Adaptive spacing via Ce deviation probing: each step targets Ce=target at a 15-min lookahead, then extends while Ce stays within ±1.5%. Produces 15-min steps during fast V3 equilibration, widening to 90-min steps near steady state. ~19 rate events total with Ce within ±1.5% across 900+ min.
+
+**Long-duration drift tests (`tests/test-tci-scheme.js`):**
+Three new tests: (9) Ce within ±5% at t=300, 600, 900 min; (10) analytical SS rate matches true steady state within 0.5%; (11) SS rate event is emitted in scheme within 2% of analytical.
+
+426 tests across 13 suites, all passing.
+
+---
+
 ### Session 25 — Configurable Exit Ce & Emergence Fix (v0.5.16)
 
 **Bug fix — emergence readout rendering (`js/ui/drug-panel.js`):**
