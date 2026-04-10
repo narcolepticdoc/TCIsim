@@ -874,6 +874,7 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   refitEigenstate();
 
   const maintTime = simTime;
+  const maintState = engine.getState(); // save for post-extraction correction
 
   // virtual_model: predict Cp at t seconds from eigenstate at zero rate
   function vm(s1, s2, s3, t) {
@@ -1044,9 +1045,57 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
     }
   }
 
+  // Post-extraction Ce correction pass.
+  // The step extraction uses SimTIVA's cptAvgFactor (0.667) which biases
+  // rates HIGH. SimTIVA corrects this by replanning every 2 min; our one-shot
+  // planner holds each rate for 30-120+ min, causing Ce to drift above target.
+  // Fix: replay the scheme through the engine and adjust each rate via binary
+  // search so that Ce = ceTarget at each step boundary.
+  {
+    const rateSteps = scheme.filter(s => s.type === 'rate');
+    if (rateSteps.length >= 2) {
+      engine.setState(maintState);
+      for (let i = 0; i < rateSteps.length; i++) {
+        const step = rateSteps[i];
+        // Advance engine to this step's start time
+        if (i > 0) {
+          const prevStep = rateSteps[i - 1];
+          const gap = step.time - prevStep.time;
+          if (gap > 0) engine.advance(gap, prevStep.value);
+        }
+
+        // Determine step duration
+        const nextTime = (i + 1 < rateSteps.length)
+          ? rateSteps[i + 1].time
+          : step.time + 120; // last step: 2-hour horizon
+        const duration = nextTime - step.time;
+        if (duration <= 0) continue;
+
+        // Binary search: rate where Ce at step midpoint = ceTarget.
+        // Midpoint targeting centers the error within each step:
+        // Ce starts near target, drifts slightly above at midpoint,
+        // then slightly below at end — minimizing max deviation.
+        const stepState = engine.getState();
+        const midpoint = duration / 2;
+        let lo = 0, hi = cfg.maxRate;
+        for (let iter = 0; iter < 25; iter++) {
+          const mid = (lo + hi) / 2;
+          engine.setState(stepState);
+          engine.advance(midpoint, mid);
+          if (engine.getConcentrations().Ce < ceTarget) lo = mid; else hi = mid;
+        }
+        const corrected = (lo + hi) / 2;
+        step.value = corrected;
+
+        // Reset engine to step start for next iteration
+        engine.setState(stepState);
+      }
+    }
+  }
+
   // Append analytical SS rate at the end of the first-pass horizon.
-  // The first-pass covers 720 min (~95% V3 equilibration). The SS rate
-  // at that point ensures Ce converges for t → ∞.
+  // The correction pass ensures within-window accuracy; the SS rate
+  // handles convergence for t → ∞.
   const ssRate = computeSteadyStateRate(engine, ceTarget);
   if (ssRate != null && scheme.length > 0) {
     const lastRate = scheme[scheme.length - 1];
