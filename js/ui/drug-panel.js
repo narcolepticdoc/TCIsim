@@ -277,13 +277,13 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS, loc
     let redose = null;
     if (Ce <= ceTarget) {
       const ceStr = `<span class="appr-val">${fmtCe(ceTarget, drugId)}</span>`;
-      redose = { staticText: `<span class="appr-below">Below Threshold ${ceStr}</span>` };
+      redose = { staticText: `<span class="appr-below">Below Redose Threshold ${ceStr}</span>` };
     } else {
       try {
         const result = model.predictTrough(drugId, t, ceTarget);
         if (result && result.time !== null && result.time > t) {
           const ceStr = `<span class="appr-val">${fmtCe(ceTarget, drugId)}</span>`;
-          redose = { prefix: `Threshold ${ceStr} in `, arrivalMin: result.time };
+          redose = { prefix: `Redose Threshold ${ceStr} in `, arrivalMin: result.time };
         }
       } catch (e) {}
     }
@@ -806,7 +806,7 @@ function update() {
           if (cntEl) {
             const ceStr = fmtCe(ceTarget, dId);
             const newHtml = rem > 0
-              ? `Threshold <span class="appr-val">${ceStr}</span> in <span class="appr-time">${fmtCountdown(rem)}</span>` : '';
+              ? `Redose Threshold <span class="appr-val">${ceStr}</span> in <span class="appr-time">${fmtCountdown(rem)}</span>` : '';
             if (cntEl.innerHTML !== newHtml) cntEl.innerHTML = newHtml;
           }
         } else if (m === 'manual') {
