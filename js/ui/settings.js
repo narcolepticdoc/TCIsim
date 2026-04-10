@@ -182,13 +182,20 @@ export function check(t) {
         if (cntEl) {
           const rem = nextEvt.time - t;
           cntEl.textContent = rem > 0 ? 'in ' + _fmtCountdown(rem) : 'now';
-          if (rem <= 0 && !_zeroChimeFired.has(nextEvt.id)) {
-            _zeroChimeFired.add(nextEvt.id);
-            playAlert('info');
-          }
         }
       }
     } catch (e) {}
+  }
+
+  // ── Zero-chime: fire once when any active popup's event time is reached ────
+  for (const [evtId, el] of _activePopups) {
+    const evtTime = Number(el.dataset.evtTime);
+    if (t >= evtTime && !_zeroChimeFired.has(evtId)) {
+      _zeroChimeFired.add(evtId);
+      const cntEl = document.getElementById('wc-' + evtId);
+      if (cntEl) cntEl.textContent = 'now';
+      playAlert('info');
+    }
   }
 
   // ── Topbar header flash: active whenever any drug has a prep warning ──────
@@ -225,6 +232,7 @@ function _showPopup(drugId, evt, t) {
   const el = document.createElement('div');
   el.className = 'warn-popup';
   el.dataset.evtId = evt.id;
+  el.dataset.evtTime = evt.time;
   el.innerHTML =
     `<div class="warn-drug">${_esc(drugName)}</div>` +
     `<div class="warn-desc">${_esc(desc)}</div>` +
