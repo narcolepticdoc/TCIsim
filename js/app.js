@@ -881,12 +881,7 @@ function boot() {
   if (viewChart) viewChart.addEventListener('click', () => setView('chart'));
   if (viewHistory) viewHistory.addEventListener('click', () => setView('history'));
 
-  // Orientation lock attempt
-  try {
-    if (screen.orientation && screen.orientation.lock) {
-      screen.orientation.lock('landscape').catch(() => {});
-    }
-  } catch (e) {}
+  // Orientation lock removed — portrait layout now supported on phones
 }
 
 function closeModal(id) {

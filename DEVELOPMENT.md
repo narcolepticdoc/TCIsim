@@ -4,32 +4,23 @@
 
 ## Session History
 
-### Session 24 (2026-04-09) — Analytical steady state + slope-reversal plateau detection (v0.5.14)
+### Session 25 (2026-04-09) — Refactor Settings Dialog into Tabbed Panel (v0.5.13)
 
-**Problem.** The slope-based plateau detector (v0.5.10–0.5.13) conflated two distinct clinical concepts: true pharmacokinetic steady state and local transient plateaus. A propofol constant infusion from zero shows a sustained low-slope region as Ce approaches its asymptote, but this is not a "plateau" — it is monotonic convergence. The detector reported "Plateau 2.05" for a scenario that should show "Steady State 2.05 in 2:44:00". Meanwhile, true plateaus (e.g. fentanyl bolus + maintenance where Ce declines from bolus peak, flattens as V3 equilibrates, then rises) went undetected because no reversal check existed.
+**Problem.** The settings modal was titled "Warning Settings" and presented all eight controls (prep alert, alert popup, redose chime, status indicator, TCI tolerance, plateau slope) in a single flat list at 400px wide. As more settings accumulated across notification and simulation domains, the modal became cluttered and lacked organisation.
 
-**Fix.** Split into two independent systems in `js/pk/steady-state-predictor.js`:
+**Fix.** Replaced the flat list with a wider (640px) tabbed settings panel using a three-column layout:
 
-1. **Analytical Steady State** — computes true Ce_ss via `−A⁻¹·B·rate` (pure matrix math, no simulation). Forward-simulates at 1-min resolution to find time to reach 95% of Ce_ss. Uses backward scan from horizon end to find the last minute outside the 5% band, rejecting transient crossings (e.g. Ce passing through the band on the way down after a rate reduction, then undershooting before slowly recovering). Always active in manual mode. Green dashed line on chart + "Steady State X.XX in M:SS" text.
-
-2. **Plateau Detection** — slope-based entry (sustained low-slope window of 15 consecutive minutes) with mandatory slope reversal. Pre-entry direction (sign of `ce[entryIdx] − ce[lookback]`) must differ from post-entry direction (scanned past the sustained window up to EXIT_HORIZON minutes for any opposite-sign movement). Monotonic approach to steady state returns `noPlateau: true`. Amber bounding box on chart + separate text line.
+- **Left column** — Vertical tab navigation. Two tabs: "Notifications" (prep/alert timing, sounds, status indicator) and "Simulation" (TCI target tolerance, plateau slope tolerance). Styled with the existing `--blue-dim` active indicator to match the app's tab pattern.
+- **Centre column** — Scrollable content panes. Each tab switches the visible pane; all existing slider/checkbox controls are preserved with their original IDs and `saveAll()` wiring. Max height 280px with overflow-y scroll for future growth.
+- **Right column** — Contextual "About" sidebar (175px). Text updates on tab switch via a `INFO_TEXTS` map in `app.js`, giving users a plain-language explanation of each settings category without cluttering the controls themselves.
 
 **Files changed:**
+- **`index.html`** — New CSS classes (`.settings-panel`, `.settings-header`, `.settings-body`, `.settings-nav`, `.settings-tab`, `.settings-content`, `.settings-pane`, `.settings-info`, `.settings-info-title`, `.settings-info-text`). Modal HTML restructured into `nav > .settings-content > aside` flex layout. Button title changed from "Warning settings" to "Settings".
+- **`js/app.js`** — `initSettings()` gains tab-switching logic: click handler on `.settings-tab` buttons toggles `.active` on both the tab and corresponding `#pane-*` element, and updates `#settings-info-text` from the `INFO_TEXTS` map.
 
-- **`js/pk/steady-state-predictor.js`** — Complete rewrite. Three exported functions: `predictSteadyStateCe(engine, rate)` (pure matrix math), `predictTimeToSteadyState(engine, startState, rate, opts)` (backward-scan time detection), `predictPlateau(engine, startState, rate, slopeTol, opts)` (entry + reversal + exit). Plateau entry is marked at the START of the 15-minute sustained window.
-- **`js/sim/simulation.js`** — Two wrapper methods: `predictSteadyState(drugId, time, rate, opts)` and `predictPlateau(drugId, time, rate, slopeTol, opts)`.
-- **`js/ui/drug-panel.js`** — Two-line approach display. Cache expanded with SS and plateau fields. New accessor `getSteadyStateCe(drugId)` for the chart SS line.
-- **`js/ui/chart.js`** — Green dashed SS line annotation (`rgba(34, 197, 94, 0.6)`, borderDash [8,4]), "SS" right-margin label, `setSteadyStateLine(ce)` setter.
-- **`js/app.js`** — Wires SS line in onFrame alongside plateau box, applies yScale per drug.
-- **`tests/test-steady-state-predictor.js`** — Complete rewrite, 62 assertions: analytical Ce_ss (propofol, fentanyl, ketamine), time to 95%, transient band crossing rejection (backward scan), no plateau for monotonic rise, fentanyl bolus+infusion plateau with reversal, rate-lowered plateau, bad input handling, engine state restoration, band monotonicity.
+**No functional changes.** All settings IDs, localStorage keys, validation ranges, and `saveAll()` persist logic are identical. The `warnings.js` module is untouched.
 
-**Key algorithmic decisions:**
-
-- **Backward scan for SS time:** Forward scan (first entry into 95% band) gives false positives when Ce transiently crosses the band on the way down after a rate reduction, then undershoots below before slowly recovering. Backward scan finds the last minute Ce was outside the band — the minute after that is when Ce has truly settled.
-- **Scan-based reversal detection:** Fixed-window lookahead (e.g. 5 or 30 minutes past sustain end) misses slow V3 reversals. The scan checks ALL minutes from sustain end to EXIT_HORIZON for any opposite-direction movement, reliably catching delayed turnarounds (e.g. propofol rate-lowered: entry t=87, sustain ends t=102, Ce minimum at t≈117, reversal detectable by t≈152).
-- **Plateau entry at window start:** When a 15-minute sustained low-slope window is detected starting at minute i, `entryIdx = i` (not `i + 15`). The plateau Ce value and chart region start are anchored at `ce[i]`.
-
-421 tests across 13 suites, all passing.
+415 tests across 13 suites, all passing.
 
 ---
 
