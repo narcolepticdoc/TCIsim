@@ -1046,68 +1046,65 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   }
 
   // Post-extraction Ce correction pass.
-  // The step extraction uses SimTIVA's cptAvgFactor (0.667) which biases
-  // rates HIGH. SimTIVA corrects this by replanning every 2 min; our one-shot
-  // planner holds each rate for 30-120+ min, causing Ce to drift above target.
-  // Fix: replay the scheme through the engine and adjust each rate via binary
-  // search so that Ce = ceTarget at each step boundary.
+  // SimTIVA's step extraction holds each rate for 30-120+ min via cptAvgFactor
+  // averaging. SimTIVA compensates by replanning every 2 min; our one-shot
+  // planner must instead replace long maintenance steps with tighter corrected
+  // steps at regular intervals. Early redistribution steps (<20 min after
+  // maintenance start) are kept from SimTIVA — the extraction handles that
+  // transition well. Beyond that, binary-search corrected rates every MAX_STEP
+  // minutes keep Ce within ±1% of target.
   {
+    const CORR_DELAY = 20;  // min: preserve SimTIVA's bolus redistribution phase
+    const MAX_STEP   = 15;  // min: interval between rate adjustments
+
     const rateSteps = scheme.filter(s => s.type === 'rate');
-    if (rateSteps.length >= 2) {
+    const firstCorrIdx = rateSteps.findIndex(s => s.time - maintTime >= CORR_DELAY);
+
+    if (firstCorrIdx >= 0 && rateSteps.length >= 2) {
+      const corrStart = rateSteps[firstCorrIdx].time;
+      const corrEnd   = maintTime + cptIntervalCount * cptInterval / 60 + 180;
+
+      // Replay engine through uncorrected early rates to reach corrStart
       engine.setState(maintState);
-      for (let i = 0; i < rateSteps.length; i++) {
-        const step = rateSteps[i];
-        // Advance engine to this step's start time
-        if (i > 0) {
-          const prevStep = rateSteps[i - 1];
-          const gap = step.time - prevStep.time;
-          if (gap > 0) engine.advance(gap, prevStep.value);
+      for (let i = 0; i < firstCorrIdx; i++) {
+        const nextT = (i + 1 < firstCorrIdx) ? rateSteps[i + 1].time : corrStart;
+        const gap   = nextT - rateSteps[i].time;
+        if (gap > 0) engine.advance(gap, rateSteps[i].value);
+      }
+
+      // Remove all rate events at or after corrStart from scheme
+      for (let i = scheme.length - 1; i >= 0; i--) {
+        if (scheme[i].type === 'rate' && scheme[i].time >= corrStart) {
+          scheme.splice(i, 1);
         }
+      }
 
-        // Determine step duration
-        const nextTime = (i + 1 < rateSteps.length)
-          ? rateSteps[i + 1].time
-          : step.time + 120; // last step: 2-hour horizon
-        const duration = nextTime - step.time;
-        if (duration <= 0) continue;
-
-        // Skip correction for early steps during bolus redistribution.
-        // SimTIVA's rate extraction handles rapid Cp redistribution well;
-        // correction is only needed for long steps where cptAvgFactor
-        // bias accumulates (held for 30-120+ min vs SimTIVA's 2 min replan).
-        if (step.time - maintTime < 20) continue;
-
-        // Binary search: rate where Ce at step midpoint = ceTarget.
-        // Midpoint targeting centers the error within each step:
-        // Ce starts near target, drifts slightly above at midpoint,
-        // then slightly below at end — minimizing max deviation.
-        const stepState = engine.getState();
-        const midpoint = duration / 2;
+      // Generate corrected rates at regular intervals via binary search.
+      // Midpoint targeting centers the error within each step.
+      for (let t = corrStart; t < corrEnd; t += MAX_STEP) {
+        const dur   = Math.min(MAX_STEP, corrEnd - t);
+        const state = engine.getState();
         let lo = 0, hi = cfg.maxRate;
         for (let iter = 0; iter < 25; iter++) {
           const mid = (lo + hi) / 2;
-          engine.setState(stepState);
-          engine.advance(midpoint, mid);
+          engine.setState(state);
+          engine.advance(dur / 2, mid);
           if (engine.getConcentrations().Ce < ceTarget) lo = mid; else hi = mid;
         }
-        const corrected = (lo + hi) / 2;
-        step.value = corrected;
-
-        // Reset engine to step start for next iteration
-        engine.setState(stepState);
+        const corrRate = (lo + hi) / 2;
+        scheme.push({ type: 'rate', time: t, value: corrRate });
+        engine.setState(state);
+        engine.advance(dur, corrRate);
       }
     }
   }
 
-  // Append analytical SS rate at the end of the first-pass horizon.
-  // The correction pass ensures within-window accuracy; the SS rate
-  // handles convergence for t → ∞.
+  // Append analytical SS rate beyond the correction horizon for t → ∞
   const ssRate = computeSteadyStateRate(engine, ceTarget);
   if (ssRate != null && scheme.length > 0) {
-    const lastRate = scheme[scheme.length - 1];
-    if (lastRate.type === 'rate' && Math.abs(ssRate - lastRate.value) / lastRate.value > 0.005) {
-      const horizonEnd = maintTime + cptIntervalCount * cptInterval / 60;
-      scheme.push({ type: 'rate', time: horizonEnd, value: ssRate });
+    const lastRateEvt = [...scheme].reverse().find(s => s.type === 'rate');
+    if (lastRateEvt && Math.abs(ssRate - lastRateEvt.value) / lastRateEvt.value > 0.005) {
+      scheme.push({ type: 'rate', time: lastRateEvt.time + 15, value: ssRate });
     }
   }
 
