@@ -48,6 +48,30 @@ export function predictSteadyStateCe(engine, rate) {
 }
 
 /**
+ * Compute the constant infusion rate that produces Ce = ceTarget at
+ * true steady state. Algebraic inverse of predictSteadyStateCe().
+ *
+ *   rate_ss = ceTarget / (−A⁻¹[3,0])
+ *
+ * Pure matrix math — no state mutation, no simulation.
+ *
+ * @param {Object} engine   - PK engine instance (for getSystemMatrix)
+ * @param {number} ceTarget - Desired steady-state Ce (μg/mL)
+ * @returns {number|null}     Infusion rate (mg/min), or null if ceTarget ≤ 0
+ */
+export function computeSteadyStateRate(engine, ceTarget) {
+  if (ceTarget <= 0) return null;
+
+  const A = engine.getSystemMatrix();
+  const Ainv = inv4(A);
+  if (!Ainv) return null;
+
+  const cePerRate = -Ainv[3 * 4 + 0]; // Ce_ss per unit rate (μg/mL per mg/min)
+  if (cePerRate <= 0) return null;
+  return ceTarget / cePerRate;         // mg/min
+}
+
+/**
  * Predict time to reach 95% of analytical steady-state Ce under constant
  * infusion. Forward-simulates at 1-min resolution.
  *

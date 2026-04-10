@@ -23,6 +23,7 @@
  */
 
 import { computeSimTIVACETBolus, computeUDFs } from './simtiva-reference.js';
+import { computeSteadyStateRate } from '../pk/steady-state-predictor.js';
 
 /**
  * @typedef {Object} TCISchemeConfig
@@ -59,6 +60,54 @@ function plannerBolusDelivery(doseMg, cfg) {
   const durationMin = volumeMl / cfg.bolusRateMlH * 60;
   const duration = Math.max(0.05, durationMin);
   return { duration, rate: doseMg / duration };
+}
+
+/**
+ * Append terminal rate events to account for V3 equilibration beyond
+ * the maintenance loop's planning window.
+ *
+ * Two-stage approach:
+ * 1. Long-lookahead rate (at simTime): binary search for the rate where
+ *    Ce at +300 min from the current engine state = ceTarget. This accounts
+ *    for V3's actual equilibration level at loop exit.
+ * 2. Analytical SS rate (at simTime + 300): the true asymptotic rate
+ *    (Ce → ceTarget as t → ∞). Takes over once V3 is nearly equilibrated.
+ *
+ * @param {Object} engine - PK engine (at the state where the loop exited)
+ * @param {number} ceTarget - Target Ce
+ * @param {number} simTime - Current simulation time
+ * @param {Array} scheme - Scheme array to append to (mutated in place)
+ * @param {Object} cfg - Planner config (for maxRate, rateSearchIter)
+ */
+function appendTerminalRates(engine, ceTarget, simTime, scheme, cfg) {
+  if (ceTarget <= 0 || scheme.length === 0) return;
+  const lastRate = scheme[scheme.length - 1];
+  if (lastRate.type !== 'rate') return;
+
+  const LONG_LA = 300; // 5 hours lookahead
+  const finalState = engine.getState();
+
+  // Stage 1: long-lookahead rate from current state
+  let lo = 0, hi = cfg.maxRate;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    engine.setState(finalState);
+    engine.advance(LONG_LA, mid);
+    if (engine.getConcentrations().Ce < ceTarget) lo = mid; else hi = mid;
+  }
+  engine.setState(finalState);
+  const longTermRate = (lo + hi) / 2;
+
+  if (Math.abs(longTermRate - lastRate.value) / lastRate.value > 0.005) {
+    scheme.push({ type: 'rate', time: simTime, value: longTermRate });
+  }
+
+  // Stage 2: analytical SS rate at simTime + LONG_LA
+  const ssRate = computeSteadyStateRate(engine, ceTarget);
+  const currentLast = scheme[scheme.length - 1];
+  if (ssRate != null && Math.abs(ssRate - currentLast.value) / currentLast.value > 0.005) {
+    scheme.push({ type: 'rate', time: simTime + LONG_LA, value: ssRate });
+  }
 }
 
 /**
@@ -162,10 +211,8 @@ export function planTCIScheme(engine, startState, startTime, ceTarget, config = 
     if (simTime >= startTime + cfg.maxPlanTime) break;
   }
 
-  // If we ran out of steps, emit the last calculated rate as maintenance
-  if (scheme.length > 0 && scheme[scheme.length - 1].type === 'rate') {
-    // Already have a final rate — good
-  }
+  // Append terminal rates for long-term V3 equilibration
+  appendTerminalRates(engine, ceTarget, simTime, scheme, cfg);
 
   engine.setState(saved);
   return scheme;
@@ -468,6 +515,9 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
       break;
     }
   }
+
+  // Append terminal rates for long-term V3 equilibration
+  appendTerminalRates(engine, ceTarget, simTime, scheme, cfg);
 
   engine.setState(saved);
   return scheme;
@@ -991,6 +1041,18 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
     const lastVal = scheme[scheme.length - 1]?.value || 0;
     if (Math.abs(rounded * 60 - lastVal) > 0.01) {
       scheme.push({ type: 'rate', time: stepTimeMin, value: rounded * 60 });
+    }
+  }
+
+  // Append analytical SS rate at the end of the first-pass horizon.
+  // The first-pass covers 720 min (~95% V3 equilibration). The SS rate
+  // at that point ensures Ce converges for t → ∞.
+  const ssRate = computeSteadyStateRate(engine, ceTarget);
+  if (ssRate != null && scheme.length > 0) {
+    const lastRate = scheme[scheme.length - 1];
+    if (lastRate.type === 'rate' && Math.abs(ssRate - lastRate.value) / lastRate.value > 0.005) {
+      const horizonEnd = maintTime + cptIntervalCount * cptInterval / 60;
+      scheme.push({ type: 'rate', time: horizonEnd, value: ssRate });
     }
   }
 
