@@ -806,7 +806,14 @@ function update() {
               ? `Redose in <span class="appr-time">${fmtCountdown(rem)}</span>` : '';
             if (cntEl.innerHTML !== newHtml) cntEl.innerHTML = newHtml;
           }
+        } else if (m === 'manual') {
+          // Combined state (infusion + threshold) with no redose needed —
+          // the infusion keeps Ce above threshold. Show normal step bar.
+          updateStepBar(dId, t);
+          barEl?.parentElement?.classList.remove('step-bar-below');
+          if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
         } else {
+          // Threshold-only, Ce below threshold — red "below" indicator
           barEl?.parentElement?.classList.add('step-bar-below');
           if (barEl) barEl.style.width = '0%';
           if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
