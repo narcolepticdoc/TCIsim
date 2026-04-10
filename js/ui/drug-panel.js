@@ -276,12 +276,14 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS, loc
   if (threshold > 0 && ceTarget > 0) {
     let redose = null;
     if (Ce <= ceTarget) {
-      redose = { staticText: '<span class="appr-below">Below Threshold</span>' };
+      const ceStr = `<span class="appr-val">${fmtCe(ceTarget, drugId)}</span>`;
+      redose = { staticText: `<span class="appr-below">Below Redose Threshold ${ceStr}</span>` };
     } else {
       try {
         const result = model.predictTrough(drugId, t, ceTarget);
         if (result && result.time !== null && result.time > t) {
-          redose = { prefix: 'Redose in ', arrivalMin: result.time };
+          const ceStr = `<span class="appr-val">${fmtCe(ceTarget, drugId)}</span>`;
+          redose = { prefix: `Redose Threshold ${ceStr} in `, arrivalMin: result.time };
         }
       } catch (e) {}
     }
@@ -802,11 +804,19 @@ function update() {
           barEl?.parentElement?.classList.remove('step-bar-below');
           if (barEl) barEl.style.width = _intermittentBarPct(dId, t, cache.arrivalMin) + '%';
           if (cntEl) {
+            const ceStr = fmtCe(ceTarget, dId);
             const newHtml = rem > 0
-              ? `Redose in <span class="appr-time">${fmtCountdown(rem)}</span>` : '';
+              ? `Redose Threshold <span class="appr-val">${ceStr}</span> in <span class="appr-time">${fmtCountdown(rem)}</span>` : '';
             if (cntEl.innerHTML !== newHtml) cntEl.innerHTML = newHtml;
           }
+        } else if (m === 'manual') {
+          // Combined state (infusion + threshold) with no redose needed —
+          // the infusion keeps Ce above threshold. Show normal step bar.
+          updateStepBar(dId, t);
+          barEl?.parentElement?.classList.remove('step-bar-below');
+          if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
         } else {
+          // Threshold-only, Ce below threshold — red "below" indicator
           barEl?.parentElement?.classList.add('step-bar-below');
           if (barEl) barEl.style.width = '0%';
           if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
