@@ -8,7 +8,7 @@ The simplest approach. Independent of SimTIVA's algorithms.
 
 **Loading:** Binary search for bolus dose where Ce at a ke0-derived lookahead = target. Produces a moderate bolus (~57mg for Ce=3.0) that doesn't overshoot Ce.
 
-**Maintenance:** Binary search at each step for the rate that holds Ce at target. `runUntilDrift` advances until Ce leaves the ±5% band, then recalculates. Produces 2-4 rate steps.
+**Maintenance:** Binary search at each step for the rate that holds Ce at target. `runUntilDrift` advances until Ce leaves the ±5% band, then recalculates. `appendTerminalRates()` adds a long-lookahead binary-search rate (accounting for actual V3 level) and the analytical SS rate for asymptotic convergence.
 
 **Characteristics:**
 - Slowest onset (~8-10 min to reach target)
@@ -24,7 +24,7 @@ Ce-targeting bolus with peak matching.
 
 **Pause:** Forward scan at 1-second resolution to detect Ce peak. Maintenance starts when Ce begins falling.
 
-**Maintenance:** Same as Stepped — binary search + drift detection. Uses ke0-derived lookahead and dual-constraint search (endpoint + peak prevention).
+**Maintenance:** Same as Stepped — binary search + drift detection + terminal rates. Uses ke0-derived lookahead and dual-constraint search (endpoint + peak prevention).
 
 **Characteristics:**
 - Fast onset (~2-3 min)
@@ -85,6 +85,16 @@ After each Ce-boost interval, `refitEigenstate()` resyncs `ps1/ps2/ps3` from the
 - 1 mL/h rounding (`roundingfactor = 360`)
 - `wait_peak` handling for initial rate oscillation after CET bolus-pause
 
+### Post-Extraction Correction Pass
+
+The step extraction's `cptAvgFactor` averaging biases rates HIGH — SimTIVA compensates by replanning every 2 min, but our one-shot planner holds each rate for 30-120+ min. A correction pass replaces all SimTIVA maintenance rates (except the zero-rate pause after bolus) with binary-search-corrected steps:
+
+1. **Adaptive spacing:** Each step targets Ce = target at a 15-min lookahead via binary search, then probes forward at 15-min increments while Ce stays within ±1.5% of target. Produces 15-min steps early (fast V3 equilibration) widening to 90-min steps late (near steady state). Typically ~19 rate events total.
+
+2. **Analytical SS tail:** Appends the steady-state rate (`computeSteadyStateRate` from `steady-state-predictor.js`) beyond the correction horizon for t → ∞ convergence.
+
+Result: Ce within ±1.5% across 900+ min, vs +4% drift at t=230 with the uncorrected SimTIVA extraction.
+
 ### Eigenstate Reconstruction
 
 When maintenance starts from a non-zero state (second target change), the current engine state is decomposed into SimTIVA eigenstates via:
@@ -100,9 +110,9 @@ Both give exact results (verified zero error at all sample points).
 
 ### Characteristics
 - Fastest onset for step-ups (<1 min to 95%)
-- Most accurate maintenance (RMSE 7.4% from-zero)
+- Most accurate maintenance: Ce within ±1.5% across 900+ min (adaptive correction pass)
 - Best target change handling (0% overshoot on step-ups)
-- 5-7 rate steps matching SimTIVA's step values and timing
+- ~19 rate events with adaptive spacing (15 min early → 90 min late)
 - Rapid target change: Ce=4.51 at t=30 for target 4.5 (vs 4.07-4.15 for other modes)
 
 ## Rate Correction Factor
@@ -141,6 +151,6 @@ Typical factors: ~0.92 at 700–750 mL/h, ~0.97–0.99 at 1200 mL/h.
 
 ## Remaining Gap vs SimTIVA
 
-The emulation planner's maintenance rates match SimTIVA from interval 2 onward. The ~2 mL/h first-rate difference traces to a 1mg bolus rounding difference (131 vs 128mg from-zero, 38 vs 33mg step-up). Both produce clinically equivalent Ce curves.
+Long-term maintenance drift is solved — the post-extraction correction pass keeps Ce within ±1.5% indefinitely. The remaining gap is in the **loading bolus**: a ~2 mL/h first-rate difference traces to a 1mg bolus rounding difference (131 vs 128mg from-zero, 38 vs 33mg step-up). Both produce clinically equivalent Ce curves.
 
 Closing this gap fully would require porting SimTIVA's `delta_seconds` handling for the step-up UDF computation and the exact `scheme_bolusadmin` rate correction for non-zero-state cases.
