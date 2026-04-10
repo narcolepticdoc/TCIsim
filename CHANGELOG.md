@@ -11,6 +11,35 @@
 
 ---
 
+## [0.5.14] — 2026-04-09
+
+Split manual-mode infusion analysis into two independent systems: analytical steady state and slope-reversal plateau detection.
+
+**Analytical Steady State:**
+
+- Compute true Ce_ss via `−A⁻¹·B·rate` (pure matrix math, no simulation needed)
+- Forward-simulate at 1-min resolution to find time to reach 95% of Ce_ss
+- Backward scan from horizon end rejects transient band crossings (e.g. Ce passing through band on the way down after rate reduction)
+- Green dashed line on chart at Ce_ss with "SS" right-margin label
+- "Steady State X.XX in M:SS" countdown in drug card text
+
+**Slope-Reversal Plateau Detection:**
+
+- Entry: sustained low-slope window (15 consecutive minutes below slope tolerance)
+- Mandatory slope reversal: pre-entry direction must differ from post-entry direction
+- Monotonic approach to steady state is NOT a plateau — returns `noPlateau: true`
+- Scan-based reversal detection catches slow V3 turnarounds up to EXIT_HORIZON minutes past sustain end
+- Plateau entry marked at START of 15-minute sustained window
+- Amber bounding box on chart + separate "Plateau" text line in drug card
+
+**Bug fix:**
+
+- Time-to-SS detection: changed from forward scan (first entry into 95% band) to backward scan (last exit from band). Fixes false positive where Ce transiently crosses the band while decaying through it, undershoots, then slowly recovers from below.
+
+**421 tests across 13 suites, all passing.**
+
+---
+
 ## [0.5.6] — 2026-04-06
 
 Responsive tablet layout, drug panel readability improvements, history panel restructure, and chart label enhancement.

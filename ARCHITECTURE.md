@@ -64,8 +64,30 @@ When a TCI scheme is planned, the planner clears future TCI events and inserts t
 - `planTCI(drugId, time, ceTarget, { tciMode })` — generates and inserts a TCI scheme
 - `getConcentrationsAt(drugId, time)` — replays events to get Cp, Ce, rate at any time
 - `getEvents(drugId)` — returns the event list
+- `predictSteadyState(drugId, time, rate, opts)` — analytical Ce_ss + time to 95%
+- `predictPlateau(drugId, time, rate, slopeTol, opts)` — slope-reversal plateau detection
 
 The facade selects the planner based on `tciMode`: `stepped`, `cet`, `cet-conservative`, or `cet-emulation`.
+
+## Steady-State Predictor (`js/pk/steady-state-predictor.js`)
+
+Two independent predictors for manual-mode constant infusion:
+
+### Analytical Steady State
+
+Computes `Ce_ss = (−A⁻¹ · B · rate)[3]` analytically via matrix inverse — pure math, no simulation. All eigenvalues of the 4-compartment system are negative, so steady state always exists for rate > 0. At true steady state, Ce_ss = Cp_ss (the effect site equilibrates with plasma).
+
+Time to 95% of Ce_ss is found by forward-simulating at 1-min resolution and scanning **backward** from the horizon to find the last minute Ce was outside the 5% band. The backward scan rejects transient crossings where Ce passes through the band on the way down (e.g. after a rate reduction) then undershoots before recovering.
+
+### Plateau Detection
+
+Detects local transient equilibria (Ce temporarily stabilizes then reverses), distinct from monotonic steady-state approach.
+
+1. **Entry:** first minute where per-minute relative slope stays below `slopeTol` for 15 consecutive minutes. Entry is the START of the sustained window.
+2. **Slope reversal:** pre-entry direction (sign of `ce[entry] − ce[lookback]`) must differ from post-entry direction (any opposite-sign movement scanned up to EXIT_HORIZON minutes past sustain end).
+3. **Exit:** first minute Ce departs a ±exitBandPct band around the entry Ce.
+
+If no reversal is found, returns `noPlateau: true`. This prevents monotonic approach to steady state from being flagged as a plateau.
 
 ## Pump Settings (`js/util/constants.js`)
 
