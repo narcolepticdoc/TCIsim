@@ -151,9 +151,12 @@ export function show(type) {
     prefilled = true;
   }
 
-  // Pre-fill if changing existing Exit Ce
+  // Pre-fill if changing existing Exit Ce (convert canonical → display unit)
   if (type === 'exitCe' && getExitCe() > 0) {
-    buffer = getExitCe().toString();
+    const patient = getPatient();
+    const ctx = { weightKg: patient?.weight || 70 };
+    const displayVal = fromCanonical(getExitCe(), currentUnit, currentDrug, 'ceTarget', ctx);
+    buffer = formatValue(displayVal, currentUnit);
     prefilled = true;
   }
 

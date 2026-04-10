@@ -380,7 +380,13 @@ function restoreCase() {
     }
     if (saved.exitCeTargets) {
       for (const [drugId, ce] of Object.entries(saved.exitCeTargets)) {
-        if (ce > 0) mode.setExitCe(drugId, ce);
+        if (ce > 0) {
+          // Rebuild display label from canonical value using the drug's default Ce unit
+          const unit = getDefaultUnit(drugId, 'ceTarget') || 'mcg/mL';
+          const displayVal = fromCanonical(ce, unit, drugId, 'ceTarget', {});
+          const label = `${formatValue(displayVal, unit)} ${unit}`;
+          mode.setExitCe(drugId, ce, label);
+        }
       }
     }
 
@@ -554,7 +560,9 @@ function boot() {
           mode.clearExitCe(selectedDrug);
           addAnnotation('Exit Ce cleared');
         } else {
-          mode.setExitCe(selectedDrug, canonicalValue);
+          // displayText is e.g. "0.2 ng/mL (0.0002 mcg/mL)" — extract short label
+          const shortLabel = displayText.split(' (')[0];
+          mode.setExitCe(selectedDrug, canonicalValue, shortLabel);
           addAnnotation(`Exit Ce set to ${displayText}`);
         }
         refreshChart();   // updates the exit line with correct yScale
