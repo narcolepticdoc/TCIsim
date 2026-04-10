@@ -208,6 +208,10 @@ function refreshChart() {
   const threshold = mode.getIntermittentThreshold(selectedDrug);
   chart.setThresholdLine(m === 'intermittent' && threshold > 0 ? threshold * yScale : null);
 
+  // Exit Ce line (red dashed, mode-independent)
+  const exitCeVal = mode.getExitCe(selectedDrug);
+  chart.setExitLine(exitCeVal > 0 ? exitCeVal * yScale : null);
+
   // Update history panel
   history.render(selectedDrug);
 
@@ -238,10 +242,12 @@ function saveState() {
   const modes = {};
   const ceTargets = {};
   const intermittentThresholds = {};
+  const exitCeTargets = {};
   for (const drugId of ['propofol', 'fentanyl', 'ketamine']) {
     modes[drugId] = mode.get(drugId);
     ceTargets[drugId] = mode.getCeTarget(drugId);
     intermittentThresholds[drugId] = mode.getIntermittentThreshold(drugId);
+    exitCeTargets[drugId] = mode.getExitCe(drugId);
   }
 
   persist.saveCase({
@@ -251,6 +257,7 @@ function saveState() {
     modes,
     ceTargets,
     intermittentThresholds,
+    exitCeTargets,
     annotations,
     primaryDrug: selectedDrug,
   });
@@ -369,6 +376,11 @@ function restoreCase() {
     if (saved.intermittentThresholds) {
       for (const [drugId, thr] of Object.entries(saved.intermittentThresholds)) {
         if (thr > 0) mode.setIntermittentThreshold(drugId, thr);
+      }
+    }
+    if (saved.exitCeTargets) {
+      for (const [drugId, ce] of Object.entries(saved.exitCeTargets)) {
+        if (ce > 0) mode.setExitCe(drugId, ce);
       }
     }
 
@@ -497,6 +509,7 @@ function boot() {
     getMode: () => mode.get(selectedDrug),
     getCeTarget: () => mode.getCeTarget(selectedDrug),
     isTciDrug: () => !NO_TCI_DRUGS.has(selectedDrug),
+    getExitCe: () => mode.getExitCe(selectedDrug),
     onConfirm(type, canonicalValue, displayText, deliveryMode) {
       let t;
       if (controls.isCaseStarted()) {
@@ -536,6 +549,16 @@ function boot() {
         mode.set(selectedDrug, 'intermittent', `Intermittent mode, redose threshold ${displayText}`);
         refreshChart();
         return; // refreshChart already called
+      } else if (type === 'exitCe') {
+        if (canonicalValue <= 0) {
+          mode.clearExitCe(selectedDrug);
+          addAnnotation('Exit Ce cleared');
+        } else {
+          mode.setExitCe(selectedDrug, canonicalValue);
+          addAnnotation(`Exit Ce set to ${displayText}`);
+        }
+        refreshChart();   // updates the exit line with correct yScale
+        return;
       } else if (type === 'bolus') {
         // Bolus — if in TCI, clear forward plan first, then bolus
         if (mode.get(selectedDrug) === 'tci') {
@@ -601,6 +624,7 @@ function boot() {
     getModeForDrug: (drugId) => mode.get(drugId),
     getIntermittentThresholdForDrug: (drugId) => mode.getIntermittentThreshold(drugId),
     getCeTargetForDrug: (drugId) => mode.getCeTarget(drugId),
+    getExitCeForDrug: (drugId) => mode.getExitCe(drugId),
     getTciFraction: () => settings.getSettings().tciFraction,
     getSsSlopeTol:  () => settings.getSettings().ssSlopeTol,
     getSsExitBand:  () => settings.getSettings().exitBandPct,

@@ -53,6 +53,7 @@ export function createChart(canvas, config = {}) {
   let effectBands = [];     // [{ ceMin, ceMax, color, label }]
   let plateauRegion = null; // { startMin, endMin, ceMin, ceMax } — chart units
   let steadyStateCe = null; // horizontal line at analytical Ce_ss — chart units
+  let exitCe = null;        // horizontal line at exit/emergence Ce threshold
   let viewMin = 0;
   let viewMax = 30;         // default 30-minute view
   let autoScroll = true;
@@ -155,6 +156,18 @@ export function createChart(canvas, config = {}) {
         borderColor: 'rgba(34, 197, 94, 0.6)',   // green — distinct from amber threshold
         borderWidth: 1.5,
         borderDash: [8, 4],
+      };
+    }
+
+    // Exit Ce threshold line
+    if (exitCe !== null && exitCe > 0) {
+      annotations.exitCe = {
+        type: 'line',
+        yMin: exitCe,
+        yMax: exitCe,
+        borderColor: '#ef4444',        // red
+        borderWidth: 1.5,
+        borderDash: [5, 4],
       };
     }
 
@@ -380,6 +393,8 @@ export function createChart(canvas, config = {}) {
             drawPillLabel(ctx, thresholdCe, thresholdCe.toFixed(2), '#f59e0b');
           if (steadyStateCe !== null && steadyStateCe > 0)
             drawPillLabel(ctx, steadyStateCe, steadyStateCe.toFixed(2), 'rgba(34, 197, 94, 0.9)');
+          if (exitCe !== null && exitCe > 0)
+            drawPillLabel(ctx, exitCe, exitCe.toFixed(1), '#ef4444');
         },
       },
     ],
@@ -505,6 +520,16 @@ export function createChart(canvas, config = {}) {
    */
   function setTargetLine(ce) {
     targetCe = ce;
+    chart.options.plugins.annotation.annotations = buildAnnotations();
+    chart.update('none');
+  }
+
+  /**
+   * Set the horizontal exit Ce line.
+   * @param {number|null} ce - exit Ce threshold, or 0/null to hide
+   */
+  function setExitLine(ce) {
+    exitCe = (ce && ce > 0) ? ce : null;
     chart.options.plugins.annotation.annotations = buildAnnotations();
     chart.update('none');
   }
@@ -726,6 +751,7 @@ export function createChart(canvas, config = {}) {
     setThresholdLine,
     setPlateauRegion,
     setSteadyStateLine,
+    setExitLine,
     setViewRange,
     resetView,
     recenter,

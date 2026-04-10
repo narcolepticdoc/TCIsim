@@ -16,7 +16,7 @@ import { DRUG_DEFS } from '../util/constants.js';
 const $ = id => document.getElementById(id);
 
 let buffer = '';
-let currentType = 'ceTarget';  // 'ceTarget' | 'rate' | 'bolus' | 'intermittent'
+let currentType = 'ceTarget';  // 'ceTarget' | 'rate' | 'bolus' | 'intermittent' | 'exitCe'
 let currentDrug = 'propofol';
 let currentUnit = 'mcg/mL';
 let onConfirm = null;          // (type, canonicalValue, displayText, deliveryMode) => void
@@ -25,6 +25,7 @@ let getPatient = null;         // () => { weight, ... }
 let getMode = null;            // () => mode string
 let getCeTarget = null;        // () => current Ce target
 let isTciDrug = null;          // () => bool — does the selected drug support TCI?
+let getExitCe = null;          // () => current Exit Ce for selected drug
 let prefilled = false;         // true when buffer is pre-populated, clears on first keypress
 
 const TITLES = {
@@ -32,6 +33,7 @@ const TITLES = {
   rate: 'Set Manual Rate',
   bolus: 'Add Bolus',
   intermittent: 'Set Redose Threshold',
+  exitCe: 'Set Exit Ce',
 };
 
 const CONFIRM_LABELS = {
@@ -39,6 +41,7 @@ const CONFIRM_LABELS = {
   rate: { label: 'Set Rate', cls: 'modal-btn-confirm-rate' },
   bolus: { label: 'Pump Bolus', cls: 'modal-btn-confirm-bolus' },
   intermittent: { label: 'Set Threshold', cls: 'modal-btn-confirm-target' },
+  exitCe: { label: 'Set Exit Ce', cls: 'modal-btn-confirm-exit' },
 };
 
 /**
@@ -56,6 +59,7 @@ export function init(opts = {}) {
   getMode = opts.getMode || (() => 'none');
   getCeTarget = opts.getCeTarget || (() => 0);
   isTciDrug = opts.isTciDrug || (() => true);
+  getExitCe = opts.getExitCe || (() => 0);
 
   // Wire keypad buttons (numeric keys)
   document.querySelectorAll('#modal-keypad .key').forEach(btn => {
@@ -83,6 +87,15 @@ export function init(opts = {}) {
 
   const btnPush = $('keypad-push-btn');
   if (btnPush) btnPush.addEventListener('click', () => confirm('push'));
+
+  const btnExit = $('btn-exit');
+  if (btnExit) btnExit.addEventListener('click', () => show('exitCe'));
+
+  const btnClear = $('keypad-clear-btn');
+  if (btnClear) btnClear.addEventListener('click', () => {
+    close();
+    if (onConfirm) onConfirm(currentType, 0, '', 'clear');
+  });
 }
 
 /**
@@ -100,8 +113,8 @@ export function show(type) {
   $('keypad-title').textContent = title;
 
   // Restore preferred unit or use default
-  // 'intermittent' uses the same Ce units as 'ceTarget' for the selected drug
-  const unitTask = (type === 'intermittent') ? 'ceTarget' : type;
+  // 'intermittent' and 'exitCe' use the same Ce units as 'ceTarget' for the selected drug
+  const unitTask = (type === 'intermittent' || type === 'exitCe') ? 'ceTarget' : type;
   const allowed = getAllowedUnits(currentDrug, unitTask);
   const prefKey = getPrefKey(currentDrug, unitTask);
   let savedUnit = null;
@@ -128,9 +141,19 @@ export function show(type) {
   const pushBtn = $('keypad-push-btn');
   if (pushBtn) pushBtn.style.display = (type === 'bolus' && !isIntermittentBolus) ? '' : 'none';
 
+  // Show "Clear" button only for exitCe when a value is already set
+  const clearBtn = $('keypad-clear-btn');
+  if (clearBtn) clearBtn.style.display = (type === 'exitCe' && getExitCe() > 0) ? '' : 'none';
+
   // Pre-fill if changing existing target
   if (type === 'ceTarget' && getMode() === 'tci' && getCeTarget() > 0) {
     buffer = getCeTarget().toString();
+    prefilled = true;
+  }
+
+  // Pre-fill if changing existing Exit Ce
+  if (type === 'exitCe' && getExitCe() > 0) {
+    buffer = getExitCe().toString();
     prefilled = true;
   }
 
@@ -170,7 +193,7 @@ function handleKey(k) {
 
 function setUnit(u) {
   currentUnit = u;
-  const unitTask = currentType === 'intermittent' ? 'ceTarget' : currentType;
+  const unitTask = (currentType === 'intermittent' || currentType === 'exitCe') ? 'ceTarget' : currentType;
   const prefKey = getPrefKey(currentDrug, unitTask);
   if (prefKey) {
     try { localStorage.setItem(prefKey, u); } catch (e) {}
@@ -230,8 +253,8 @@ function updateDisplay() {
 
   try {
     const ctx = { weightKg: patient.weight };
-    // 'intermittent' uses ceTarget units for conversion
-    const convTask = currentType === 'intermittent' ? 'ceTarget' : currentType;
+    // 'intermittent' and 'exitCe' use ceTarget units for conversion
+    const convTask = (currentType === 'intermittent' || currentType === 'exitCe') ? 'ceTarget' : currentType;
     const canonical = toCanonical(v, currentUnit, currentDrug, convTask, ctx);
 
     // Show conversion to other allowed units
@@ -263,8 +286,8 @@ function confirm(deliveryMode) {
 
   try {
     const ctx = { weightKg: patient.weight };
-    // 'intermittent' uses ceTarget units for conversion
-    const convTask = currentType === 'intermittent' ? 'ceTarget' : currentType;
+    // 'intermittent' and 'exitCe' use ceTarget units for conversion
+    const convTask = (currentType === 'intermittent' || currentType === 'exitCe') ? 'ceTarget' : currentType;
     const canonical = toCanonical(v, currentUnit, currentDrug, convTask, ctx);
 
     // Build a human-readable display string for the annotation

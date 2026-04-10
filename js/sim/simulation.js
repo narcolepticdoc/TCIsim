@@ -398,6 +398,22 @@ export function createModel(config = {}) {
   }
 
   /**
+   * Predict when Ce would decay to a threshold if the infusion were
+   * stopped right now (rate forced to 0).
+   * Used for the "Exit Ce" countdown on the drug card.
+   */
+  function predictDecayTo(drugId, time, targetCe) {
+    const engine = eventList.getEngine(drugId);
+    if (!engine) return null;
+
+    const state = eventList.getStateAtTime(drugId, time);
+    const result = predictTroughTime(engine, state, time, targetCe, 0);
+
+    eventList.replayDrug(drugId);
+    return result;
+  }
+
+  /**
    * Predict analytical steady-state Ce and time to reach 95% of it
    * under a constant infusion rate.
    *
@@ -473,7 +489,7 @@ export function createModel(config = {}) {
     // Queries
     getConcentrationsAt, computeCurve, predictBIS,
     getRateAtTime, getEvents, getPDModel, getModelName,
-    getEventList, predictTrough, predictSteadyState, predictPlateau,
+    getEventList, predictTrough, predictDecayTo, predictSteadyState, predictPlateau,
 
     // Multi-drug
     registerDrug,

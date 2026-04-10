@@ -14,6 +14,7 @@ const $ = id => document.getElementById(id);
 const modes = {};  // { drugId: 'none' | 'tci' | 'manual' | 'intermittent' }
 let ceTargets = {}; // { drugId: number } — current Ce target per drug
 let intermittentThresholds = {}; // { drugId: number } — Ce redose threshold for intermittent mode
+let exitCeTargets = {}; // { drugId: number } — Ce threshold for emergence / exit (persists across modes)
 let onModeChange = null;
 
 /** Drugs that support TCI (Ce targeting). All others use intermittent/manual only. */
@@ -79,12 +80,46 @@ export function setIntermittentThreshold(drugId, ce) {
 }
 
 /**
+ * Get the Exit Ce threshold for a drug (0 if not set).
+ */
+export function getExitCe(drugId) {
+  return exitCeTargets[drugId] || 0;
+}
+
+/**
+ * Set the Exit Ce threshold for a drug.
+ */
+export function setExitCe(drugId, ce) {
+  exitCeTargets[drugId] = ce;
+  updateExitButton(drugId);
+}
+
+/**
+ * Clear the Exit Ce threshold for a drug.
+ */
+export function clearExitCe(drugId) {
+  exitCeTargets[drugId] = 0;
+  updateExitButton(drugId);
+}
+
+/**
+ * Update the Exit Ce button label to reflect the current value.
+ */
+function updateExitButton(drugId) {
+  const be = $('btn-exit');
+  if (!be) return;
+  const val = exitCeTargets[drugId] || 0;
+  be.textContent = val > 0 ? `Exit ${val.toFixed(1)}` : 'Exit Ce';
+}
+
+/**
  * Reset all mode state.
  */
 export function reset() {
   for (const k of Object.keys(modes)) modes[k] = 'none';
   for (const k of Object.keys(ceTargets)) ceTargets[k] = 0;
   for (const k of Object.keys(intermittentThresholds)) intermittentThresholds[k] = 0;
+  for (const k of Object.keys(exitCeTargets)) exitCeTargets[k] = 0;
   updateModeUI();
 }
 
@@ -93,6 +128,7 @@ export function reset() {
  */
 export function refreshUI(drugId) {
   updateModeUI(drugId);
+  updateExitButton(drugId);
 }
 
 /**
