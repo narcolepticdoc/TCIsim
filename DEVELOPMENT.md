@@ -4,6 +4,23 @@
 
 ## Session History
 
+### Interim — Settings Rename & Pump-Change Popup (v0.5.15.1)
+
+*Between Sessions 24 and 25. Not tracked in session numbering.*
+
+**Rename `warnings.js` → `settings.js`:**
+The module outgrew its original name — it now manages notification settings, simulation tuning parameters (TCI fraction, plateau slope tolerance, exit band), and per-frame event processing. Renamed file via `git mv`, updated import alias from `warnings` to `settings` in `app.js` (8 call sites) and `drug-panel.js` (3 call sites). Updated references in `CLAUDE.md` and `ARCHITECTURE.md`. localStorage key `'tci-warn-settings'` unchanged — no migration needed.
+
+**Larger TCI pump-change popup (`index.html`):**
+The warning popup shown during active TCI plans (upcoming rate changes and boluses) was small and hard to read on mobile. Enlarged to be visually closer to the first-step countdown modal: `.warn-desc` (pump action) bumped from 14px/500 to 19px/600, `.warn-countdown` from 12px/`--text-secondary` to 24px/`--amber` with letter-spacing. Container width increased to 400px, padding and button sizing scaled proportionally.
+
+**Zero chime on pump-change countdown (`js/ui/settings.js`):**
+Added a one-shot `playAlert('info')` when the warning popup countdown reaches zero, matching the existing first-step modal behaviour. Required a new `_zeroChimeFired` Set guard (alongside `_prepSoundFired`/`_alertFired`). The chime logic runs in a separate pass over all `_activePopups` after the per-drug loop — the `nextEvt` selector uses strict future time (`e.time > t`), so the event drops out of selection at the exact moment `rem <= 0`. Event time stored on the popup element's `dataset.evtTime` for the post-loop check.
+
+421 tests across 13 suites, all passing.
+
+---
+
 ### Session 24 (2026-04-10) — Mobile Interface Optimization & Portrait Layout (v0.5.15)
 
 **Y-axis gesture reversal (`js/ui/chart.js`):**
