@@ -125,8 +125,13 @@ export function show(type) {
     ? savedUnit
     : (getDefaultUnit(currentDrug, unitTask) || allowed[0]);
 
-  // Build unit toggle buttons
-  renderUnitToggle(allowed);
+  // Build unit toggle buttons (hide for exitCe — no unit conversion needed)
+  if (type === 'exitCe') {
+    const container = $('keypad-units');
+    if (container) { container.innerHTML = ''; container.style.display = 'none'; }
+  } else {
+    renderUnitToggle(allowed);
+  }
 
   // In intermittent mode, bolus is always IV Push — show a single "Administer" button
   const isIntermittentBolus = (type === 'bolus') && (getMode() === 'intermittent');
@@ -246,9 +251,10 @@ function updateDisplay() {
     el.classList.toggle('empty', !buffer);
   }
 
-  // Conversion preview
+  // Conversion preview (skip for exitCe — no unit conversion)
   const cv = $('keypad-conversion');
   if (!cv) return;
+  if (currentType === 'exitCe') { cv.textContent = ''; return; }
 
   const v = parseFloat(buffer);
   const patient = getPatient();

@@ -381,10 +381,11 @@ function restoreCase() {
     if (saved.exitCeTargets) {
       for (const [drugId, ce] of Object.entries(saved.exitCeTargets)) {
         if (ce > 0) {
-          // Rebuild display label from canonical value using the drug's default Ce unit
+          // Rebuild short numeric label from canonical value (e.g. "1.5", "0.2")
           const unit = getDefaultUnit(drugId, 'ceTarget') || 'mcg/mL';
           const displayVal = fromCanonical(ce, unit, drugId, 'ceTarget', {});
-          const label = `${formatValue(displayVal, unit)} ${unit}`;
+          // Strip trailing zeros: 1.50 → 1.5, 0.20 → 0.2
+          const label = parseFloat(formatValue(displayVal, unit)).toString();
           mode.setExitCe(drugId, ce, label);
         }
       }
@@ -560,9 +561,9 @@ function boot() {
           mode.clearExitCe(selectedDrug);
           addAnnotation('Exit Ce cleared');
         } else {
-          // displayText is e.g. "0.2 ng/mL (0.0002 mcg/mL)" — extract short label
-          const shortLabel = displayText.split(' (')[0];
-          mode.setExitCe(selectedDrug, canonicalValue, shortLabel);
+          // Extract just the numeric part the user typed (e.g. "1.5" from "1.5 mcg/mL")
+          const numLabel = displayText.split(' ')[0];
+          mode.setExitCe(selectedDrug, canonicalValue, numLabel);
           addAnnotation(`Exit Ce set to ${displayText}`);
         }
         refreshChart();   // updates the exit line with correct yScale
