@@ -1,5 +1,5 @@
 /**
- * warnings.js — Event Warning System
+ * settings.js — Settings & Event Warning System
  *
  * Two-tier advance warnings for upcoming pump events requiring intervention:
  *
@@ -41,6 +41,7 @@ let _getPatient = null;
 // One-shot guards — sets of event IDs that have already fired
 const _prepSoundFired = new Set();
 const _alertFired     = new Set();
+const _zeroChimeFired = new Set();
 
 // Active popups — eventId → HTMLElement
 const _activePopups = new Map();
@@ -109,6 +110,7 @@ export function reset() {
   _activePopups.clear();
   _prepSoundFired.clear();
   _alertFired.clear();
+  _zeroChimeFired.clear();
   _belowThresholdActive.clear();
   document.querySelectorAll('.drug-card.warn-prep').forEach(el => el.classList.remove('warn-prep'));
   const topbar = document.querySelector('.sim-topbar');
@@ -180,6 +182,10 @@ export function check(t) {
         if (cntEl) {
           const rem = nextEvt.time - t;
           cntEl.textContent = rem > 0 ? 'in ' + _fmtCountdown(rem) : 'now';
+          if (rem <= 0 && !_zeroChimeFired.has(nextEvt.id)) {
+            _zeroChimeFired.add(nextEvt.id);
+            playAlert('info');
+          }
         }
       }
     } catch (e) {}

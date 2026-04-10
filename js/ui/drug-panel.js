@@ -12,7 +12,7 @@
  */
 
 import { fromCanonical, formatValue, getAllowedUnits, getDefaultUnit, getPrefKey } from '../util/units.js';
-import * as warnings from './warnings.js';
+import * as settings from './settings.js';
 
 const $ = id => document.getElementById(id);
 
@@ -69,7 +69,7 @@ export function setCurveData(curve) {
 const EMERGENCE_CE = 1.5;
 
 // Fallback values when no getter is wired. Match the DEFAULTS in
-// warnings.js (tciFraction: 0.95, ssSlopeTol: 0.0010).
+// settings.js (tciFraction: 0.95, ssSlopeTol: 0.0010).
 const TCI_FRACTION_DEFAULT = 0.95;
 const SS_SLOPE_DEFAULT     = 0.0010;
 const EXIT_BAND_DEFAULT    = 0.05;
@@ -666,7 +666,7 @@ function update() {
     // ── Approach line ─────────────────────────────────────────────
     if (caseStarted) {
       updateApproachLine(dId, t, m, Ce, ceTarget, rate);
-      warnings.checkBelowThreshold(dId, m === 'intermittent' && ceTarget > 0 && Ce <= ceTarget);
+      settings.checkBelowThreshold(dId, m === 'intermittent' && ceTarget > 0 && Ce <= ceTarget);
     } else {
       const el = $(dId + '-approach');
       if (el) el.innerHTML = '';
@@ -754,7 +754,7 @@ function update() {
         } else if (rate === 0 && m !== 'intermittent') {
           status = 'alert';                      // pump paused / stopped
         } else {
-          const warnMin = warnings.getSettings().statusWarnMinutes ?? 2;
+          const warnMin = settings.getSettings().statusWarnMinutes ?? 2;
           let isWarn = false;
           // Next scheduled manual event (rate change, bolus, pause, TCI step)
           try {

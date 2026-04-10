@@ -22,7 +22,7 @@ import { bolusDeliveryMinutes, setPumpSettings, getPumpSettings, APP_VERSION } f
 import { fromCanonical, getAllowedUnits, getDefaultUnit, formatValue } from './util/units.js';
 import { playAlert } from './ui/alert-sound.js';
 import * as persist from './ui/persist.js';
-import * as warnings from './ui/warnings.js';
+import * as settings from './ui/settings.js';
 
 const $ = id => document.getElementById(id);
 
@@ -289,7 +289,7 @@ function handleNewCase() {
   if (model) model.reset();
   confirmedPatient = null;
   annotations = [];
-  warnings.reset();
+  settings.reset();
 
   // Destroy chart
   if (chart) { chart.destroy(); chart = null; }
@@ -601,9 +601,9 @@ function boot() {
     getModeForDrug: (drugId) => mode.get(drugId),
     getIntermittentThresholdForDrug: (drugId) => mode.getIntermittentThreshold(drugId),
     getCeTargetForDrug: (drugId) => mode.getCeTarget(drugId),
-    getTciFraction: () => warnings.getSettings().tciFraction,
-    getSsSlopeTol:  () => warnings.getSettings().ssSlopeTol,
-    getSsExitBand:  () => warnings.getSettings().exitBandPct,
+    getTciFraction: () => settings.getSettings().tciFraction,
+    getSsSlopeTol:  () => settings.getSettings().ssSlopeTol,
+    getSsExitBand:  () => settings.getSettings().exitBandPct,
     onFrame(t) {
       // Update chart cursor — throttled to every 500ms
       if (chart && t > 0) {
@@ -668,7 +668,7 @@ function boot() {
         }
       }
       // Check for upcoming events requiring advance warning
-      if (t > 0) warnings.check(t);
+      if (t > 0) settings.check(t);
     },
   });
 
@@ -690,7 +690,7 @@ function boot() {
   });
 
   // Initialize warnings
-  warnings.init({
+  settings.init({
     model,
     getDrugIds: () => ['propofol', 'fentanyl', 'ketamine'],
     getPatient:  () => model ? model.getPatient() : null,
@@ -711,7 +711,7 @@ function boot() {
       return pct.toFixed(2);
     };
 
-    const savedSettings     = warnings.getSettings();
+    const savedSettings     = settings.getSettings();
     const prepSlider        = $('set-prep');
     const alertSlider       = $('set-alert');
     const prepVal           = $('set-prep-val');
@@ -765,7 +765,7 @@ function boot() {
       if (tciFractionVal)  tciFractionVal.textContent  = tciFractionPct    + '%';
       if (ssSlopeVal)      ssSlopeVal.textContent      = ssSlopeLabel(ssSlopeTol);
       if (exitBandVal)     exitBandVal.textContent     = '±' + exitBandInt + '%';
-      warnings.setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct });
+      settings.setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct });
     }
 
     prepSlider.addEventListener('input',    saveAll);
