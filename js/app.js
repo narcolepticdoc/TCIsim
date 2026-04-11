@@ -315,16 +315,29 @@ function restoreCase() {
   if (!saved || !saved.patient) return;
 
   try {
-    // Apply saved pump settings before resetting model
+    // Apply saved pump settings before resetting model. Max Pump Rate is a
+    // shared global (one physical pump) read from `tci-pump-max-rate`, with a
+    // legacy fallback to the old per-propofol `tci-pump-rate` key. Each drug
+    // has its own concentration.
     try {
       const savedConc = localStorage.getItem('tci-pump-concentration');
-      const savedRate = localStorage.getItem('tci-pump-rate');
-      if (savedConc || savedRate) {
-        setPumpSettings('propofol', {
-          concentration: parseFloat(savedConc) || 10,
-          bolusRateMlH: parseFloat(savedRate) || 750,
-        });
-      }
+      const savedRate = localStorage.getItem('tci-pump-max-rate')
+                     ?? localStorage.getItem('tci-pump-rate');
+      const bolusRateMlH = parseFloat(savedRate) || 750;
+      setPumpSettings('propofol', {
+        concentration: parseFloat(savedConc) || 10,
+        bolusRateMlH,
+      });
+      const savedFentConc = localStorage.getItem('tci-pump-concentration-fentanyl');
+      setPumpSettings('fentanyl', {
+        concentration: parseFloat(savedFentConc) || 0.05,
+        bolusRateMlH,
+      });
+      const savedKetConc = localStorage.getItem('tci-pump-concentration-ketamine');
+      setPumpSettings('ketamine', {
+        concentration: parseFloat(savedKetConc) || 10,
+        bolusRateMlH,
+      });
     } catch (e) {}
 
     // Reset model and set patient

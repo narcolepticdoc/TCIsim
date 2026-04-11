@@ -97,13 +97,15 @@ export function init(opts = {}) {
     if (tab) tab.addEventListener('click', () => switchDrugTab(d));
   });
 
+  // Wire global Max Pump Rate — single control that drives all three drugs
+  const maxRateEl = $('input-max-pump-rate');
+  if (maxRateEl) maxRateEl.addEventListener('change', updateAllPumpDerived);
+
   // Wire pump settings (propofol)
   const concEl = $('input-concentration');
-  const rateEl = $('input-pump-rate');
   const tciModeEl = $('input-tci-mode');
   const opioidEl = $('input-opioid');
   if (concEl) concEl.addEventListener('change', updatePumpDerived);
-  if (rateEl) rateEl.addEventListener('change', updatePumpDerived);
   if (opioidEl) opioidEl.addEventListener('change', () => {
     updateDerived();
     updateCe50CorrectionVisibility();
@@ -111,15 +113,11 @@ export function init(opts = {}) {
 
   // Wire pump settings (fentanyl)
   const fentConcEl = $('input-fentanyl-concentration');
-  const fentRateEl = $('input-fentanyl-pump-rate');
   if (fentConcEl) fentConcEl.addEventListener('change', updatePumpDerivedFentanyl);
-  if (fentRateEl) fentRateEl.addEventListener('change', updatePumpDerivedFentanyl);
 
   // Wire pump settings (ketamine)
   const ketConcEl = $('input-ketamine-concentration');
-  const ketRateEl = $('input-ketamine-pump-rate');
   if (ketConcEl) ketConcEl.addEventListener('change', updatePumpDerivedKetamine);
-  if (ketRateEl) ketRateEl.addEventListener('change', updatePumpDerivedKetamine);
 
   // Wire Ce50 opioid correction checkbox
   const ce50CorrEl = $('input-ce50-correction');
@@ -137,7 +135,7 @@ export function init(opts = {}) {
 
   // Restore saved pump settings
   restorePumpSettingsUI();
-  updatePumpDerived();
+  updateAllPumpDerived();
 }
 
 // ---- Model info block ----
@@ -469,46 +467,40 @@ function confirmPatient() {
 
 function applyPumpSettings() {
   const concEl = $('input-concentration');
-  const rateEl = $('input-pump-rate');
+  const maxRateEl = $('input-max-pump-rate');
   const tciModeEl = $('input-tci-mode');
   const opioidEl = $('input-opioid');
-  if (!concEl || !rateEl) return;
+  if (!concEl || !maxRateEl) return;
 
   const concentration = parseFloat(concEl.value) || 10;
-  const bolusRateMlH = parseFloat(rateEl.value) || 750;
+  const bolusRateMlH = parseFloat(maxRateEl.value) || 750;
 
   setPumpSettings('propofol', { concentration, bolusRateMlH });
 
-  // Fentanyl settings
+  // Fentanyl settings — same global rate, per-drug concentration
   const fentConcEl = $('input-fentanyl-concentration');
-  const fentRateEl = $('input-fentanyl-pump-rate');
-  if (fentConcEl && fentRateEl) {
+  if (fentConcEl) {
     const fConc = parseFloat(fentConcEl.value) || 0.05;
-    const fRate = parseFloat(fentRateEl.value) || 750;
-    setPumpSettings('fentanyl', { concentration: fConc, bolusRateMlH: fRate });
+    setPumpSettings('fentanyl', { concentration: fConc, bolusRateMlH });
     try {
       localStorage.setItem('tci-pump-concentration-fentanyl', String(fConc));
-      localStorage.setItem('tci-pump-rate-fentanyl', String(fRate));
     } catch (e) {}
   }
 
-  // Ketamine settings
+  // Ketamine settings — same global rate, per-drug concentration
   const ketConcEl = $('input-ketamine-concentration');
-  const ketRateEl = $('input-ketamine-pump-rate');
-  if (ketConcEl && ketRateEl) {
+  if (ketConcEl) {
     const kConc = parseFloat(ketConcEl.value) || 10;
-    const kRate = parseFloat(ketRateEl.value) || 750;
-    setPumpSettings('ketamine', { concentration: kConc, bolusRateMlH: kRate });
+    setPumpSettings('ketamine', { concentration: kConc, bolusRateMlH });
     try {
       localStorage.setItem('tci-pump-concentration-ketamine', String(kConc));
-      localStorage.setItem('tci-pump-rate-ketamine', String(kRate));
     } catch (e) {}
   }
 
-  // Save propofol-specific settings to localStorage
+  // Save propofol concentration + global pump rate + mode/opioid to localStorage
   try {
     localStorage.setItem('tci-pump-concentration', String(concentration));
-    localStorage.setItem('tci-pump-rate', String(bolusRateMlH));
+    localStorage.setItem('tci-pump-max-rate', String(bolusRateMlH));
     if (tciModeEl) localStorage.setItem('tci-mode', tciModeEl.value);
     if (opioidEl) localStorage.setItem('tci-opioid', opioidEl.value);
     const ce50CorrEl2 = $('input-ce50-correction');
@@ -545,36 +537,32 @@ function applyPumpSettings() {
 function restorePumpSettingsUI() {
   try {
     const savedConc = localStorage.getItem('tci-pump-concentration');
-    const savedRate = localStorage.getItem('tci-pump-rate');
+    // Read the new global key first, falling back to the legacy per-propofol
+    // `tci-pump-rate` key for one-shot silent migration from pre-0.5.19.1.
+    const savedRate = localStorage.getItem('tci-pump-max-rate')
+                   ?? localStorage.getItem('tci-pump-rate');
     const savedMode = localStorage.getItem('tci-mode');
     const savedOpioid = localStorage.getItem('tci-opioid');
 
     if (savedConc) { const el = $('input-concentration'); if (el) el.value = savedConc; }
-    if (savedRate) { const el = $('input-pump-rate'); if (el) el.value = savedRate; }
+    if (savedRate) { const el = $('input-max-pump-rate'); if (el) el.value = savedRate; }
     if (savedMode) { const el = $('input-tci-mode'); if (el) el.value = savedMode; }
     if (savedOpioid) { const el = $('input-opioid'); if (el) el.value = savedOpioid; }
     const savedCe50Corr = localStorage.getItem('tci-ce50-correction');
     if (savedCe50Corr) { const el = $('input-ce50-correction'); if (el) el.checked = savedCe50Corr === 'true'; }
   } catch (e) {}
 
-  // Restore fentanyl settings
+  // Restore fentanyl concentration
   try {
     const fc = localStorage.getItem('tci-pump-concentration-fentanyl');
-    const fr = localStorage.getItem('tci-pump-rate-fentanyl');
     if (fc) { const el = $('input-fentanyl-concentration'); if (el) el.value = fc; }
-    if (fr) { const el = $('input-fentanyl-pump-rate'); if (el) el.value = fr; }
   } catch (e) {}
 
-  // Restore ketamine settings
+  // Restore ketamine concentration
   try {
     const kc = localStorage.getItem('tci-pump-concentration-ketamine');
-    const kr = localStorage.getItem('tci-pump-rate-ketamine');
     if (kc) { const el = $('input-ketamine-concentration'); if (el) el.value = kc; }
-    if (kr) { const el = $('input-ketamine-pump-rate'); if (el) el.value = kr; }
   } catch (e) {}
-
-  updatePumpDerivedFentanyl();
-  updatePumpDerivedKetamine();
 }
 
 // ---- Drug setup tab switching ----
@@ -588,12 +576,20 @@ function switchDrugTab(drugId) {
 
 // ---- Pump derived displays ----
 
+/**
+ * Read the shared global Max Pump Rate in mL/h. Falls back to 750 if the
+ * element is missing or unparseable.
+ */
+function getGlobalPumpRateMlH() {
+  return parseFloat($('input-max-pump-rate')?.value) || 750;
+}
+
 function updatePumpDerived() {
   const el = $('pump-derived');
   if (!el) return;
 
   const conc = parseFloat($('input-concentration')?.value) || 10;
-  const rateMlH = parseFloat($('input-pump-rate')?.value) || 750;
+  const rateMlH = getGlobalPumpRateMlH();
 
   const bolusRateMgMin = rateMlH * conc / 60;
 
@@ -604,7 +600,7 @@ function updatePumpDerivedFentanyl() {
   const el = $('pump-derived-fentanyl');
   if (!el) return;
   const conc = parseFloat($('input-fentanyl-concentration')?.value) || 0.05;
-  const rateMlH = parseFloat($('input-fentanyl-pump-rate')?.value) || 750;
+  const rateMlH = getGlobalPumpRateMlH();
   const bolusRateMcgMin = rateMlH * conc * 1000 / 60; // convert mg→mcg for display
   el.textContent = `Max bolus rate: ${bolusRateMcgMin.toFixed(1)} mcg/min`;
 }
@@ -613,9 +609,19 @@ function updatePumpDerivedKetamine() {
   const el = $('pump-derived-ketamine');
   if (!el) return;
   const conc = parseFloat($('input-ketamine-concentration')?.value) || 10;
-  const rateMlH = parseFloat($('input-ketamine-pump-rate')?.value) || 750;
+  const rateMlH = getGlobalPumpRateMlH();
   const bolusRateMgMin = rateMlH * conc / 60;
   el.textContent = `Max bolus rate: ${bolusRateMgMin.toFixed(1)} mg/min`;
+}
+
+/**
+ * Refresh all three drug panels' pump-derived lines. Called when the
+ * global Max Pump Rate changes — every drug's max bolus rate depends on it.
+ */
+function updateAllPumpDerived() {
+  updatePumpDerived();
+  updatePumpDerivedFentanyl();
+  updatePumpDerivedKetamine();
 }
 
 /**
