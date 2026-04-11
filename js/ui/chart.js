@@ -401,7 +401,7 @@ export function createChart(canvas, config = {}) {
           if (targetCe !== null && targetCe > 0)
             drawPillLabel(ctx, targetCe, targetCe.toFixed(1), COLORS.target);
           if (thresholdCe !== null && thresholdCe > 0)
-            drawPillLabel(ctx, thresholdCe, thresholdCe.toFixed(2), '#f59e0b');
+            drawPillLabel(ctx, thresholdCe, thresholdCe.toFixed(1), '#f59e0b');
           if (steadyStateCe !== null && steadyStateCe > 0)
             drawPillLabel(ctx, steadyStateCe, steadyStateCe.toFixed(2), 'rgba(34, 197, 94, 0.9)');
           if (exitCe !== null && exitCe > 0)

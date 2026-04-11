@@ -4,6 +4,14 @@
 
 ## Session History
 
+### Interim — Threshold chart pill precision fixed to X.x for all drugs (v0.5.17.5)
+
+*Between Sessions 25 and 26. Not tracked in session numbering.*
+
+The threshold pill label on the chart (`js/ui/chart.js`, `drawPillLabel`) used `thresholdCe.toFixed(2)`. Since `thresholdCe` is stored in chart units (already ×`_yScale`), fentanyl's 0.2 ng/mL threshold displayed as "0.20". Changed to `toFixed(1)`. Note: `targetCe` and `exitCe` pills already used `toFixed(1)`.
+
+---
+
 ### Interim — Threshold Ce label precision fixed to X.x (v0.5.17.4)
 
 *Between Sessions 25 and 26. Not tracked in session numbering.*
