@@ -4,6 +4,25 @@
 
 ## Session History
 
+### Interim — Exit Ce UI: Labels, Corner Readout, Button Grouping (v0.5.17.1)
+
+*Between Sessions 25 and 26. Not tracked in session numbering.*
+
+Polished the Exit Ce UI across three areas:
+
+**Button labels (`js/ui/mode.js`):**
+`updateExitButton()` now shows state-aware labels — `"Set Exit Ce"` when no threshold is set, `"Change Exit Ce"` when one is active. The old label embedded the numeric value (`"Exit 0.8 mcg/mL"`), which was redundant given the corner readout and chart line. New `getExitCeLabel(drugId)` export exposes the display label to downstream modules.
+
+**Drug card corner readout (`js/ui/drug-panel.js`):**
+The top-right corner of each drug card now shows `Exit Ce <value> in <mm:ss>` when a threshold is set and the simulation is running — the Ce value is rendered in cyan (`var(--cyan)`) to match the Ce color scheme, and the countdown remains amber. Only the numeric part of the label is shown (units stripped). When Ce drops at or below the threshold, the readout now says `"Exit Ce Reached"` (was `"Exit reached"`) in green. New `getExitCeLabelForDrug` callback slot added to `drug-panel.js` init, wired in `app.js`.
+
+**Button grouping (`index.html`):**
+Exit Ce moved from between Add Bolus and Start to immediately after Set Target — grouping the two concentration-targeting controls together. A thin `ctrl-divider` separates this targeting group from the manual pump controls (Manual Rate, Add Bolus). New `.ctrl-divider` CSS rule added.
+
+426 tests across 13 suites, all passing.
+
+---
+
 ### Interim — Orthogonal Infusion + Redose Threshold for Non-TCI Drugs (v0.5.17)
 
 *Between Sessions 25 and 26. Not tracked in session numbering.*
