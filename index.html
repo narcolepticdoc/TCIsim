@@ -72,6 +72,9 @@
     .pump-settings .card-title{font-size:11px;margin-bottom:6px;display:block}
     .pump-settings .input-grid{gap:6px 12px}
     .pump-derived{font-family:var(--font-mono);font-size:10px;color:var(--cyan);margin-top:4px}
+    .model-info{padding:6px 9px;margin-bottom:8px;background:var(--bg-input);border-left:3px solid var(--blue);border-radius:var(--radius-sm)}
+    .model-info-name{font-family:var(--font-mono);font-size:11px;font-weight:500;color:var(--text-primary);display:block}
+    .model-info-desc{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);display:block;margin-top:3px;line-height:1.35}
     .drug-setup-tabs{display:flex;gap:3px;margin-bottom:6px}
     .drug-setup-tab{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-mono);font-size:10px;padding:3px 10px;cursor:pointer;transition:all .15s}
     .drug-setup-tab.active{background:var(--blue-dim,rgba(59,130,246,.15));color:var(--text-primary);border-color:var(--border)}
@@ -596,6 +599,10 @@
           <button class="drug-setup-tab" id="setup-tab-ketamine">Ketamine</button>
         </div>
         <div class="drug-setup-panel active" id="setup-panel-propofol">
+          <div class="model-info">
+            <span class="model-info-name" id="model-info-name-propofol"></span>
+            <span class="model-info-desc" id="model-info-desc-propofol"></span>
+          </div>
           <div class="input-grid">
             <div class="form-row">
               <label for="input-opioid">Opioid Co-administration</label>
@@ -633,10 +640,22 @@
                 <option value="1200">1200 mL/h</option>
               </select>
             </div>
+            <div class="form-row">
+              <label for="input-propofol-bolus-unit">Default bolus unit</label>
+              <select id="input-propofol-bolus-unit"></select>
+            </div>
+            <div class="form-row">
+              <label for="input-propofol-rate-unit">Default infusion unit</label>
+              <select id="input-propofol-rate-unit"></select>
+            </div>
           </div>
           <div class="pump-derived" id="pump-derived">Max bolus rate: 125.0 mg/min</div>
         </div>
         <div class="drug-setup-panel" id="setup-panel-fentanyl">
+          <div class="model-info">
+            <span class="model-info-name" id="model-info-name-fentanyl"></span>
+            <span class="model-info-desc" id="model-info-desc-fentanyl"></span>
+          </div>
           <div class="input-grid">
             <div class="form-row">
               <label for="input-fentanyl-concentration">Concentration</label>
@@ -653,10 +672,22 @@
                 <option value="1200">1200 mL/h</option>
               </select>
             </div>
+            <div class="form-row">
+              <label for="input-fentanyl-bolus-unit">Default bolus unit</label>
+              <select id="input-fentanyl-bolus-unit"></select>
+            </div>
+            <div class="form-row">
+              <label for="input-fentanyl-rate-unit">Default infusion unit</label>
+              <select id="input-fentanyl-rate-unit"></select>
+            </div>
           </div>
           <div class="pump-derived" id="pump-derived-fentanyl">Max bolus rate: 0.6 mcg/min</div>
         </div>
         <div class="drug-setup-panel" id="setup-panel-ketamine">
+          <div class="model-info">
+            <span class="model-info-name" id="model-info-name-ketamine"></span>
+            <span class="model-info-desc" id="model-info-desc-ketamine"></span>
+          </div>
           <div class="input-grid">
             <div class="form-row">
               <label for="input-ketamine-concentration">Concentration</label>
@@ -672,6 +703,14 @@
                 <option value="1000">1000 mL/h</option>
                 <option value="1200">1200 mL/h</option>
               </select>
+            </div>
+            <div class="form-row">
+              <label for="input-ketamine-bolus-unit">Default bolus unit</label>
+              <select id="input-ketamine-bolus-unit"></select>
+            </div>
+            <div class="form-row">
+              <label for="input-ketamine-rate-unit">Default infusion unit</label>
+              <select id="input-ketamine-rate-unit"></select>
             </div>
           </div>
           <div class="pump-derived" id="pump-derived-ketamine">Max bolus rate: 125.0 mg/min</div>

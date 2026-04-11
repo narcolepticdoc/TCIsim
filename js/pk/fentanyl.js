@@ -31,6 +31,14 @@
  */
 export const MODEL_NAME = 'Shafer 1990';
 
+/**
+ * Longer-form provenance shown in the setup-screen drug panel.
+ * Describes the published model and any modifications in use.
+ */
+export const MODEL_DESCRIPTION =
+  'Shafer 1990 fentanyl PK with Shibutani 2004 pharmacokinetic-mass ' +
+  'weight adjustment (applied only when TBW \u2265 85 kg AND BMI > 30).';
+
 // Reference patient weight for parameter scaling
 const REF_WEIGHT = 70; // kg
 

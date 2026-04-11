@@ -44,6 +44,14 @@
  */
 export const MODEL_NAME = 'Eleveld 2018';
 
+/**
+ * Longer-form provenance shown in the setup-screen drug panel.
+ * Describes the published model and any modifications in use.
+ */
+export const MODEL_DESCRIPTION =
+  'Propofol PK-PD model. Eleveld DJ, Colin P, Absalom AR, Struys MMRF. ' +
+  'BJA 2018;120(5):942\u2013959. Full pediatric support (27 weeks PMA to 88 y).';
+
 // ============================================================
 // HELPER FUNCTIONS (matched to SimTIVA's fcentral, fageing, etc.)
 // ============================================================
