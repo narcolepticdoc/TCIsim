@@ -104,6 +104,13 @@ export function getExitCe(drugId) {
 }
 
 /**
+ * Get the display label for the Exit Ce threshold (e.g. "0.8 mcg/mL").
+ */
+export function getExitCeLabel(drugId) {
+  return exitCeLabels[drugId] || '';
+}
+
+/**
  * Set the Exit Ce threshold for a drug.
  * @param {string} drugId
  * @param {number} ce - canonical mcg/mL
@@ -132,7 +139,7 @@ function updateExitButton(drugId) {
   if (!be) return;
   const val = exitCeTargets[drugId] || 0;
   const label = exitCeLabels[drugId] || '';
-  be.textContent = (val > 0 && label) ? `Exit ${label}` : (val > 0 ? `Exit ${val}` : 'Exit Ce');
+  be.textContent = val > 0 ? 'Change Exit Ce' : 'Set Exit Ce';
 }
 
 /**
