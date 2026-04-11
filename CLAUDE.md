@@ -12,8 +12,8 @@ js/sim/events.js          Event list — source of truth for all pump commands
 js/sim/simulation.js      Stateless facade: setPatient, planTCI, getConcentrationsAt
 js/sim/tci-planner.js     Four TCI planners (stepped, CET, CET-conservative, emulation)
 js/sim/simtiva-reference.js  SimTIVA eigenvalue math (clean-room, no GPL code)
-js/util/constants.js      DRUG_DEFS, pump settings (getPumpSettings/setPumpSettings)
-js/util/units.js          Bidirectional unit conversion
+js/util/constants.js      DRUG_DEFS, DRUG_TASK_UNITS (incl. quantSteps), pump settings
+js/util/units.js          Bidirectional unit conversion + quantizeInDisplay
 js/pk/steady-state-predictor.js  Analytical SS + slope-reversal plateau detection
 js/ui/settings.js         Settings & event warning system (prep pulse + alert popup)
 js/ui/alert-sound.js      Persistent AudioContext; unlockAudio() + playAlert(level)

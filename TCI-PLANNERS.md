@@ -115,6 +115,21 @@ Both give exact results (verified zero error at all sample points).
 - ~19 rate events with adaptive spacing (15 min early → 90 min late)
 - Rapid target change: Ce=4.51 at t=30 for target 4.5 (vs 4.07-4.15 for other modes)
 
+## Quantize In Display Units (opt-in)
+
+When `cfg.quantizeInDisplay` is set (via the "Round TCI plan in display units" checkbox in the setup panel), every bolus and rate the planner emits is snapped to the clinician's chosen display-unit grid (e.g. nearest mL/h, nearest 10 mcg/kg, nearest 0.01 mcg/kg/min) **before** being fed back into `engine.advance`. The step sizes live in `DRUG_TASK_UNITS[drug][task].quantSteps[displayUnit]` in `js/util/constants.js`.
+
+**Critical design point:** quantization happens *inside* the planning loop, not after. If the final scheme were rounded post-hoc, each iteration of the maintenance loop would have advanced the engine with the un-rounded value, so rounding error would stack across steps. Quantizing inside the loop means every `engine.advance()` call uses the value the pump will actually deliver, and the next iteration corrects from that true state.
+
+`makeQuantizers(cfg)` in `js/sim/tci-planner.js` produces `qBolus`/`qRate` closures that resolve to identity functions when the flag is off (so all four planners' default behaviour is unchanged). When on, the closures call `quantizeInDisplay()` from `js/util/units.js` using the drug's stored `tci-pref-{task}Unit-{drug}` preference. Applied throughout:
+
+- **Stepped, CET:** `qBolus` on loading bolus, `qRate` on every maintenance-rate binary search result (initial + in-loop iterations + the 0.001 mg/min minimum-rate fallback).
+- **CET Conservative:** `qBolus` on both the analytical zero-Ce path and the existing-drug rate-corrected bolus. Rate-side quantization happens via delegation to CET, which already quantizes — but the pre-quantized `bolusOverrideMg` bypasses CET's own bolus quantization to avoid double-snapping.
+- **CET Emulation:** `qBolus` on zero-Ce and trial-dose boluses; `bolusDurSec` uses `cfg.quantizeInDisplay ? bolusMg : Math.ceil(bolusMg)`; legacy `Math.ceil(bolusMg)` is gated behind `!cfg.quantizeInDisplay`; the `rnd` closure (previously hard-coded nearest 1 mL/h at 10 mg/mL) becomes `(r) => qRate(r*60)/60`; in the post-extraction adaptive correction pass `rate` is quantized **before** the forward-probe extension loop so probe duration matches the delivered rate; the final SS rate is quantized before being appended.
+- **appendTerminalRates:** the long-lookahead binary-search rate and the analytical SS rate are both quantized before being pushed.
+
+The flag defaults off and is opt-in. All 426 pre-existing tests keep passing (closures are no-ops) plus 29 new tests covering the quantization math and stacking-error regression.
+
 ## Rate Correction Factor
 
 `computeRateCorrFactor` in `simtiva-reference.js` calculates the fraction by which bolus delivery duration is shortened to prevent Ce overshoot during pump delivery.

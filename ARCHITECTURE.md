@@ -98,6 +98,15 @@ Runtime-configurable pump parameters:
 
 Persisted to localStorage. Accessed via `getPumpSettings(drugId)` / `setPumpSettings(drugId, opts)`.
 
+## Unit Conversion (`js/util/units.js`)
+
+Bidirectional conversion between canonical engine units (mg, mg/min, mcg/mL) and display units (mL/h, mcg/kg/min, ng/mL, mcg/kg, etc.), driven by the `DRUG_TASK_UNITS` table in `constants.js`.
+
+- `toCanonical(value, unit, drug, task, ctx)` / `fromCanonical(...)` — round-trip conversion using patient weight and drug concentration from `ctx`.
+- `getAllowedUnits(drug, task)` / `getDefaultUnit(drug, task)` / `getPrefKey(drug, task)` — look up the keypad-allowed list, default display, and localStorage key for the per-drug per-task unit preference.
+- `quantizeInDisplay(canonicalValue, displayUnit, drug, task, ctx)` — snaps a canonical value to the nearest step defined in `DRUG_TASK_UNITS[drug][task].quantSteps[displayUnit]`, then returns the result in canonical units. Used by the TCI planner for the opt-in "Round TCI plan in display units" mode. No-op when no step is defined for that unit.
+- `getQuantStep(drug, task, displayUnit)` / `getQuantizeConfig(drug)` — table lookup and localStorage-backed config reader used by the setup panel and all three `planTCI()` call sites.
+
 ## SimTIVA Reference Module (`js/sim/simtiva-reference.js`)
 
 Clean-room reimplementation of SimTIVA's eigenvalue-based computations, used by the CET planners:
@@ -122,6 +131,7 @@ All planners share:
 - `plannerBolusDelivery(doseMg, cfg)` — computes duration and rate for bolus delivery, matching `events.js getBolusDelivery()`
 - Decay-wait phase for target decreases: when Ce > upperBound, rate=0 and advance until Ce decays to tolerance band before entering maintenance search
 - `refitEigenstate()` pattern for syncing SimTIVA eigenstate to engine reality after any engine advance
+- `makeQuantizers(cfg)` — when `cfg.quantizeInDisplay` is set, produces `qBolus`/`qRate` closures that snap canonical values to the clinician's chosen display-unit grid via `quantizeInDisplay()` from `js/util/units.js`. Applied **inside** the planning loop (before every `engine.advance()`) so stacking errors don't accumulate. When the flag is off, the closures are identity functions and default behaviour is unchanged.
 
 ### Emulation Planner Eigenstate Sync
 
