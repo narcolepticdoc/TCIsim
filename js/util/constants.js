@@ -125,6 +125,9 @@ export function pushDeliveryMinutes(doseMg, drugId) {
 // ---- Per-drug, per-task unit configuration ----
 // canonical = what the engine uses (mg, mg/min, mcg/mL)
 // allowed = what the keypad can display
+// quantSteps = rounding increment for the TCI planner when "round in display
+//   units" is enabled. The step is in the display unit itself. Missing entries
+//   fall back to no quantization for that unit.
 
 export const DRUG_TASK_UNITS = {
   propofol: {
@@ -133,12 +136,14 @@ export const DRUG_TASK_UNITS = {
       allowed: ['mg', 'mcg/kg', 'mL'],
       defaultDisplay: 'mg',
       prefKey: 'tci-pref-bolusUnit-propofol',
+      quantSteps: { 'mg': 1, 'mcg/kg': 10, 'mL': 0.1 },
     },
     rate: {
       canonical: 'mg/min',
       allowed: ['mL/h', 'mcg/kg/min', 'mg/min'],
       defaultDisplay: 'mL/h',
       prefKey: 'tci-pref-rateUnit-propofol',
+      quantSteps: { 'mL/h': 1, 'mcg/kg/min': 5, 'mg/min': 0.1 },
     },
     ceTarget: {
       canonical: 'mcg/mL',
@@ -151,12 +156,14 @@ export const DRUG_TASK_UNITS = {
       allowed: ['mcg', 'mcg/kg', 'mL'],
       defaultDisplay: 'mcg',
       prefKey: 'tci-pref-bolusUnit-fentanyl',
+      quantSteps: { 'mcg': 5, 'mcg/kg': 0.25, 'mL': 0.1 },
     },
     rate: {
       canonical: 'mg/min',
       allowed: ['mcg/kg/min', 'mcg/h', 'mL/h'],
       defaultDisplay: 'mcg/kg/min',
       prefKey: 'tci-pref-rateUnit-fentanyl',
+      quantSteps: { 'mcg/kg/min': 0.01, 'mcg/h': 5, 'mL/h': 1 },
     },
     ceTarget: {
       canonical: 'mcg/mL',
@@ -169,12 +176,14 @@ export const DRUG_TASK_UNITS = {
       allowed: ['mcg', 'mcg/kg'],
       defaultDisplay: 'mcg',
       prefKey: 'tci-pref-bolusUnit-remifentanil',
+      quantSteps: { 'mcg': 5, 'mcg/kg': 0.1 },
     },
     rate: {
       canonical: 'mg/min',
       allowed: ['mcg/kg/min', 'mL/h'],
       defaultDisplay: 'mcg/kg/min',
       prefKey: 'tci-pref-rateUnit-remifentanil',
+      quantSteps: { 'mcg/kg/min': 0.01, 'mL/h': 1 },
     },
     ceTarget: {
       canonical: 'mcg/mL',
@@ -187,12 +196,14 @@ export const DRUG_TASK_UNITS = {
       allowed: ['mg', 'mg/kg', 'mL'],
       defaultDisplay: 'mg',
       prefKey: 'tci-pref-bolusUnit-ketamine',
+      quantSteps: { 'mg': 5, 'mg/kg': 0.1, 'mL': 0.1 },
     },
     rate: {
       canonical: 'mg/min',
       allowed: ['mg/kg/h', 'mL/h', 'mg/min'],
       defaultDisplay: 'mg/kg/h',
       prefKey: 'tci-pref-rateUnit-ketamine',
+      quantSteps: { 'mg/kg/h': 0.1, 'mL/h': 1, 'mg/min': 0.1 },
     },
     ceTarget: {
       canonical: 'mcg/mL',

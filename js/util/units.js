@@ -100,6 +100,74 @@ export function getPrefKey(drugId, task) {
 }
 
 /**
+ * Get the quantization step size for a drug/task/display-unit.
+ * Returns null when no step is defined for that unit.
+ */
+export function getQuantStep(drugId, task, displayUnit) {
+  return DRUG_TASK_UNITS[drugId]?.[task]?.quantSteps?.[displayUnit] ?? null;
+}
+
+/**
+ * Quantize a canonical value by rounding it to the nearest step defined
+ * for the given display unit, then converting back to canonical.
+ *
+ * The TCI planner uses this inside its iteration loops so that every
+ * subsequent engine.advance() call sees the value the pump will actually
+ * deliver — preventing the stacking errors that would result from
+ * post-hoc rounding of the planner's final output.
+ *
+ * When no step is defined (or the input is non-finite), the canonical
+ * value is returned unchanged — callers can invoke this unconditionally.
+ *
+ * @param {number} canonicalValue - value in canonical units (mg, mg/min, ...)
+ * @param {string} displayUnit    - target display unit (e.g. 'mL/h')
+ * @param {string} drugId
+ * @param {string} task           - 'bolus' | 'rate'
+ * @param {Object} ctx            - { weightKg, concentration }
+ * @returns {number} canonical value snapped to the display-unit grid
+ */
+export function quantizeInDisplay(canonicalValue, displayUnit, drugId, task, ctx = {}) {
+  const step = getQuantStep(drugId, task, displayUnit);
+  if (!step || !Number.isFinite(canonicalValue)) return canonicalValue;
+  const displayVal = fromCanonical(canonicalValue, displayUnit, drugId, task, ctx);
+  const snapped = Math.round(displayVal / step) * step;
+  if (!Number.isFinite(snapped)) return canonicalValue;
+  return toCanonical(snapped, displayUnit, drugId, task, ctx).value;
+}
+
+/**
+ * Read the current quantize-in-display configuration for a drug from
+ * localStorage. Falls back to defaults when no preference is stored or
+ * the stored unit is no longer in the allowed list.
+ *
+ * @param {string} drugId
+ * @returns {Object} { quantizeInDisplay, bolusDisplayUnit?, rateDisplayUnit? }
+ */
+export function getQuantizeConfig(drugId) {
+  let enabled = false;
+  try { enabled = localStorage.getItem('tci-pref-quantizeInDisplay') === 'true'; }
+  catch (e) { /* ignore */ }
+  if (!enabled) return { quantizeInDisplay: false };
+
+  const bolusKey = getPrefKey(drugId, 'bolus');
+  const rateKey  = getPrefKey(drugId, 'rate');
+  let bolusDisplayUnit = null, rateDisplayUnit = null;
+  try {
+    if (bolusKey) bolusDisplayUnit = localStorage.getItem(bolusKey);
+    if (rateKey)  rateDisplayUnit  = localStorage.getItem(rateKey);
+  } catch (e) { /* ignore */ }
+
+  const bolusAllowed = getAllowedUnits(drugId, 'bolus');
+  const rateAllowed  = getAllowedUnits(drugId, 'rate');
+  if (!bolusDisplayUnit || !bolusAllowed.includes(bolusDisplayUnit))
+    bolusDisplayUnit = getDefaultUnit(drugId, 'bolus');
+  if (!rateDisplayUnit || !rateAllowed.includes(rateDisplayUnit))
+    rateDisplayUnit = getDefaultUnit(drugId, 'rate');
+
+  return { quantizeInDisplay: true, bolusDisplayUnit, rateDisplayUnit };
+}
+
+/**
  * Format a value with appropriate decimal places for its unit.
  * 
  * @param {number} value

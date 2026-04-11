@@ -26,7 +26,7 @@ import {
   MODEL_DESCRIPTION as KETAMINE_MODEL_DESCRIPTION,
 } from '../pk/ketamine.js';
 import { setPumpSettings, getPumpSettings } from '../util/constants.js';
-import { getAllowedUnits, getDefaultUnit, getPrefKey } from '../util/units.js';
+import { getAllowedUnits, getDefaultUnit, getPrefKey, getQuantStep } from '../util/units.js';
 
 // Drugs that have a tabbed setup panel. Remifentanil has no PK model yet.
 const SETUP_DRUGS = ['propofol', 'fentanyl', 'ketamine'];
@@ -132,6 +132,9 @@ export function init(opts = {}) {
   populateModelInfo();
   populateUnitSelectors();
 
+  // Wire the "round in display units" checkbox + per-drug rounding-note line
+  populateRoundingControls();
+
   // Restore saved pump settings
   restorePumpSettingsUI();
   updatePumpDerived();
@@ -187,6 +190,93 @@ function populateUnitSelectors() {
       if (current && allowed.includes(current)) sel.value = current;
     }
   }
+}
+
+// ---- Round TCI plan in display units (opt-in) ----
+
+/**
+ * Wire the "round in display units" checkbox and the per-drug rounding-note
+ * lines. The checkbox state is persisted under `tci-pref-quantizeInDisplay`,
+ * which simulation.js reads via getQuantizeConfig() on every plan call.
+ *
+ * The rounding-note under each drug's unit selectors updates live whenever
+ * the user changes a unit selector or toggles the checkbox, so the clinician
+ * can see exactly what grid the planner is going to use.
+ */
+function populateRoundingControls() {
+  const cb = $('input-round-in-display');
+
+  // Restore saved checkbox state
+  if (cb) {
+    try {
+      const saved = localStorage.getItem('tci-pref-quantizeInDisplay');
+      cb.checked = saved === 'true';
+    } catch (e) {}
+
+    cb.addEventListener('change', () => {
+      try {
+        localStorage.setItem('tci-pref-quantizeInDisplay',
+          cb.checked ? 'true' : 'false');
+      } catch (e) {}
+      updateAllRoundingNotes();
+    });
+  }
+
+  // Listen on every unit selector so the note reflects the current selection
+  for (const drugId of SETUP_DRUGS) {
+    for (const task of ['bolus', 'rate']) {
+      const sel = $(`input-${drugId}-${task}-unit`);
+      if (sel) sel.addEventListener('change', () => updateRoundingNote(drugId));
+    }
+  }
+
+  updateAllRoundingNotes();
+}
+
+function updateAllRoundingNotes() {
+  for (const drugId of SETUP_DRUGS) updateRoundingNote(drugId);
+}
+
+/**
+ * Write the rounding-note line for a single drug. Shows the current grid
+ * (e.g., "bolus → nearest 10 mcg/kg, rate → nearest 1 mL/h") when the
+ * checkbox is on, or an off-state hint explaining how to enable it.
+ */
+function updateRoundingNote(drugId) {
+  const note = $(`rounding-note-${drugId}`);
+  if (!note) return;
+
+  const cb = $('input-round-in-display');
+  const enabled = !!(cb && cb.checked);
+  note.classList.toggle('active', enabled);
+
+  if (!enabled) {
+    note.textContent =
+      'Planner rounds in engine-canonical units (mg / mg/min). ' +
+      'Enable "Round TCI plan in display units" to align with your selected units.';
+    return;
+  }
+
+  const bolusSel = $(`input-${drugId}-bolus-unit`);
+  const rateSel  = $(`input-${drugId}-rate-unit`);
+  const bolusUnit = bolusSel?.value || getDefaultUnit(drugId, 'bolus');
+  const rateUnit  = rateSel?.value  || getDefaultUnit(drugId, 'rate');
+  const bolusStep = getQuantStep(drugId, 'bolus', bolusUnit);
+  const rateStep  = getQuantStep(drugId, 'rate',  rateUnit);
+
+  const bolusPart = bolusStep != null
+    ? `bolus → nearest ${formatStep(bolusStep)} ${bolusUnit}`
+    : `bolus → ${bolusUnit} (no rounding)`;
+  const ratePart = rateStep != null
+    ? `rate → nearest ${formatStep(rateStep)} ${rateUnit}`
+    : `rate → ${rateUnit} (no rounding)`;
+
+  note.textContent = `Plan rounds to: ${bolusPart}, ${ratePart}`;
+}
+
+/** Strip trailing zeros from a step size (0.10 → 0.1, 1 → 1, 0.25 → 0.25). */
+function formatStep(step) {
+  return Number.isInteger(step) ? String(step) : String(parseFloat(step.toFixed(4)));
 }
 
 // ---- Ce50 opioid correction visibility ----
@@ -438,6 +528,17 @@ function applyPumpSettings() {
       if (!key) continue;
       try { localStorage.setItem(key, el.value); } catch (e) {}
     }
+  }
+
+  // Persist "round TCI plan in display units" opt-in (redundant with the
+  // change listener in populateRoundingControls, but mirrors the existing
+  // on-confirm pattern for the other unit preferences).
+  const roundEl = $('input-round-in-display');
+  if (roundEl) {
+    try {
+      localStorage.setItem('tci-pref-quantizeInDisplay',
+        roundEl.checked ? 'true' : 'false');
+    } catch (e) {}
   }
 }
 
