@@ -4,6 +4,14 @@
 
 ## Session History
 
+### Interim — Exit Ce corner value fixed to X.x precision (v0.5.17.2)
+
+*Between Sessions 25 and 26. Not tracked in session numbering.*
+
+The drug card corner readout used the raw keypad buffer token for the Ce value, so an integer entry (e.g. "2") would display as "2" rather than "2.0". Fixed by parsing the numeric part of the label and formatting with `toFixed(1)` in `updateExitReadout()` (`js/ui/drug-panel.js`).
+
+---
+
 ### Interim — Exit Ce UI: Labels, Corner Readout, Button Grouping (v0.5.17.1)
 
 *Between Sessions 25 and 26. Not tracked in session numbering.*

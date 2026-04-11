@@ -693,7 +693,7 @@ function updateExitReadout(drugId, t, Ce, caseStarted) {
   if (result && result.time !== null && result.time > t) {
     const rem = result.time - t;
     const lbl = getExitCeLabelForDrug ? getExitCeLabelForDrug(drugId) : '';
-    const numPart = lbl ? lbl.split(' ')[0] : '';
+    const numPart = lbl ? parseFloat(lbl.split(' ')[0]).toFixed(1) : '';
     const ceSpan = numPart ? ` <span style="color:var(--cyan)">${numPart}</span>` : '';
     html = `Exit Ce${ceSpan} in <span class="appr-time">${fmtCountdown(rem)}</span>`;
   }
