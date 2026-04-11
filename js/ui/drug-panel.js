@@ -197,13 +197,14 @@ function isInBolusPhase(drugId, t) {
 /**
  * Format Ce (or Cp) for display in the drug card.
  * Fentanyl Ce is tiny in mcg/mL — display in ng/mL instead (×1000).
+ * dp controls decimal places for mcg/mL drugs (default 2 for live readout, 1 for labels).
  */
-function fmtCe(ceMcgMl, drugId) {
+function fmtCe(ceMcgMl, drugId, dp = 2) {
   const allowed = getAllowedUnits(drugId, 'ceTarget');
   if (allowed && allowed[0] === 'ng/mL') {
     return (ceMcgMl * 1000).toFixed(1);
   }
-  return ceMcgMl.toFixed(2);
+  return ceMcgMl.toFixed(dp);
 }
 
 /** Format rate for inline display next to status label. Returns '' if no rate. */
@@ -278,13 +279,13 @@ function computeApproachData(drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS, loc
   if (threshold > 0 && ceTarget > 0) {
     let redose = null;
     if (Ce <= ceTarget) {
-      const ceStr = `<span class="appr-val">${fmtCe(ceTarget, drugId)}</span>`;
+      const ceStr = `<span class="appr-val">${fmtCe(ceTarget, drugId, 1)}</span>`;
       redose = { staticText: `<span class="appr-below">Below Redose Threshold ${ceStr}</span>` };
     } else {
       try {
         const result = model.predictTrough(drugId, t, ceTarget);
         if (result && result.time !== null && result.time > t) {
-          const ceStr = `<span class="appr-val">${fmtCe(ceTarget, drugId)}</span>`;
+          const ceStr = `<span class="appr-val">${fmtCe(ceTarget, drugId, 1)}</span>`;
           redose = { prefix: `Redose Threshold ${ceStr} in `, arrivalMin: result.time };
         }
       } catch (e) {}
@@ -809,7 +810,7 @@ function update() {
           barEl?.parentElement?.classList.remove('step-bar-below');
           if (barEl) barEl.style.width = _intermittentBarPct(dId, t, cache.arrivalMin) + '%';
           if (cntEl) {
-            const ceStr = fmtCe(ceTarget, dId);
+            const ceStr = fmtCe(ceTarget, dId, 1);
             const newHtml = rem > 0
               ? `Redose Threshold <span class="appr-val">${ceStr}</span> in <span class="appr-time">${fmtCountdown(rem)}</span>` : '';
             if (cntEl.innerHTML !== newHtml) cntEl.innerHTML = newHtml;

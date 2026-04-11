@@ -4,6 +4,14 @@
 
 ## Session History
 
+### Interim — Threshold Ce label precision fixed to X.x (v0.5.17.4)
+
+*Between Sessions 25 and 26. Not tracked in session numbering.*
+
+The redose threshold Ce value shown in approach-line and step-bar labels ("Redose Threshold 2.00 in 3:21") used `toFixed(2)` for mcg/mL drugs, giving unnecessary X.xx precision inconsistent with the X.x format used for the Exit Ce corner readout. `fmtCe()` in `js/ui/drug-panel.js` was given an optional `dp` parameter (default 2, preserving live Ce/Cp readout precision). The three threshold label call sites (approach-line "Below Redose Threshold", approach-line "Redose Threshold X in", and step-bar countdown) now pass `dp=1`.
+
+---
+
 ### Interim — Rate button shows "Change Rate" when infusion is running (v0.5.17.3)
 
 *Between Sessions 25 and 26. Not tracked in session numbering.*
