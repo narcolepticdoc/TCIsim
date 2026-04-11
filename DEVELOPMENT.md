@@ -4,6 +4,19 @@
 
 ## Session History
 
+### Interim — Rate button shows "Change Rate" when infusion is running (v0.5.17.3)
+
+*Between Sessions 25 and 26. Not tracked in session numbering.*
+
+The rate button (`btn-rate`) previously showed a static label ("Manual Rate" from HTML for TCI drugs, "Set Rate" for non-TCI drugs) regardless of whether an infusion was active. For consistency with the pattern established by "Set/Change Threshold" and "Set/Change Exit Ce", `updateModeUI()` in `js/ui/mode.js` now sets `br.textContent` explicitly in every branch:
+
+- Mode `'manual'` (infusion running) → **"Change Rate"**
+- All other states → **"Set Rate"**
+
+This applies to both TCI and non-TCI drugs. The initial HTML button text was also updated from "Manual Rate" to "Set Rate" to match the default no-mode state.
+
+---
+
 ### Interim — Exit Ce corner value fixed to X.x precision (v0.5.17.2)
 
 *Between Sessions 25 and 26. Not tracked in session numbering.*

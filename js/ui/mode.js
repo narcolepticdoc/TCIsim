@@ -191,23 +191,26 @@ function updateModeUI(drugId) {
       ml.textContent = 'TARGET';
       ml.className = 'mode-label target-mode';
       bt.textContent = 'Change Target';
+      br.textContent = 'Set Rate';
       bt.classList.add('active-mode');
     } else if (m === 'manual') {
       ml.textContent = 'MANUAL';
       ml.className = 'mode-label manual-mode';
       bt.textContent = 'Set Target';
+      br.textContent = 'Change Rate';
       br.classList.add('active-mode');
       bb.classList.add('active-mode');
     } else {
       ml.textContent = 'NO MODE';
       ml.className = 'mode-label no-mode';
       bt.textContent = 'Set Target';
+      br.textContent = 'Set Rate';
     }
   } else {
     // Non-TCI drug (fentanyl, ketamine): derive display from mode + threshold
     const hasThreshold = (intermittentThresholds[resolvedDrug] || 0) > 0;
     bt.textContent = hasThreshold ? 'Change Threshold' : 'Set Threshold';
-    br.textContent = 'Set Rate';
+    br.textContent = m === 'manual' ? 'Change Rate' : 'Set Rate';
 
     if (m === 'manual' && hasThreshold) {
       ml.textContent = 'INF + REDOSE';
