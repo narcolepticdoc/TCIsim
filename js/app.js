@@ -647,6 +647,7 @@ function boot() {
     getIntermittentThresholdForDrug: (drugId) => mode.getIntermittentThreshold(drugId),
     getCeTargetForDrug: (drugId) => mode.getCeTarget(drugId),
     getExitCeForDrug: (drugId) => mode.getExitCe(drugId),
+    getExitCeLabelForDrug: (drugId) => mode.getExitCeLabel(drugId),
     getTciFraction: () => settings.getSettings().tciFraction,
     getSsSlopeTol:  () => settings.getSettings().ssSlopeTol,
     getSsExitBand:  () => settings.getSettings().exitBandPct,

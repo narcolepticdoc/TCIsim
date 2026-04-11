@@ -265,6 +265,7 @@
     .btn-ctrl-bolus.active-mode{box-shadow:0 0 0 2px var(--purple)}
     .btn-ctrl-exit{background:#dc2626;color:#fff}
     .btn-ctrl-exit:hover{background:#b91c1c}
+    .ctrl-divider{width:1px;height:22px;background:var(--border-subtle);margin:0 3px;flex-shrink:0}
     .btn-ctrl-pause{background:var(--blue);color:#fff;margin-left:auto}
     .btn-ctrl-pause:hover{background:#2563eb}
     .btn-ctrl-pause.is-running{background:#ef4444}
@@ -813,9 +814,10 @@
     <div class="sim-controls">
       <div class="mode-label no-mode" id="mode-label">NO MODE</div>
       <button class="btn-ctrl btn-ctrl-target" id="btn-target">Set Target</button>
+      <button class="btn-ctrl btn-ctrl-exit" id="btn-exit">Set Exit Ce</button>
+      <div class="ctrl-divider"></div>
       <button class="btn-ctrl btn-ctrl-rate" id="btn-rate">Manual Rate</button>
       <button class="btn-ctrl btn-ctrl-bolus" id="btn-bolus">Add Bolus</button>
-      <button class="btn-ctrl btn-ctrl-exit" id="btn-exit">Exit Ce</button>
       <button class="btn-ctrl btn-ctrl-pause is-stopped" id="btn-pause">Start</button>
     </div>
   </div>

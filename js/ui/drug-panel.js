@@ -27,6 +27,7 @@ let getModeForDrug                    = null;   // (drugId) => mode string for a
 let getIntermittentThresholdForDrug   = null;   // (drugId) => canonical mcg/mL threshold
 let getCeTargetForDrug                = null;   // (drugId) => TCI Ce target (mcg/mL canonical)
 let getExitCeForDrug                  = null;   // (drugId) => Exit Ce threshold (mcg/mL canonical)
+let getExitCeLabelForDrug             = null;   // (drugId) => Exit Ce display label (e.g. "0.8 mcg/mL")
 let rafId                    = null;
 let onFrame                  = null;   // callback: (elapsedMinutes) => void
 
@@ -134,6 +135,7 @@ export function init(opts = {}) {
   getIntermittentThresholdForDrug = opts.getIntermittentThresholdForDrug || null;
   getCeTargetForDrug              = opts.getCeTargetForDrug              || null;
   getExitCeForDrug                = opts.getExitCeForDrug                || (() => 0);
+  getExitCeLabelForDrug           = opts.getExitCeLabelForDrug           || (() => '');
   onFrame                         = opts.onFrame                         || null;
   getTciFraction                  = opts.getTciFraction                  || (() => TCI_FRACTION_DEFAULT);
   getSsSlopeTol                   = opts.getSsSlopeTol                   || (() => SS_SLOPE_DEFAULT);
@@ -672,7 +674,7 @@ function updateExitReadout(drugId, t, Ce, caseStarted) {
 
   // Ce already at or below exit threshold
   if (Ce <= exitCe) {
-    const html = '<span style="color:var(--green)">Exit reached</span>';
+    const html = '<span style="color:var(--green)">Exit Ce Reached</span>';
     if (el.innerHTML !== html) el.innerHTML = html;
     return;
   }
@@ -690,7 +692,10 @@ function updateExitReadout(drugId, t, Ce, caseStarted) {
   let html = '';
   if (result && result.time !== null && result.time > t) {
     const rem = result.time - t;
-    html = `Exit <span class="appr-time">${fmtCountdown(rem)}</span>`;
+    const lbl = getExitCeLabelForDrug ? getExitCeLabelForDrug(drugId) : '';
+    const numPart = lbl ? lbl.split(' ')[0] : '';
+    const ceSpan = numPart ? ` <span style="color:var(--cyan)">${numPart}</span>` : '';
+    html = `Exit Ce${ceSpan} in <span class="appr-time">${fmtCountdown(rem)}</span>`;
   }
   cache.lastUpdate = now;
   cache.html = html;
