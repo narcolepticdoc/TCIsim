@@ -75,6 +75,8 @@
     .model-info{padding:6px 9px;margin-bottom:8px;background:var(--bg-input);border-left:3px solid var(--blue);border-radius:var(--radius-sm)}
     .model-info-name{font-family:var(--font-mono);font-size:11px;font-weight:500;color:var(--text-primary);display:block}
     .model-info-desc{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);display:block;margin-top:3px;line-height:1.35}
+    .rounding-note{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);padding:4px 9px;margin-top:4px;line-height:1.4}
+    .rounding-note.active{color:var(--text-primary)}
     .drug-setup-tabs{display:flex;gap:3px;margin-bottom:6px}
     .drug-setup-tab{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-mono);font-size:10px;padding:3px 10px;cursor:pointer;transition:all .15s}
     .drug-setup-tab.active{background:var(--blue-dim,rgba(59,130,246,.15));color:var(--text-primary);border-color:var(--border)}
@@ -648,7 +650,13 @@
               <label for="input-propofol-rate-unit">Default infusion unit</label>
               <select id="input-propofol-rate-unit"></select>
             </div>
+            <div class="form-row">
+              <label for="input-round-in-display">Round TCI plan in display units</label>
+              <input type="checkbox" id="input-round-in-display">
+              <span class="form-hint">Makes bolus and rate values line up with pump-enterable numbers. May alter Ce trajectory slightly.</span>
+            </div>
           </div>
+          <div class="rounding-note" id="rounding-note-propofol"></div>
           <div class="pump-derived" id="pump-derived">Max bolus rate: 125.0 mg/min</div>
         </div>
         <div class="drug-setup-panel" id="setup-panel-fentanyl">
@@ -681,6 +689,7 @@
               <select id="input-fentanyl-rate-unit"></select>
             </div>
           </div>
+          <div class="rounding-note" id="rounding-note-fentanyl"></div>
           <div class="pump-derived" id="pump-derived-fentanyl">Max bolus rate: 0.6 mcg/min</div>
         </div>
         <div class="drug-setup-panel" id="setup-panel-ketamine">
@@ -713,6 +722,7 @@
               <select id="input-ketamine-rate-unit"></select>
             </div>
           </div>
+          <div class="rounding-note" id="rounding-note-ketamine"></div>
           <div class="pump-derived" id="pump-derived-ketamine">Max bolus rate: 125.0 mg/min</div>
         </div>
       </div>

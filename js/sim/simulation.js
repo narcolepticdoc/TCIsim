@@ -243,6 +243,13 @@ export function createModel(config = {}) {
       bolusConcentration: ps.concentration,
       bolusRateMlH: ps.bolusRateMlH,
       maxRate: ps.maxRate,
+      // Quantize-in-display-units mode — planner snaps every bolus/rate to
+      // the clinician's chosen display-unit step before advancing the engine.
+      drugId,
+      weightKg: patient.weight,
+      quantizeInDisplay: !!tciConfig.quantizeInDisplay,
+      bolusDisplayUnit: tciConfig.bolusDisplayUnit || null,
+      rateDisplayUnit: tciConfig.rateDisplayUnit || null,
     };
 
     // Generate scheme — select planner based on tciMode

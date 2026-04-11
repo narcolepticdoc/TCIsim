@@ -15,18 +15,24 @@ const DRUG_DEFS = {
 
 const DRUG_TASK_UNITS = {
   propofol: {
-    bolus: { canonical: 'mg', allowed: ['mg', 'mcg/kg', 'mL'] },
-    rate: { canonical: 'mg/min', allowed: ['mL/h', 'mcg/kg/min', 'mg/min'], defaultDisplay: 'mL/h' },
+    bolus: { canonical: 'mg', allowed: ['mg', 'mcg/kg', 'mL'],
+             quantSteps: { 'mg': 1, 'mcg/kg': 10, 'mL': 0.1 } },
+    rate: { canonical: 'mg/min', allowed: ['mL/h', 'mcg/kg/min', 'mg/min'], defaultDisplay: 'mL/h',
+            quantSteps: { 'mL/h': 1, 'mcg/kg/min': 5, 'mg/min': 0.1 } },
     ceTarget: { canonical: 'mcg/mL', allowed: ['mcg/mL'] },
   },
   fentanyl: {
-    bolus: { canonical: 'mg', allowed: ['mcg', 'mcg/kg', 'mL'] },
-    rate: { canonical: 'mg/min', allowed: ['mcg/kg/min', 'mcg/h', 'mL/h'], defaultDisplay: 'mcg/kg/min' },
+    bolus: { canonical: 'mg', allowed: ['mcg', 'mcg/kg', 'mL'],
+             quantSteps: { 'mcg': 5, 'mcg/kg': 0.25, 'mL': 0.1 } },
+    rate: { canonical: 'mg/min', allowed: ['mcg/kg/min', 'mcg/h', 'mL/h'], defaultDisplay: 'mcg/kg/min',
+            quantSteps: { 'mcg/kg/min': 0.01, 'mcg/h': 5, 'mL/h': 1 } },
     ceTarget: { canonical: 'mcg/mL', allowed: ['ng/mL'] },
   },
   ketamine: {
-    bolus: { canonical: 'mg', allowed: ['mg', 'mg/kg', 'mL'] },
-    rate: { canonical: 'mg/min', allowed: ['mg/kg/h', 'mL/h', 'mg/min'], defaultDisplay: 'mg/kg/h' },
+    bolus: { canonical: 'mg', allowed: ['mg', 'mg/kg', 'mL'],
+             quantSteps: { 'mg': 5, 'mg/kg': 0.1, 'mL': 0.1 } },
+    rate: { canonical: 'mg/min', allowed: ['mg/kg/h', 'mL/h', 'mg/min'], defaultDisplay: 'mg/kg/h',
+            quantSteps: { 'mg/kg/h': 0.1, 'mL/h': 1, 'mg/min': 0.1 } },
   },
 };
 
@@ -93,6 +99,19 @@ function fromCanonical(value, displayUnit, drugId, task, ctx) {
   if (displayUnit === config.canonical) return value;
   const conc = ctx.concentration || DRUG_DEFS[drugId]?.concentration;
   return fromBase(value, displayUnit, task, ctx.weightKg, conc);
+}
+
+function getQuantStep(drugId, task, displayUnit) {
+  return DRUG_TASK_UNITS[drugId]?.[task]?.quantSteps?.[displayUnit] ?? null;
+}
+
+function quantizeInDisplay(canonicalValue, displayUnit, drugId, task, ctx = {}) {
+  const step = getQuantStep(drugId, task, displayUnit);
+  if (!step || !Number.isFinite(canonicalValue)) return canonicalValue;
+  const displayVal = fromCanonical(canonicalValue, displayUnit, drugId, task, ctx);
+  const snapped = Math.round(displayVal / step) * step;
+  if (!Number.isFinite(snapped)) return canonicalValue;
+  return toCanonical(snapped, displayUnit, drugId, task, ctx).value;
 }
 
 // ---- Test harness ----
@@ -343,6 +362,155 @@ console.log('\n===== Round-Trip Accuracy (All Combinations) =====\n');
   if (allPass) {
     passed++;
     console.log(`  ✓ All ${cases.length} round-trip conversions pass (<0.01% error)`);
+  }
+}
+
+console.log('\n===== Quantization In Display Units =====\n');
+
+{
+  const ctx = { weightKg: 70 };
+  const TOL = 1e-9;
+
+  // ---- Helper: assert canonical value, when converted to display unit, is on grid ----
+  function onGrid(canonical, unit, drug, task, step) {
+    const disp = fromCanonical(canonical, unit, drug, task, ctx);
+    const k = Math.round(disp / step);
+    return Math.abs(disp - k * step) < TOL;
+  }
+
+  // --- Propofol rate: mL/h step = 1 ---
+  {
+    // 9.67 mg/min = 58.02 mL/h — should snap to 58 mL/h = 9.6667 mg/min
+    const q = quantizeInDisplay(9.67, 'mL/h', 'propofol', 'rate', ctx);
+    ok(onGrid(q, 'mL/h', 'propofol', 'rate', 1), 'propofol 9.67 mg/min → integer mL/h');
+    near(fromCanonical(q, 'mL/h', 'propofol', 'rate', ctx), 58, 1e-9, '9.67 mg/min snaps to 58 mL/h');
+  }
+
+  // --- Propofol rate: mcg/kg/min step = 5 ---
+  {
+    // 7 mg/min = 100 mcg/kg/min for 70kg — already on grid (multiple of 5)
+    const q = quantizeInDisplay(7, 'mcg/kg/min', 'propofol', 'rate', ctx);
+    ok(onGrid(q, 'mcg/kg/min', 'propofol', 'rate', 5), 'propofol 100 mcg/kg/min already on grid');
+    // 138.1 mcg/kg/min should snap to 140 mcg/kg/min
+    const canonical138 = toCanonical(138.1, 'mcg/kg/min', 'propofol', 'rate', ctx).value;
+    const q2 = quantizeInDisplay(canonical138, 'mcg/kg/min', 'propofol', 'rate', ctx);
+    near(fromCanonical(q2, 'mcg/kg/min', 'propofol', 'rate', ctx), 140, 1e-9,
+         '138.1 mcg/kg/min snaps to 140 mcg/kg/min');
+  }
+
+  // --- Propofol bolus: mcg/kg step = 10 ---
+  {
+    // 148 mg = 2114.3 mcg/kg → should snap to 2110 mcg/kg
+    const q = quantizeInDisplay(148, 'mcg/kg', 'propofol', 'bolus', ctx);
+    ok(onGrid(q, 'mcg/kg', 'propofol', 'bolus', 10), 'propofol 148 mg snaps to mcg/kg grid');
+    near(fromCanonical(q, 'mcg/kg', 'propofol', 'bolus', ctx), 2110, 1e-9,
+         '148 mg = 2114.3 mcg/kg → 2110 mcg/kg (nearest 10)');
+  }
+
+  // --- Propofol bolus: mL step = 0.1 ---
+  {
+    // 14.87 mg = 1.487 mL → snaps to 1.5 mL
+    const q = quantizeInDisplay(14.87, 'mL', 'propofol', 'bolus', ctx);
+    near(fromCanonical(q, 'mL', 'propofol', 'bolus', ctx), 1.5, 1e-9,
+         '14.87 mg → 1.5 mL (nearest 0.1)');
+  }
+
+  // --- Propofol rate: mg/min step = 0.1 (canonical-unit grid) ---
+  {
+    const q = quantizeInDisplay(9.67, 'mg/min', 'propofol', 'rate', ctx);
+    near(q, 9.7, 1e-9, '9.67 mg/min → 9.7 mg/min (nearest 0.1)');
+  }
+
+  // --- Fentanyl bolus: mcg step = 5 ---
+  {
+    // 0.137 mg = 137 mcg → 135 mcg (nearest 5)
+    const q = quantizeInDisplay(0.137, 'mcg', 'fentanyl', 'bolus', ctx);
+    near(fromCanonical(q, 'mcg', 'fentanyl', 'bolus', ctx), 135, 1e-9,
+         'fentanyl 137 mcg → 135 mcg (nearest 5)');
+  }
+
+  // --- Fentanyl rate: mcg/kg/min step = 0.01 ---
+  {
+    // 0.003456 mg/min = 0.04937 mcg/kg/min for 70kg → 0.05 mcg/kg/min
+    const q = quantizeInDisplay(0.003456, 'mcg/kg/min', 'fentanyl', 'rate', ctx);
+    near(fromCanonical(q, 'mcg/kg/min', 'fentanyl', 'rate', ctx), 0.05, 1e-9,
+         'fentanyl 0.04937 mcg/kg/min → 0.05 (nearest 0.01)');
+  }
+
+  // --- Ketamine bolus: mg/kg step = 0.1 ---
+  {
+    // 117 mg = 1.6714 mg/kg for 70kg → 1.7 mg/kg
+    const q = quantizeInDisplay(117, 'mg/kg', 'ketamine', 'bolus', ctx);
+    near(fromCanonical(q, 'mg/kg', 'ketamine', 'bolus', ctx), 1.7, 1e-9,
+         'ketamine 117 mg → 1.7 mg/kg (nearest 0.1)');
+  }
+
+  // --- Ketamine rate: mg/kg/h step = 0.1 ---
+  {
+    // 0.4667 mg/min = 0.4 mg/kg/h for 70kg — already on grid
+    const q = quantizeInDisplay(0.4667, 'mg/kg/h', 'ketamine', 'rate', ctx);
+    near(fromCanonical(q, 'mg/kg/h', 'ketamine', 'rate', ctx), 0.4, 1e-9,
+         'ketamine 0.4667 mg/min → 0.4 mg/kg/h');
+  }
+
+  // --- No quantStep (fallback) ---
+  {
+    // ceTarget mcg/mL has no quantSteps table — quantize should pass through
+    const q = quantizeInDisplay(3.14159, 'mcg/mL', 'propofol', 'ceTarget', ctx);
+    near(q, 3.14159, 1e-12, 'No quantStep returns value unchanged');
+  }
+
+  // --- Zero passes through cleanly ---
+  {
+    const q = quantizeInDisplay(0, 'mL/h', 'propofol', 'rate', ctx);
+    ok(q === 0, 'Zero quantizes to zero');
+  }
+
+  // --- Non-finite input passes through ---
+  {
+    const q = quantizeInDisplay(NaN, 'mL/h', 'propofol', 'rate', ctx);
+    ok(Number.isNaN(q), 'NaN passes through');
+  }
+
+  // --- Idempotence: quantize(quantize(x)) === quantize(x) ---
+  {
+    const q1 = quantizeInDisplay(58.7 * 10 / 60, 'mL/h', 'propofol', 'rate', ctx);
+    const q2 = quantizeInDisplay(q1, 'mL/h', 'propofol', 'rate', ctx);
+    near(q1, q2, 1e-12, 'Quantize is idempotent');
+  }
+
+  // --- Grid snap is round-to-nearest (not floor) ---
+  {
+    // 0.55 mL/h should round to 1 mL/h (>=0.5), 0.45 should round to 0
+    const q1canonical = toCanonical(0.55, 'mL/h', 'propofol', 'rate', ctx).value;
+    const q1 = quantizeInDisplay(q1canonical, 'mL/h', 'propofol', 'rate', ctx);
+    near(fromCanonical(q1, 'mL/h', 'propofol', 'rate', ctx), 1, 1e-9, '0.55 mL/h rounds up to 1');
+
+    const q2canonical = toCanonical(0.45, 'mL/h', 'propofol', 'rate', ctx).value;
+    const q2 = quantizeInDisplay(q2canonical, 'mL/h', 'propofol', 'rate', ctx);
+    near(fromCanonical(q2, 'mL/h', 'propofol', 'rate', ctx), 0, 1e-9, '0.45 mL/h rounds down to 0');
+  }
+
+  // --- getQuantStep lookup ---
+  {
+    ok(getQuantStep('propofol', 'rate', 'mL/h') === 1, 'propofol rate mL/h step = 1');
+    ok(getQuantStep('propofol', 'bolus', 'mcg/kg') === 10, 'propofol bolus mcg/kg step = 10');
+    ok(getQuantStep('fentanyl', 'rate', 'mcg/kg/min') === 0.01, 'fentanyl rate mcg/kg/min step = 0.01');
+    ok(getQuantStep('ketamine', 'bolus', 'mg/kg') === 0.1, 'ketamine bolus mg/kg step = 0.1');
+    ok(getQuantStep('propofol', 'ceTarget', 'mcg/mL') === null, 'ceTarget has no step (returns null)');
+  }
+
+  // --- Weight-dependent quantization: same display-unit grid, different canonical values ---
+  {
+    const light = { weightKg: 50 };
+    const heavy = { weightKg: 100 };
+    // 10 mcg/kg step: for 50kg bolus snaps to multiples of 0.5 mg; for 100kg to multiples of 1 mg.
+    const q50 = quantizeInDisplay(0.73, 'mcg/kg', 'propofol', 'bolus', light);
+    const q100 = quantizeInDisplay(0.73, 'mcg/kg', 'propofol', 'bolus', heavy);
+    near(fromCanonical(q50, 'mcg/kg', 'propofol', 'bolus', light), 10, 1e-9,
+         '50kg: 0.73 mg = 14.6 mcg/kg → 10 mcg/kg');
+    near(fromCanonical(q100, 'mcg/kg', 'propofol', 'bolus', heavy), 10, 1e-9,
+         '100kg: 0.73 mg = 7.3 mcg/kg → 10 mcg/kg');
   }
 }
 

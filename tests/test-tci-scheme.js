@@ -110,6 +110,66 @@ function runUntilDrift(engine,ceTarget,rate,fromTime,cfg){
   return t;
 }
 
+// ============ QUANTIZED-IN-LOOP PLANNER (stacking-error regression) ============
+// Mirrors the quantize-in-display pattern of js/sim/tci-planner.js: rates/boluses are
+// snapped inside the loop BEFORE engine.advance, so each iteration sees the quantized
+// value. Stepped planner only, propofol mL/h / mg (concentration 10 mg/mL).
+
+// Quantize mg/min canonical rate to nearest whole mL/h (propofol, 10 mg/mL):
+//   mL/h = mg/min * 60 / 10, snap to integer, back to mg/min
+function qRateMlH(mgMin) {
+  if (!Number.isFinite(mgMin)) return mgMin;
+  const mlh = Math.round(mgMin * 60 / 10);
+  return mlh * 10 / 60;
+}
+
+// Quantize mg bolus to nearest whole mg (propofol):
+function qBolusMg(mg) {
+  if (!Number.isFinite(mg)) return mg;
+  return Math.round(mg);
+}
+
+function planTCISchemeQuantized(engine, startState, startTime, ceTarget, config={}) {
+  const cfg={tolerancePct:0.05,maxRate:200,maxSteps:12,maxPlanTime:480,simStep:0.1,rateSearchIter:35,minStepDuration:3.0,rateStablePct:0.05,...config};
+  const scheme=[];
+  if(ceTarget<=0){scheme.push({type:'rate',time:startTime,value:0});return scheme}
+  const saved=engine.getState();engine.setState(startState);
+  const currentCe=engine.getConcentrations().Ce;
+  let simTime=startTime;
+
+  if(currentCe<ceTarget*(1-cfg.tolerancePct)){
+    const rawBolus=calcBolus(engine,ceTarget,cfg);
+    const bolusMg=qBolusMg(rawBolus);
+    if(bolusMg>0){scheme.push({type:'bolus',time:simTime,value:bolusMg});engine.advance(0.05,bolusMg/0.05);simTime+=0.05}
+  }
+
+  let prevRate=-1;
+  for(let step=0;step<cfg.maxSteps;step++){
+    if(simTime>=startTime+cfg.maxPlanTime)break;
+    // CRITICAL: quantize before engine.advance runs the step
+    const rate=qRateMlH(findRate(engine,ceTarget,cfg,step));
+    if(prevRate>0&&Math.abs(rate-prevRate)/Math.max(prevRate,1e-9)<cfg.rateStablePct){scheme.push({type:'rate',time:simTime,value:rate});break}
+    scheme.push({type:'rate',time:simTime,value:rate});prevRate=rate;
+    const stepEnd=runUntilDrift(engine,ceTarget,rate,simTime,cfg);simTime=stepEnd;
+    if(simTime>=startTime+cfg.maxPlanTime)break;
+  }
+  if(ceTarget>0&&scheme.length>0){
+    const lr=scheme[scheme.length-1];
+    if(lr.type==='rate'){
+      const LONG_LA=300;const fs=engine.getState();
+      let lo2=0,hi2=cfg.maxRate;
+      for(let i=0;i<30;i++){const mid=(lo2+hi2)/2;engine.setState(fs);engine.advance(LONG_LA,mid);if(engine.getConcentrations().Ce<ceTarget)lo2=mid;else hi2=mid}
+      engine.setState(fs);const ltRate=qRateMlH((lo2+hi2)/2);
+      if(Math.abs(ltRate-lr.value)/Math.max(lr.value,1e-9)>0.005)scheme.push({type:'rate',time:simTime,value:ltRate});
+      const ssRateRaw=computeSteadyStateRate(engine,ceTarget);
+      const ssRate=ssRateRaw!=null?qRateMlH(ssRateRaw):null;
+      const cl=scheme[scheme.length-1];
+      if(ssRate!=null&&Math.abs(ssRate-cl.value)/Math.max(cl.value,1e-9)>0.005)scheme.push({type:'rate',time:simTime+LONG_LA,value:ssRate});
+    }
+  }
+  engine.setState(saved);return scheme;
+}
+
 // ============ TESTS ============
 let passed=0,failed=0;
 function assert(c,m){if(c){passed++;console.log(`  ✓ ${m}`)}else{failed++;console.error(`  ✗ ${m}`)}}
@@ -362,6 +422,74 @@ console.log('\n=== TEST 11: SS Rate Event Is Emitted In Scheme ===');
   console.log(`  Analytical SS rate: ${ssRate.toFixed(4)} mg/min`);
   console.log(`  Deviation: ${(dev*100).toFixed(2)}%`);
   assert(dev < 0.02, `Last emitted rate within 2% of analytical SS rate (actual: ${(dev*100).toFixed(2)}%)`);
+}
+
+console.log('\n=== TEST 12: Quantize-In-Loop Stepped — All Rates Snap To Integer mL/h ===');
+{
+  const eng=createEngine(params);
+  const scheme=planTCISchemeQuantized(eng, eng.getState(), 0, 3.0);
+
+  console.log(`  Quantized scheme: ${scheme.length} steps`);
+  fmtScheme(scheme,70);
+
+  // Every rate, when converted to mL/h, must be an integer (within FP tolerance)
+  let allOnGrid=true;
+  for (const s of scheme) {
+    if (s.type === 'rate') {
+      const mlh = s.value * 60 / CONC;
+      const k = Math.round(mlh);
+      if (Math.abs(mlh - k) > 1e-9) { allOnGrid=false; break; }
+    }
+  }
+  assert(allOnGrid, 'Every rate in scheme is an integer mL/h value');
+
+  // Bolus is a whole mg
+  const bolusEvt = scheme.find(s => s.type === 'bolus');
+  if (bolusEvt) {
+    assert(Math.abs(bolusEvt.value - Math.round(bolusEvt.value)) < 1e-9, 'Bolus is whole mg');
+  }
+}
+
+console.log('\n=== TEST 13: Quantize-In-Loop — No Stacking Error Across 30 min Replay ===');
+{
+  // Core regression test for the design: quantize inside the planning loop so
+  // each engine.advance sees the already-rounded rate. If quantization were
+  // applied post-hoc to an unrounded plan, stacking errors would push Ce off.
+  const ceTarget=3.0;
+  const eng=createEngine(params);
+  const scheme=planTCISchemeQuantized(eng, eng.getState(), 0, ceTarget);
+
+  // Replay forward to 30 min
+  eng.reset();
+  let currentRate=0, simTime=0, evtIdx=0;
+  for (let t=0; t<=30; t+=0.1) {
+    while (evtIdx<scheme.length && scheme[evtIdx].time<=t) {
+      const evt=scheme[evtIdx];
+      const dt=evt.time-simTime;
+      if (dt>0) { eng.advance(dt,currentRate); simTime=evt.time; }
+      if (evt.type==='bolus') { eng.advance(0.05,evt.value/0.05); simTime+=0.05; }
+      else { currentRate=evt.value; }
+      evtIdx++;
+    }
+    const dt=t-simTime;
+    if (dt>0) { eng.advance(dt,currentRate); simTime=t; }
+  }
+  const ceAt30=eng.getConcentrations().Ce;
+  const dev=Math.abs(ceAt30-ceTarget)/ceTarget;
+  console.log(`  Ce at t=30 min: ${ceAt30.toFixed(4)} (deviation: ${(dev*100).toFixed(2)}%)`);
+  assert(dev < 0.08, `Quantized scheme keeps Ce within ±8% of target at 30 min (actual: ${(dev*100).toFixed(2)}%)`);
+}
+
+console.log('\n=== TEST 14: Quantize-In-Loop — State Is Preserved ===');
+{
+  const eng=createEngine(params);
+  eng.advance(10,2.0);
+  const before=new Float64Array(eng.getState());
+  planTCISchemeQuantized(eng, eng.getState(), 10, 3.0);
+  const after=eng.getState();
+  let ok=true;
+  for (let i=0;i<4;i++) { if (Math.abs(before[i]-after[i])>1e-10) { ok=false; break; } }
+  assert(ok,'Quantized planner preserves engine state');
 }
 
 // ---- SUMMARY ----

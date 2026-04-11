@@ -24,6 +24,30 @@
 
 import { computeSimTIVACETBolus, computeUDFs } from './simtiva-reference.js';
 import { computeSteadyStateRate } from '../pk/steady-state-predictor.js';
+import { quantizeInDisplay } from '../util/units.js';
+
+/**
+ * Build quantization closures for a planner run. These snap bolus/rate
+ * values to the clinician's chosen display-unit step BEFORE they are
+ * fed back into engine.advance — so subsequent iterations see the value
+ * the pump will actually deliver, preventing stacking errors from
+ * post-hoc rounding. No-ops when cfg.quantizeInDisplay is false or the
+ * display unit has no defined step, so all existing call paths remain
+ * unchanged for the default (non-quantized) mode.
+ */
+function makeQuantizers(cfg) {
+  const qBolus = (mg) => {
+    if (!cfg.quantizeInDisplay || !cfg.bolusDisplayUnit || !cfg.drugId) return mg;
+    return quantizeInDisplay(mg, cfg.bolusDisplayUnit, cfg.drugId, 'bolus',
+      { weightKg: cfg.weightKg, concentration: cfg.bolusConcentration });
+  };
+  const qRate = (mgMin) => {
+    if (!cfg.quantizeInDisplay || !cfg.rateDisplayUnit || !cfg.drugId) return mgMin;
+    return quantizeInDisplay(mgMin, cfg.rateDisplayUnit, cfg.drugId, 'rate',
+      { weightKg: cfg.weightKg, concentration: cfg.bolusConcentration });
+  };
+  return { qBolus, qRate };
+}
 
 /**
  * @typedef {Object} TCISchemeConfig
@@ -84,6 +108,7 @@ function appendTerminalRates(engine, ceTarget, simTime, scheme, cfg) {
   const lastRate = scheme[scheme.length - 1];
   if (lastRate.type !== 'rate') return;
 
+  const { qRate } = makeQuantizers(cfg);
   const LONG_LA = 300; // 5 hours lookahead
   const finalState = engine.getState();
 
@@ -96,14 +121,15 @@ function appendTerminalRates(engine, ceTarget, simTime, scheme, cfg) {
     if (engine.getConcentrations().Ce < ceTarget) lo = mid; else hi = mid;
   }
   engine.setState(finalState);
-  const longTermRate = (lo + hi) / 2;
+  const longTermRate = qRate((lo + hi) / 2);
 
   if (Math.abs(longTermRate - lastRate.value) / lastRate.value > 0.005) {
     scheme.push({ type: 'rate', time: simTime, value: longTermRate });
   }
 
   // Stage 2: analytical SS rate at simTime + LONG_LA
-  const ssRate = computeSteadyStateRate(engine, ceTarget);
+  const ssRateRaw = computeSteadyStateRate(engine, ceTarget);
+  const ssRate = ssRateRaw != null ? qRate(ssRateRaw) : null;
   const currentLast = scheme[scheme.length - 1];
   if (ssRate != null && Math.abs(ssRate - currentLast.value) / currentLast.value > 0.005) {
     scheme.push({ type: 'rate', time: simTime + LONG_LA, value: ssRate });
@@ -128,6 +154,7 @@ export function planTCIScheme(engine, startState, startTime, ceTarget, config = 
     maxSteps: 12,       // more steps for the longer horizon (default was 8)
     ...config,
   };
+  const { qBolus, qRate } = makeQuantizers(cfg);
   const scheme = [];
 
   if (ceTarget <= 0) {
@@ -147,7 +174,7 @@ export function planTCIScheme(engine, startState, startTime, ceTarget, config = 
   // ---- Step 1a: Loading bolus (target increase) ----
   // If current Ce is below the lower bound, calculate a loading dose.
   if (currentCe < lowerBound) {
-    const bolusMg = calculateLoadingBolus(engine, ceTarget, cfg);
+    const bolusMg = qBolus(calculateLoadingBolus(engine, ceTarget, cfg));
 
     if (bolusMg > 0) {
       scheme.push({ type: 'bolus', time: simTime, value: bolusMg });
@@ -185,12 +212,12 @@ export function planTCIScheme(engine, startState, startTime, ceTarget, config = 
     if (simTime >= startTime + cfg.maxPlanTime) break;
 
     // Find the rate that holds Ce at target over the next period
-    let optimalRate = findMaintenanceRate(engine, ceTarget, cfg, step);
+    let optimalRate = qRate(findMaintenanceRate(engine, ceTarget, cfg, step));
 
     // Maintenance should never pause — if rate search returns ~0 but Ce
     // is still substantial, use a minimal rate and let the next step correct
     if (optimalRate < 0.001 && engine.getConcentrations().Ce > ceTarget * 0.5) {
-      optimalRate = 0.001;
+      optimalRate = qRate(0.001);
     }
 
     // Check if rate has stabilised (converged to maintenance)
@@ -390,6 +417,7 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
     initialLookAhead: derivedLookAhead,
     ...config,
   };
+  const { qBolus, qRate } = makeQuantizers(cfg);
   const scheme = [];
 
   if (ceTarget <= 0) {
@@ -413,9 +441,11 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
   const needsBolus = currentCe < lowerBound && ceDeficitRatio < 0.8;
 
   if (needsBolus) {
+    // When delegated from CET-Conservative, bolusOverrideMg is already
+    // quantized — don't double-quantize. Otherwise snap here.
     const bolusMg = bolusOverrideMg != null
       ? bolusOverrideMg
-      : calculateCETBolus(engine, ceTarget, cfg);
+      : qBolus(calculateCETBolus(engine, ceTarget, cfg));
 
     if (bolusMg > 0) {
       scheme.push({ type: 'bolus', time: simTime, value: bolusMg });
@@ -481,9 +511,9 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
   const checkInterval = 1.0; // check every minute
 
   // Find initial maintenance rate
-  let currentRate = findMaintenanceRate(engine, ceTarget, cfg, 0);
+  let currentRate = qRate(findMaintenanceRate(engine, ceTarget, cfg, 0));
   if (currentRate < 0.001 && engine.getConcentrations().Ce > ceTarget * 0.5) {
-    currentRate = 0.001;
+    currentRate = qRate(0.001);
   }
   scheme.push({ type: 'rate', time: simTime, value: currentRate });
 
@@ -497,14 +527,14 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
 
     // Check optimal rate every minute, but only use growing lookAhead
     const stepIdx = Math.min(checkNum, 20); // cap growth
-    const optimalNow = findMaintenanceRate(engine, ceTarget, cfg, stepIdx);
+    const optimalNow = qRate(findMaintenanceRate(engine, ceTarget, cfg, stepIdx));
 
     const rateChange = currentRate > 0.001
       ? Math.abs(optimalNow - currentRate) / currentRate
       : (optimalNow > 0.001 ? 1 : 0);
 
     if (rateChange > rateChangeThresh) {
-      currentRate = optimalNow > 0.001 ? optimalNow : 0.001;
+      currentRate = optimalNow > 0.001 ? optimalNow : qRate(0.001);
       scheme.push({ type: 'rate', time: simTime, value: currentRate });
       stepCount++;
     } else if (rateChange < cfg.rateStablePct) {
@@ -579,6 +609,7 @@ function calculateCETBolus(engine, ceTarget, cfg) {
  */
 export function planTCISchemeCETConservative(engine, startState, startTime, ceTarget, config = {}) {
   const cfg = { ...DEFAULT_SCHEME_CONFIG, ...config };
+  const { qBolus } = makeQuantizers(cfg);
 
   const pkParams = engine.params;
 
@@ -594,7 +625,7 @@ export function planTCISchemeCETConservative(engine, startState, startTime, ceTa
       maxRateMlH: cfg.bolusRateMlH || 750,
       concentration: cfg.bolusConcentration || 10,
     });
-    bolusMg = simtiva.bolusMg;
+    bolusMg = qBolus(simtiva.bolusMg);
     const bolusEndMin = simtiva.durationSec / 60;
     const peakMin = simtiva.peakTimeSec / 60;
     pauseDurationMin = Math.max(0, peakMin - bolusEndMin);
@@ -610,7 +641,7 @@ export function planTCISchemeCETConservative(engine, startState, startTime, ceTa
     const correctionRatio = simtiva.rawBolusMg > 0
       ? simtiva.bolusMg / simtiva.rawBolusMg
       : 1;
-    bolusMg = exactBolus * correctionRatio;
+    bolusMg = qBolus(exactBolus * correctionRatio);
     pauseDurationMin = null; // use forward scan (peak time differs with existing drug)
   }
 
@@ -642,6 +673,7 @@ export function planTCISchemeCETConservative(engine, startState, startTime, ceTa
  */
 export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, config = {}) {
   const cfg = { ...DEFAULT_SCHEME_CONFIG, ...config };
+  const { qBolus, qRate } = makeQuantizers(cfg);
   const scheme = [];
 
   if (ceTarget <= 0) {
@@ -671,7 +703,7 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
         maxRateMlH: cfg.bolusRateMlH || 750,
         concentration: cfg.bolusConcentration || 10,
       });
-      bolusMg = simtiva.bolusMg;
+      bolusMg = qBolus(simtiva.bolusMg);
       pauseDurationMin = Math.max(0, (simtiva.peakTimeSec - simtiva.durationSec) / 60);
     } else {
       // SimTIVA CET step-up algorithm (lines 3762-3779):
@@ -765,20 +797,25 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
         concentration: cfg.bolusConcentration || 10,
       });
       const correctionRatio = simtiva.rawBolusMg > 0 ? simtiva.bolusMg / simtiva.rawBolusMg : 1;
-      bolusMg = trialDose * correctionRatio;
+      bolusMg = qBolus(trialDose * correctionRatio);
 
-      // Pause duration: from bolus end to peak time
+      // Pause duration: from bolus end to peak time.
+      // When quantizeInDisplay is on, bolusMg is already the final value,
+      // so use it directly (no additional Math.ceil). When off, mirror
+      // SimTIVA's ceil-to-1mg rounding used for the final value below.
       const maxRateMlH = cfg.bolusRateMlH || 750;
       const concentration = cfg.bolusConcentration || 10;
-      const bolusDurSec = Math.round((Math.ceil(bolusMg) / concentration) / maxRateMlH * 3600);
+      const bolusForDur = cfg.quantizeInDisplay ? bolusMg : Math.ceil(bolusMg);
+      const bolusDurSec = Math.round((bolusForDur / concentration) / maxRateMlH * 3600);
       if (tempPeak > bolusDurSec) {
         pauseDurationMin = (tempPeak - bolusDurSec) / 60;
       }
     }
 
     if (bolusMg > 0) {
-      // SimTIVA CET rounding: ceil to nearest 1mg
-      bolusMg = Math.ceil(bolusMg);
+      // SimTIVA CET rounding: ceil to nearest 1mg. Skipped in quantize-in-display
+      // mode — bolusMg is already snapped to the clinician's display-unit grid.
+      if (!cfg.quantizeInDisplay) bolusMg = Math.ceil(bolusMg);
       scheme.push({ type: 'bolus', time: simTime, value: bolusMg });
       const { duration, rate } = plannerBolusDelivery(bolusMg, cfg);
       engine.advance(duration, rate);
@@ -962,8 +999,13 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   const stepMagnitude = currentCe > 0 ? (ceTarget - currentCe) / ceTarget : 1;
   const cptThreshold = (earlyRateMlH >= 30 && stepMagnitude > 0.20) ? 0.08 : 0.05;
   const cptAvgFactor = (earlyRateMlH >= 30 && stepMagnitude > 0.20) ? 0.667 : 0.62;
-  const rf = 360; // round mg/sec to nearest 1 mL/h
-  const rnd = (r) => Math.round(r * rf) / rf;
+  const rf = 360; // round mg/sec to nearest 1 mL/h (default assumes 10 mg/mL)
+  // In quantize-in-display mode the rnd function snaps through the clinician's
+  // chosen display unit (e.g. mL/h at their actual concentration, or mcg/kg/min).
+  // Signature is preserved: mg/sec in → mg/sec out.
+  const rnd = cfg.quantizeInDisplay
+    ? (r) => qRate(r * 60) / 60
+    : (r) => Math.round(r * rf) / rf;
 
   let priorTestRate;
   const cptTimes = [];
@@ -1103,7 +1145,10 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
           engine.advance(PROBE, mid);
           if (engine.getConcentrations().Ce < ceTarget) lo = mid; else hi = mid;
         }
-        const rate = (lo + hi) / 2;
+        // Quantize BEFORE the forward-probe extension loop so the probe
+        // uses the same rate the pump will deliver — otherwise extension
+        // stops too early (or too late) under display-unit rounding.
+        const rate = qRate((lo + hi) / 2);
 
         // Probe forward: extend this rate while Ce stays within tolerance
         let dur = PROBE;
@@ -1123,7 +1168,8 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   }
 
   // Append analytical SS rate beyond the correction horizon for t → ∞
-  const ssRate = computeSteadyStateRate(engine, ceTarget);
+  const ssRateRaw = computeSteadyStateRate(engine, ceTarget);
+  const ssRate = ssRateRaw != null ? qRate(ssRateRaw) : null;
   if (ssRate != null && scheme.length > 0) {
     const lastRateEvt = [...scheme].reverse().find(s => s.type === 'rate');
     if (lastRateEvt && Math.abs(ssRate - lastRateEvt.value) / lastRateEvt.value > 0.005) {

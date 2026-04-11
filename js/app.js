@@ -19,7 +19,7 @@ import * as eventEditor from './ui/event-editor.js';
 import { createChart } from './ui/chart.js';
 import { ceForBIS } from './pk/pd.js';
 import { bolusDeliveryMinutes, setPumpSettings, getPumpSettings, APP_VERSION } from './util/constants.js';
-import { fromCanonical, getAllowedUnits, getDefaultUnit, formatValue } from './util/units.js';
+import { fromCanonical, getAllowedUnits, getDefaultUnit, formatValue, getQuantizeConfig } from './util/units.js';
 import { playAlert } from './ui/alert-sound.js';
 import * as persist from './ui/persist.js';
 import * as settings from './ui/settings.js';
@@ -542,7 +542,7 @@ function boot() {
         } else {
           // Pre-case: plan immediately, no delay needed
           mode.setCeTarget(selectedDrug, canonicalValue);
-          model.planTCI(selectedDrug, t, canonicalValue, { tciMode });
+          model.planTCI(selectedDrug, t, canonicalValue, { tciMode, ...getQuantizeConfig(selectedDrug) });
           mode.set(selectedDrug, 'tci', `TCI target Ce=${canonicalValue.toFixed(1)} μg/mL`);
           advancePreStartClock(selectedDrug, 0.01);
         }
@@ -971,7 +971,7 @@ function commitTciDelay() {
 
   const futureTime = timer.getElapsedMinutes() + tciDelaySeconds / 60;
   mode.setCeTarget(drugId, ceTarget);
-  const { scheme } = model.planTCI(drugId, futureTime, ceTarget, { tciMode });
+  const { scheme } = model.planTCI(drugId, futureTime, ceTarget, { tciMode, ...getQuantizeConfig(drugId) });
   mode.set(drugId, 'tci', `TCI target Ce=${ceTarget.toFixed(1)} μg/mL`);
   refreshChart();
 

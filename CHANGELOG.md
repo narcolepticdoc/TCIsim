@@ -11,6 +11,53 @@
 
 ---
 
+## [0.5.19] — 2026-04-11
+
+Opt-in "Round TCI plan in display units" mode. Makes every bolus and rate emitted by the planner line up with pump-enterable numbers in the clinician's chosen display units (e.g. integer mL/h, multiples of 10 mcg/kg).
+
+**Design principle — quantize inside the loop, not after:**
+
+The naive fix (rounding the planner's final output to display units) introduces stacking errors because each iteration of the maintenance loop advances the engine with the *un-rounded* canonical value, so rounding error compounds. The correct fix is to quantize **inside** the planning loop — every `engine.advance()` call uses the already-quantized value the pump will actually deliver.
+
+**Implementation:**
+
+- New `quantSteps` tables in `DRUG_TASK_UNITS` (`js/util/constants.js`) define per-drug per-display-unit step sizes (propofol mL/h: 1, mcg/kg: 10, mcg/kg/min: 5; fentanyl mcg: 5, mcg/kg/min: 0.01; ketamine mg: 5, mg/kg: 0.1, etc.).
+- `quantizeInDisplay(canonicalValue, displayUnit, drugId, task, ctx)` in `js/util/units.js` snaps a canonical value to the nearest step in the display grid and returns it in canonical units. No-op when no step is defined for that unit.
+- `getQuantizeConfig(drugId)` reads `tci-pref-quantizeInDisplay` + the drug's stored `tci-pref-{task}Unit-{drug}` keys and returns a config object the planner threads through.
+- `makeQuantizers(cfg)` in `js/sim/tci-planner.js` produces `qBolus`/`qRate` closures applied inside all four planners (stepped, CET, CET-Conservative, CET-Emulation) *and* in `appendTerminalRates()`. Closures are no-ops when the flag is off, so all 426 existing tests remain green.
+- Emulation planner's legacy `Math.ceil(bolusMg)` and `rnd(r) = Math.round(r*360)/360` paths are gated behind `!cfg.quantizeInDisplay`; when quantize is on the `rnd` closure snaps through the user's chosen display unit (`qRate(r*60)/60`), and the adaptive-correction pass quantizes `rate` before the forward-probe extension loop so probe duration matches the rate the pump will actually deliver.
+- Conservative→CET delegation passes the already-quantized bolus as `bolusOverrideMg` so it isn't double-snapped.
+- Terminal rates (long-lookahead binary-search + analytical SS) are quantized before being appended.
+
+**UI (opt-in):**
+
+- New checkbox "Round TCI plan in display units" in the propofol setup panel (index.html). Flag is drug-agnostic — one checkbox governs every drug, since the planner reads each drug's own stored display-unit pref.
+- Live-updating rounding-note line under every drug's unit selectors showing exactly what grid the planner will use, e.g. "Plan rounds to: bolus → nearest 10 mcg/kg, rate → nearest 1 mL/h". Note dims when the checkbox is off and reads "Planner rounds in engine-canonical units (mg / mg/min)."
+- `populateRoundingControls()` in `js/ui/setup.js` wires listeners on the checkbox and all six unit selectors so the note reflects current selection in real time.
+- Preference persisted under `tci-pref-quantizeInDisplay` in localStorage; re-saved on confirm in `applyPumpSettings()`.
+
+**Tests:**
+
+- 25 new quantization tests in `tests/test-units.js` covering every drug/unit grid, idempotence, round-to-nearest semantics, weight-dependent snapping, zero/NaN passthrough, null-step fallback.
+- 4 new stacking-error regression tests in `tests/test-tci-scheme.js` using an inline quantize-in-loop planner variant. Proves (a) every rate in the scheme is an integer mL/h value, (b) Ce at 30 min stays within ±8% of target, (c) bolus is a whole mg, (d) engine state is preserved.
+- **455 tests across 13 suites, all passing.**
+
+---
+
+## [0.5.18] — 2026-04-11
+
+Per-drug default unit selectors and PK model provenance display on the setup screen.
+
+**Model info display:**
+
+Each drug setup panel now shows a `.model-info` block listing the PK/PD model provenance under the drug selection tabs — e.g. "Eleveld 2018" for propofol, "Shafer 1990 with Shibutani 2004 weight correction" for fentanyl, "Domino 1982 / Navarrete 2000" for ketamine. Names and descriptions come from exported `MODEL_NAME` / `MODEL_DESCRIPTION` constants in each `js/pk/<drug>.js`.
+
+**Default unit selectors:**
+
+Every drug gained per-task default unit dropdowns in its setup panel (bolus unit + rate unit, populated from the drug's `DRUG_TASK_UNITS.allowed` list). Persisted to localStorage under `tci-pref-{task}Unit-{drug}` and consulted by the keypad and drug panel on every open — so a clinician who prefers mcg/kg/min over mL/h sees that unit pre-selected everywhere, without having to flip it each time. Existing runtime unit overrides still work and still persist per-task.
+
+---
+
 ## [0.5.14] — 2026-04-09
 
 Split manual-mode infusion analysis into two independent systems: analytical steady state and slope-reversal plateau detection.

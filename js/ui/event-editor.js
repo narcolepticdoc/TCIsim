@@ -12,7 +12,7 @@
  * TCI conflict rules (2a/2b/3a/3b/4/5) apply on confirm/delete.
  */
 
-import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue }
+import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, getQuantizeConfig }
   from '../util/units.js';
 
 const $ = id => document.getElementById(id);
@@ -512,7 +512,7 @@ function applyWithRules(eventTime, action) {
     _pendingRuleAction = () => {
       action();
       for (const e of allTci) { try { _model.deleteEvent(e.id); } catch (x) {} }
-      if (ceTarget > 0) _model.planTCI(drug, tciStart, ceTarget);
+      if (ceTarget > 0) _model.planTCI(drug, tciStart, ceTarget, getQuantizeConfig(drug));
       close();
       _refreshChart();
     };
