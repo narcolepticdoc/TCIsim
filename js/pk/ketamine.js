@@ -35,6 +35,14 @@
  */
 export const MODEL_NAME = 'Domino/Navarrete';
 
+/**
+ * Longer-form provenance shown in the setup-screen drug panel.
+ * Describes the published model and any modifications in use.
+ */
+export const MODEL_DESCRIPTION =
+  'Domino 1982 ketamine PK (parameterisation validated in Absalom 2007) ' +
+  'with Navarrete 2024 ke0 estimate from ANI response data.';
+
 // Fixed micro-rate constants (min⁻¹) — population values, not weight-scaled
 const K10 = 0.4381;  // Central elimination
 const K12 = 0.5921;  // Central → fast peripheral

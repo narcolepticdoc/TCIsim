@@ -11,8 +11,35 @@
  * value via calcEleveldParams().
  */
 
-import { calcEleveldParams, fatFreeMass } from '../pk/eleveld.js';
+import {
+  calcEleveldParams,
+  fatFreeMass,
+  MODEL_NAME as ELEVELD_MODEL_NAME,
+  MODEL_DESCRIPTION as ELEVELD_MODEL_DESCRIPTION,
+} from '../pk/eleveld.js';
+import {
+  MODEL_NAME as FENTANYL_MODEL_NAME,
+  MODEL_DESCRIPTION as FENTANYL_MODEL_DESCRIPTION,
+} from '../pk/fentanyl.js';
+import {
+  MODEL_NAME as KETAMINE_MODEL_NAME,
+  MODEL_DESCRIPTION as KETAMINE_MODEL_DESCRIPTION,
+} from '../pk/ketamine.js';
 import { setPumpSettings, getPumpSettings } from '../util/constants.js';
+import { getAllowedUnits, getDefaultUnit, getPrefKey } from '../util/units.js';
+
+// Drugs that have a tabbed setup panel. Remifentanil has no PK model yet.
+const SETUP_DRUGS = ['propofol', 'fentanyl', 'ketamine'];
+
+// Model display metadata for the setup-screen info block, keyed by drug id.
+// Imported directly from each PK module so the setup screen shows accurate
+// provenance without needing a live model instance (model is only created
+// on confirmPatient()).
+const MODEL_INFO = {
+  propofol: { name: ELEVELD_MODEL_NAME,  description: ELEVELD_MODEL_DESCRIPTION  },
+  fentanyl: { name: FENTANYL_MODEL_NAME, description: FENTANYL_MODEL_DESCRIPTION },
+  ketamine: { name: KETAMINE_MODEL_NAME, description: KETAMINE_MODEL_DESCRIPTION },
+};
 
 const $ = id => document.getElementById(id);
 
@@ -101,9 +128,65 @@ export function init(opts = {}) {
   // Set initial visibility based on restored opioid value
   updateCe50CorrectionVisibility();
 
+  // Populate model info blocks and default-unit selectors for each drug panel
+  populateModelInfo();
+  populateUnitSelectors();
+
   // Restore saved pump settings
   restorePumpSettingsUI();
   updatePumpDerived();
+}
+
+// ---- Model info block ----
+
+function populateModelInfo() {
+  for (const drugId of SETUP_DRUGS) {
+    const info = MODEL_INFO[drugId];
+    if (!info) continue;
+    const nameEl = $(`model-info-name-${drugId}`);
+    const descEl = $(`model-info-desc-${drugId}`);
+    if (nameEl) nameEl.textContent = info.name;
+    if (descEl) descEl.textContent = info.description;
+  }
+}
+
+// ---- Default unit selectors ----
+
+/**
+ * Build the bolus/rate unit <select> options for each drug panel and
+ * preselect the saved preference (or the hardcoded default).
+ *
+ * Reads from the same `prefKey` localStorage keys that drug-panel.js and
+ * the keypad use at runtime, so mid-case overrides and setup defaults
+ * share a single source of truth.
+ */
+function populateUnitSelectors() {
+  for (const drugId of SETUP_DRUGS) {
+    for (const task of ['bolus', 'rate']) {
+      const sel = $(`input-${drugId}-${task}-unit`);
+      if (!sel) continue;
+
+      const allowed = getAllowedUnits(drugId, task) || [];
+      sel.innerHTML = '';
+      for (const unit of allowed) {
+        const opt = document.createElement('option');
+        opt.value = unit;
+        opt.textContent = unit;
+        sel.appendChild(opt);
+      }
+
+      // Preselect from localStorage prefKey, falling back to the static default.
+      let current = getDefaultUnit(drugId, task);
+      const key = getPrefKey(drugId, task);
+      if (key) {
+        try {
+          const saved = localStorage.getItem(key);
+          if (saved && allowed.includes(saved)) current = saved;
+        } catch (e) {}
+      }
+      if (current && allowed.includes(current)) sel.value = current;
+    }
+  }
 }
 
 // ---- Ce50 opioid correction visibility ----
@@ -341,6 +424,21 @@ function applyPumpSettings() {
     const ce50CorrEl2 = $('input-ce50-correction');
     if (ce50CorrEl2) localStorage.setItem('tci-ce50-correction', ce50CorrEl2.checked ? 'true' : 'false');
   } catch (e) {}
+
+  // Persist default-unit selections to the same prefKey localStorage keys
+  // that drug-panel.js and the keypad read at runtime. Skip silently on
+  // invalid values so the existing runtime preference survives.
+  for (const drugId of SETUP_DRUGS) {
+    for (const task of ['bolus', 'rate']) {
+      const el = $(`input-${drugId}-${task}-unit`);
+      if (!el || !el.value) continue;
+      const allowed = getAllowedUnits(drugId, task) || [];
+      if (!allowed.includes(el.value)) continue;
+      const key = getPrefKey(drugId, task);
+      if (!key) continue;
+      try { localStorage.setItem(key, el.value); } catch (e) {}
+    }
+  }
 }
 
 function restorePumpSettingsUI() {
