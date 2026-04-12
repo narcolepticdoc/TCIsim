@@ -8,7 +8,13 @@ Mobile-first PWA for anesthesia training. Simulates propofol pharmacokinetics us
 js/version.js             APP_VERSION — single source of truth, edit here to bump the version
 js/pk/eleveld.js          Eleveld 2018 PK-PD parameter calculator
 js/pk/engine.js           Matrix-exponential PK engine (4×4, arbitrary time steps)
-js/sim/events.js          Event list — source of truth for all pump commands
+js/sim/events.js          Thin re-export shim over js/sim/events/
+js/sim/events/index.js    Event list orchestrator — state + facade assembly
+js/sim/events/delivery.js Bolus delivery math (pump rate, push rate)
+js/sim/events/replay.js   Per-drug engine replay, getRateAtTime, getActiveRateForDrug
+js/sim/events/list-ops.js CRUD: insert/remove/getById/getAll/getByDrug/clearAfter/clearFrom/clearAll
+js/sim/events/query.js    getConcentrationsAt, computeCurve, getStateAtLastEvent, getStateAtTime
+js/sim/events/actions.js  findActiveBolus + addRate/addBolus/addPause/editEvent/deleteEvent
 js/sim/simulation.js      Stateless facade: setPatient, planTCI, getConcentrationsAt
 js/sim/tci-planner.js     Thin re-export shim over js/sim/tci/
 js/sim/tci/shared.js      Shared helpers: DEFAULT_SCHEME_CONFIG, makeQuantizers, appendTerminalRates, findMaintenanceRate
