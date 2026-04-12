@@ -178,6 +178,43 @@ Three new tests: (9) Ce within ±5% at t=300, 600, 900 min; (10) analytical SS r
 
 426 tests across 13 suites, all passing.
 
+### Interim — Code review fixes: peak detection, fentanyl height, steady-state heuristic (v0.5.19.9)
+
+*Not tracked in session numbering.*
+
+Five fixes from a full code review of the simulation orchestration layer and TCI planners. The pharmacology core (`eleveld.js`, `pd.js`, `engine.js`) was confirmed correct. Two review claims were rejected after independent verification.
+
+**CET/Emulation peak-detection bug (`js/sim/tci/cet.js`, `js/sim/tci/emulation.js`):**
+The bolus pause scan used `cePrior` (previous Ce) instead of `cePeak` for the drop threshold. Because `cePrior` was unconditionally updated at the end of every loop iteration (`cePrior = ce`), the termination condition `ce < cePrior - 0.0005` checked against the immediately previous Ce — not the observed peak. This could trigger premature exit on single-step floating-point noise at the flat peak. Fixed: removed `cePrior`, threshold against `cePeak` instead.
+
+**Fentanyl NaN height (`js/sim/simulation.js`, `js/pk/fentanyl.js`):**
+`calcFentanylParams()` uses `height` for BMI to apply the Shibutani weight correction for obese patients (BMI > 30, TBW >= 85 kg). Both call sites in `simulation.js` (`init()` and `setPatient()`) passed only `{ weight }`, causing `height` to be `undefined` → `NaN` for BMI. The `pkMass()` guard `bmi > 30` evaluated to `false` (since `NaN > 30` is false), so the correction was silently skipped. Obese patients never received the Shibutani-corrected pharmacokinetic mass for fentanyl. Fixed: pass `height` at both call sites.
+
+**Steady-state heuristic too short (`js/pk/decay-predictor.js`):**
+`predictTroughWithRate()` estimated steady-state Ce by advancing 120 minutes. Eleveld V3 equilibration has τ ≈ V3/Q3 ≈ 246 min, so at 120 min V3 is only ~40% equilibrated, inflating the estimated SS. Could incorrectly return `willReach: false`. Replaced with `predictSteadyStateCe()` from `steady-state-predictor.js` — analytical matrix math, exact and stateless.
+
+**Dead setState calls removed (`js/sim/simulation.js`):**
+`setPatient()` snapshotted old engine state and transplanted it into new engines before calling `replayAll()`. Since `replayDrug()` calls `engine.reset()` before replaying events, the transplanted state was immediately zeroed — making the `setState()` calls dead code. Removed along with updated docstring.
+
+**Bolus deficit threshold configurable (`js/sim/tci/shared.js`, `js/sim/tci/cet.js`):**
+Hard-coded `0.8` threshold for skipping the loading bolus (when Ce is already >= 80% of target) moved to `bolusDeficitThreshold: 0.8` in `DEFAULT_SCHEME_CONFIG`.
+
+**Rejected review claims:**
+- *"setState double-counts drug"* — incorrect; `engine.reset()` in `replayDrug()` zeroes state before replay. No double-counting.
+- *"appendTerminalRates leaves engine dirty"* — incorrect; `computeSteadyStateRate()` is pure matrix math with no state mutation, and the engine is restored at line 107.
+- *"Q2 test tolerance too wide (1.83 is erroneous)"* — incorrect; 1.83 is the correct output. The Q2 formula includes `(1 + 1.3*(1 - fq3maturation(age)))`, shifting the base theta of 1.75 to ~1.83 for adult patients.
+
+**Files changed:**
+- `js/sim/tci/cet.js` — removed `cePrior`, use `cePeak` in threshold; use `cfg.bolusDeficitThreshold`
+- `js/sim/tci/emulation.js` — same `cePrior` fix
+- `js/sim/simulation.js` — pass `height` to secondary drug calc; remove dead `setState` calls
+- `js/pk/decay-predictor.js` — import `predictSteadyStateCe`, replace 120-min simulation
+- `js/sim/tci/shared.js` — add `bolusDeficitThreshold` to config
+
+485 tests across 13 suites, all passing.
+
+---
+
 ### Interim — Fix test-pk.js divergence from production, add ceForBIS coverage (v0.5.19.8)
 
 *Not tracked in session numbering.*
