@@ -36,47 +36,72 @@ Open `http://localhost:8080` on a mobile device or browser.
 ## Running Tests
 
 ```bash
-# All test suites (262 tests)
-for f in test-pk.js test-model.js test-decay.js test-tci-scheme.js test-vs-simtiva.js test-integration.js test-units.js; do
-  node $f
-done
+node tests/run-tests.js
 ```
 
 ## Project Structure
 
 ```
 tci-sim/
-├── index.html              # Single-page app (setup + sim screens)
-├── manifest.json            # PWA manifest
+├── index.html                    # Single-page app (setup + sim screens)
+├── manifest.json                 # PWA manifest
 ├── js/
-│   ├── app.js               # Main application controller
+│   ├── app.js                    # Main application controller
+│   ├── version.js                # APP_VERSION — single source of truth
 │   ├── pk/
-│   │   ├── eleveld.js        # Eleveld 2018 parameter calculation
-│   │   ├── engine.js         # Matrix-exponential PK engine
-│   │   ├── pd.js             # PD model (BIS prediction)
-│   │   └── decay-predictor.js# Context-sensitive decrement times
+│   │   ├── eleveld.js            # Eleveld 2018 parameter calculation
+│   │   ├── engine.js             # Matrix-exponential PK engine
+│   │   ├── pd.js                 # PD model (BIS prediction)
+│   │   ├── decay-predictor.js    # Context-sensitive decrement times
+│   │   ├── fentanyl.js           # Fentanyl PK parameters
+│   │   ├── ketamine.js           # Ketamine PK parameters
+│   │   └── steady-state-predictor.js # Analytical SS + plateau detection
 │   ├── sim/
-│   │   ├── simulation.js     # Stateless model facade
-│   │   ├── events.js         # Event list with bolus delivery
-│   │   ├── tci-planner.js    # Four TCI planner variants
-│   │   └── simtiva-reference.js # UDF computation, rate correction
+│   │   ├── simulation.js         # Stateless model facade
+│   │   ├── events.js             # Re-export shim → events/
+│   │   ├── events/
+│   │   │   ├── index.js          # Event list orchestrator + facade
+│   │   │   ├── delivery.js       # Bolus delivery math
+│   │   │   ├── replay.js         # Per-drug engine replay
+│   │   │   ├── list-ops.js       # CRUD + clear operations
+│   │   │   ├── query.js          # Concentration queries + curve sampling
+│   │   │   └── actions.js        # findActiveBolus + add/edit/delete
+│   │   ├── tci-planner.js        # Re-export shim → tci/
+│   │   ├── tci/
+│   │   │   ├── index.js          # Barrel re-export + planTCIFromEvents
+│   │   │   ├── shared.js         # Config, quantizers, findMaintenanceRate
+│   │   │   ├── stepped.js        # Stepped planner (conservative)
+│   │   │   ├── cet.js            # CET planner (fast onset)
+│   │   │   ├── cet-conservative.js # CET Conservative (rate-corrected)
+│   │   │   └── emulation.js      # CET Emulation (SimTIVA port)
+│   │   └── simtiva-reference.js  # UDF computation, rate correction
 │   ├── ui/
-│   │   ├── setup.js          # Patient/pump configuration screen
-│   │   ├── chart.js          # Chart.js concentration plot
-│   │   ├── history.js        # Event history panel
-│   │   ├── event-editor.js   # Unified event editor modal
-│   │   ├── keypad.js         # Numeric keypad modal
-│   │   ├── timer.js          # Elapsed time / wall clock
-│   │   ├── controls.js       # Start/pause pump controls
-│   │   ├── mode.js           # TCI/manual mode tracking
-│   │   ├── drug-panel.js     # Drug info sidebar
-│   │   └── persist.js        # LocalStorage case save/restore
+│   │   ├── setup.js              # Patient/pump configuration screen
+│   │   ├── chart.js              # Chart.js concentration plot
+│   │   ├── history.js            # Event history panel
+│   │   ├── event-editor.js       # Unified event editor modal
+│   │   ├── keypad.js             # Numeric keypad modal
+│   │   ├── timer.js              # Elapsed time / wall clock
+│   │   ├── controls.js           # Start/pause pump controls
+│   │   ├── mode.js               # TCI/manual mode tracking
+│   │   ├── drug-panel.js         # Re-export shim → drug-panel/
+│   │   ├── drug-panel/
+│   │   │   ├── index.js          # rAF loop, update(), public getters
+│   │   │   ├── approach.js       # Approach line computation + rendering
+│   │   │   ├── step-bar.js       # Step bar progress + countdown
+│   │   │   ├── exit-readout.js   # Exit Ce readout
+│   │   │   └── formatters.js     # Display formatting helpers
+│   │   ├── settings.js           # Settings & event warning system
+│   │   ├── alert-sound.js        # AudioContext; playAlert(level)
+│   │   └── persist.js            # LocalStorage case save/restore
 │   └── util/
-│       ├── constants.js      # Drug config, pump settings
-│       ├── math.js           # Matrix-exp, eigenvalue utilities
-│       └── units.js          # Unit conversion helpers
-├── test-*.js                 # Test suites (262 tests)
-└── _legacy/                  # Archived legacy code
+│       ├── constants.js          # Drug config, pump settings
+│       ├── math.js               # Matrix-exp, eigenvalue utilities
+│       └── units.js              # Unit conversion helpers
+├── tests/
+│   ├── run-tests.js              # Test runner (455 tests, 13 suites)
+│   └── test-*.js                 # Test suites
+└── _legacy/                      # Archived legacy code
 ```
 
 ## Documentation
