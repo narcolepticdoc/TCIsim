@@ -1,13 +1,15 @@
 /**
  * decay-predictor.js — Predicts when Ce will decay to a threshold
- * 
+ *
  * Given an engine state and a current infusion rate (typically 0 for
  * intermittent bolus mode), finds the elapsed time at which Ce drops
  * to a specified trough concentration.
- * 
+ *
  * Uses a simple forward search with bisection refinement — Ce decay
  * is monotonic when rate=0, so this is straightforward.
  */
+
+import { predictSteadyStateCe } from './steady-state-predictor.js';
 
 /**
  * Find the time (minutes from startTime) at which Ce decays to the
@@ -131,13 +133,9 @@ export function predictTroughWithRate(engine, startState, startTime, troughCe, c
   // If rate > 0, check if steady-state Ce is above trough
   // Steady-state Ce at a given rate can be estimated by running far forward
   if (currentRate > 0) {
-    const savedState = engine.getState();
-    engine.setState(startState);
-    engine.advance(120, currentRate); // 2 hours should approach steady state
-    const steadyCe = engine.getConcentrations().Ce;
-    engine.setState(savedState);
-
-    if (steadyCe > troughCe) {
+    // Analytical steady-state — exact, no simulation needed
+    const steadyCe = predictSteadyStateCe(engine, currentRate);
+    if (steadyCe != null && steadyCe > troughCe) {
       // Infusion maintains Ce above trough — will never reach it
       return { time: null, ceAtTime: steadyCe, willReach: false };
     }
