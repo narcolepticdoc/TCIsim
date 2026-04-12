@@ -146,6 +146,19 @@ Single-page app with two screens (setup and simulation), no framework. All UI mo
 - Timer: elapsed time with optional wall-clock sync, dual-mode popover (Start Time / Elapsed Time)
 - History: all events visible including system events (dimmed italic with ↩ prefix), tappable timestamps toggle ET/RT
 
+### App Entry Point (`js/app.js` + `js/app/`)
+
+`app.js` is the entry point loaded via `<script type="module">`. It owns core application state (model, patient, selected drug, chart instance) and wires all UI modules via `boot()`. Domain concerns are split into sub-modules under `js/app/`:
+
+| Module | Factory | Responsibility |
+|--------|---------|----------------|
+| `settings-ui.js` | `initSettingsUI()` | Settings modal DOM wiring (sliders, checkboxes, tabs) |
+| `tci-modal.js` | `createTciModal()` | TCI delay selection + first-step countdown modals |
+| `session.js` | `createSession()` | Case save / restore / new case lifecycle |
+| `chart-bridge.js` | `createChartBridge()` | Chart refresh cycle, BIS overlay bands, per-frame updates |
+
+Each sub-module receives dependencies via a factory options object (getter functions for mutable state, direct references for stable modules). Late-binding closures resolve circular dependencies between chart-bridge (calls `session.save()`) and session (calls `chartBridge.refresh()`).
+
 ## Event Warning System (`js/ui/settings.js`, `js/ui/alert-sound.js`)
 
 Two-tier advance warnings for upcoming pump events (`source:'tci'` and `source:'manual'`). `source:'system'` events are excluded — they are automatically applied and require no human action.
@@ -159,7 +172,7 @@ Two-tier advance warnings for upcoming pump events (`source:'tci'` and `source:'
 - Three-tone chime (`playAlert('warning')`) if sound is enabled (on by default).
 - Persistent popup appended to `#warnings-container` (fixed position, stacked above bottom controls). Shows drug name, event description in display units, live countdown. Requires manual "Got it" to dismiss.
 
-**Per-frame check:** `settings.check(t)` is called every rAF frame from the `onFrame` callback in `app.js`. Prep visual (card class + topbar class) is toggled each frame based on current `remSec <= prepSec`. Alert and prep-sound are one-shot per event ID, guarded by `_alertFired` and `_prepSoundFired` Sets. Both sets clear on `reset()` (called on new case).
+**Per-frame check:** `settings.check(t)` is called every rAF frame from the `onFrame` callback in `js/app/chart-bridge.js`. Prep visual (card class + topbar class) is toggled each frame based on current `remSec <= prepSec`. Alert and prep-sound are one-shot per event ID, guarded by `_alertFired` and `_prepSoundFired` Sets. Both sets clear on `reset()` (called on new case).
 
 **Audio:** `alert-sound.js` holds a single persistent `AudioContext`. `unlockAudio()` is registered as a one-shot `click` listener in `settings.init()` to satisfy browser autoplay policy. Three levels: `info` (single 880 Hz), `warning` (880/880/1100 Hz), `urgent` (alternating 1200/900 Hz).
 

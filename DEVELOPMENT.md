@@ -4,6 +4,31 @@
 
 ## Session History
 
+### Interim — Refactor app.js into sub-modules (v0.5.19.10)
+
+*Between Sessions 25 and 26. Not tracked in session numbering.*
+
+`js/app.js` was the largest file in the codebase at 1087 lines, owning 8+ unrelated concerns. Decomposed into 4 focused sub-modules under a new `js/app/` directory using the strangler fig pattern (one extraction at a time, full test suite verified after each step).
+
+**New modules:**
+
+- **`js/app/settings-ui.js`** (`initSettingsUI()`) — Settings modal DOM wiring: slider/checkbox initialization, live value labels, tab switching, open/close buttons. Dependencies: only `getSettings` and `setSettings` from the settings module.
+- **`js/app/tci-modal.js`** (`createTciModal()`) — TCI delay selection modal and first-step countdown modal. Owns `pendingTCI`, `tciDelaySeconds`, `tciCountdownInterval` state that was previously at module scope in app.js. Exposes `showDelay`, `commit`, `setPending`, `cleanupDelay`, `cleanupFirstStep`, `initListeners`.
+- **`js/app/session.js`** (`createSession()`) — Case save, restore, and new case lifecycle. Receives mutable app state via getter/setter pairs (`getModel`, `getConfirmedPatient`, `setConfirmedPatient`, etc.). Preserves all invariants: snapshot stripping, system event skipping, `'intermittent'` → `'none'` migration, `mode.refreshUI()` after threshold restore.
+- **`js/app/chart-bridge.js`** (`createChartBridge()`) — Chart refresh cycle (`refresh`), BIS effect overlay (`computeEffectOverlay`), per-drug y-axis config (`getConfig`, replaces `CHART_DRUG_CONFIG`), and the per-frame `onFrame` callback. The `chart._lastCursorUpdate`, `chart._lastSsCe`, `chart._lastPlateauRegion` properties previously glued onto the chart object are now clean local variables.
+
+**Prerequisite: `DRUG_IDS` constant** — Added `export const DRUG_IDS = ['propofol', 'fentanyl', 'ketamine']` to `js/util/constants.js`. Replaces 4 hardcoded drug ID arrays in app.js. Adding remifentanil later is a one-line change.
+
+**Circular dependency resolution:** `chartBridge.refresh()` calls `session.save()` and `session.restore()` calls `chartBridge.refresh()`. Resolved via late-binding closures — both are created in `boot()` before any user interaction, and reference each other through module-scope variables.
+
+**No shim needed:** Unlike `drug-panel.js` → `drug-panel/` and `events.js` → `events/`, app.js is only loaded via `<script type="module">` in index.html — no other JS module imports from it.
+
+**Result:** app.js reduced from 1087 to 542 lines (50% reduction). `initSimScreen` (75 lines) and keypad `onConfirm` handler (90 lines) remain in app.js — they are deeply coupled to app-level state with no natural module boundary.
+
+**Tests:** 485 tests across 13 suites, all passing. No behavioral changes.
+
+---
+
 ### Interim — Round TCI plan in display units (v0.5.19)
 
 *Between Sessions 25 and 26. Not tracked in session numbering.*
