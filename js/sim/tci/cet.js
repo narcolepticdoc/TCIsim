@@ -72,7 +72,7 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
   // Large deficit (Ce < 80% of target): bolus → pause → maintenance
   // Small deficit (Ce 80-95% of target): skip bolus, just adjust rate
   const ceDeficitRatio = currentCe / ceTarget;
-  const needsBolus = currentCe < lowerBound && ceDeficitRatio < 0.8;
+  const needsBolus = currentCe < lowerBound && ceDeficitRatio < cfg.bolusDeficitThreshold;
 
   if (needsBolus) {
     // When delegated from CET-Conservative, bolusOverrideMg is already
@@ -102,7 +102,6 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
         // Forward scan to detect Ce peak (1-second resolution)
         const pauseStep = 1 / 60;
         let cePeak = 0;
-        let cePrior = 0;
         const maxWait = startTime + cfg.maxPlanTime;
 
         while (simTime < maxWait) {
@@ -112,12 +111,10 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
 
           if (ce > cePeak) {
             cePeak = ce;
-            cePrior = ce;
-          } else if (ce < cePrior - 0.0005) {
+          } else if (ce < cePeak - 0.0005) {
             // Ce has started falling — peak was reached
             break;
           }
-          cePrior = ce;
         }
       }
     }

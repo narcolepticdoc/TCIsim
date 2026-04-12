@@ -99,7 +99,7 @@ export function createModel(config = {}) {
       ['fentanyl', calcFentanylParams],
       ['ketamine', calcKetamineParams],
     ]) {
-      const pk = calcFn({ weight: patient.weight });
+      const pk = calcFn({ weight: patient.weight, height: patient.height });
       const eng = createEngine(pk);
       eventList.registerEngine(drugId, eng);
       const ps = getPumpSettings(drugId);
@@ -117,18 +117,14 @@ export function createModel(config = {}) {
   // ---- Patient management ----
 
   /**
-   * Update patient demographics. Rebuilds engine with new params,
-   * preserving compartment state. Replays all events.
+   * Update patient demographics. Rebuilds engine with new params
+   * and replays all events from scratch.
    */
   function setPatient(newPatient) {
     patient = { ...patient, ...newPatient };
     params = calcEleveldParams(patient);
 
-    const oldEngine = eventList.getEngine(cfg.primaryDrug);
-    const savedState = oldEngine ? oldEngine.getState() : null;
-
     const newEngine = createEngine(params);
-    if (savedState) newEngine.setState(savedState);
     eventList.registerEngine(cfg.primaryDrug, newEngine);
 
     // Re-register drug config
@@ -150,11 +146,8 @@ export function createModel(config = {}) {
       ['fentanyl', calcFentanylParams],
       ['ketamine', calcKetamineParams],
     ]) {
-      const pk = calcFn({ weight: patient.weight });
-      const oldEng = eventList.getEngine(drugId);
-      const savedState = oldEng ? oldEng.getState() : null;
+      const pk = calcFn({ weight: patient.weight, height: patient.height });
       const newEng = createEngine(pk);
-      if (savedState) newEng.setState(savedState);
       eventList.registerEngine(drugId, newEng);
       const ps = getPumpSettings(drugId);
       eventList.registerDrugConfig(drugId, {

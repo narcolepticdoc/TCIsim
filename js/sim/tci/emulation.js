@@ -181,14 +181,13 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
         simTime += pauseDurationMin;
       } else {
         const pauseStep = 1 / 60;
-        let cePeak = 0, cePrior = 0;
+        let cePeak = 0;
         while (simTime < startTime + cfg.maxPlanTime) {
           engine.advance(pauseStep, 0);
           simTime += pauseStep;
           const ce = engine.getConcentrations().Ce;
-          if (ce > cePeak) { cePeak = ce; cePrior = ce; }
-          else if (ce < cePrior - 0.0005) break;
-          cePrior = ce;
+          if (ce > cePeak) { cePeak = ce; }
+          else if (ce < cePeak - 0.0005) break;
         }
       }
     }
