@@ -83,12 +83,12 @@ const THETA = {
   CL_arterial:1.0, Q2_arterial:0.68,
   Ce50:3.08, ke0_ref:0.146, BIS_baseline:93.0,
   gamma:1.89, gamma2:1.47,
-  Ce50_aging:-0.00635, Ce50_opioid:-0.567,
+  Ce50_aging:-0.00635,
   ke0_wgt_exp:-0.25,
 };
 
 function calcEleveldParams(patient) {
-  const {age,weight,height,male,opioid,ce50OpioidCorrection,pma:pmaInput}=patient;
+  const {age,weight,height,male,opioid,pma:pmaInput}=patient;
   const bmi=weight/Math.pow(height/100,2);
   const ffm=fatFreeMass(weight,height,age,male);
   const pma=getPMA(age,pmaInput);
@@ -110,8 +110,7 @@ function calcEleveldParams(patient) {
   const q3_sex=male?1:(q3_mat/q3_mat_ref);
   const Q3=THETA.Q3*Math.pow(V3/THETA.V3,0.75)*q3_sex;
   const ke0=THETA.ke0_ref*Math.pow(weight/WGT_REF,THETA.ke0_wgt_exp);
-  const ce50OpioidFlag2=(opioid&&ce50OpioidCorrection)?1:0;
-  const Ce50=THETA.Ce50*Math.exp(THETA.Ce50_aging*(age-AGE_REF))*Math.exp(THETA.Ce50_opioid*ce50OpioidFlag2);
+  const Ce50=THETA.Ce50*Math.exp(THETA.Ce50_aging*(age-AGE_REF));
   
   return {
     patient:{age,weight,height,male,opioid,bmi,ffm,pma},
@@ -368,9 +367,8 @@ console.log('\n=== TEST 6: Covariate Sensitivity ===');
   // Female: CL should be higher
   assert(female.CL > base.CL, `Female CL (${female.CL.toFixed(3)}) > Male CL (${base.CL.toFixed(3)})`);
   
-  // Opioid: Ce50 is the same as base by default (opioid correction off, matches SimTIVA).
-  // The Eleveld paper correction (exp(-0.567)) is only applied when ce50OpioidCorrection=true.
-  assert(opioid.Ce50 === base.Ce50, `Opioid Ce50 (${opioid.Ce50.toFixed(2)}) === Base Ce50 (${base.Ce50.toFixed(2)}) — correction off by default`);
+  // Opioid: Ce50 is always the same as base — opioid affects only PK (V3, CL), not PD.
+  assert(opioid.Ce50 === base.Ce50, `Opioid Ce50 (${opioid.Ce50.toFixed(2)}) === Base Ce50 (${base.Ce50.toFixed(2)}) — opioid does not affect Ce50`);
 
   // Opioid: V3 must decrease (exp(-0.0138*age) applied only with opioid)
   // At age 35: V3 = 273 * ffm/ffmref * exp(-0.0138*35) ≈ 168 L, NOT 273 L
@@ -425,15 +423,25 @@ console.log('\n=== TEST 7: Ce50 Absolute Values (Age-Stratified) ===');
   assert(Math.abs(ttP.Ce50 - 2.98374611609866) < 0.001,
     `Ce50 matches TivaTrainer DiY4 (${ttP.Ce50.toFixed(6)} ≈ 2.983746)`);
 
-  // Opioid at age 50 (default, correction off): Ce50 = 2.800 (same as no-opioid)
+  // Opioid at age 50: Ce50 is identical to no-opioid (opioid affects only V3, CL)
   const opP = calcEleveldParams({ age: 50, weight: 70, height: 170, male: true, opioid: true });
   assert(Math.abs(opP.Ce50 - 2.800) < 0.01,
-    `Ce50 age 50 + opioid (correction off): ${opP.Ce50.toFixed(3)} ≈ 2.800`);
-  // With correction on: Ce50 = 2.800 * exp(-0.567) ≈ 1.588
-  const opPCorr = calcEleveldParams({ age: 50, weight: 70, height: 170, male: true, opioid: true, ce50OpioidCorrection: true });
-  const opCorrExpected = 2.800 * Math.exp(-0.567);
-  assert(Math.abs(opPCorr.Ce50 - opCorrExpected) < 0.02,
-    `Ce50 age 50 + opioid (correction on): ${opPCorr.Ce50.toFixed(3)} ≈ ${opCorrExpected.toFixed(3)}`);
+    `Ce50 age 50 + opioid: ${opP.Ce50.toFixed(3)} ≈ 2.800 (same as no-opioid)`);
+
+  // Ce50 opioid independence across ages: Ce50 must be identical with/without opioid
+  for (const testAge of [20, 40, 50, 70]) {
+    const noOp = calcEleveldParams({ age: testAge, weight: 70, height: 170, male: true, opioid: false });
+    const withOp = calcEleveldParams({ age: testAge, weight: 70, height: 170, male: true, opioid: true });
+    assert(noOp.Ce50 === withOp.Ce50,
+      `Ce50 age ${testAge}: opioid=false (${noOp.Ce50.toFixed(4)}) === opioid=true (${withOp.Ce50.toFixed(4)})`);
+  }
+
+  // Opioid changes PK (V3, CL) but not Ce50
+  const noOp50 = calcEleveldParams({ age: 50, weight: 70, height: 170, male: true, opioid: false });
+  const withOp50 = calcEleveldParams({ age: 50, weight: 70, height: 170, male: true, opioid: true });
+  assert(withOp50.V3 < noOp50.V3, `Opioid V3 (${withOp50.V3.toFixed(1)}) < No-opioid V3 (${noOp50.V3.toFixed(1)})`);
+  assert(withOp50.CL < noOp50.CL, `Opioid CL (${withOp50.CL.toFixed(3)}) < No-opioid CL (${noOp50.CL.toFixed(3)})`);
+  assert(withOp50.Ce50 === noOp50.Ce50, `Ce50 unchanged by opioid: ${withOp50.Ce50.toFixed(4)} === ${noOp50.Ce50.toFixed(4)}`);
 }
 
 // ---- TEST 8: Gamma Split-Direction (BIS Curve Shape) ----
@@ -462,6 +470,45 @@ console.log('\n=== TEST 8: Gamma Split Direction ===');
   const bis_mid = predictBIS(p.Ce50, p);
   assert(approxEqual(bis_mid, 46.5, 0.5),
     `BIS at Ce=Ce50: ${bis_mid.toFixed(1)} ≈ 46.5 (midpoint)`);
+}
+
+// ---- TEST 9: BIS Reference Values (DiY Induction Spreadsheet) ----
+// Validates BIS predictions match TivaTrainer DiY at age 40 (Ce50 ≈ 2.9837).
+// These values confirm the opioid flag does NOT affect the BIS–Ce relationship.
+
+console.log('\n=== TEST 9: BIS Reference Values (Age 40, Ce50 ≈ 2.984) ===');
+{
+  const p40 = calcEleveldParams({ age: 40, weight: 80, height: 170, male: true, opioid: false });
+  const expectedCe50 = 3.08 * Math.exp(-0.00635 * (40 - 35));
+  assert(Math.abs(p40.Ce50 - expectedCe50) < 0.001,
+    `Ce50 age 40 = ${p40.Ce50.toFixed(4)} (expected ${expectedCe50.toFixed(4)})`);
+
+  // BIS at known Ce values — should be in the low-40s range, NOT mid-20s
+  const bisTests = [
+    { Ce: 3.3856, expectedBIS: 42.19, tol: 1.5 },
+    { Ce: 3.2832, expectedBIS: 43.24, tol: 1.5 },
+    { Ce: 3.1659, expectedBIS: 44.48, tol: 1.5 },
+    { Ce: 3.0109, expectedBIS: 46.19, tol: 1.5 },
+  ];
+  for (const t of bisTests) {
+    const bis = predictBIS(t.Ce, p40);
+    assert(Math.abs(bis - t.expectedBIS) < t.tol,
+      `BIS at Ce=${t.Ce.toFixed(4)}: ${bis.toFixed(1)} ≈ ${t.expectedBIS} (±${t.tol})`);
+    // Sanity: BIS must be in 35–50 range, never below 30 at these Ce values
+    assert(bis > 35 && bis < 50,
+      `BIS at Ce=${t.Ce.toFixed(4)} in sane range: ${bis.toFixed(1)} ∈ [35, 50]`);
+  }
+
+  // Same Ce values with opioid=true: BIS–Ce relationship must be identical
+  const p40op = calcEleveldParams({ age: 40, weight: 80, height: 170, male: true, opioid: true });
+  assert(p40op.Ce50 === p40.Ce50,
+    `Ce50 opioid=true (${p40op.Ce50.toFixed(4)}) === opioid=false (${p40.Ce50.toFixed(4)})`);
+  for (const t of bisTests) {
+    const bisOp = predictBIS(t.Ce, p40op);
+    const bisNoOp = predictBIS(t.Ce, p40);
+    assert(bisOp === bisNoOp,
+      `BIS at Ce=${t.Ce.toFixed(4)} identical with/without opioid: ${bisOp.toFixed(1)} === ${bisNoOp.toFixed(1)}`);
+  }
 }
 
 // ---- SUMMARY ----

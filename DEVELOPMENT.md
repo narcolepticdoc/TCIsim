@@ -178,6 +178,22 @@ Three new tests: (9) Ce within ±5% at t=300, 600, 900 min; (10) analytical SS r
 
 426 tests across 13 suites, all passing.
 
+### Interim — Remove Ce50 opioid correction (v0.5.19.7)
+
+*Not tracked in session numbering.*
+
+**Change:** Removed the `ce50OpioidCorrection` flag and `exp(-0.567)` Ce50 opioid correction from the Eleveld implementation. Ce50 is now unconditionally age-dependent only: `Ce50 = 3.08 * exp(-0.00635 * (age - 35))`.
+
+**Rationale:** The `exp(-0.567)` factor is not part of the published Eleveld 2018 model. Ce50 in the paper depends only on age. Opioid covariates affect V3 and CL (PK) but not Ce50 (PD). Three independent reference implementations — SimTIVA, TivaTrainer, and TivaTrainer DiY spreadsheets — all compute Ce50 without an opioid term. Cross-validation against Vandemoortele 2022 review confirms this. The factor (`exp(-0.567) ≈ 0.567`) is numerically close to the V3 opioid term at age 40 (`exp(-0.0138*40) ≈ 0.576`), suggesting it was a misinterpretation of a PK parameter as a PD covariate.
+
+**Files changed:**
+- `js/pk/eleveld.js` — removed `ce50OpioidCorrection` destructuring and `exp(-0.567)` multiplier
+- `index.html` — removed Ce50 opioid correction checkbox row
+- `js/ui/setup.js` — removed checkbox wiring, localStorage persistence, visibility toggling
+- `js/sim/simulation.js` — removed `ce50OpioidCorrection` from default patient
+- `tests/test-pk.js` — removed `Ce50_opioid` theta, updated inline calc, replaced correction-on test with Ce50 opioid-independence tests and BIS reference-value regression tests
+- `tests/test-sim-v2.js` — fixed legacy inline Ce50 formula (removed opioid factor, corrected aging coefficient)
+
 ---
 
 ### Session 25 — Configurable Exit Ce & Emergence Fix (v0.5.16)

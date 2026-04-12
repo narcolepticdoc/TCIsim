@@ -108,7 +108,6 @@ export function init(opts = {}) {
   if (concEl) concEl.addEventListener('change', updatePumpDerived);
   if (opioidEl) opioidEl.addEventListener('change', () => {
     updateDerived();
-    updateCe50CorrectionVisibility();
   });
 
   // Wire pump settings (fentanyl)
@@ -118,13 +117,6 @@ export function init(opts = {}) {
   // Wire pump settings (ketamine)
   const ketConcEl = $('input-ketamine-concentration');
   if (ketConcEl) ketConcEl.addEventListener('change', updatePumpDerivedKetamine);
-
-  // Wire Ce50 opioid correction checkbox
-  const ce50CorrEl = $('input-ce50-correction');
-  if (ce50CorrEl) ce50CorrEl.addEventListener('change', () => { updateDerived(); });
-
-  // Set initial visibility based on restored opioid value
-  updateCe50CorrectionVisibility();
 
   // Populate model info blocks and default-unit selectors for each drug panel
   populateModelInfo();
@@ -277,20 +269,6 @@ function formatStep(step) {
   return Number.isInteger(step) ? String(step) : String(parseFloat(step.toFixed(4)));
 }
 
-// ---- Ce50 opioid correction visibility ----
-
-function updateCe50CorrectionVisibility() {
-  const opioidEl = $('input-opioid');
-  const row = $('ce50-correction-row');
-  if (!row) return;
-  const withOpioid = opioidEl ? opioidEl.value === 'true' : false;
-  row.style.display = withOpioid ? '' : 'none';
-  if (!withOpioid) {
-    const cb = $('input-ce50-correction');
-    if (cb) cb.checked = false;
-  }
-}
-
 // ---- Units ----
 
 function setUnits(u) {
@@ -378,8 +356,7 @@ function updateDerived() {
       // Use the real Eleveld params to get Ce50 (not the old inline formula)
       const opioidEl = $('input-opioid');
       const opioid = opioidEl ? opioidEl.value === 'true' : false;
-      const ce50OpioidCorrection = $('input-ce50-correction')?.checked ?? false;
-      const params = calcEleveldParams({ age: a, weight: w, height: h, male, opioid, ce50OpioidCorrection });
+      const params = calcEleveldParams({ age: a, weight: w, height: h, male, opioid });
 
       $('derived-bmi').textContent = bmi.toFixed(1);
       $('derived-ffm').textContent = ffm.toFixed(1) + ' kg';
@@ -451,7 +428,6 @@ function confirmPatient() {
       height: Math.round(getHeightCm() * 10) / 10,
       male: $('input-sex').value === 'male',
       opioid: opioidEl ? opioidEl.value === 'true' : false,
-      ce50OpioidCorrection: $('input-ce50-correction')?.checked ?? false,
     };
 
     // Apply pump settings before confirming
@@ -503,8 +479,6 @@ function applyPumpSettings() {
     localStorage.setItem('tci-pump-max-rate', String(bolusRateMlH));
     if (tciModeEl) localStorage.setItem('tci-mode', tciModeEl.value);
     if (opioidEl) localStorage.setItem('tci-opioid', opioidEl.value);
-    const ce50CorrEl2 = $('input-ce50-correction');
-    if (ce50CorrEl2) localStorage.setItem('tci-ce50-correction', ce50CorrEl2.checked ? 'true' : 'false');
   } catch (e) {}
 
   // Persist default-unit selections to the same prefKey localStorage keys
@@ -548,8 +522,6 @@ function restorePumpSettingsUI() {
     if (savedRate) { const el = $('input-max-pump-rate'); if (el) el.value = savedRate; }
     if (savedMode) { const el = $('input-tci-mode'); if (el) el.value = savedMode; }
     if (savedOpioid) { const el = $('input-opioid'); if (el) el.value = savedOpioid; }
-    const savedCe50Corr = localStorage.getItem('tci-ce50-correction');
-    if (savedCe50Corr) { const el = $('input-ce50-correction'); if (el) el.checked = savedCe50Corr === 'true'; }
   } catch (e) {}
 
   // Restore fentanyl concentration
