@@ -32,7 +32,7 @@ Key implementation details:
 - Opioid flag affects CL (×1.37) and Ce50 (significantly reduced)
 - Fat-free mass calculation per the Al-Sallami equation
 
-## Event System (`js/sim/events.js`)
+## Event System (`js/sim/events/`)
 
 Events are the source of truth. The event list stores time-ordered events (bolus, rate change, pause) and replays them through the PK engine to compute concentrations at any time.
 
@@ -123,9 +123,9 @@ Clean-room reimplementation of SimTIVA's eigenvalue-based computations, used by 
 - Bolus rounding is done in mL (`Math.round(durationSec * maxRateMgSec / concentration)`) then converted back to mg, matching SimTIVA line 4702
 - `computeRateCorrFactor` takes `e_coef[]` and `lambda[]` (not pump-rate scalars) and simulates the Ce trajectory during delivery to find the mechanistically correct correction duration
 
-## TCI Planners (`js/sim/tci-planner.js`)
+## TCI Planners (`js/sim/tci/`)
 
-Four planning modes. See TCI-PLANNERS.md for full detail.
+Four planning modes, split into separate modules under `js/sim/tci/` (shared helpers in `shared.js`, one file per planner; `js/sim/tci-planner.js` is a thin re-export shim). See TCI-PLANNERS.md for full detail.
 
 All planners share:
 - `plannerBolusDelivery(doseMg, cfg)` — computes duration and rate for bolus delivery, matching `events.js getBolusDelivery()`
