@@ -84,8 +84,9 @@ export function ceForBIS(targetBIS, pdParams) {
   // ratio = (effect / (1 - effect))^(1/γ)
   // Ce = Ce50 × ratio
   
-  // Use gamma1 for first estimate, refine if needed
-  // Since effect = 0.5 corresponds to Ce = Ce50, use appropriate gamma
+  // effect < 0.5  ↔  Ce < Ce50  (by definition of Ce50)
+  // effect ≥ 0.5  ↔  Ce ≥ Ce50
+  // So this branch is exact — no refinement needed.
   const gamma = (effect < 0.5) ? gamma1 : gamma2;
   
   const ratio = Math.pow(effect / (1 - effect), 1 / gamma);

@@ -1,19 +1,20 @@
 /**
  * test-pk.js — Validation test suite for Phase 1 PK engine
- * 
- * Run with: node --experimental-vm-modules test-pk.js
- * (or simply: node test-pk.js if using .mjs or bundler)
- * 
+ *
+ * Run with: node test-pk.js
+ *
  * Tests:
  * 1. Eleveld parameter calculator against published reference values
  * 2. Matrix exponential accuracy
- * 3. PK engine conservation and steady-state behaviour  
+ * 3. PK engine conservation and steady-state behaviour
  * 4. TCI algorithm convergence
  * 5. PD model BIS predictions
+ * 6. Covariate sensitivity
+ * 7. Ce50 absolute values (age-stratified)
+ * 8. Gamma split direction
+ * 9. BIS reference values
+ * 10. ceForBIS round-trip
  */
-
-// Since we're testing ES modules in Node, use dynamic import workaround
-// For simplicity, inline the modules here for Node.js testing
 
 // ============ INLINE math.js ============
 const N = 4;
@@ -64,62 +65,6 @@ function expm4(A) {
   return result;
 }
 
-// ============ INLINE eleveld.js ============
-function sigmoid(x, E50, gamma) { const xg=Math.pow(x,gamma),eg=Math.pow(E50,gamma); return xg/(xg+eg); }
-function fatFreeMass(wgt, hgt, age, male) {
-  const bmi=wgt/Math.pow(hgt/100,2);
-  if(male){const mf=(0.88+(1-0.88)/(1+Math.pow(age/13.4,-12.7)));return mf*((9270*wgt)/(6680+216*bmi));}
-  else{const mf=(1.11+(1-1.11)/(1+Math.pow(age/7.1,-1.1)));return mf*((9270*wgt)/(8780+244*bmi));}
-}
-function getPMA(ageYears, pmaWeeks) { if(pmaWeeks!=null&&pmaWeeks>0) return pmaWeeks; return(ageYears*52)+40; }
-
-const THETA = {
-  V1:6.28,V2:25.5,V3:273,CL:1.89,Q2:1.75,Q3:1.11,
-  V2_aging:-0.0156, CL_aging_opioid:-0.00286,
-  V1_Emax_WGT:2.72, V1_E50_WGT:33.6,
-  CL_female:1.30,
-  CL_mat_PMA50:42.3, CL_mat_hill:9.06,
-  Q3_mat_AGE50:68.3, Q3_mat_hill:1.89,
-  CL_arterial:1.0, Q2_arterial:0.68,
-  Ce50:3.08, ke0_ref:0.146, BIS_baseline:93.0,
-  gamma:1.89, gamma2:1.47,
-  Ce50_aging:-0.00635,
-  ke0_wgt_exp:-0.25,
-};
-
-function calcEleveldParams(patient) {
-  const {age,weight,height,male,opioid,pma:pmaInput}=patient;
-  const bmi=weight/Math.pow(height/100,2);
-  const ffm=fatFreeMass(weight,height,age,male);
-  const pma=getPMA(age,pmaInput);
-  const opioidFlag=opioid?1:0;
-  const WGT_REF=70,AGE_REF=35;
-  
-  const v1r=sigmoid(weight,THETA.V1_E50_WGT,1)/sigmoid(WGT_REF,THETA.V1_E50_WGT,1);
-  const V1=THETA.V1*v1r;
-  const V2=THETA.V2*(weight/WGT_REF)*Math.exp(THETA.V2_aging*(age-AGE_REF));
-  const ffm_ref=fatFreeMass(WGT_REF,170,AGE_REF,true);
-  const V3=opioid ? THETA.V3*(ffm/ffm_ref)*Math.exp(-0.0138*age) : THETA.V3*(ffm/ffm_ref);
-  const cl_mat=sigmoid(pma,THETA.CL_mat_PMA50,THETA.CL_mat_hill);
-  const cl_mat_ref=sigmoid(getPMA(AGE_REF,null),THETA.CL_mat_PMA50,THETA.CL_mat_hill);
-  const cl_sex=male?1:THETA.CL_female;
-  const CL=THETA.CL*Math.pow(weight/WGT_REF,0.75)*(cl_mat/cl_mat_ref)*cl_sex*Math.exp(opioidFlag*THETA.CL_aging_opioid*(age-AGE_REF));
-  const Q2=THETA.Q2*Math.pow(V2/THETA.V2,0.75);
-  const q3_mat=sigmoid(age,THETA.Q3_mat_AGE50,THETA.Q3_mat_hill);
-  const q3_mat_ref=sigmoid(AGE_REF,THETA.Q3_mat_AGE50,THETA.Q3_mat_hill);
-  const q3_sex=male?1:(q3_mat/q3_mat_ref);
-  const Q3=THETA.Q3*Math.pow(V3/THETA.V3,0.75)*q3_sex;
-  const ke0=THETA.ke0_ref*Math.pow(weight/WGT_REF,THETA.ke0_wgt_exp);
-  const Ce50=THETA.Ce50*Math.exp(THETA.Ce50_aging*(age-AGE_REF));
-  
-  return {
-    patient:{age,weight,height,male,opioid,bmi,ffm,pma},
-    V1,V2,V3,CL,Q2,Q3,ke0,
-    k10:CL/V1,k12:Q2/V1,k21:Q2/V2,k13:Q3/V1,k31:Q3/V3,
-    Ce50, gamma1:THETA.gamma, gamma2:THETA.gamma2, BIS_baseline:THETA.BIS_baseline,
-  };
-}
-
 // ============ INLINE engine ============
 function buildSystemMatrix(params) {
   const {V1,V2,V3,CL,Q2,Q3,ke0}=params;
@@ -164,16 +109,12 @@ function createEngine(params) {
   return {advance,getConcentrations,predictCe,reset,getState,setState,get params(){return params;}};
 }
 
-// ============ INLINE pd.js ============
-function drugEffect(Ce,Ce50,g1,g2) {
-  if(Ce<=0)return 0;if(Ce50<=0)return 1;
-  const g=(Ce<=Ce50)?g1:g2;const r=Ce/Ce50;const rg=Math.pow(r,g);return rg/(1+rg);
-}
-function predictBIS(Ce,p) {
-  const e=drugEffect(Ce,p.Ce50,p.gamma1,p.gamma2);return Math.max(0,Math.min(100,p.BIS_baseline*(1-e)));
-}
-
 // ============ TEST RUNNER ============
+(async () => {
+
+const { calcEleveldParams } = await import('../js/pk/eleveld.js');
+const { predictBIS, ceForBIS } = await import('../js/pk/pd.js');
+
 let passed = 0, failed = 0;
 
 function assert(condition, msg) {
@@ -364,8 +305,10 @@ console.log('\n=== TEST 6: Covariate Sensitivity ===');
   assert(elderly.V2 < base.V2, `Elderly V2 (${elderly.V2.toFixed(1)}) < Base V2 (${base.V2.toFixed(1)})`);
   assert(elderly.Ce50 < base.Ce50, `Elderly Ce50 (${elderly.Ce50.toFixed(2)}) < Base Ce50 (${base.Ce50.toFixed(2)})`);
   
-  // Female: CL should be higher
+  // Female: CL should be higher (base value 2.1 vs male 1.79 per Eleveld Table 2)
   assert(female.CL > base.CL, `Female CL (${female.CL.toFixed(3)}) > Male CL (${base.CL.toFixed(3)})`);
+  assert(relEqual(female.CL, 2.1, 0.05),
+    `Female CL within 5% of 2.1 L/min (got ${female.CL.toFixed(3)})`);
   
   // Opioid: Ce50 is always the same as base — opioid affects only PK (V3, CL), not PD.
   assert(opioid.Ce50 === base.Ce50, `Opioid Ce50 (${opioid.Ce50.toFixed(2)}) === Base Ce50 (${base.Ce50.toFixed(2)}) — opioid does not affect Ce50`);
@@ -511,9 +454,41 @@ console.log('\n=== TEST 9: BIS Reference Values (Age 40, Ce50 ≈ 2.984) ===');
   }
 }
 
+// ---- TEST 10: ceForBIS round-trip ----
+console.log('\n=== TEST 10: ceForBIS round-trip ===');
+{
+  const p = calcEleveldParams({ age:35, weight:70, height:170, male:true, opioid:false });
+  const pdParams = { Ce50: p.Ce50, gamma1: p.gamma1, gamma2: p.gamma2, BIS_baseline: p.BIS_baseline };
+
+  // Round-trip: ceForBIS(predictBIS(Ce)) ≈ Ce
+  const testCes = [1.0, 2.0, p.Ce50, 4.0, 6.0, 10.0];
+  for (const Ce of testCes) {
+    const bis = predictBIS(Ce, pdParams);
+    const ceBack = ceForBIS(bis, pdParams);
+    assert(relEqual(ceBack, Ce, 0.01),
+      `ceForBIS round-trip at Ce=${Ce}: got ${ceBack.toFixed(4)} (expected ${Ce})`);
+  }
+
+  // Verify returned Ce is on correct side of Ce50
+  const ceBelow = ceForBIS(70, pdParams); // BIS=70 → Ce < Ce50
+  assert(ceBelow < p.Ce50,
+    `ceForBIS(BIS=70) returns Ce < Ce50: ${ceBelow.toFixed(3)} < ${p.Ce50.toFixed(3)}`);
+
+  const ceAbove = ceForBIS(30, pdParams); // BIS=30 → Ce > Ce50
+  assert(ceAbove > p.Ce50,
+    `ceForBIS(BIS=30) returns Ce > Ce50: ${ceAbove.toFixed(3)} > ${p.Ce50.toFixed(3)}`);
+
+  // Boundary: ceForBIS(BIS = baseline/2) === Ce50
+  const ceMid = ceForBIS(p.BIS_baseline * 0.5, pdParams);
+  assert(relEqual(ceMid, p.Ce50, 0.001),
+    `ceForBIS at 50% baseline returns Ce50: ${ceMid.toFixed(4)} ≈ ${p.Ce50.toFixed(4)}`);
+}
+
 // ---- SUMMARY ----
 console.log(`\n${'='.repeat(50)}`);
 console.log(`  RESULTS: ${passed} passed, ${failed} failed`);
 console.log(`${'='.repeat(50)}\n`);
 
 process.exit(failed > 0 ? 1 : 0);
+
+})().catch(e => { console.error(e); process.exit(1); });
