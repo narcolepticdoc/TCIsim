@@ -10,7 +10,13 @@ js/pk/eleveld.js          Eleveld 2018 PK-PD parameter calculator
 js/pk/engine.js           Matrix-exponential PK engine (4×4, arbitrary time steps)
 js/sim/events.js          Event list — source of truth for all pump commands
 js/sim/simulation.js      Stateless facade: setPatient, planTCI, getConcentrationsAt
-js/sim/tci-planner.js     Four TCI planners (stepped, CET, CET-conservative, emulation)
+js/sim/tci-planner.js     Thin re-export shim over js/sim/tci/
+js/sim/tci/shared.js      Shared helpers: DEFAULT_SCHEME_CONFIG, makeQuantizers, appendTerminalRates, findMaintenanceRate
+js/sim/tci/stepped.js     planTCIScheme — conservative, binary-search bolus
+js/sim/tci/cet.js         planTCISchemeCET + calculateCETBolus — fast onset, peak-matched
+js/sim/tci/cet-conservative.js  planTCISchemeCETConservative — rate-corrected bolus
+js/sim/tci/emulation.js   planTCISchemeEmulation — SimTIVA deliver_cpt port
+js/sim/tci/index.js       Barrel re-export + planTCIFromEvents convenience wrapper
 js/sim/simtiva-reference.js  SimTIVA eigenvalue math (clean-room, no GPL code)
 js/util/constants.js      DRUG_DEFS, DRUG_TASK_UNITS (incl. quantSteps), pump settings
 js/util/units.js          Bidirectional unit conversion + quantizeInDisplay
