@@ -178,6 +178,33 @@ Three new tests: (9) Ce within ±5% at t=300, 600, 900 min; (10) analytical SS r
 
 426 tests across 13 suites, all passing.
 
+### Interim — Fix test-pk.js divergence from production, add ceForBIS coverage (v0.5.19.8)
+
+*Not tracked in session numbering.*
+
+**Problem:** `tests/test-pk.js` inlined its own copy of `calcEleveldParams` instead of importing from production `js/pk/eleveld.js`. This copy had two divergences from the production implementation:
+
+1. **Female CL computed incorrectly:** The test used a multiplier approach (`1.89 × 1.30 = 2.457 L/min`), while the production code uses separate base values per Eleveld Table 2 (`male ? 1.79 : 2.1`). The existing directional assertion (`female.CL > base.CL`) passed silently with the wrong absolute value.
+2. **Q3 had a spurious sex modifier:** The test applied the Q3 maturation ratio only for females (`q3_sex = male ? 1 : (q3_mat/q3_mat_ref)`), while the production code applies it universally regardless of sex.
+
+Additionally, `ceForBIS` in `js/pk/pd.js` had a misleading comment implying its gamma branch was an approximation when it is mathematically exact, and had zero test coverage.
+
+**Fix:**
+- Replaced inlined `calcEleveldParams`, `drugEffect`, and `predictBIS` in `test-pk.js` with dynamic imports of the production modules (`eleveld.js`, `pd.js`). Test body wrapped in async IIFE to support dynamic `import()`.
+- Added absolute value assertion for female CL: `relEqual(female.CL, 2.1, 0.05)`.
+- Added Test 10: `ceForBIS` round-trip (9 assertions) — validates `ceForBIS(predictBIS(Ce)) ≈ Ce` across six Ce values, correct side-of-Ce50 for high/low BIS, and exact Ce50 return at 50% baseline.
+- Fixed `ceForBIS` comment in `pd.js` to explain that `effect < 0.5 ↔ Ce < Ce50` by definition of Ce50, so the branch is exact.
+
+**No production simulation logic changed.** Only the test suite and a comment were modified.
+
+**Files changed:**
+- `tests/test-pk.js` — replaced inlined PK/PD functions with imports, added female CL absolute assertion, added ceForBIS round-trip test
+- `js/pk/pd.js` — fixed misleading comment on ceForBIS gamma branch
+
+485 tests across 13 suites, all passing.
+
+---
+
 ### Interim — Remove Ce50 opioid correction (v0.5.19.7)
 
 *Not tracked in session numbering.*
