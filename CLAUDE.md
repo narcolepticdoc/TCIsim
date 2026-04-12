@@ -8,7 +8,13 @@ Mobile-first PWA for anesthesia training. Simulates propofol pharmacokinetics us
 js/version.js             APP_VERSION — single source of truth, edit here to bump the version
 js/pk/eleveld.js          Eleveld 2018 PK-PD parameter calculator
 js/pk/engine.js           Matrix-exponential PK engine (4×4, arbitrary time steps)
-js/sim/events.js          Event list — source of truth for all pump commands
+js/sim/events.js          Thin re-export shim over js/sim/events/
+js/sim/events/index.js    Event list orchestrator — state + facade assembly
+js/sim/events/delivery.js Bolus delivery math (pump rate, push rate)
+js/sim/events/replay.js   Per-drug engine replay, getRateAtTime, getActiveRateForDrug
+js/sim/events/list-ops.js CRUD: insert/remove/getById/getAll/getByDrug/clearAfter/clearFrom/clearAll
+js/sim/events/query.js    getConcentrationsAt, computeCurve, getStateAtLastEvent, getStateAtTime
+js/sim/events/actions.js  findActiveBolus + addRate/addBolus/addPause/editEvent/deleteEvent
 js/sim/simulation.js      Stateless facade: setPatient, planTCI, getConcentrationsAt
 js/sim/tci-planner.js     Thin re-export shim over js/sim/tci/
 js/sim/tci/shared.js      Shared helpers: DEFAULT_SCHEME_CONFIG, makeQuantizers, appendTerminalRates, findMaintenanceRate
@@ -21,6 +27,12 @@ js/sim/simtiva-reference.js  SimTIVA eigenvalue math (clean-room, no GPL code)
 js/util/constants.js      DRUG_DEFS, DRUG_TASK_UNITS (incl. quantSteps), pump settings
 js/util/units.js          Bidirectional unit conversion + quantizeInDisplay
 js/pk/steady-state-predictor.js  Analytical SS + slope-reversal plateau detection
+js/ui/drug-panel.js       Thin re-export shim over js/ui/drug-panel/
+js/ui/drug-panel/index.js Drug panel orchestrator — rAF loop, update(), public getters
+js/ui/drug-panel/approach.js  Approach line: cache, computeApproachData, updateApproachLine
+js/ui/drug-panel/step-bar.js  Step bar progress + next-event countdown
+js/ui/drug-panel/exit-readout.js  "Time to Exit Ce if stopped now" readout
+js/ui/drug-panel/formatters.js   fmtCountdown, bisColor, fmtCe, fmtRateInline
 js/ui/settings.js         Settings & event warning system (prep pulse + alert popup)
 js/ui/alert-sound.js      Persistent AudioContext; unlockAudio() + playAlert(level)
 js/app.js                 Entry point, wires all modules
