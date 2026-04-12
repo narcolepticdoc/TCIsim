@@ -146,7 +146,7 @@ const FFM_REF = (0.88 + (1 - 0.88) / (1 + Math.pow(35 / 13.4, -12.7))) *
  * @returns {Object} PK-PD parameters with rate constants in per-minute units
  */
 export function calcEleveldParams(patient) {
-  const { age, weight, height, male, opioid, ce50OpioidCorrection, pma: pmaInput } = patient;
+  const { age, weight, height, male, opioid, pma: pmaInput } = patient;
 
   const bmi = weight / Math.pow(height / 100, 2);
   const ffm = fatFreeMass(weight, height, age, male);
@@ -214,15 +214,10 @@ export function calcEleveldParams(patient) {
 
   // ---- PD parameters ----
   // Ce50: Eleveld 2018 Table 3, E50 = 3.08 * Fage(-0.00635)
-  // Confirmed against TivaTrainer DiY4 (cell G22) and Vandemoortele 2022 review.
-  // Previous value -0.0517 was ln(2)/13.4 — a copy-paste error from Al-Sallami FFM.
-  //
-  // Opioid correction (exp(-0.567)): present in the Eleveld 2018 paper, but NOT
-  // implemented by SimTIVA. Disabled by default (ce50OpioidCorrection=false) to
-  // match SimTIVA. Enable via the setup UI toggle to use the paper formula.
-  const ce50OpioidFlag = (opioid && ce50OpioidCorrection) ? 1 : 0;
-  const Ce50 = 3.08 * Math.exp(-0.00635 * (age - 35)) *
-               Math.exp(-0.567 * ce50OpioidFlag);
+  // Age-dependent only — no opioid covariate on Ce50.
+  // Confirmed against SimTIVA, TivaTrainer DiY4, and Vandemoortele 2022 review.
+  // Opioid effects in Eleveld affect V3 and CL only (PK), not Ce50 (PD).
+  const Ce50 = 3.08 * Math.exp(-0.00635 * (age - 35));
 
   // Split-gamma: asymmetric sigmoid Emax curve.
   // TivaTrainer DiY4: IF(Ce <= Ce50, 1.89, 1.47)
