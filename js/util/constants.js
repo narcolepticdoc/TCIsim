@@ -37,6 +37,10 @@ export const DRUG_DEFS = {
   },
 };
 
+// Active drug IDs — single source of truth for iteration.
+// remifentanil is defined in DRUG_DEFS but has no PK model yet.
+export const DRUG_IDS = ['propofol', 'fentanyl', 'ketamine'];
+
 // ---- Runtime pump settings (user-configurable) ----
 // Falls back to DRUG_DEFS defaults. Updated from setup screen.
 
