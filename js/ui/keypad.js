@@ -185,6 +185,20 @@ export function show(type) {
     prefilled = true;
   }
 
+  // Pre-fill last rate for this drug (stored in canonical mg/min, converted to display unit)
+  if (type === 'rate') {
+    try {
+      const lastMgMin = localStorage.getItem(`tci_lastRate_${currentDrug}`);
+      if (lastMgMin) {
+        const patient = getPatient();
+        const ctx = { weightKg: patient?.weight || 70 };
+        const displayVal = fromCanonical(parseFloat(lastMgMin), currentUnit, currentDrug, 'rate', ctx);
+        buffer = formatValue(displayVal, currentUnit);
+        prefilled = true;
+      }
+    } catch (e) {}
+  }
+
   // Pre-fill last bolus dose for this drug (stored in canonical mg, converted to display unit)
   if (type === 'bolus') {
     try {
@@ -328,6 +342,11 @@ function confirm(deliveryMode) {
     // Remember bolus dose in canonical mg for quick re-dose
     if (currentType === 'bolus') {
       try { localStorage.setItem(`tci_lastBolus_${currentDrug}`, String(canonical.value)); } catch (e) {}
+    }
+
+    // Remember rate in canonical mg/min for quick resume
+    if (currentType === 'rate') {
+      try { localStorage.setItem(`tci_lastRate_${currentDrug}`, String(canonical.value)); } catch (e) {}
     }
 
     // Capture one-shot callback before close() clears it
