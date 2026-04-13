@@ -56,6 +56,7 @@ function _getApproachCache(drugId) {
       // Cache invalidation
       computedVersion: -1,
       mode: '', rate: 0, target: 0,
+      ceAboveTarget: null,  // tracks Ce vs ceTarget to invalidate on threshold crossing
       ssSlopeTol: 0, tciFraction: 0, exitBandPct: 0,
       curve: null,
     };
@@ -228,10 +229,15 @@ export function updateApproachLine(ctx, drugId, t, m, Ce, ceTarget, rate) {
   const tciFraction = ctx.getTciFraction();
   const exitBandPct = ctx.getSsExitBand();
 
+  // Track whether Ce is above the target/threshold — invalidate cache on crossing
+  // so "Below Redose Threshold" ↔ countdown transitions aren't stale
+  const ceAboveTarget = ceTarget > 0 ? (Ce > ceTarget) : null;
+
   const displayChanged =
     cache.mode   !== m ||
     Math.abs(cache.rate   - rate)     > 0.01 ||
     Math.abs(cache.target - ceTarget) > 0.01 ||
+    (ceAboveTarget !== null && cache.ceAboveTarget !== ceAboveTarget) ||
     Math.abs(cache.ssSlopeTol  - ssSlopeTol)  > 1e-7 ||
     Math.abs(cache.tciFraction - tciFraction) > 1e-6 ||
     Math.abs((cache.exitBandPct || 0) - exitBandPct) > 1e-6;
@@ -279,6 +285,7 @@ export function updateApproachLine(ctx, drugId, t, m, Ce, ceTarget, rate) {
     cache.mode            = m;
     cache.rate            = rate;
     cache.target          = ceTarget;
+    cache.ceAboveTarget   = ceAboveTarget;
     cache.ssSlopeTol      = ssSlopeTol;
     cache.tciFraction     = tciFraction;
     cache.exitBandPct     = exitBandPct;
