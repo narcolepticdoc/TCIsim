@@ -205,6 +205,13 @@ function update() {
           if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
         }
       }
+    } else {
+      // Case not started — clear stale step bar data from previous case
+      const barEl = ctx.$(dId + '-bar');
+      const cntEl = ctx.$(dId + '-bar-countdown');
+      if (barEl) barEl.style.width = '0%';
+      if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
+      barEl?.parentElement?.classList.remove('step-bar-below');
     }
 
     // ── Right-side status indicator ───────────────────────────────
