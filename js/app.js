@@ -330,8 +330,13 @@ function boot() {
         if (!controls.isCaseStarted()) advancePreStartClock(selectedDrug, 0.01);
       } else if (type === 'intermittent') {
         // Redose threshold — independent overlay, does not change mode
-        mode.setIntermittentThreshold(selectedDrug, canonicalValue);
-        addAnnotation(`Redose threshold ${displayText}`);
+        if (canonicalValue <= 0) {
+          mode.clearIntermittentThreshold(selectedDrug);
+          addAnnotation('Redose threshold cleared');
+        } else {
+          mode.setIntermittentThreshold(selectedDrug, canonicalValue);
+          addAnnotation(`Redose threshold ${displayText}`);
+        }
         mode.refreshUI(selectedDrug);
         // Update history filter for the new threshold state
         const isInfusing = mode.get(selectedDrug) === 'manual';

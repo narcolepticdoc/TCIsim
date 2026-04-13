@@ -113,6 +113,8 @@ export function show(type) {
   let title = TITLES[type] || 'Enter Value';
   if (type === 'ceTarget' && getMode() === 'tci' && getCeTarget() > 0) {
     title = 'Change Ce Target';
+  } else if (type === 'intermittent' && getIntermittentThreshold() > 0) {
+    title = 'Change Redose Threshold';
   }
   $('keypad-title').textContent = title;
 
@@ -152,9 +154,12 @@ export function show(type) {
   const pushBtn = $('keypad-push-btn');
   if (pushBtn) pushBtn.style.display = (type === 'bolus' && !isIntermittentBolus) ? '' : 'none';
 
-  // Show "Clear" button only for exitCe when a value is already set
+  // Show "Clear" button for exitCe or intermittent when a value is already set
   const clearBtn = $('keypad-clear-btn');
-  if (clearBtn) clearBtn.style.display = (type === 'exitCe' && getExitCe() > 0) ? '' : 'none';
+  if (clearBtn) clearBtn.style.display =
+    (type === 'exitCe' && getExitCe() > 0) ||
+    (type === 'intermittent' && getIntermittentThreshold() > 0)
+      ? '' : 'none';
 
   // Pre-fill if changing existing target
   if (type === 'ceTarget' && getMode() === 'tci' && getCeTarget() > 0) {
@@ -167,6 +172,15 @@ export function show(type) {
     const patient = getPatient();
     const ctx = { weightKg: patient?.weight || 70 };
     const displayVal = fromCanonical(getExitCe(), currentUnit, currentDrug, 'ceTarget', ctx);
+    buffer = formatValue(displayVal, currentUnit);
+    prefilled = true;
+  }
+
+  // Pre-fill if changing existing redose threshold
+  if (type === 'intermittent' && getIntermittentThreshold() > 0) {
+    const patient = getPatient();
+    const ctx = { weightKg: patient?.weight || 70 };
+    const displayVal = fromCanonical(getIntermittentThreshold(), currentUnit, currentDrug, 'ceTarget', ctx);
     buffer = formatValue(displayVal, currentUnit);
     prefilled = true;
   }
