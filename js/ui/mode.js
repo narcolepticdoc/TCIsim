@@ -141,8 +141,8 @@ function updateExitButton(drugId) {
   const be = $('btn-exit');
   if (!be) return;
   const val = exitCeTargets[drugId] || 0;
-  const label = exitCeLabels[drugId] || '';
   be.textContent = val > 0 ? 'Change Exit Ce' : 'Set Exit Ce';
+  be.classList.toggle('active-mode', val > 0);
 }
 
 /**
