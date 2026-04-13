@@ -24,7 +24,7 @@ js/sim/tci/cet-conservative.js  planTCISchemeCETConservative — rate-corrected 
 js/sim/tci/emulation.js   planTCISchemeEmulation — SimTIVA deliver_cpt port
 js/sim/tci/index.js       Barrel re-export + planTCIFromEvents convenience wrapper
 js/sim/simtiva-reference.js  SimTIVA eigenvalue math (clean-room, no GPL code)
-js/util/constants.js      DRUG_DEFS, DRUG_TASK_UNITS (incl. quantSteps), pump settings
+js/util/constants.js      DRUG_DEFS, DRUG_IDS, DRUG_TASK_UNITS (incl. quantSteps), pump settings
 js/util/units.js          Bidirectional unit conversion + quantizeInDisplay
 js/pk/steady-state-predictor.js  Analytical SS + slope-reversal plateau detection
 js/ui/drug-panel.js       Thin re-export shim over js/ui/drug-panel/
@@ -36,6 +36,10 @@ js/ui/drug-panel/formatters.js   fmtCountdown, bisColor, fmtCe, fmtRateInline
 js/ui/settings.js         Settings & event warning system (prep pulse + alert popup)
 js/ui/alert-sound.js      Persistent AudioContext; unlockAudio() + playAlert(level)
 js/app.js                 Entry point, wires all modules
+js/app/settings-ui.js     Settings modal DOM wiring (sliders, tabs, open/close)
+js/app/tci-modal.js       TCI delay + first-step countdown modals
+js/app/session.js         Case save / restore / new case
+js/app/chart-bridge.js    Chart refresh, BIS overlay, per-frame updates
 ```
 
 ## Architecture in One Paragraph

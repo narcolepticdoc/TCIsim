@@ -1,0 +1,215 @@
+/**
+ * chart-bridge.js — Chart updates, effect overlay, and per-frame callbacks.
+ *
+ * Extracted from app.js. Owns the refreshChart cycle, BIS overlay
+ * computation, per-drug chart configuration, and the rAF-driven
+ * onFrame callback that updates the chart cursor, history dimming,
+ * steady-state line, and plateau region.
+ */
+
+import { ceForBIS } from '../pk/pd.js';
+
+const $ = id => document.getElementById(id);
+
+// ---- Per-Drug Chart Configuration ----
+// yScale: multiply canonical mcg/mL curve values before passing to chart
+// yLabel: y-axis title
+// yDefault: suggestedMax when no saved value exists
+const CHART_DRUG_CONFIG = {
+  propofol:     { yScale: 1,    yLabel: '\u03bcg/mL', yDefault: 10 },
+  remifentanil: { yScale: 1,    yLabel: '\u03bcg/mL', yDefault: 10 },
+  fentanyl:     { yScale: 1000, yLabel: 'ng/mL',  yDefault: 10 },
+  ketamine:     { yScale: 1000, yLabel: 'ng/mL',  yDefault: 10000 },
+};
+
+/**
+ * Create chart bridge controller.
+ *
+ * @param {{
+ *   getChart: Function,
+ *   getModel: Function,
+ *   timer: object,
+ *   getSelectedDrug: Function,
+ *   mode: object,
+ *   drugPanel: object,
+ *   history: object,
+ *   settings: object,
+ *   save: Function,
+ * }} deps
+ */
+export function createChartBridge({
+  getChart, getModel, timer, getSelectedDrug,
+  mode, drugPanel, history, settings, save,
+}) {
+  // Throttle state — replaces properties previously glued onto the chart object
+  let lastCursorUpdate = 0;
+  let lastHistoryDimUpdate = 0;
+  let lastSsCe = null;
+  let lastPlateauRegion = null;
+
+  function getConfig(drugId) {
+    return CHART_DRUG_CONFIG[drugId] || { yScale: 1, yLabel: '\u03bcg/mL', yDefault: 10 };
+  }
+
+  /**
+   * Compute BIS overlay bands from the PD model.
+   * Bands are drawn at Ce levels corresponding to BIS thresholds.
+   */
+  function computeEffectOverlay() {
+    const chart = getChart();
+    const model = getModel();
+    const selectedDrug = getSelectedDrug();
+    if (!chart || !model) return;
+    const pd = model.getPDModel(selectedDrug);
+    if (!pd) { chart.setEffectOverlay([]); return; }
+
+    const params = pd.params;
+    // ceForBIS(N) returns the Ce concentration at which BIS = N.
+    // More drug -> lower BIS -> higher Ce, so: ce90 < ce80 < ce60 < ce40 < ce20 numerically.
+    const ce90 = ceForBIS(90, params);  // Light Sedation upper boundary
+    const ce80 = ceForBIS(80, params);  // Light Sedation / Deep Sedation boundary
+    const ce60 = ceForBIS(60, params);  // Deep Sedation / GA boundary
+    const ce40 = ceForBIS(40, params);  // GA / Deep Anesthesia boundary
+    const ce20 = ceForBIS(20, params);  // Deep Anesthesia lower boundary
+
+    chart.setEffectOverlay([
+      { ceMin: ce90, ceMax: ce80, color: '#ef444430', label: 'Light Sedation' },  // Red    BIS 80-90
+      { ceMin: ce80, ceMax: ce60, color: '#f9731630', label: 'Deep Sedation' },   // Orange BIS 60-80
+      { ceMin: ce60, ceMax: ce40, color: '#eab30830', label: 'GA' },              // Yellow BIS 40-60
+      { ceMin: ce40, ceMax: ce20, color: '#22c55e30', label: 'Deep Anesthesia' }, // Green  BIS 20-40
+    ]);
+  }
+
+  /**
+   * Recompute the curve and refresh the chart.
+   * Called after every model mutation.
+   */
+  function refresh() {
+    const chart = getChart();
+    const model = getModel();
+    const selectedDrug = getSelectedDrug();
+    if (!chart || !model) return;
+    const t = timer.getElapsedMinutes();
+
+    // Compute end time: furthest event + 360 min forward buffer, minimum 360 min.
+    // Matches the slope-based steady-state predictor's 6 h search horizon so the
+    // chart can display the full predicted plateau region when users pan out.
+    const events = model.getEvents(selectedDrug);
+    const lastEventTime = events.length > 0 ? events[events.length - 1].time : 0;
+    const endTime = Math.max(360, t + 360, lastEventTime + 360);
+
+    const rawCurve = model.computeCurve(selectedDrug, 0, endTime, 10 / 60);
+    const { yScale } = getConfig(selectedDrug);
+    const chartCurve = yScale === 1 ? rawCurve : rawCurve.map(pt => ({
+      ...pt, Ce: pt.Ce * yScale, Cp: pt.Cp * yScale,
+    }));
+    // Keep the chart's PD model in sync with the currently selected drug
+    // so the eBIS tooltip line reflects the right drug (null clears it
+    // for fentanyl/ketamine which have no PD model).
+    chart.setPDModel(model.getPDModel(selectedDrug));
+    chart.setCurveData(chartCurve);
+    drugPanel.setCurveData(rawCurve);  // drug-panel uses canonical mcg/mL for threshold comparisons
+    computeEffectOverlay();  // clears BIS bands for drugs without a PD model
+
+    // Show chart controls
+    const cc = $('chart-controls');
+    if (cc) cc.style.display = 'flex';
+
+    // Update target line (scale Ce target to match chart units)
+    const m = mode.get(selectedDrug);
+    const ce = mode.getCeTarget(selectedDrug);
+    chart.setTargetLine(m === 'tci' && ce > 0 ? ce * yScale : null);
+
+    // Intermittent threshold line (amber dashed, shown whenever threshold is set)
+    const threshold = mode.getIntermittentThreshold(selectedDrug);
+    chart.setThresholdLine(threshold > 0 ? threshold * yScale : null);
+
+    // Exit Ce line (red dashed, mode-independent)
+    const exitCeVal = mode.getExitCe(selectedDrug);
+    chart.setExitLine(exitCeVal > 0 ? exitCeVal * yScale : null);
+
+    // Update history panel
+    history.render(selectedDrug);
+
+    // Auto-save state
+    save();
+  }
+
+  /**
+   * Per-frame callback for drugPanel's rAF loop.
+   * Updates chart cursor, history dimming, steady-state line,
+   * plateau region, and settings warnings.
+   */
+  function onFrame(t) {
+    const chart = getChart();
+    const model = getModel();
+    const selectedDrug = getSelectedDrug();
+
+    // Update chart cursor — throttled to every 500ms
+    if (chart && t > 0) {
+      const now = Date.now();
+      if (!lastCursorUpdate || now - lastCursorUpdate > 500) {
+        lastCursorUpdate = now;
+        chart.setCursorTime(t);
+      }
+    }
+    // Update history past/future dimming — throttled to every 2s
+    {
+      const now = Date.now();
+      if (!lastHistoryDimUpdate || now - lastHistoryDimUpdate > 2000) {
+        lastHistoryDimUpdate = now;
+        history.updateDimming();
+      }
+    }
+    // Chart annotations — updated per-frame so they reflect the
+    // freshly-computed approach data (which runs in the rAF loop BEFORE
+    // this callback). Putting it in refreshChart would race: refreshChart
+    // reads the data before updateApproachLine has computed it.
+    if (chart) {
+      const m = mode.get(selectedDrug);
+      const { yScale: ys } = getConfig(selectedDrug);
+
+      // Steady-state horizontal line (manual mode only)
+      const ssCe = drugPanel.getSteadyStateCe(selectedDrug);
+      if (ssCe && m === 'manual') {
+        const scaled = ssCe * ys;
+        if (lastSsCe !== scaled) {
+          lastSsCe = scaled;
+          chart.setSteadyStateLine(scaled);
+        }
+      } else if (lastSsCe) {
+        lastSsCe = null;
+        chart.setSteadyStateLine(null);
+      }
+
+      // Plateau region bounding box (manual mode only)
+      const plat = drugPanel.getPlateauRegion(selectedDrug);
+      if (plat && m === 'manual') {
+        // Compute chart end time for permanent plateaus (endMin === null)
+        const events = model ? model.getEvents(selectedDrug) : [];
+        const lastEvt = events.length > 0 ? events[events.length - 1].time : 0;
+        const chartEnd = Math.max(360, t + 360, lastEvt + 360);
+        const region = {
+          startMin: plat.startMin,
+          endMin:   plat.endMin ?? chartEnd,
+          ceMin:    plat.ceMin * ys,
+          ceMax:    plat.ceMax * ys,
+        };
+        // Only update chart when region actually changed
+        const prev = lastPlateauRegion;
+        if (!prev || prev.startMin !== region.startMin || prev.endMin !== region.endMin ||
+            Math.abs(prev.ceMin - region.ceMin) > 1e-9 || Math.abs(prev.ceMax - region.ceMax) > 1e-9) {
+          lastPlateauRegion = region;
+          chart.setPlateauRegion(region);
+        }
+      } else if (lastPlateauRegion) {
+        lastPlateauRegion = null;
+        chart.setPlateauRegion(null);
+      }
+    }
+    // Check for upcoming events requiring advance warning
+    if (t > 0) settings.check(t);
+  }
+
+  return { getConfig, computeEffectOverlay, refresh, onFrame };
+}
