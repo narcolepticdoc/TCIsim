@@ -402,9 +402,6 @@ export function createChart(canvas, config = {}) {
           }
 
           const ctx = ch.ctx;
-          const olAlpha = parseInt(_overlayAlpha, 16) / 255;
-          ctx.save();
-          ctx.globalAlpha = olAlpha;
           if (targetCe !== null && targetCe > 0)
             drawPillLabel(ctx, targetCe, targetCe.toFixed(1), COLORS.target);
           if (thresholdCe !== null && thresholdCe > 0)
@@ -413,7 +410,6 @@ export function createChart(canvas, config = {}) {
             drawPillLabel(ctx, steadyStateCe, steadyStateCe.toFixed(2), 'rgba(34, 197, 94, 0.9)');
           if (exitCe !== null && exitCe > 0)
             drawPillLabel(ctx, exitCe, exitCe.toFixed(1), '#ef4444');
-          ctx.restore();
         },
       },
       {
