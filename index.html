@@ -665,6 +665,13 @@
           </div>
           <div class="input-grid">
             <div class="form-row">
+              <label for="input-fentanyl-pump">Delivery Method</label>
+              <select id="input-fentanyl-pump">
+                <option value="false" selected>Manual (bolus only)</option>
+                <option value="true">Infusion pump</option>
+              </select>
+            </div>
+            <div class="form-row">
               <label for="input-fentanyl-concentration">Concentration</label>
               <select id="input-fentanyl-concentration">
                 <option value="0.05" selected>50 mcg/mL (standard)</option>
@@ -675,7 +682,7 @@
               <label for="input-fentanyl-bolus-unit">Default bolus unit</label>
               <select id="input-fentanyl-bolus-unit"></select>
             </div>
-            <div class="form-row">
+            <div class="form-row" id="row-fentanyl-rate-unit">
               <label for="input-fentanyl-rate-unit">Default infusion unit</label>
               <select id="input-fentanyl-rate-unit"></select>
             </div>
@@ -690,6 +697,13 @@
           </div>
           <div class="input-grid">
             <div class="form-row">
+              <label for="input-ketamine-pump">Delivery Method</label>
+              <select id="input-ketamine-pump">
+                <option value="false" selected>Manual (bolus only)</option>
+                <option value="true">Infusion pump</option>
+              </select>
+            </div>
+            <div class="form-row">
               <label for="input-ketamine-concentration">Concentration</label>
               <select id="input-ketamine-concentration">
                 <option value="10" selected>10 mg/mL (1%)</option>
@@ -700,7 +714,7 @@
               <label for="input-ketamine-bolus-unit">Default bolus unit</label>
               <select id="input-ketamine-bolus-unit"></select>
             </div>
-            <div class="form-row">
+            <div class="form-row" id="row-ketamine-rate-unit">
               <label for="input-ketamine-rate-unit">Default infusion unit</label>
               <select id="input-ketamine-rate-unit"></select>
             </div>

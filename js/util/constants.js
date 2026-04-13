@@ -41,6 +41,12 @@ export const DRUG_DEFS = {
 // remifentanil is defined in DRUG_DEFS but has no PK model yet.
 export const DRUG_IDS = ['propofol', 'fentanyl', 'ketamine'];
 
+// ---- Per-drug pump requirement ----
+// Propofol always requires an infusion pump (TCI + manual infusion).
+// Fentanyl/ketamine are optional — when disabled the UI locks to
+// intermittent bolus-only mode with IV Push delivery.
+const PUMP_MANDATORY = new Set(['propofol']);
+
 // ---- Runtime pump settings (user-configurable) ----
 // Falls back to DRUG_DEFS defaults. Updated from setup screen.
 
@@ -48,7 +54,7 @@ const _pumpSettings = {};
 
 /**
  * Get effective pump settings for a drug.
- * Returns { concentration, bolusRateMlH, maxRate }.
+ * Returns { concentration, bolusRateMlH, maxRate, pumpEnabled }.
  * User overrides take precedence over DRUG_DEFS defaults.
  */
 export function getPumpSettings(drugId) {
@@ -58,13 +64,22 @@ export function getPumpSettings(drugId) {
     concentration: user.concentration ?? def.concentration ?? 10,
     bolusRateMlH: user.bolusRateMlH ?? def.bolusRateMlH ?? 750,
     maxRate: user.maxRate ?? def.maxRate ?? 200,
+    pumpEnabled: PUMP_MANDATORY.has(drugId) ? true : (user.pumpEnabled ?? false),
   };
+}
+
+/**
+ * Check whether an infusion pump is enabled for a drug.
+ * Propofol always returns true. Fentanyl/ketamine default to false.
+ */
+export function isPumpEnabled(drugId) {
+  return getPumpSettings(drugId).pumpEnabled;
 }
 
 /**
  * Update pump settings for a drug. Partial updates supported.
  * @param {string} drugId
- * @param {Object} settings - { concentration?, bolusRateMlH? }
+ * @param {Object} settings - { concentration?, bolusRateMlH?, pumpEnabled? }
  */
 export function setPumpSettings(drugId, settings) {
   if (!_pumpSettings[drugId]) _pumpSettings[drugId] = {};
@@ -72,6 +87,9 @@ export function setPumpSettings(drugId, settings) {
   // values when both concentration and bolusRateMlH are updated together.
   if (settings.concentration != null) _pumpSettings[drugId].concentration = settings.concentration;
   if (settings.bolusRateMlH  != null) _pumpSettings[drugId].bolusRateMlH  = settings.bolusRateMlH;
+  if (settings.pumpEnabled   != null && !PUMP_MANDATORY.has(drugId)) {
+    _pumpSettings[drugId].pumpEnabled = !!settings.pumpEnabled;
+  }
   const ps = getPumpSettings(drugId);
   _pumpSettings[drugId].maxRate = ps.bolusRateMlH * ps.concentration / 60;
 }

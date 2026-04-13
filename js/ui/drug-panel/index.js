@@ -15,6 +15,7 @@
  */
 
 import * as settings from '../settings.js';
+import { isPumpEnabled } from '../../util/constants.js';
 import { fmtCe, fmtRateInline, bisColor, isInBolusPhase, fmtCountdown,
          TCI_FRACTION_DEFAULT, SS_SLOPE_DEFAULT, EXIT_BAND_DEFAULT } from './formatters.js';
 import { setCurveData, updateApproachLine, _getApproachCache,
@@ -129,12 +130,15 @@ function update() {
 
     if (statusEl) {
       let label = 'Stopped', cls = 'stopped';
-      if (!caseStarted || m === 'none') {
+      const pumpOn = isPumpEnabled(dId);
+      if (!caseStarted) {
         label = 'Stopped'; cls = 'stopped';
-      } else if (threshold > 0 && m !== 'manual') {
-        // Threshold-only (no infusion): show bolus status during delivery, blank otherwise
+      } else if (!pumpOn || (m === 'none' && threshold > 0) || (threshold > 0 && m !== 'manual')) {
+        // No pump, or threshold-only (no infusion): show bolus status during delivery, blank otherwise
         if (isInBolusPhase(ctx, dId, t) || rate > 50) { label = 'Bolus'; cls = 'bolus'; }
         else { label = ''; cls = ''; }
+      } else if (m === 'none') {
+        label = 'Stopped'; cls = 'stopped';
       } else if (rate === 0) {
         label = 'Paused'; cls = 'paused';
       } else if (isInBolusPhase(ctx, dId, t) || rate > 50) {

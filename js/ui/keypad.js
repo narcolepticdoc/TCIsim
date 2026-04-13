@@ -27,6 +27,7 @@ let getCeTarget = null;        // () => current Ce target
 let isTciDrug = null;          // () => bool — does the selected drug support TCI?
 let getExitCe = null;          // () => current Exit Ce for selected drug
 let getIntermittentThreshold = null; // () => current redose threshold for selected drug
+let isPumpEnabled = null;      // () => bool — is an infusion pump enabled for the selected drug?
 let prefilled = false;         // true when buffer is pre-populated, clears on first keypress
 
 const TITLES = {
@@ -62,6 +63,7 @@ export function init(opts = {}) {
   isTciDrug = opts.isTciDrug || (() => true);
   getExitCe = opts.getExitCe || (() => 0);
   getIntermittentThreshold = opts.getIntermittentThreshold || (() => 0);
+  isPumpEnabled = opts.isPumpEnabled || (() => true);
 
   // Wire keypad buttons (numeric keys)
   document.querySelectorAll('#modal-keypad .key').forEach(btn => {
@@ -135,8 +137,10 @@ export function show(type) {
     renderUnitToggle(allowed);
   }
 
-  // Threshold set + no infusion → bolus is always IV Push ("Administer" button)
-  const isIntermittentBolus = (type === 'bolus') && (getIntermittentThreshold() > 0) && (getMode() !== 'manual');
+  // No pump, or threshold set + no infusion → bolus is always IV Push ("Administer" button)
+  const isIntermittentBolus = (type === 'bolus') && (
+    !isPumpEnabled() || (getIntermittentThreshold() > 0 && getMode() !== 'manual')
+  );
 
   // Confirm button style
   const cc = CONFIRM_LABELS[type];
