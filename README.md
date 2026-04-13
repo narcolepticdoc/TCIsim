@@ -47,6 +47,11 @@ tci-sim/
 ├── manifest.json                 # PWA manifest
 ├── js/
 │   ├── app.js                    # Main application controller
+│   ├── app/
+│   │   ├── settings-ui.js        # Settings modal DOM wiring
+│   │   ├── tci-modal.js          # TCI delay + first-step countdown modals
+│   │   ├── session.js            # Case save / restore / new case
+│   │   └── chart-bridge.js       # Chart refresh, BIS overlay, per-frame updates
 │   ├── version.js                # APP_VERSION — single source of truth
 │   ├── pk/
 │   │   ├── eleveld.js            # Eleveld 2018 parameter calculation
@@ -95,11 +100,11 @@ tci-sim/
 │   │   ├── alert-sound.js        # AudioContext; playAlert(level)
 │   │   └── persist.js            # LocalStorage case save/restore
 │   └── util/
-│       ├── constants.js          # Drug config, pump settings
+│       ├── constants.js          # Drug config, DRUG_IDS, pump settings
 │       ├── math.js               # Matrix-exp, eigenvalue utilities
 │       └── units.js              # Unit conversion helpers
 ├── tests/
-│   ├── run-tests.js              # Test runner (455 tests, 13 suites)
+│   ├── run-tests.js              # Test runner (485 tests, 13 suites)
 │   └── test-*.js                 # Test suites
 └── _legacy/                      # Archived legacy code
 ```
