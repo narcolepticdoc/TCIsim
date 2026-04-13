@@ -408,6 +408,55 @@ export function createChart(canvas, config = {}) {
             drawPillLabel(ctx, exitCe, exitCe.toFixed(1), '#ef4444');
         },
       },
+      {
+        // Draw dots on Ce/Cp lines at the cursor time
+        id: 'cursorDots',
+        afterDraw(ch) {
+          if (cursorTime <= 0) return;
+          const xScl = ch.scales.x;
+          const yScl = ch.scales.y;
+          const ca = ch.chartArea;
+          if (!xScl || !yScl || !ca) return;
+          const cx = xScl.getPixelForValue(cursorTime);
+          if (cx < ca.left || cx > ca.right) return;
+          const ctx = ch.ctx;
+
+          for (const ds of ch.data.datasets) {
+            if (!ds.data || ds.data.length === 0) return;
+            const color = ds.borderColor;
+            // Only draw for Ce/Cp datasets (skip rate)
+            if (color !== COLORS.ce && color !== COLORS.cp) continue;
+            // Binary search for the cursor time in sorted x data
+            const data = ds.data;
+            let lo = 0, hi = data.length - 1;
+            while (lo < hi) {
+              const mid = (lo + hi) >> 1;
+              if (data[mid].x < cursorTime) lo = mid + 1; else hi = mid;
+            }
+            // Interpolate between adjacent points
+            const i = Math.min(lo, data.length - 1);
+            let yVal;
+            if (i === 0 || data[i].x === cursorTime) {
+              yVal = data[i].y;
+            } else {
+              const a = data[i - 1], b = data[i];
+              const frac = (cursorTime - a.x) / (b.x - a.x);
+              yVal = a.y + frac * (b.y - a.y);
+            }
+            const py = yScl.getPixelForValue(yVal);
+            if (py < ca.top || py > ca.bottom) continue;
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx, py, 4, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = '#0a0f1a';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.restore();
+          }
+        },
+      },
     ],
   });
 
