@@ -24,7 +24,7 @@ js/sim/tci/cet-conservative.js  planTCISchemeCETConservative — rate-corrected 
 js/sim/tci/emulation.js   planTCISchemeEmulation — SimTIVA deliver_cpt port
 js/sim/tci/index.js       Barrel re-export + planTCIFromEvents convenience wrapper
 js/sim/simtiva-reference.js  SimTIVA eigenvalue math (clean-room, no GPL code)
-js/util/constants.js      DRUG_DEFS, DRUG_IDS, DRUG_TASK_UNITS (incl. quantSteps), pump settings
+js/util/constants.js      DRUG_DEFS, DRUG_IDS, DRUG_TASK_UNITS (incl. quantSteps), pump settings + isPumpEnabled
 js/util/units.js          Bidirectional unit conversion + quantizeInDisplay
 js/pk/steady-state-predictor.js  Analytical SS + slope-reversal plateau detection
 js/ui/drug-panel.js       Thin re-export shim over js/ui/drug-panel/
@@ -70,11 +70,15 @@ The emulation planner maintains a parallel SimTIVA eigenstate (`ps1/ps2/ps3`). A
 ## Pump Settings
 
 ```js
-getPumpSettings('propofol')   // { concentration, bolusRateMlH, maxRate }
+getPumpSettings('propofol')   // { concentration, bolusRateMlH, maxRate, pumpEnabled }
 setPumpSettings('propofol', { concentration: 10, bolusRateMlH: 750 })
+isPumpEnabled('propofol')     // true (mandatory)
+isPumpEnabled('fentanyl')     // false by default (opt-in via setup screen)
 ```
 
 `maxRate` is auto-derived as `bolusRateMlH * concentration / 60` mg/min. Persisted to localStorage. Always read pump settings from `getPumpSettings` — never hardcode 750 or 10.
+
+`pumpEnabled` controls per-drug delivery method. Propofol is always pump-mandatory (`PUMP_MANDATORY` set). Fentanyl and ketamine default to manual (bolus only) — when pump is OFF, `updateModeUI()` in `mode.js` hides Set Rate / Stop Pump buttons and the UI locks to intermittent bolus mode with IV Push delivery. The toggle lives on the setup screen per-drug tab and is persisted to `tci-pump-enabled-{drugId}` in localStorage and in case save/restore.
 
 ## Running Tests
 
@@ -82,7 +86,7 @@ setPumpSettings('propofol', { concentration: 10, bolusRateMlH: 750 })
 node tests/run-tests.js
 ```
 
-Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 421 tests across 13 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
+Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 485 tests across 13 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
 
 ## Versioning Scheme
 
