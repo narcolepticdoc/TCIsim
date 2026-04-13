@@ -228,6 +228,7 @@ function updateModeUI(drugId) {
       ml.textContent = 'INTERMITTENT';
       ml.className = 'mode-label target-mode';
       bt.classList.add('active-mode');
+      bb.classList.add('active-mode');
     } else {
       ml.textContent = 'NO MODE';
       ml.className = 'mode-label no-mode';
@@ -257,6 +258,7 @@ function updateModeUI(drugId) {
       ml.textContent = 'INTERMITTENT';
       ml.className = 'mode-label target-mode';
       bt.classList.add('active-mode');
+      bb.classList.add('active-mode');
     } else {
       ml.textContent = 'NO MODE';
       ml.className = 'mode-label no-mode';
