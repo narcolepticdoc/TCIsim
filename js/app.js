@@ -263,10 +263,12 @@ function boot() {
 
       model.addPause(selectedDrug, t, 'Pump stopped');
       addAnnotation('Pump stopped');
-      // Stop drops out of TCI and clears future events
+      // Stop drops out of current mode and clears future events
       if (mode.get(selectedDrug) === 'tci') {
         model.clearAfter(selectedDrug, t);
-        mode.set(selectedDrug, 'manual', 'Pump stopped');
+      }
+      if (mode.get(selectedDrug) !== 'none') {
+        mode.set(selectedDrug, 'none', 'Pump stopped');
       }
       refreshChart();
     },
