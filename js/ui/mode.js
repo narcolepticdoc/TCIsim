@@ -155,6 +155,7 @@ export function reset() {
   for (const k of Object.keys(exitCeTargets)) exitCeTargets[k] = 0;
   for (const k of Object.keys(exitCeLabels)) exitCeLabels[k] = '';
   updateModeUI();
+  updateExitButton();
 }
 
 /**

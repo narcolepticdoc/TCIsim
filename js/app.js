@@ -94,6 +94,14 @@ function initSimScreen(patient) {
   Object.keys(preStartClock).forEach(k => delete preStartClock[k]);
   annotations = [];
 
+  // Reset drug selection to propofol (default)
+  selectedDrug = 'propofol';
+  document.querySelectorAll('.drug-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('drug-propofol')?.classList.add('active');
+  keypad.setDrug('propofol');
+  eventEditor.setDrug('propofol');
+  history.setDrug('propofol');
+
   // Reset sim screen state
   $('history-list').innerHTML = '';
   $('history-empty').style.display = 'block';
