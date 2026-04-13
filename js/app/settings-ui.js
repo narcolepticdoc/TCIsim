@@ -24,6 +24,7 @@ const ssSlopeToSlider = (tol) => {
 const INFO_TEXTS = {
   notifications: 'Configure how the simulator alerts you to upcoming pump events. Prep alerts provide early visual warning with an amber pulse on drug cards. Alert popups appear closer to the event with optional sound cues. The status indicator colors the drug card edge based on event proximity.',
   simulation: 'Fine-tune how the simulator evaluates targets and steady-state. Target tolerance sets how close the effect-site concentration must get to target before it is considered reached \u2014 lower values are stricter. Plateau slope tolerance determines how flat the concentration curve must be to qualify as steady-state.',
+  appearance: 'Adjust the visual presentation of the chart. Reducing Cp line opacity pushes the plasma concentration curve into the background so the effect-site (Ce) curve stands out more clearly.',
 };
 
 /**
@@ -50,6 +51,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
   const ssSlopeVal        = $('set-ss-slope-val');
   const exitBandSlider    = $('set-exit-band');
   const exitBandVal       = $('set-exit-band-val');
+  const cpOpacitySlider   = $('set-cp-opacity');
+  const cpOpacityVal      = $('set-cp-opacity-val');
   if (!prepSlider || !alertSlider) return;
 
   // Populate controls from saved settings
@@ -68,6 +71,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (ssSlopeVal)        ssSlopeVal.textContent        = ssSlopeLabel(savedSettings.ssSlopeTol ?? SS_SLOPE_DEFAULT);
   if (exitBandSlider)    exitBandSlider.value          = Math.round((savedSettings.exitBandPct ?? 0.05) * 100);
   if (exitBandVal)       exitBandVal.textContent       = '±' + Math.round((savedSettings.exitBandPct ?? 0.05) * 100) + '%';
+  if (cpOpacitySlider)   cpOpacitySlider.value         = Math.round((savedSettings.cpOpacity ?? 1.0) * 100);
+  if (cpOpacityVal)      cpOpacityVal.textContent      = Math.round((savedSettings.cpOpacity ?? 1.0) * 100) + '%';
 
   function saveAll() {
     const prepSec           = parseInt(prepSlider.value,  10);
@@ -82,13 +87,16 @@ export function initSettingsUI({ getSettings, setSettings }) {
     const ssSlopeTol        = ssSlopePct / 100;
     const exitBandInt       = exitBandSlider ? parseInt(exitBandSlider.value, 10) : 5;
     const exitBandPct       = exitBandInt / 100;
+    const cpOpacityPct      = cpOpacitySlider ? parseInt(cpOpacitySlider.value, 10) : 100;
+    const cpOpacity         = cpOpacityPct / 100;
     if (prepVal)         prepVal.textContent         = prepSec           + 's';
     if (alertVal)        alertVal.textContent        = alertSec          + 's';
     if (statusWarnVal)   statusWarnVal.textContent   = statusWarnMinutes + ' min';
     if (tciFractionVal)  tciFractionVal.textContent  = tciFractionPct    + '%';
     if (ssSlopeVal)      ssSlopeVal.textContent      = ssSlopeLabel(ssSlopeTol);
     if (exitBandVal)     exitBandVal.textContent     = '±' + exitBandInt + '%';
-    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct });
+    if (cpOpacityVal)    cpOpacityVal.textContent    = cpOpacityPct      + '%';
+    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity });
   }
 
   prepSlider.addEventListener('input',    saveAll);
@@ -100,6 +108,7 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (tciFractionSlider) tciFractionSlider.addEventListener('input', saveAll);
   if (ssSlopeSlider)     ssSlopeSlider.addEventListener('input',     saveAll);
   if (exitBandSlider)    exitBandSlider.addEventListener('input',    saveAll);
+  if (cpOpacitySlider)   cpOpacitySlider.addEventListener('input',   saveAll);
 
   // Tab switching + info panel
   const infoText = $('settings-info-text');

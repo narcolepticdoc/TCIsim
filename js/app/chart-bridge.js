@@ -46,6 +46,7 @@ export function createChartBridge({
   let lastHistoryDimUpdate = 0;
   let lastSsCe = null;
   let lastPlateauRegion = null;
+  let lastCpOpacity = null;
 
   function getConfig(drugId) {
     return CHART_DRUG_CONFIG[drugId] || { yScale: 1, yLabel: '\u03bcg/mL', yDefault: 10 };
@@ -205,6 +206,14 @@ export function createChartBridge({
       } else if (lastPlateauRegion) {
         lastPlateauRegion = null;
         chart.setPlateauRegion(null);
+      }
+    }
+    // Cp opacity — only update chart when setting changes
+    if (chart) {
+      const cpOp = settings.getSettings().cpOpacity ?? 1.0;
+      if (lastCpOpacity !== cpOp) {
+        lastCpOpacity = cpOp;
+        chart.setCpOpacity(cpOp);
       }
     }
     // Check for upcoming events requiring advance warning
