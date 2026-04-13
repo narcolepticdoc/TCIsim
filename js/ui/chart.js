@@ -424,8 +424,8 @@ export function createChart(canvas, config = {}) {
           for (const ds of ch.data.datasets) {
             if (!ds.data || ds.data.length === 0) return;
             const color = ds.borderColor;
-            // Only draw for Ce/Cp datasets (skip rate)
-            if (color !== COLORS.ce && color !== COLORS.cp) continue;
+            // Only draw for Ce/Cp datasets (skip rate) — Cp color may have alpha suffix
+            if (!color.startsWith(COLORS.ce) && !color.startsWith(COLORS.cp)) continue;
             // Binary search for the cursor time in sorted x data
             const data = ds.data;
             let lo = 0, hi = data.length - 1;
@@ -803,6 +803,16 @@ export function createChart(canvas, config = {}) {
     lastTap = now;
   });
 
+  /** Set Cp line opacity (0.1–1.0). Applies to border and fill colors. */
+  function setCpOpacity(opacity) {
+    if (!cfg.showCp) return;
+    const ds = datasets[0]; // Cp is always first when showCp is true
+    const a = Math.round(Math.max(0.1, Math.min(1.0, opacity)) * 255).toString(16).padStart(2, '0');
+    ds.borderColor = COLORS.cp + a;
+    ds.backgroundColor = COLORS.cp + Math.round(opacity * 0x18).toString(16).padStart(2, '0');
+    chart.update('none');
+  }
+
   return {
     setCurveData,
     setCursorTime,
@@ -819,6 +829,7 @@ export function createChart(canvas, config = {}) {
     setPDModel,
     setPatientWeight,
     switchDrug,
+    setCpOpacity,
     destroy,
     get tooltipEnabled() { return tooltipEnabled; },
     get chart() { return chart; },

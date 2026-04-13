@@ -25,6 +25,7 @@ const DEFAULTS     = {
   tciFraction: 0.95,   // TCI "time to target" — tight (0.90–0.99)
   ssSlopeTol:  0.0010, // Manual-mode plateau slope — per-minute relative (0.10 %/min)
   exitBandPct: 0.05,   // Plateau exit ±% band (0.05 = ±5%)
+  cpOpacity:   1.0,    // Cp line opacity (0.1–1.0)
 };
 
 const DRUG_NAMES = {
@@ -73,6 +74,10 @@ export function getSettings() {
                            && p.exitBandPct >= 0.01 && p.exitBandPct <= 0.20)
         ? p.exitBandPct : DEFAULTS.exitBandPct;
 
+      const cpOpacity = (typeof p.cpOpacity === 'number'
+                        && p.cpOpacity >= 0.1 && p.cpOpacity <= 1.0)
+        ? p.cpOpacity : DEFAULTS.cpOpacity;
+
       return {
         prepSec:           (typeof p.prepSec           === 'number'  && p.prepSec  >= 0) ? p.prepSec           : DEFAULTS.prepSec,
         prepSound:         (typeof p.prepSound         === 'boolean')                    ? p.prepSound          : DEFAULTS.prepSound,
@@ -83,14 +88,15 @@ export function getSettings() {
         tciFraction,
         ssSlopeTol,
         exitBandPct,
+        cpOpacity,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────

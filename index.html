@@ -1037,6 +1037,7 @@
         <nav class="settings-nav">
           <button class="settings-tab active" data-tab="notifications">Notifications</button>
           <button class="settings-tab" data-tab="simulation">Simulation</button>
+          <button class="settings-tab" data-tab="appearance">Appearance</button>
         </nav>
         <div class="settings-content">
           <div class="settings-pane active" id="pane-notifications">
@@ -1097,6 +1098,15 @@
               <div class="settings-control">
                 <input type="range" id="set-exit-band" min="2" max="10" step="1" value="5">
                 <span id="set-exit-band-val">±5%</span>
+              </div>
+            </div>
+          </div>
+          <div class="settings-pane" id="pane-appearance">
+            <div class="settings-row">
+              <label>Cp line opacity</label>
+              <div class="settings-control">
+                <input type="range" id="set-cp-opacity" min="10" max="100" step="5" value="100">
+                <span id="set-cp-opacity-val">100%</span>
               </div>
             </div>
           </div>
