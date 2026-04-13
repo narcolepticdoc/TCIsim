@@ -19,7 +19,7 @@ import * as drugPanel from './ui/drug-panel.js';
 import * as history from './ui/history.js';
 import * as eventEditor from './ui/event-editor.js';
 import { createChart } from './ui/chart.js';
-import { bolusDeliveryMinutes, APP_VERSION, DRUG_IDS } from './util/constants.js';
+import { bolusDeliveryMinutes, APP_VERSION, DRUG_IDS, isPumpEnabled } from './util/constants.js';
 import { getQuantizeConfig } from './util/units.js';
 import * as persist from './ui/persist.js';
 import * as settings from './ui/settings.js';
@@ -238,8 +238,12 @@ function boot() {
     onCaseStart() {
       Object.keys(preStartClock).forEach(k => delete preStartClock[k]);
       addAnnotation('Case started');
+      // Re-evaluate button visibility now that case has started —
+      // hides Stop Pump for drugs without a pump.
+      mode.refreshUI(selectedDrug);
     },
     onPumpPause() {
+      if (!isPumpEnabled(selectedDrug)) return; // no pump to pause
       const t = timer.getElapsedMinutes();
       // Guard: don't pause if already manually paused (rate=0 in non-TCI mode)
       // Allow the button to fire in TCI mode even when rate=0 (TCI-scheduled pause),
@@ -268,7 +272,7 @@ function boot() {
       // and no infusion is running (pure intermittent mode)
       if (drugId === selectedDrug) {
         const hasThreshold = mode.getIntermittentThreshold(drugId) > 0;
-        history.setBolusOnly(hasThreshold && newMode !== 'manual');
+        history.setBolusOnly(!isPumpEnabled(drugId) || (hasThreshold && newMode !== 'manual'));
       }
     },
   });
@@ -281,6 +285,7 @@ function boot() {
     isTciDrug: () => !NO_TCI_DRUGS.has(selectedDrug),
     getExitCe: () => mode.getExitCe(selectedDrug),
     getIntermittentThreshold: () => mode.getIntermittentThreshold(selectedDrug),
+    isPumpEnabled: () => isPumpEnabled(selectedDrug),
     onConfirm(type, canonicalValue, displayText, deliveryMode) {
       let t;
       if (controls.isCaseStarted()) {
@@ -306,6 +311,7 @@ function boot() {
           advancePreStartClock(selectedDrug, 0.01);
         }
       } else if (type === 'rate') {
+        if (!isPumpEnabled(selectedDrug)) return; // no pump — rate not available
         // Manual rate — drops out of TCI
         if (mode.get(selectedDrug) === 'tci') {
           model.clearAfter(selectedDrug, t);
@@ -321,7 +327,7 @@ function boot() {
         mode.refreshUI(selectedDrug);
         // Update history filter for the new threshold state
         const isInfusing = mode.get(selectedDrug) === 'manual';
-        history.setBolusOnly(!isInfusing);
+        history.setBolusOnly(!isPumpEnabled(selectedDrug) || !isInfusing);
         refreshChart();
         return; // refreshChart already called
       } else if (type === 'exitCe') {
@@ -337,18 +343,19 @@ function boot() {
         refreshChart();   // updates the exit line with correct yScale
         return;
       } else if (type === 'bolus') {
+        const pumpOn = isPumpEnabled(selectedDrug);
         // Bolus — if in TCI, clear forward plan first, then bolus
         if (mode.get(selectedDrug) === 'tci') {
           model.clearAfter(selectedDrug, t);
           mode.set(selectedDrug, 'manual', 'Dropped out of TCI — manual bolus');
-        } else if (mode.get(selectedDrug) === 'none' && !NO_TCI_DRUGS.has(selectedDrug)) {
-          // TCI-capable drug: bolus from 'none' implies manual mode
+        } else if (mode.get(selectedDrug) === 'none' && !NO_TCI_DRUGS.has(selectedDrug) && pumpOn) {
+          // TCI-capable drug with pump: bolus from 'none' implies manual mode
           mode.set(selectedDrug, 'manual');
         }
-        // Threshold set + no infusion → always IV Push; otherwise respect keypad choice
+        // No pump, or threshold set + no infusion → always IV Push; otherwise respect keypad choice
         const hasThreshold = mode.getIntermittentThreshold(selectedDrug) > 0;
         const isInfusing = mode.get(selectedDrug) === 'manual';
-        const dm = (hasThreshold && !isInfusing) ? 'push' : (deliveryMode || 'pump');
+        const dm = (!pumpOn || (hasThreshold && !isInfusing)) ? 'push' : (deliveryMode || 'pump');
         const label = dm === 'push' ? 'IV Push' : 'Pump Bolus';
         model.addBolus(selectedDrug, t, canonicalValue, `${label} ${displayText}`, {
           deliveryMode: dm,
@@ -375,7 +382,7 @@ function boot() {
       eventEditor.setDrug(drugId);
       mode.refreshUI(drugId);
       const hasThreshold = mode.getIntermittentThreshold(drugId) > 0;
-      history.setBolusOnly(hasThreshold && mode.get(drugId) !== 'manual');
+      history.setBolusOnly(!isPumpEnabled(drugId) || (hasThreshold && mode.get(drugId) !== 'manual'));
       history.setDrug(drugId);
       history.render();
       // Switch chart to new drug's y-axis config (label, scale, persisted range)

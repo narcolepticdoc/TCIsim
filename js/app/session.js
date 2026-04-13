@@ -5,7 +5,7 @@
  * full application state to localStorage via the persist module.
  */
 
-import { setPumpSettings, DRUG_IDS } from '../util/constants.js';
+import { setPumpSettings, isPumpEnabled, DRUG_IDS } from '../util/constants.js';
 import { fromCanonical, getDefaultUnit, formatValue } from '../util/units.js';
 import * as persist from '../ui/persist.js';
 
@@ -66,11 +66,13 @@ export function createSession({
     const ceTargets = {};
     const intermittentThresholds = {};
     const exitCeTargets = {};
+    const pumpEnabled = {};
     for (const drugId of DRUG_IDS) {
       modes[drugId] = mode.get(drugId);
       ceTargets[drugId] = mode.getCeTarget(drugId);
       intermittentThresholds[drugId] = mode.getIntermittentThreshold(drugId);
       exitCeTargets[drugId] = mode.getExitCe(drugId);
+      pumpEnabled[drugId] = isPumpEnabled(drugId);
     }
 
     persist.saveCase({
@@ -81,6 +83,7 @@ export function createSession({
       ceTargets,
       intermittentThresholds,
       exitCeTargets,
+      pumpEnabled,
       annotations: getAnnotations(),
       primaryDrug: getSelectedDrug(),
     });
@@ -106,16 +109,28 @@ export function createSession({
           bolusRateMlH,
         });
         const savedFentConc = localStorage.getItem('tci-pump-concentration-fentanyl');
+        const savedFentPump = localStorage.getItem('tci-pump-enabled-fentanyl');
         setPumpSettings('fentanyl', {
           concentration: parseFloat(savedFentConc) || 0.05,
           bolusRateMlH,
+          pumpEnabled: savedFentPump === 'true',
         });
         const savedKetConc = localStorage.getItem('tci-pump-concentration-ketamine');
+        const savedKetPump = localStorage.getItem('tci-pump-enabled-ketamine');
         setPumpSettings('ketamine', {
           concentration: parseFloat(savedKetConc) || 10,
           bolusRateMlH,
+          pumpEnabled: savedKetPump === 'true',
         });
       } catch (e) {}
+
+      // Restore pump-enabled state from saved case (takes precedence over localStorage
+      // since it reflects the actual case configuration)
+      if (saved.pumpEnabled) {
+        for (const [drugId, enabled] of Object.entries(saved.pumpEnabled)) {
+          setPumpSettings(drugId, { pumpEnabled: enabled });
+        }
+      }
 
       // Reset model and set patient
       model.reset();

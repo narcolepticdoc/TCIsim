@@ -25,7 +25,7 @@ import {
   MODEL_NAME as KETAMINE_MODEL_NAME,
   MODEL_DESCRIPTION as KETAMINE_MODEL_DESCRIPTION,
 } from '../pk/ketamine.js';
-import { setPumpSettings, getPumpSettings } from '../util/constants.js';
+import { setPumpSettings, getPumpSettings, isPumpEnabled } from '../util/constants.js';
 import { getAllowedUnits, getDefaultUnit, getPrefKey, getQuantStep } from '../util/units.js';
 
 // Drugs that have a tabbed setup panel. Remifentanil has no PK model yet.
@@ -118,6 +118,12 @@ export function init(opts = {}) {
   const ketConcEl = $('input-ketamine-concentration');
   if (ketConcEl) ketConcEl.addEventListener('change', updatePumpDerivedKetamine);
 
+  // Wire delivery-method toggles (fentanyl, ketamine — propofol is always pump)
+  const fentPumpEl = $('input-fentanyl-pump');
+  if (fentPumpEl) fentPumpEl.addEventListener('change', () => updatePumpToggleVisibility('fentanyl'));
+  const ketPumpEl = $('input-ketamine-pump');
+  if (ketPumpEl) ketPumpEl.addEventListener('change', () => updatePumpToggleVisibility('ketamine'));
+
   // Populate model info blocks and default-unit selectors for each drug panel
   populateModelInfo();
   populateUnitSelectors();
@@ -128,6 +134,10 @@ export function init(opts = {}) {
   // Restore saved pump settings
   restorePumpSettingsUI();
   updateAllPumpDerived();
+
+  // Set initial visibility of pump-dependent rows
+  updatePumpToggleVisibility('fentanyl');
+  updatePumpToggleVisibility('ketamine');
 }
 
 // ---- Model info block ----
@@ -453,23 +463,29 @@ function applyPumpSettings() {
 
   setPumpSettings('propofol', { concentration, bolusRateMlH });
 
-  // Fentanyl settings — same global rate, per-drug concentration
+  // Fentanyl settings — same global rate, per-drug concentration + pump toggle
   const fentConcEl = $('input-fentanyl-concentration');
+  const fentPumpEl = $('input-fentanyl-pump');
   if (fentConcEl) {
     const fConc = parseFloat(fentConcEl.value) || 0.05;
-    setPumpSettings('fentanyl', { concentration: fConc, bolusRateMlH });
+    const fPump = fentPumpEl ? fentPumpEl.value === 'true' : false;
+    setPumpSettings('fentanyl', { concentration: fConc, bolusRateMlH, pumpEnabled: fPump });
     try {
       localStorage.setItem('tci-pump-concentration-fentanyl', String(fConc));
+      localStorage.setItem('tci-pump-enabled-fentanyl', String(fPump));
     } catch (e) {}
   }
 
-  // Ketamine settings — same global rate, per-drug concentration
+  // Ketamine settings — same global rate, per-drug concentration + pump toggle
   const ketConcEl = $('input-ketamine-concentration');
+  const ketPumpEl = $('input-ketamine-pump');
   if (ketConcEl) {
     const kConc = parseFloat(ketConcEl.value) || 10;
-    setPumpSettings('ketamine', { concentration: kConc, bolusRateMlH });
+    const kPump = ketPumpEl ? ketPumpEl.value === 'true' : false;
+    setPumpSettings('ketamine', { concentration: kConc, bolusRateMlH, pumpEnabled: kPump });
     try {
       localStorage.setItem('tci-pump-concentration-ketamine', String(kConc));
+      localStorage.setItem('tci-pump-enabled-ketamine', String(kPump));
     } catch (e) {}
   }
 
@@ -524,16 +540,20 @@ function restorePumpSettingsUI() {
     if (savedOpioid) { const el = $('input-opioid'); if (el) el.value = savedOpioid; }
   } catch (e) {}
 
-  // Restore fentanyl concentration
+  // Restore fentanyl concentration + pump toggle
   try {
     const fc = localStorage.getItem('tci-pump-concentration-fentanyl');
     if (fc) { const el = $('input-fentanyl-concentration'); if (el) el.value = fc; }
+    const fp = localStorage.getItem('tci-pump-enabled-fentanyl');
+    if (fp != null) { const el = $('input-fentanyl-pump'); if (el) el.value = fp; }
   } catch (e) {}
 
-  // Restore ketamine concentration
+  // Restore ketamine concentration + pump toggle
   try {
     const kc = localStorage.getItem('tci-pump-concentration-ketamine');
     if (kc) { const el = $('input-ketamine-concentration'); if (el) el.value = kc; }
+    const kp = localStorage.getItem('tci-pump-enabled-ketamine');
+    if (kp != null) { const el = $('input-ketamine-pump'); if (el) el.value = kp; }
   } catch (e) {}
 }
 
@@ -544,6 +564,25 @@ function switchDrugTab(drugId) {
   document.querySelectorAll('.drug-setup-panel').forEach(p => p.classList.remove('active'));
   $(`setup-tab-${drugId}`)?.classList.add('active');
   $(`setup-panel-${drugId}`)?.classList.add('active');
+}
+
+// ---- Pump toggle visibility ----
+
+/**
+ * Show/hide pump-dependent rows in a drug's setup panel.
+ * When pump is off, hide: rate unit selector, pump-derived display.
+ * Concentration and bolus unit remain visible (needed for mL calculations).
+ */
+function updatePumpToggleVisibility(drugId) {
+  const toggleEl = $(`input-${drugId}-pump`);
+  if (!toggleEl) return;
+  const pumpOn = toggleEl.value === 'true';
+
+  const rateRow = $(`row-${drugId}-rate-unit`);
+  const derived = $(`pump-derived-${drugId}`);
+
+  if (rateRow) rateRow.style.display = pumpOn ? '' : 'none';
+  if (derived) derived.style.display = pumpOn ? '' : 'none';
 }
 
 // ---- Pump derived displays ----

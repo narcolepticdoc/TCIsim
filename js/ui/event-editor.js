@@ -14,6 +14,7 @@
 
 import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, getQuantizeConfig }
   from '../util/units.js';
+import { isPumpEnabled } from '../util/constants.js';
 
 const $ = id => document.getElementById(id);
 
@@ -147,8 +148,11 @@ export function openAdd() {
   $('evt-editor-title').textContent = 'Add Event';
   $('ee-delete-row').style.display = 'none';
 
+  const pumpOn = isPumpEnabled(_selectedDrug);
   document.querySelectorAll('#ee-type-row .ee-type').forEach(btn => {
-    btn.disabled = false;
+    const isInfusionType = btn.dataset.type === 'rate' || btn.dataset.type === 'pause';
+    btn.disabled = !pumpOn && isInfusionType;
+    btn.style.display = (!pumpOn && isInfusionType) ? 'none' : '';
   });
 
   setType('bolus');
@@ -174,13 +178,15 @@ function setType(type) {
 
   $('ee-value-section').style.display = type === 'pause' ? 'none' : '';
   $('ee-pause-section').style.display = type === 'pause' ? '' : 'none';
-  $('ee-push-btn').style.display = type === 'bolus' ? '' : 'none';
+  const pumpOn = isPumpEnabled(_selectedDrug);
+  // No pump → boluses are always IV push; hide the separate push button
+  $('ee-push-btn').style.display = (type === 'bolus' && pumpOn) ? '' : 'none';
   const valLabel = $('ee-value-label');
   if (valLabel) valLabel.textContent = type === 'bolus' ? 'Dose' : 'Rate';
 
   const btn = $('ee-confirm');
   if (type === 'bolus') {
-    btn.textContent = _isEditMode ? 'Save Bolus' : 'Pump Bolus';
+    btn.textContent = _isEditMode ? 'Save Bolus' : (pumpOn ? 'Pump Bolus' : 'Administer');
     btn.className = 'modal-btn-confirm-bolus';
   } else if (type === 'rate') {
     btn.textContent = _isEditMode ? 'Save Rate' : 'Set Rate';
@@ -389,6 +395,8 @@ function populatePauseDuration() {
 function doConfirm(deliveryMode) {
   const time = getSelectedCaseMinutes();
   const drug = _selectedDrug;
+  // Force IV push when pump is disabled
+  if (!isPumpEnabled(drug)) deliveryMode = 'push';
 
   if (_currentType === 'pause') {
     applyWithRules(time, () => {

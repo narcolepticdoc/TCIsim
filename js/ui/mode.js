@@ -17,6 +17,9 @@
  * annotate and update the UI.
  */
 
+import { isPumpEnabled } from '../util/constants.js';
+import { isCaseStarted } from './controls.js';
+
 const $ = id => document.getElementById(id);
 
 const modes = {};  // { drugId: 'none' | 'tci' | 'manual' }
@@ -164,29 +167,33 @@ export function refreshUI(drugId) {
 
 /**
  * Update the mode label and button highlights.
- * Handles both TCI-capable drugs (propofol) and intermittent-only drugs
- * (fentanyl, ketamine).
+ * Handles TCI-capable drugs (propofol), pump-enabled non-TCI drugs,
+ * and pump-disabled non-TCI drugs (bolus-only simplified UI).
  */
 function updateModeUI(drugId) {
   const ml = $('mode-label');
   const bt = $('btn-target');
   const br = $('btn-rate');
   const bb = $('btn-bolus');
+  const bp = $('btn-pause');
+  const cd = document.querySelector('.ctrl-divider');
   if (!ml || !bt || !br || !bb) return;
 
   bt.classList.remove('active-mode');
   br.classList.remove('active-mode');
   bb.classList.remove('active-mode');
 
-  // Default: show btn-rate (may be hidden below for intermittent)
-  br.style.display = '';
-
   const resolvedDrug = drugId || 'propofol';
   const m = modes[resolvedDrug] || 'none';
   const isTci = TCI_CAPABLE_DRUGS.has(resolvedDrug);
+  const pumpOn = isPumpEnabled(resolvedDrug);
 
   if (isTci) {
-    // TCI-capable drug (propofol, remifentanil)
+    // TCI-capable drug (propofol, remifentanil) — pump always on
+    br.style.display = '';
+    if (bp) bp.style.display = '';
+    if (cd) cd.style.display = '';
+
     if (m === 'tci') {
       ml.textContent = 'TARGET';
       ml.className = 'mode-label target-mode';
@@ -206,8 +213,30 @@ function updateModeUI(drugId) {
       bt.textContent = 'Set Target';
       br.textContent = 'Set Rate';
     }
+  } else if (!pumpOn) {
+    // Non-TCI drug, pump disabled — bolus-only simplified interface
+    br.style.display = 'none';
+    // Hide Stop Pump after case starts; keep Start visible before case starts
+    if (bp) bp.style.display = isCaseStarted() ? 'none' : '';
+    if (cd) cd.style.display = 'none';
+
+    const hasThreshold = (intermittentThresholds[resolvedDrug] || 0) > 0;
+    bt.textContent = hasThreshold ? 'Change Threshold' : 'Set Threshold';
+
+    if (hasThreshold) {
+      ml.textContent = 'INTERMITTENT';
+      ml.className = 'mode-label target-mode';
+      bt.classList.add('active-mode');
+    } else {
+      ml.textContent = 'NO MODE';
+      ml.className = 'mode-label no-mode';
+    }
   } else {
-    // Non-TCI drug (fentanyl, ketamine): derive display from mode + threshold
+    // Non-TCI drug, pump enabled — full infusion controls
+    br.style.display = '';
+    if (bp) bp.style.display = '';
+    if (cd) cd.style.display = '';
+
     const hasThreshold = (intermittentThresholds[resolvedDrug] || 0) > 0;
     bt.textContent = hasThreshold ? 'Change Threshold' : 'Set Threshold';
     br.textContent = m === 'manual' ? 'Change Rate' : 'Set Rate';
