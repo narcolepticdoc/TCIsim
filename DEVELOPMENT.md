@@ -4,6 +4,35 @@
 
 ## Session History
 
+### Interim — Chart visuals & appearance settings (v0.5.20.2)
+
+*Between Sessions 25 and 26. Not tracked in session numbering.*
+
+Chart readability improvements and a new Appearance settings tab for controlling visual density.
+
+**Chart cursor dots (`js/ui/chart.js`):**
+
+- Custom `cursorDots` Chart.js plugin draws filled circles where Ce (blue) and Cp (red) curves cross the current time cursor line. Uses binary search + linear interpolation on dataset points. Each dot is 4px radius with a dark outline. Dot color matches the line — Cp dot dims with Cp opacity setting.
+
+**Stop Pump button dimming (`js/ui/mode.js`, `index.html`):**
+
+- New `is-idle` CSS state for the Stop Pump button: muted translucent red when case is running but no pump is active (mode `'none'`). Bright red `is-running` only when TCI or manual mode is active. Toggled in `updateModeUI()` after case start.
+
+**Appearance settings tab (`index.html`, `js/ui/settings.js`, `js/app/settings-ui.js`):**
+
+- New "Appearance" tab in the settings modal with three opacity sliders (10%–100%):
+  - **Cp line opacity** (`cpOpacity`) — fades the Cp curve via hex alpha on dataset border/fill colors
+  - **BIS nomogram opacity** (`nomogramOpacity`) — scales the base alpha of BIS effect-site bands and their text labels
+  - **Threshold line opacity** (`overlayOpacity`) — controls alpha on all horizontal reference lines (target, threshold, SS, exit Ce) and plateau region; pill labels remain at full opacity for legibility
+- All three settings persisted in localStorage and applied in real time via change detection in `chart-bridge.onFrame()`
+- Opacity values stored as `_overlayAlpha` (hex) and `_nomogramOpacity` (float) in chart scope, used by `buildAnnotations()` so they survive annotation rebuilds (cursor move, zoom, pan)
+
+**Files changed:** `js/ui/chart.js`, `js/ui/mode.js`, `js/ui/settings.js`, `js/app/settings-ui.js`, `js/app/chart-bridge.js`, `index.html`
+
+**Tests:** 485 tests across 13 suites, all passing.
+
+---
+
 ### Interim — Fix stale drug panel data & control button UX (v0.5.20.1)
 
 *Between Sessions 25 and 26. Not tracked in session numbering.*
