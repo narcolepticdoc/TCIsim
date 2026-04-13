@@ -264,4 +264,11 @@ function updateModeUI(drugId) {
       ml.className = 'mode-label no-mode';
     }
   }
+
+  // Dim Stop Pump when case is running but no pump is active
+  if (bp && isCaseStarted()) {
+    const pumpActive = m === 'tci' || m === 'manual';
+    bp.classList.remove('is-running', 'is-idle');
+    bp.classList.add(pumpActive ? 'is-running' : 'is-idle');
+  }
 }
