@@ -53,6 +53,10 @@ export function initSettingsUI({ getSettings, setSettings }) {
   const exitBandVal       = $('set-exit-band-val');
   const cpOpacitySlider   = $('set-cp-opacity');
   const cpOpacityVal      = $('set-cp-opacity-val');
+  const nomogramSlider    = $('set-nomogram-opacity');
+  const nomogramVal       = $('set-nomogram-opacity-val');
+  const overlaySlider     = $('set-overlay-opacity');
+  const overlayVal        = $('set-overlay-opacity-val');
   if (!prepSlider || !alertSlider) return;
 
   // Populate controls from saved settings
@@ -73,6 +77,10 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (exitBandVal)       exitBandVal.textContent       = '±' + Math.round((savedSettings.exitBandPct ?? 0.05) * 100) + '%';
   if (cpOpacitySlider)   cpOpacitySlider.value         = Math.round((savedSettings.cpOpacity ?? 1.0) * 100);
   if (cpOpacityVal)      cpOpacityVal.textContent      = Math.round((savedSettings.cpOpacity ?? 1.0) * 100) + '%';
+  if (nomogramSlider)    nomogramSlider.value          = Math.round((savedSettings.nomogramOpacity ?? 1.0) * 100);
+  if (nomogramVal)       nomogramVal.textContent       = Math.round((savedSettings.nomogramOpacity ?? 1.0) * 100) + '%';
+  if (overlaySlider)     overlaySlider.value           = Math.round((savedSettings.overlayOpacity ?? 1.0) * 100);
+  if (overlayVal)        overlayVal.textContent        = Math.round((savedSettings.overlayOpacity ?? 1.0) * 100) + '%';
 
   function saveAll() {
     const prepSec           = parseInt(prepSlider.value,  10);
@@ -89,6 +97,10 @@ export function initSettingsUI({ getSettings, setSettings }) {
     const exitBandPct       = exitBandInt / 100;
     const cpOpacityPct      = cpOpacitySlider ? parseInt(cpOpacitySlider.value, 10) : 100;
     const cpOpacity         = cpOpacityPct / 100;
+    const nomogramPct       = nomogramSlider ? parseInt(nomogramSlider.value, 10) : 100;
+    const nomogramOpacity   = nomogramPct / 100;
+    const overlayPct        = overlaySlider ? parseInt(overlaySlider.value, 10) : 100;
+    const overlayOpacity    = overlayPct / 100;
     if (prepVal)         prepVal.textContent         = prepSec           + 's';
     if (alertVal)        alertVal.textContent        = alertSec          + 's';
     if (statusWarnVal)   statusWarnVal.textContent   = statusWarnMinutes + ' min';
@@ -96,7 +108,9 @@ export function initSettingsUI({ getSettings, setSettings }) {
     if (ssSlopeVal)      ssSlopeVal.textContent      = ssSlopeLabel(ssSlopeTol);
     if (exitBandVal)     exitBandVal.textContent     = '±' + exitBandInt + '%';
     if (cpOpacityVal)    cpOpacityVal.textContent    = cpOpacityPct      + '%';
-    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity });
+    if (nomogramVal)     nomogramVal.textContent     = nomogramPct       + '%';
+    if (overlayVal)      overlayVal.textContent      = overlayPct        + '%';
+    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity });
   }
 
   prepSlider.addEventListener('input',    saveAll);
@@ -109,6 +123,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (ssSlopeSlider)     ssSlopeSlider.addEventListener('input',     saveAll);
   if (exitBandSlider)    exitBandSlider.addEventListener('input',    saveAll);
   if (cpOpacitySlider)   cpOpacitySlider.addEventListener('input',   saveAll);
+  if (nomogramSlider)    nomogramSlider.addEventListener('input',    saveAll);
+  if (overlaySlider)     overlaySlider.addEventListener('input',     saveAll);
 
   // Tab switching + info panel
   const infoText = $('settings-info-text');
