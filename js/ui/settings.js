@@ -26,6 +26,8 @@ const DEFAULTS     = {
   ssSlopeTol:  0.0010, // Manual-mode plateau slope — per-minute relative (0.10 %/min)
   exitBandPct: 0.05,   // Plateau exit ±% band (0.05 = ±5%)
   cpOpacity:   1.0,    // Cp line opacity (0.1–1.0)
+  nomogramOpacity: 1.0, // BIS nomogram band opacity (0.1–1.0, applied as multiplier)
+  overlayOpacity:  1.0, // Threshold/target line opacity (0.1–1.0)
 };
 
 const DRUG_NAMES = {
@@ -78,6 +80,14 @@ export function getSettings() {
                         && p.cpOpacity >= 0.1 && p.cpOpacity <= 1.0)
         ? p.cpOpacity : DEFAULTS.cpOpacity;
 
+      const nomogramOpacity = (typeof p.nomogramOpacity === 'number'
+                               && p.nomogramOpacity >= 0.1 && p.nomogramOpacity <= 1.0)
+        ? p.nomogramOpacity : DEFAULTS.nomogramOpacity;
+
+      const overlayOpacity = (typeof p.overlayOpacity === 'number'
+                              && p.overlayOpacity >= 0.1 && p.overlayOpacity <= 1.0)
+        ? p.overlayOpacity : DEFAULTS.overlayOpacity;
+
       return {
         prepSec:           (typeof p.prepSec           === 'number'  && p.prepSec  >= 0) ? p.prepSec           : DEFAULTS.prepSec,
         prepSound:         (typeof p.prepSound         === 'boolean')                    ? p.prepSound          : DEFAULTS.prepSound,
@@ -89,14 +99,16 @@ export function getSettings() {
         ssSlopeTol,
         exitBandPct,
         cpOpacity,
+        nomogramOpacity,
+        overlayOpacity,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────

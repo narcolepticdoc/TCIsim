@@ -61,6 +61,8 @@ export function createChart(canvas, config = {}) {
   let tooltipEnabled = true;
   let _currentDrugId = cfg.drugId || 'propofol';
   let _yScale = 1;          // scale factor applied to curve data (1 for mcg/mL, 1000 for ng/mL)
+  let _overlayAlpha = 'ff';  // hex alpha for threshold/target lines
+  let _nomogramOpacity = 1.0; // multiplier for BIS band alpha
 
   // Build datasets
   const datasets = [];
@@ -128,10 +130,9 @@ export function createChart(canvas, config = {}) {
         type: 'line',
         yMin: targetCe,
         yMax: targetCe,
-        borderColor: COLORS.target,
+        borderColor: COLORS.target + _overlayAlpha,
         borderWidth: 1.5,
         borderDash: [6, 3],
-        // Label is drawn in the right margin by the targetCeLabel inline plugin
       };
     }
 
@@ -141,10 +142,9 @@ export function createChart(canvas, config = {}) {
         type: 'line',
         yMin: thresholdCe,
         yMax: thresholdCe,
-        borderColor: '#f59e0b',   // amber — distinct from target orange
+        borderColor: '#f59e0b' + _overlayAlpha,
         borderWidth: 1.5,
         borderDash: [4, 3],
-        // Label drawn in right margin by targetCeLabel plugin below
       };
     }
 
@@ -154,7 +154,7 @@ export function createChart(canvas, config = {}) {
         type: 'line',
         yMin: steadyStateCe,
         yMax: steadyStateCe,
-        borderColor: 'rgba(34, 197, 94, 0.6)',   // green — distinct from amber threshold
+        borderColor: '#22c55e' + _overlayAlpha,
         borderWidth: 1.5,
         borderDash: [8, 4],
       };
@@ -166,26 +166,29 @@ export function createChart(canvas, config = {}) {
         type: 'line',
         yMin: exitCe,
         yMax: exitCe,
-        borderColor: '#ef4444',        // red
+        borderColor: '#ef4444' + _overlayAlpha,
         borderWidth: 1.5,
         borderDash: [5, 4],
       };
     }
 
-    // Effect overlay bands
+    // Effect overlay bands — scale base alpha by nomogram opacity
     effectBands.forEach((band, i) => {
+      const baseAlpha = parseInt(band.color.slice(7, 9) || '30', 16);
+      const scaledAlpha = Math.round(baseAlpha * _nomogramOpacity).toString(16).padStart(2, '0');
+      const labelAlpha = Math.round(0x88 * _nomogramOpacity).toString(16).padStart(2, '0');
       annotations[`band_${i}`] = {
         type: 'box',
         yMin: band.ceMin,
         yMax: band.ceMax,
-        backgroundColor: band.color,
+        backgroundColor: band.color.slice(0, 7) + scaledAlpha,
         borderWidth: 0,
         label: band.label ? {
           display: true,
           content: band.label,
           position: { x: 'end', y: 'center' },
           xAdjust: -36,
-          color: '#ffffff88',
+          color: '#ffffff' + labelAlpha,
           font: { size: 9 },
         } : undefined,
       };
@@ -193,6 +196,7 @@ export function createChart(canvas, config = {}) {
 
     // Plateau region bounding box (manual-mode plateau highlight)
     if (plateauRegion) {
+      const fillA = Math.round(0x1f * (parseInt(_overlayAlpha, 16) / 255)).toString(16).padStart(2, '0');
       annotations.plateau = {
         type: 'box',
         xScaleID: 'x',
@@ -201,8 +205,8 @@ export function createChart(canvas, config = {}) {
         xMax: plateauRegion.endMin ?? viewMax,
         yMin: plateauRegion.ceMin,
         yMax: plateauRegion.ceMax,
-        backgroundColor: 'rgba(245, 158, 11, 0.12)',  // amber tint
-        borderColor: '#f59e0b',                        // amber — matches threshold line
+        backgroundColor: '#f59e0b' + fillA,
+        borderColor: '#f59e0b' + _overlayAlpha,
         borderWidth: 2,
         drawTime: 'afterDatasetsDraw',
       };
@@ -398,6 +402,9 @@ export function createChart(canvas, config = {}) {
           }
 
           const ctx = ch.ctx;
+          const olAlpha = parseInt(_overlayAlpha, 16) / 255;
+          ctx.save();
+          ctx.globalAlpha = olAlpha;
           if (targetCe !== null && targetCe > 0)
             drawPillLabel(ctx, targetCe, targetCe.toFixed(1), COLORS.target);
           if (thresholdCe !== null && thresholdCe > 0)
@@ -406,6 +413,7 @@ export function createChart(canvas, config = {}) {
             drawPillLabel(ctx, steadyStateCe, steadyStateCe.toFixed(2), 'rgba(34, 197, 94, 0.9)');
           if (exitCe !== null && exitCe > 0)
             drawPillLabel(ctx, exitCe, exitCe.toFixed(1), '#ef4444');
+          ctx.restore();
         },
       },
       {
@@ -813,6 +821,20 @@ export function createChart(canvas, config = {}) {
     chart.update('none');
   }
 
+  /** Set BIS nomogram band opacity (0.1–1.0). Rebuilds annotations with scaled alpha. */
+  function setNomogramOpacity(opacity) {
+    _nomogramOpacity = Math.max(0.1, Math.min(1.0, opacity));
+    chart.options.plugins.annotation.annotations = buildAnnotations();
+    chart.update('none');
+  }
+
+  /** Set threshold/target/SS/exit line opacity (0.1–1.0). Rebuilds annotations with scaled alpha. */
+  function setOverlayOpacity(opacity) {
+    _overlayAlpha = Math.round(Math.max(0.1, Math.min(1.0, opacity)) * 255).toString(16).padStart(2, '0');
+    chart.options.plugins.annotation.annotations = buildAnnotations();
+    chart.update('none');
+  }
+
   return {
     setCurveData,
     setCursorTime,
@@ -830,6 +852,8 @@ export function createChart(canvas, config = {}) {
     setPatientWeight,
     switchDrug,
     setCpOpacity,
+    setNomogramOpacity,
+    setOverlayOpacity,
     destroy,
     get tooltipEnabled() { return tooltipEnabled; },
     get chart() { return chart; },
