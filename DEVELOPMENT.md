@@ -4,6 +4,32 @@
 
 ## Session History
 
+### Interim — Fix stale drug panel data & control button UX (v0.5.20.1)
+
+*Between Sessions 25 and 26. Not tracked in session numbering.*
+
+Fixes several bugs where drug panel data and control buttons retained stale state from a previous case or failed to update for non-selected drugs. Also improves control button visual feedback with dim/bright states.
+
+**Bug fixes:**
+
+- **Step bar stale data after New Case** — Step bar countdown text (rate countdowns, redose thresholds) persisted in the DOM after starting a new case because the `update()` loop had no `else` branch to clear step bar elements when `caseStarted` was false.
+- **Approach cache not invalidating on Ce threshold crossing** — The approach cache used mode, rate, and ceTarget as invalidation keys but did not track whether Ce was above or below the threshold. Non-selected drug cards showed stale "Below Redose Threshold" text even after Ce rose above the threshold. Added `ceAboveTarget` tracking to the cache.
+- **Stale button state after New Case** — `mode.reset()` did not call `updateExitButton()`, leaving the exit button showing "Change Exit Ce" after targets were cleared. `initSimScreen()` did not reset `selectedDrug` or drug card `.active` class, causing `onCaseStart` to update buttons for the wrong drug.
+- **Pump stop not clearing manual mode** — Stopping the pump from manual mode left the mode as `'manual'`, keeping the rate button highlighted. Now drops to `'none'` from any active mode.
+
+**UI improvements:**
+
+- **Dim/bright control buttons** — Target/threshold, exit Ce, rate, and bolus buttons now use muted translucent backgrounds by default. Full bright color with glow ring appears only when `active-mode` is set, making active vs inactive state visually clear.
+- **Bolus button highlights in intermittent mode** — Add Bolus gets `active-mode` in both intermittent-only and infusion+redose states (pump-off and pump-on paths).
+- **Threshold dialog clear option** — Mirrors the exit Ce pattern: shows a Clear button when a threshold is set, pre-fills the current value for editing, title changes to "Change Redose Threshold".
+- **Rate keypad pre-fill** — The rate keypad pre-fills with the last used rate (per-drug, stored in localStorage) for quick resume after pump stop.
+
+**Files changed:** `js/ui/drug-panel/index.js`, `js/ui/drug-panel/approach.js`, `js/ui/mode.js`, `js/ui/keypad.js`, `js/app.js`, `index.html`
+
+**Tests:** 485 tests across 13 suites, all passing.
+
+---
+
 ### Interim — Per-drug pump settings (v0.5.20)
 
 *Between Sessions 25 and 26. Not tracked in session numbering.*
