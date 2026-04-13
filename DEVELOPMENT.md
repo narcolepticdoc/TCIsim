@@ -4,6 +4,59 @@
 
 ## Session History
 
+### Interim — Per-drug pump settings (v0.5.20)
+
+*Between Sessions 25 and 26. Not tracked in session numbering.*
+
+Adds a per-drug "Delivery Method" setting controlling whether each drug uses an infusion pump. Propofol pump is mandatory; fentanyl and ketamine default to manual (bolus only) and can opt-in to pump use via the setup screen.
+
+**When pump is OFF for a drug:**
+
+- Set Rate and Stop Pump buttons are hidden — simplified bolus-only interface
+- Boluses forced to IV Push delivery mode ("Administer" button)
+- Mode locked to NO MODE or INTERMITTENT (INFUSION / INF+REDOSE states unavailable)
+- Event editor hides rate/pause type options
+- Drug status no longer shows "Stopped" for pumpless drugs (bug fix)
+- History defaults to bolus-only view
+
+**Data model (`js/util/constants.js`):**
+
+- `PUMP_MANDATORY` set — drugs where pump is always on (propofol)
+- `getPumpSettings()` returns `pumpEnabled` (propofol: always true, fentanyl/ketamine: default false)
+- `setPumpSettings()` accepts `pumpEnabled` (skipped for mandatory drugs)
+- `isPumpEnabled(drugId)` — convenience getter
+
+**UI (`index.html` + `js/ui/setup.js`):**
+
+- "Delivery Method" `<select>` on fentanyl/ketamine setup tabs (Manual bolus only / Infusion pump)
+- Infusion unit selector and pump-derived rate display hidden when pump is OFF
+- Persisted to `tci-pump-enabled-{drugId}` in localStorage
+
+**Mode gating (`js/ui/mode.js`):**
+
+- New pump-disabled branch in `updateModeUI()` hides `btn-rate`, `btn-pause` (post-start), ctrl-divider
+- Imports `isPumpEnabled` from constants and `isCaseStarted` from controls (no circular dependency — controls.js does not import mode.js)
+
+**Bolus handling (`js/app.js` + `js/ui/keypad.js`):**
+
+- `isPumpEnabled` injected into keypad via opts; extends `isIntermittentBolus` to include no-pump drugs
+- Rate handler guarded: `if (!isPumpEnabled(selectedDrug)) return`
+- Pump-pause handler guarded similarly
+- `onCaseStart` callback calls `mode.refreshUI()` to hide Stop Pump for no-pump drugs
+
+**Event editor (`js/ui/event-editor.js`):**
+
+- Rate/pause type buttons hidden when pump is off; delivery mode forced to push
+
+**Persistence (`js/app/session.js`):**
+
+- `pumpEnabled` map added to `persist.saveCase()` and restored on load
+- Old saved cases without `pumpEnabled` field default to current settings (no migration issue)
+
+**Tests:** 485 tests across 13 suites, all passing. Model layer unchanged — pump settings are purely a UI concern.
+
+---
+
 ### Interim — Refactor app.js into sub-modules (v0.5.19.10)
 
 *Between Sessions 25 and 26. Not tracked in session numbering.*
