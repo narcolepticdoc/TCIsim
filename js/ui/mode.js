@@ -141,8 +141,8 @@ function updateExitButton(drugId) {
   const be = $('btn-exit');
   if (!be) return;
   const val = exitCeTargets[drugId] || 0;
-  const label = exitCeLabels[drugId] || '';
   be.textContent = val > 0 ? 'Change Exit Ce' : 'Set Exit Ce';
+  be.classList.toggle('active-mode', val > 0);
 }
 
 /**
@@ -155,6 +155,7 @@ export function reset() {
   for (const k of Object.keys(exitCeTargets)) exitCeTargets[k] = 0;
   for (const k of Object.keys(exitCeLabels)) exitCeLabels[k] = '';
   updateModeUI();
+  updateExitButton();
 }
 
 /**
