@@ -123,7 +123,6 @@ export function createChart(canvas, config = {}) {
   let viewMin = 0;
   let viewMax = 30;         // default 30-minute view
   let autoScroll = true;
-  let tooltipEnabled = true;
   let _currentDrugId = cfg.drugId || 'propofol';
   let _yScale = 1;          // scale factor applied to curve data (1 for mcg/mL, 1000 for ng/mL)
   let _overlayAlpha = 'ff';  // hex alpha for threshold/target lines
@@ -131,6 +130,23 @@ export function createChart(canvas, config = {}) {
   let eventMarkers = [];      // [{ time, kind }] — future TCI events for overlay
   let eventAnnotationsEnabled = false;
   let eventMarkerSize = 7;    // px radius / half-size for marker shapes
+  let inspectTime = null;     // time (minutes) where user tapped to inspect, or null
+  let inspectEnabled = false; // gate: ⓘ button controls whether taps set inspectTime
+
+  // Shared helper: binary-search + linear interpolation for a sorted {x, y} array
+  function interpolateAtTime(data, time) {
+    if (!data || data.length === 0) return null;
+    let lo = 0, hi = data.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (data[mid].x < time) lo = mid + 1; else hi = mid;
+    }
+    const i = Math.min(lo, data.length - 1);
+    if (i === 0 || data[i].x === time) return data[i].y;
+    const a = data[i - 1], b = data[i];
+    const frac = (time - a.x) / (b.x - a.x);
+    return a.y + frac * (b.y - a.y);
+  }
 
   // Build datasets
   const datasets = [];
@@ -191,6 +207,18 @@ export function createChart(canvas, config = {}) {
       borderWidth: 1.5,
       borderDash: [4, 3],
     };
+
+    // Inspect line (amber solid — user tap point)
+    if (inspectTime !== null) {
+      annotations.inspect = {
+        type: 'line',
+        xMin: inspectTime,
+        xMax: inspectTime,
+        borderColor: '#f59e0b',
+        borderWidth: 1.5,
+        borderDash: [],
+      };
+    }
 
     // Target line
     if (targetCe !== null && targetCe > 0) {
@@ -301,6 +329,18 @@ export function createChart(canvas, config = {}) {
       layout: {
         padding: { right: 5 },
       },
+      onClick(event, elements, ch) {
+        if (!inspectEnabled) return;
+        const xScale = ch.scales.x;
+        if (!xScale) return;
+        const ca = ch.chartArea;
+        if (!ca) return;
+        const px = event.x;
+        if (px < ca.left || px > ca.right) return;
+        const t = xScale.getValueForPixel(px);
+        if (t < 0) return;
+        setInspectTime(t);
+      },
       interaction: {
         mode: 'index',
         intersect: false,
@@ -347,7 +387,7 @@ export function createChart(canvas, config = {}) {
           labels: { color: '#9ca3af', font: { size: 10 }, boxWidth: 12, padding: 8 },
         },
         tooltip: {
-          enabled: tooltipEnabled,
+          enabled: false,
           backgroundColor: '#1e293bee',
           titleFont: { size: 11 },
           bodyFont: { size: 10 },
@@ -527,6 +567,98 @@ export function createChart(canvas, config = {}) {
             ctx.stroke();
             ctx.restore();
           }
+        },
+      },
+      {
+        // Draw amber dots on Ce/Cp curves at the inspect time
+        id: 'inspectDots',
+        afterDraw(ch) {
+          if (inspectTime === null) return;
+          const xScl = ch.scales.x;
+          const yScl = ch.scales.y;
+          const ca = ch.chartArea;
+          if (!xScl || !yScl || !ca) return;
+          const icx = xScl.getPixelForValue(inspectTime);
+          if (icx < ca.left || icx > ca.right) return;
+          const ctx = ch.ctx;
+
+          for (const ds of ch.data.datasets) {
+            if (!ds.data || ds.data.length === 0) continue;
+            const color = ds.borderColor;
+            if (!color.startsWith(COLORS.ce) && !color.startsWith(COLORS.cp)) continue;
+            const yVal = interpolateAtTime(ds.data, inspectTime);
+            if (yVal === null) continue;
+            const py = yScl.getPixelForValue(yVal);
+            if (py < ca.top || py > ca.bottom) continue;
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(icx, py, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#f59e0b';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.restore();
+          }
+        },
+      },
+      {
+        // Fixed readout panel drawn on canvas at top-right of chart area
+        id: 'readoutPanel',
+        afterDraw(ch) {
+          if (inspectTime === null || !inspectEnabled) return;
+          const ca = ch.chartArea;
+          if (!ca) return;
+          const ctx = ch.ctx;
+
+          // Interpolate Ce and Cp at inspectTime
+          let ceVal = null, cpVal = null;
+          for (const ds of ch.data.datasets) {
+            if (!ds.data || ds.data.length === 0) continue;
+            const color = ds.borderColor;
+            if (color.startsWith(COLORS.ce)) ceVal = interpolateAtTime(ds.data, inspectTime);
+            else if (color.startsWith(COLORS.cp)) cpVal = interpolateAtTime(ds.data, inspectTime);
+          }
+
+          // Compute eBIS from Ce (unscale to canonical mcg/mL)
+          let bisStr = '';
+          if (pdModel && ceVal !== null) {
+            try {
+              const ce = ceVal / (_yScale || 1);
+              const bis = pdModel.predict(ce);
+              if (Number.isFinite(bis)) bisStr = 'eBIS ' + bis.toFixed(0);
+            } catch (e) {}
+          }
+
+          // Build display lines
+          const line1 = 't = ' + inspectTime.toFixed(1) + ' min';
+          const parts2 = [];
+          if (ceVal !== null) parts2.push('Ce ' + ceVal.toFixed(2));
+          if (cpVal !== null) parts2.push('Cp ' + cpVal.toFixed(2));
+          if (bisStr) parts2.push(bisStr);
+          const line2 = parts2.join('  ');
+
+          // Measure and draw panel
+          ctx.save();
+          ctx.font = '11px monospace';
+          const w1 = ctx.measureText(line1).width;
+          const w2 = ctx.measureText(line2).width;
+          const panelW = Math.max(w1, w2) + 16;
+          const panelH = 34;
+          const px = ca.right - panelW - 4;
+          const py = ca.top + 4;
+
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+          ctx.beginPath();
+          ctx.roundRect(px, py, panelW, panelH, 5);
+          ctx.fill();
+
+          ctx.fillStyle = '#f59e0b';
+          ctx.textBaseline = 'top';
+          ctx.fillText(line1, px + 8, py + 4);
+          ctx.fillStyle = '#e2e8f0';
+          ctx.fillText(line2, px + 8, py + 18);
+          ctx.restore();
         },
       },
       {
@@ -771,15 +903,23 @@ export function createChart(canvas, config = {}) {
     chart.update('none');
   }
 
-  /**
-   * Toggle the hover tooltip on/off.
-   * @returns {boolean} new state
-   */
-  function toggleTooltip() {
-    tooltipEnabled = !tooltipEnabled;
-    chart.options.plugins.tooltip.enabled = tooltipEnabled;
+  function setInspectTime(t) {
+    inspectTime = t;
+    chart.options.plugins.annotation.annotations = buildAnnotations();
     chart.update('none');
-    return tooltipEnabled;
+  }
+
+  function clearInspect() {
+    if (inspectTime === null) return;
+    inspectTime = null;
+    chart.options.plugins.annotation.annotations = buildAnnotations();
+    chart.update('none');
+  }
+
+  function toggleInspect() {
+    inspectEnabled = !inspectEnabled;
+    if (!inspectEnabled) clearInspect();
+    return inspectEnabled;
   }
 
   /**
@@ -816,6 +956,7 @@ export function createChart(canvas, config = {}) {
     _currentDrugId = drugId;
     _yScale = yScale || 1;
     thresholdCe = null;  // clear stale threshold from previous drug
+    inspectTime = null;  // clear stale inspect from previous drug
 
     // Update y-axis label
     chart.options.scales.y.title.text = yLabel || 'μg/mL';
@@ -908,6 +1049,7 @@ export function createChart(canvas, config = {}) {
   }, { passive: true });
 
   function recenter() {
+    inspectTime = null;
     autoScroll = true;
     const range = viewMax - viewMin; // keep current zoom level
     viewMin = Math.max(0, cursorTime - range * 0.3);
@@ -996,7 +1138,9 @@ export function createChart(canvas, config = {}) {
     setViewRange,
     resetView,
     recenter,
-    toggleTooltip,
+    setInspectTime,
+    clearInspect,
+    toggleInspect,
     setPDModel,
     setPatientWeight,
     switchDrug,
@@ -1007,7 +1151,7 @@ export function createChart(canvas, config = {}) {
     toggleEventAnnotations,
     setEventMarkerSize,
     destroy,
-    get tooltipEnabled() { return tooltipEnabled; },
+    get inspectEnabled() { return inspectEnabled; },
     get eventAnnotationsEnabled() { return eventAnnotationsEnabled; },
     get chart() { return chart; },
   };
