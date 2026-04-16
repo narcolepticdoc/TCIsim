@@ -489,6 +489,13 @@ function boot() {
       btnChartTooltip.classList.toggle('active', enabled);
     }
   });
+  const btnChartEvents = $('btn-chart-events');
+  if (btnChartEvents) btnChartEvents.addEventListener('click', () => {
+    if (chart) {
+      const enabled = chart.toggleEventAnnotations();
+      btnChartEvents.classList.toggle('active', enabled);
+    }
+  });
   const btnNewCaseConfirm = $('btn-new-case-confirm');
   if (btnNewCaseConfirm) btnNewCaseConfirm.addEventListener('click', () => {
     closeModal('modal-new-case');

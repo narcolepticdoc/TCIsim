@@ -11,6 +11,34 @@ import { ceForBIS } from '../pk/pd.js';
 
 const $ = id => document.getElementById(id);
 
+/**
+ * Classify future TCI events into chart-marker kinds by walking the full event
+ * list forward while tracking the running rate. Skips system-generated events
+ * (e.g. rate-restore after a bolus). Returns markers for events with time > now.
+ */
+function classifyFutureEvents(events, now) {
+  let currentRate = 0;
+  const out = [];
+  for (const e of events) {
+    if (e.source === 'system') continue;
+    const isFuture = e.time > now;
+    if (e.type === 'pause' || (e.type === 'rate' && e.value === 0)) {
+      if (isFuture) out.push({ time: e.time, kind: 'stop' });
+      currentRate = 0;
+    } else if (e.type === 'rate' && e.value > 0) {
+      let kind = null;
+      if (currentRate === 0) kind = 'resume';
+      else if (e.value > currentRate) kind = 'increase';
+      else if (e.value < currentRate) kind = 'decrease';
+      if (kind && isFuture) out.push({ time: e.time, kind });
+      currentRate = e.value;
+    } else if (e.type === 'bolus') {
+      if (isFuture) out.push({ time: e.time, kind: 'bolus' });
+    }
+  }
+  return out;
+}
+
 // ---- Per-Drug Chart Configuration ----
 // yScale: multiply canonical mcg/mL curve values before passing to chart
 // yLabel: y-axis title
@@ -49,6 +77,7 @@ export function createChartBridge({
   let lastCpOpacity = null;
   let lastNomogramOpacity = null;
   let lastOverlayOpacity = null;
+  let lastEventMarkersKey = '';
 
   function getConfig(drugId) {
     return CHART_DRUG_CONFIG[drugId] || { yScale: 1, yLabel: '\u03bcg/mL', yDefault: 10 };
@@ -208,6 +237,26 @@ export function createChartBridge({
       } else if (lastPlateauRegion) {
         lastPlateauRegion = null;
         chart.setPlateauRegion(null);
+      }
+
+      // Future-event markers — only when the overlay is enabled.
+      // Gated to TCI mode (manual mode rarely has pre-scheduled future events).
+      if (chart.eventAnnotationsEnabled) {
+        if (m === 'tci' && model) {
+          const evts = model.getEvents(selectedDrug) || [];
+          const markers = classifyFutureEvents(evts, t);
+          const key = markers.map(x => `${x.time}:${x.kind}`).join('|');
+          if (key !== lastEventMarkersKey) {
+            lastEventMarkersKey = key;
+            chart.setEventAnnotations(markers);
+          }
+        } else if (lastEventMarkersKey) {
+          lastEventMarkersKey = '';
+          chart.setEventAnnotations([]);
+        }
+      } else if (lastEventMarkersKey) {
+        lastEventMarkersKey = '';
+        chart.setEventAnnotations([]);
       }
     }
     // Appearance settings — only update chart when values change
