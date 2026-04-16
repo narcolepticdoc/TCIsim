@@ -79,6 +79,7 @@ export function createChartBridge({
   let lastNomogramOpacity = null;
   let lastOverlayOpacity = null;
   let lastEventMarkersKey = '';
+  let lastEventMarkerSize = null;
 
   function getConfig(drugId) {
     return CHART_DRUG_CONFIG[drugId] || { yScale: 1, yLabel: '\u03bcg/mL', yDefault: 10 };
@@ -277,6 +278,11 @@ export function createChartBridge({
       if (lastOverlayOpacity !== ovOp) {
         lastOverlayOpacity = ovOp;
         chart.setOverlayOpacity(ovOp);
+      }
+      const mkSize = s.eventMarkerSize ?? 7;
+      if (lastEventMarkerSize !== mkSize) {
+        lastEventMarkerSize = mkSize;
+        chart.setEventMarkerSize(mkSize);
       }
     }
     // Check for upcoming events requiring advance warning

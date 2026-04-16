@@ -57,6 +57,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
   const nomogramVal       = $('set-nomogram-opacity-val');
   const overlaySlider     = $('set-overlay-opacity');
   const overlayVal        = $('set-overlay-opacity-val');
+  const markerSizeSlider  = $('set-event-marker-size');
+  const markerSizeVal     = $('set-event-marker-size-val');
   if (!prepSlider || !alertSlider) return;
 
   // Populate controls from saved settings
@@ -81,6 +83,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (nomogramVal)       nomogramVal.textContent       = Math.round((savedSettings.nomogramOpacity ?? 1.0) * 100) + '%';
   if (overlaySlider)     overlaySlider.value           = Math.round((savedSettings.overlayOpacity ?? 1.0) * 100);
   if (overlayVal)        overlayVal.textContent        = Math.round((savedSettings.overlayOpacity ?? 1.0) * 100) + '%';
+  if (markerSizeSlider)  markerSizeSlider.value        = (savedSettings.eventMarkerSize ?? 7);
+  if (markerSizeVal)     markerSizeVal.textContent     = (savedSettings.eventMarkerSize ?? 7) + ' px';
 
   function saveAll() {
     const prepSec           = parseInt(prepSlider.value,  10);
@@ -101,6 +105,7 @@ export function initSettingsUI({ getSettings, setSettings }) {
     const nomogramOpacity   = nomogramPct / 100;
     const overlayPct        = overlaySlider ? parseInt(overlaySlider.value, 10) : 100;
     const overlayOpacity    = overlayPct / 100;
+    const eventMarkerSize   = markerSizeSlider ? parseInt(markerSizeSlider.value, 10) : 7;
     if (prepVal)         prepVal.textContent         = prepSec           + 's';
     if (alertVal)        alertVal.textContent        = alertSec          + 's';
     if (statusWarnVal)   statusWarnVal.textContent   = statusWarnMinutes + ' min';
@@ -110,7 +115,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
     if (cpOpacityVal)    cpOpacityVal.textContent    = cpOpacityPct      + '%';
     if (nomogramVal)     nomogramVal.textContent     = nomogramPct       + '%';
     if (overlayVal)      overlayVal.textContent      = overlayPct        + '%';
-    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity });
+    if (markerSizeVal)   markerSizeVal.textContent   = eventMarkerSize   + ' px';
+    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize });
   }
 
   prepSlider.addEventListener('input',    saveAll);
@@ -125,6 +131,7 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (cpOpacitySlider)   cpOpacitySlider.addEventListener('input',   saveAll);
   if (nomogramSlider)    nomogramSlider.addEventListener('input',    saveAll);
   if (overlaySlider)     overlaySlider.addEventListener('input',     saveAll);
+  if (markerSizeSlider)  markerSizeSlider.addEventListener('input',  saveAll);
 
   // Tab switching + info panel
   const infoText = $('settings-info-text');

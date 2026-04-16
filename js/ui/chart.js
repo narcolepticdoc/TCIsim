@@ -130,6 +130,7 @@ export function createChart(canvas, config = {}) {
   let _nomogramOpacity = 1.0; // multiplier for BIS band alpha
   let eventMarkers = [];      // [{ time, kind }] — future TCI events for overlay
   let eventAnnotationsEnabled = false;
+  let eventMarkerSize = 7;    // px radius / half-size for marker shapes
 
   // Build datasets
   const datasets = [];
@@ -548,7 +549,7 @@ export function createChart(canvas, config = {}) {
           if (!ceData || ceData.length === 0) return;
 
           const ctx = ch.ctx;
-          const R = 7;  // shape radius / half-size
+          const R = eventMarkerSize;  // shape radius / half-size (configurable)
 
           for (const m of eventMarkers) {
             const cx = xScl.getPixelForValue(m.time);
@@ -977,6 +978,12 @@ export function createChart(canvas, config = {}) {
     return eventAnnotationsEnabled;
   }
 
+  /** Set the event-marker shape radius in px (clamped to 4–16). */
+  function setEventMarkerSize(px) {
+    eventMarkerSize = Math.max(4, Math.min(16, Math.round(px)));
+    chart.update('none');
+  }
+
   return {
     setCurveData,
     setCursorTime,
@@ -998,6 +1005,7 @@ export function createChart(canvas, config = {}) {
     setOverlayOpacity,
     setEventAnnotations,
     toggleEventAnnotations,
+    setEventMarkerSize,
     destroy,
     get tooltipEnabled() { return tooltipEnabled; },
     get eventAnnotationsEnabled() { return eventAnnotationsEnabled; },
