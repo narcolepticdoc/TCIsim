@@ -16,9 +16,17 @@ const $ = id => document.getElementById(id);
  * list forward while tracking the running rate. Skips system-generated events
  * (e.g. rate-restore after a bolus). Tags each marker as past or future so
  * the chart can render past events dimmed.
+ *
+ * Classification compares each rate event against the last *non-zero* rate,
+ * not the instantaneous running rate. This way a rate event that follows a
+ * pause is labelled by its direction relative to the pre-pause level
+ * (decrease/increase) rather than always being called "resume". A true
+ * "resume" marker is only used when the new rate matches the prior rate
+ * (or when no prior rate has ever been set).
  */
 function classifyFutureEvents(events, now) {
   let currentRate = 0;
+  let lastNonZeroRate = 0;
   const out = [];
   for (const e of events) {
     if (e.source === 'system') continue;
@@ -27,12 +35,16 @@ function classifyFutureEvents(events, now) {
       out.push({ time: e.time, kind: 'stop', past });
       currentRate = 0;
     } else if (e.type === 'rate' && e.value > 0) {
+      const ref = lastNonZeroRate;
       let kind = null;
-      if (currentRate === 0) kind = 'resume';
-      else if (e.value > currentRate) kind = 'increase';
-      else if (e.value < currentRate) kind = 'decrease';
+      if (ref === 0)                  kind = 'resume';   // first rate ever set
+      else if (e.value > ref)         kind = 'increase';
+      else if (e.value < ref)         kind = 'decrease';
+      else if (currentRate === 0)     kind = 'resume';   // equal to prior, after a pause
+      // else: equal to prior with no pause → no-op, skip
       if (kind) out.push({ time: e.time, kind, past });
       currentRate = e.value;
+      lastNonZeroRate = e.value;
     } else if (e.type === 'bolus') {
       out.push({ time: e.time, kind: 'bolus', past });
     }
