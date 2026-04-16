@@ -646,7 +646,9 @@ export function createChart(canvas, config = {}) {
           const panelW = Math.max(w1, w2) + 16;
           const panelH = 34;
           const px = ca.right - panelW - 4;
-          const py = ca.top + 4;
+          // Buttons sit at top:8 and are 38px tall. Anchor readout below them
+          // (with 6px gap), but never above chartArea.top.
+          const py = Math.max(ca.top + 4, 52);
 
           ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
           ctx.beginPath();
