@@ -1,0 +1,48 @@
+/**
+ * target-label.js — Coloured pill labels at the right edge of the chart area.
+ */
+
+import { COLORS } from '../../../util/constants.js';
+
+export function createTargetLabelPlugin(s) {
+  return {
+    id: 'targetCeLabel',
+    afterDraw(ch) {
+      const yScl = ch.scales.y;
+      const ca = ch.chartArea;
+      if (!yScl || !ca) return;
+
+      function drawPillLabel(ctx, value, text, bgColor) {
+        const y = yScl.getPixelForValue(value);
+        if (y < ca.top || y > ca.bottom) return;
+        ctx.save();
+        ctx.font = 'bold 10px sans-serif';
+        const tw = ctx.measureText(text).width;
+        const padH = 5, padV = 3;
+        const pillW = tw + padH * 2;
+        const pillH = 10 + padV * 2;
+        const r = pillH / 2;
+        const x = ca.right - pillW - 2;
+        ctx.beginPath();
+        ctx.roundRect(x, y - pillH / 2, pillW, pillH, r);
+        ctx.fillStyle = bgColor;
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x + pillW / 2, y);
+        ctx.restore();
+      }
+
+      const ctx = ch.ctx;
+      if (s.targetCe !== null && s.targetCe > 0)
+        drawPillLabel(ctx, s.targetCe, s.targetCe.toFixed(1), COLORS.target);
+      if (s.thresholdCe !== null && s.thresholdCe > 0)
+        drawPillLabel(ctx, s.thresholdCe, s.thresholdCe.toFixed(1), '#f59e0b');
+      if (s.steadyStateCe !== null && s.steadyStateCe > 0)
+        drawPillLabel(ctx, s.steadyStateCe, s.steadyStateCe.toFixed(2), 'rgba(34, 197, 94, 0.9)');
+      if (s.exitCe !== null && s.exitCe > 0)
+        drawPillLabel(ctx, s.exitCe, s.exitCe.toFixed(1), '#ef4444');
+    },
+  };
+}
