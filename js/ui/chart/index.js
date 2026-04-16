@@ -1,0 +1,527 @@
+/**
+ * chart/index.js — TCI Chart Component orchestrator.
+ *
+ * Creates and manages a Chart.js instance for pharmacokinetic curves.
+ * Sub-modules handle plugins, annotations, gestures, and state.
+ */
+
+import { COLORS } from '../../util/constants.js';
+import { fromCanonical, getDefaultUnit, getPrefKey, formatValue, getAllowedUnits } from '../../util/units.js';
+
+import { createState } from './state.js';
+import { buildAnnotations } from './annotations.js';
+import { attachGestures } from './gestures.js';
+import { createTargetLabelPlugin } from './plugins/target-label.js';
+import { createCursorDotsPlugin } from './plugins/cursor-dots.js';
+import { createInspectDotsPlugin } from './plugins/inspect-dots.js';
+import { createReadoutPanelPlugin } from './plugins/readout-panel.js';
+import { createEventMarkersPlugin } from './plugins/event-markers.js';
+
+const Chart = window.Chart;
+
+if (!Chart) {
+  console.warn('[TCI Sim] Chart.js not loaded — chart features disabled');
+}
+
+/**
+ * Create a TCI chart instance.
+ *
+ * @param {HTMLCanvasElement} canvas - The canvas element to render into
+ * @param {Object} [config] - Configuration options
+ * @param {string} [config.drugId] - Drug identifier (for labelling)
+ * @param {boolean} [config.showCp] - Show Cp curve (default true)
+ * @param {boolean} [config.showCe] - Show Ce curve (default true)
+ * @param {boolean} [config.showRate] - Show rate step plot (default false)
+ * @returns {Object} Chart controller
+ */
+export function createChart(canvas, config = {}) {
+  if (!Chart) {
+    console.error('[TCI Sim] Cannot create chart — Chart.js not loaded');
+    return null;
+  }
+  const cfg = {
+    drugId: 'propofol',
+    showCp: true,
+    showCe: true,
+    showRate: false,
+    ...config,
+  };
+
+  const s = createState(cfg);
+
+  // Build datasets
+  const datasets = [];
+
+  if (cfg.showCp) {
+    datasets.push({
+      label: 'Cp (μg/mL)',
+      data: [],
+      borderColor: COLORS.cp,
+      backgroundColor: COLORS.cp + '18',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.1,
+      fill: false,
+      order: 2,
+    });
+  }
+
+  if (cfg.showCe) {
+    datasets.push({
+      label: 'Ce (μg/mL)',
+      data: [],
+      borderColor: COLORS.ce,
+      backgroundColor: COLORS.ce + '18',
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.1,
+      fill: false,
+      order: 1,
+    });
+  }
+
+  if (cfg.showRate) {
+    datasets.push({
+      label: 'Rate (mg/min)',
+      data: [],
+      borderColor: COLORS.rate,
+      backgroundColor: COLORS.rate + '30',
+      borderWidth: 1,
+      pointRadius: 0,
+      stepped: 'before',
+      fill: true,
+      yAxisID: 'yRate',
+      order: 3,
+    });
+  }
+
+  // Create chart instance
+  const chart = new Chart(canvas, {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      layout: {
+        padding: { right: 5 },
+      },
+      onClick(event, elements, ch) {
+        if (!s.inspectEnabled) return;
+        const xScale = ch.scales.x;
+        if (!xScale) return;
+        const ca = ch.chartArea;
+        if (!ca) return;
+        const px = event.x;
+        if (px < ca.left || px > ca.right) return;
+        const t = xScale.getValueForPixel(px);
+        if (t < 0) return;
+        setInspectTime(t);
+      },
+      interaction: {
+        mode: 'index',
+        intersect: false,
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          title: { display: true, text: 'Time (min)', color: '#9ca3af', font: { size: 10 } },
+          min: s.viewMin,
+          max: s.viewMax,
+          ticks: {
+            color: '#6b7280',
+            font: { size: 9 },
+            maxTicksLimit: 12,
+          },
+          grid: { color: '#1e293b' },
+        },
+        y: {
+          type: 'linear',
+          title: { display: true, text: 'μg/mL', color: '#9ca3af', font: { size: 10 } },
+          min: 0,
+          suggestedMax: 8,
+          ticks: {
+            color: '#6b7280',
+            font: { size: 9 },
+          },
+          grid: { color: '#1e293b' },
+        },
+        ...(cfg.showRate ? {
+          yRate: {
+            type: 'linear',
+            position: 'right',
+            title: { display: true, text: 'mg/min', color: COLORS.rate, font: { size: 10 } },
+            min: 0,
+            grid: { display: false },
+            ticks: { color: COLORS.rate, font: { size: 9 } },
+          },
+        } : {}),
+      },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: { color: '#9ca3af', font: { size: 10 }, boxWidth: 12, padding: 8 },
+        },
+        tooltip: {
+          enabled: false,
+          backgroundColor: '#1e293bee',
+          titleFont: { size: 11 },
+          bodyFont: { size: 10 },
+          callbacks: {
+            title(items) {
+              if (items.length > 0) return `t = ${items[0].parsed.x.toFixed(1)} min`;
+              return '';
+            },
+            afterBody(items) {
+              if (!items.length) return '';
+              const idx = items[0].dataIndex;
+              const lines = [];
+              if (s.rateValues.length > idx) {
+                const rateMgMin = s.rateValues[idx];
+                try {
+                  const prefKey = getPrefKey(s.currentDrugId, 'rate');
+                  let displayUnit = getDefaultUnit(s.currentDrugId, 'rate');
+                  if (prefKey) {
+                    try {
+                      const saved = localStorage.getItem(prefKey);
+                      const allowed = getAllowedUnits(s.currentDrugId, 'rate');
+                      if (saved && allowed.includes(saved)) displayUnit = saved;
+                    } catch (e) { /* ignore */ }
+                  }
+                  const ctx = { weightKg: s.patientWeightKg || undefined };
+                  const displayVal = fromCanonical(rateMgMin, displayUnit, s.currentDrugId, 'rate', ctx);
+                  lines.push(`Rate: ${formatValue(displayVal, displayUnit)} ${displayUnit}`);
+                } catch (e) {
+                  lines.push(`Rate: ${rateMgMin.toFixed(2)} mg/min`);
+                }
+              }
+              if (s.pdModel) {
+                const ceItem = items.find(it => {
+                  const lbl = it.dataset && it.dataset.label;
+                  return typeof lbl === 'string' && lbl.startsWith('Ce');
+                });
+                if (ceItem) {
+                  try {
+                    const ce  = ceItem.parsed.y / (s.yScale || 1);
+                    const bis = s.pdModel.predict(ce);
+                    if (Number.isFinite(bis)) lines.push(`eBIS: ${bis.toFixed(0)}`);
+                  } catch (e) { /* ignore */ }
+                }
+              }
+              return lines;
+            },
+          },
+        },
+        annotation: {
+          annotations: buildAnnotations(s),
+        },
+        zoom: {
+          limits: {
+            x: { min: 0 },
+          },
+          pan: {
+            enabled: true,
+            mode: 'x',
+            onPanStart() {
+              s.autoScroll = false;
+            },
+            onPanComplete({ chart: c }) {
+              s.autoScroll = false;
+              s.viewMin = c.scales.x.min;
+              s.viewMax = c.scales.x.max;
+            },
+          },
+          zoom: {
+            wheel: { enabled: false },
+            pinch: { enabled: true },
+            mode: 'x',
+            onZoomStart() {
+              s.autoScroll = false;
+            },
+            onZoomComplete({ chart: c }) {
+              s.autoScroll = false;
+              s.viewMin = c.scales.x.min;
+              s.viewMax = c.scales.x.max;
+            },
+          },
+        },
+      },
+    },
+    plugins: [
+      createTargetLabelPlugin(s),
+      createCursorDotsPlugin(s),
+      createInspectDotsPlugin(s),
+      createReadoutPanelPlugin(s),
+      createEventMarkersPlugin(s),
+    ],
+  });
+
+  // ---- Public API ----
+
+  function setCurveData(curveData) {
+    let dsIdx = 0;
+
+    if (cfg.showCp) {
+      datasets[dsIdx].data = curveData.map(p => ({ x: p.time, y: p.Cp }));
+      dsIdx++;
+    }
+
+    if (cfg.showCe) {
+      datasets[dsIdx].data = curveData.map(p => ({ x: p.time, y: p.Ce }));
+      dsIdx++;
+    }
+
+    if (cfg.showRate) {
+      datasets[dsIdx].data = curveData.map(p => ({ x: p.time, y: p.rate }));
+      dsIdx++;
+    }
+
+    s.rateValues = curveData.map(p => p.rate);
+
+    if (s.yMaxManual === null && curveData.length > 0) {
+      const maxCp = Math.max(...curveData.map(p => p.Cp));
+      const maxCe = Math.max(...curveData.map(p => p.Ce));
+      const maxConc = Math.max(maxCp, maxCe, s.targetCe || 0);
+      chart.options.scales.y.max = Math.ceil(maxConc * 1.3);
+    }
+
+    chart.options.scales.x.min = s.viewMin;
+    chart.options.scales.x.max = s.viewMax;
+
+    canvas.style.display = 'block';
+    const placeholder = document.getElementById('chart-placeholder');
+    if (placeholder) placeholder.style.display = 'none';
+
+    chart.update('none');
+  }
+
+  function setCursorTime(t) {
+    s.cursorTime = t;
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+
+    if (s.autoScroll && t > s.viewMax * 0.85) {
+      const range = s.viewMax - s.viewMin;
+      s.viewMin = Math.max(0, t - range * 0.3);
+      s.viewMax = s.viewMin + range;
+      try {
+        chart.zoomScale('x', { min: s.viewMin, max: s.viewMax }, 'none');
+      } catch (e) {
+        chart.options.scales.x.min = s.viewMin;
+        chart.options.scales.x.max = s.viewMax;
+      }
+    }
+
+    chart.update('none');
+  }
+
+  function setEffectOverlay(bands) {
+    s.effectBands = bands;
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
+  function setThresholdLine(ce) {
+    s.thresholdCe = ce;
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
+  function setPlateauRegion(region) {
+    s.plateauRegion = region;
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
+  function setSteadyStateLine(ce) {
+    s.steadyStateCe = ce;
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
+  function setTargetLine(ce) {
+    s.targetCe = ce;
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
+  function setExitLine(ce) {
+    s.exitCe = (ce && ce > 0) ? ce : null;
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
+  function setViewRange(tMin, tMax) {
+    s.viewMin = tMin;
+    s.viewMax = tMax;
+    s.autoScroll = false;
+    try {
+      chart.zoomScale('x', { min: s.viewMin, max: s.viewMax }, 'none');
+    } catch (e) {
+      chart.options.scales.x.min = s.viewMin;
+      chart.options.scales.x.max = s.viewMax;
+    }
+    chart.update('none');
+  }
+
+  function resetView() {
+    s.autoScroll = true;
+    s.yMaxManual = null;
+    try { localStorage.removeItem('chart-ymax-' + s.currentDrugId); } catch (e) { /* ignore */ }
+    s.viewMin = 0;
+    s.viewMax = 30;
+    chart.options.scales.y.min = 0;
+    delete chart.options.scales.y.max;
+    try { chart.resetZoom('none'); } catch (e) { /* ignore */ }
+    try {
+      chart.zoomScale('x', { min: 0, max: 30 }, 'none');
+    } catch (e) {
+      chart.options.scales.x.min = 0;
+      chart.options.scales.x.max = 30;
+    }
+    chart.update('none');
+  }
+
+  function recenter() {
+    s.inspectTime = null;
+    s.autoScroll = true;
+    const range = s.viewMax - s.viewMin;
+    s.viewMin = Math.max(0, s.cursorTime - range * 0.3);
+    s.viewMax = s.viewMin + range;
+    try {
+      chart.zoomScale('x', { min: s.viewMin, max: s.viewMax }, 'none');
+    } catch (e) {
+      chart.options.scales.x.min = s.viewMin;
+      chart.options.scales.x.max = s.viewMax;
+    }
+    chart.update('none');
+  }
+
+  function setInspectTime(t) {
+    s.inspectTime = t;
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
+  function clearInspect() {
+    if (s.inspectTime === null) return;
+    s.inspectTime = null;
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
+  function toggleInspect() {
+    s.inspectEnabled = !s.inspectEnabled;
+    if (!s.inspectEnabled) clearInspect();
+    return s.inspectEnabled;
+  }
+
+  function setPDModel(pd) {
+    s.pdModel = pd || null;
+  }
+
+  function setPatientWeight(kg) {
+    s.patientWeightKg = kg;
+  }
+
+  function switchDrug(drugId, yLabel, suggestedMax, yScale) {
+    if (s.currentDrugId && s.yMaxManual !== null) {
+      try { localStorage.setItem('chart-ymax-' + s.currentDrugId, String(s.yMaxManual)); } catch (e) { /* ignore */ }
+    }
+
+    s.currentDrugId = drugId;
+    s.yScale = yScale || 1;
+    s.thresholdCe = null;
+    s.inspectTime = null;
+
+    chart.options.scales.y.title.text = yLabel || 'μg/mL';
+
+    let saved = NaN;
+    try { saved = parseFloat(localStorage.getItem('chart-ymax-' + drugId)); } catch (e) { /* ignore */ }
+    if (isFinite(saved) && saved > 0) {
+      s.yMaxManual = saved;
+      chart.options.scales.y.max = s.yMaxManual;
+      delete chart.options.scales.y.suggestedMax;
+    } else {
+      s.yMaxManual = null;
+      delete chart.options.scales.y.max;
+      chart.options.scales.y.suggestedMax = suggestedMax || 10;
+    }
+    chart.update('none');
+  }
+
+  // Attach gestures (Y-axis drag, double-tap recenter)
+  const detachGestures = attachGestures(canvas, chart, s, recenter);
+
+  function destroy() {
+    detachGestures();
+    chart.destroy();
+  }
+
+  function setCpOpacity(opacity) {
+    if (!cfg.showCp) return;
+    const ds = datasets[0];
+    const a = Math.round(Math.max(0.1, Math.min(1.0, opacity)) * 255).toString(16).padStart(2, '0');
+    ds.borderColor = COLORS.cp + a;
+    ds.backgroundColor = COLORS.cp + Math.round(opacity * 0x18).toString(16).padStart(2, '0');
+    chart.update('none');
+  }
+
+  function setNomogramOpacity(opacity) {
+    s.nomogramOpacity = Math.max(0.1, Math.min(1.0, opacity));
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
+  function setOverlayOpacity(opacity) {
+    s.overlayAlpha = Math.round(Math.max(0.1, Math.min(1.0, opacity)) * 255).toString(16).padStart(2, '0');
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
+  function setEventAnnotations(markers) {
+    s.eventMarkers = Array.isArray(markers) ? markers : [];
+    chart.update('none');
+  }
+
+  function toggleEventAnnotations() {
+    s.eventAnnotationsEnabled = !s.eventAnnotationsEnabled;
+    chart.update('none');
+    return s.eventAnnotationsEnabled;
+  }
+
+  function setEventMarkerSize(px) {
+    s.eventMarkerSize = Math.max(4, Math.min(16, Math.round(px)));
+    chart.update('none');
+  }
+
+  return {
+    setCurveData,
+    setCursorTime,
+    setEffectOverlay,
+    setTargetLine,
+    setThresholdLine,
+    setPlateauRegion,
+    setSteadyStateLine,
+    setExitLine,
+    setViewRange,
+    resetView,
+    recenter,
+    setInspectTime,
+    clearInspect,
+    toggleInspect,
+    setPDModel,
+    setPatientWeight,
+    switchDrug,
+    setCpOpacity,
+    setNomogramOpacity,
+    setOverlayOpacity,
+    setEventAnnotations,
+    toggleEventAnnotations,
+    setEventMarkerSize,
+    destroy,
+    get inspectEnabled() { return s.inspectEnabled; },
+    get eventAnnotationsEnabled() { return s.eventAnnotationsEnabled; },
+    get chart() { return chart; },
+  };
+}
