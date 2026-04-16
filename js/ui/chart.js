@@ -24,9 +24,74 @@ if (!Chart) {
   console.warn('[TCI Sim] Chart.js not loaded — chart features disabled');
 }
 
+// ---- Shape helpers for futureEventMarkers plugin ----
+
+function drawOctagon(ctx, cx, cy, r, fill) {
+  ctx.beginPath();
+  for (let k = 0; k < 8; k++) {
+    const a = Math.PI / 8 + k * Math.PI / 4;
+    const x = cx + r * Math.cos(a);
+    const y = cy + r * Math.sin(a);
+    if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.stroke();
+}
+
+function drawTriangle(ctx, cx, cy, r, dir, fill) {
+  // Equilateral triangle centred on (cx, cy), pointing in `dir` ('up'|'down'|'right')
+  const h = r * 1.1;
+  ctx.beginPath();
+  if (dir === 'up') {
+    ctx.moveTo(cx, cy - h);
+    ctx.lineTo(cx - h, cy + h * 0.7);
+    ctx.lineTo(cx + h, cy + h * 0.7);
+  } else if (dir === 'down') {
+    ctx.moveTo(cx, cy + h);
+    ctx.lineTo(cx - h, cy - h * 0.7);
+    ctx.lineTo(cx + h, cy - h * 0.7);
+  } else { // 'right'
+    ctx.moveTo(cx + h, cy);
+    ctx.lineTo(cx - h * 0.7, cy - h);
+    ctx.lineTo(cx - h * 0.7, cy + h);
+  }
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.stroke();
+}
+
+function drawDoubleUpArrow(ctx, cx, cy, r, fill) {
+  // Two stacked up-chevrons — reads as "push up"
+  const w = r * 1.1;
+  const h = r * 0.75;
+  const gap = r * 0.25;
+  ctx.fillStyle = fill;
+
+  // Lower chevron (arrowhead): points at cy + h/2, base at cy + h*1.5
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + gap);
+  ctx.lineTo(cx - w, cy + gap + h);
+  ctx.lineTo(cx + w, cy + gap + h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Upper chevron: points at cy - h, base at cy
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - gap - h);
+  ctx.lineTo(cx - w, cy - gap);
+  ctx.lineTo(cx + w, cy - gap);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
 /**
  * Create a TCI chart instance.
- * 
+ *
  * @param {HTMLCanvasElement} canvas - The canvas element to render into
  * @param {Object} [config] - Configuration options
  * @param {string} [config.drugId] - Drug identifier (for labelling)
@@ -63,6 +128,9 @@ export function createChart(canvas, config = {}) {
   let _yScale = 1;          // scale factor applied to curve data (1 for mcg/mL, 1000 for ng/mL)
   let _overlayAlpha = 'ff';  // hex alpha for threshold/target lines
   let _nomogramOpacity = 1.0; // multiplier for BIS band alpha
+  let eventMarkers = [];      // [{ time, kind }] — future TCI events for overlay
+  let eventAnnotationsEnabled = false;
+  let eventMarkerSize = 7;    // px radius / half-size for marker shapes
 
   // Build datasets
   const datasets = [];
@@ -461,6 +529,72 @@ export function createChart(canvas, config = {}) {
           }
         },
       },
+      {
+        // Draw shape markers at future TCI event times, interpolated onto the Ce curve
+        id: 'futureEventMarkers',
+        afterDraw(ch) {
+          if (!eventAnnotationsEnabled || !eventMarkers.length) return;
+          const xScl = ch.scales.x;
+          const yScl = ch.scales.y;
+          const ca = ch.chartArea;
+          if (!xScl || !yScl || !ca) return;
+
+          // Locate Ce dataset (markers ride on Ce)
+          let ceData = null;
+          for (const ds of ch.data.datasets) {
+            if (ds.borderColor && ds.borderColor.startsWith(COLORS.ce)) {
+              ceData = ds.data; break;
+            }
+          }
+          if (!ceData || ceData.length === 0) return;
+
+          const ctx = ch.ctx;
+          const R = eventMarkerSize;  // shape radius / half-size (configurable)
+
+          for (const m of eventMarkers) {
+            const cx = xScl.getPixelForValue(m.time);
+            if (cx < ca.left || cx > ca.right) continue;
+
+            // Binary search for Ce at this event's time
+            let lo = 0, hi = ceData.length - 1;
+            while (lo < hi) {
+              const mid = (lo + hi) >> 1;
+              if (ceData[mid].x < m.time) lo = mid + 1; else hi = mid;
+            }
+            const i = Math.min(lo, ceData.length - 1);
+            let yVal;
+            if (i === 0 || ceData[i].x === m.time) {
+              yVal = ceData[i].y;
+            } else {
+              const a = ceData[i - 1], b = ceData[i];
+              const frac = (m.time - a.x) / (b.x - a.x);
+              yVal = a.y + frac * (b.y - a.y);
+            }
+            const py = yScl.getPixelForValue(yVal);
+            if (py < ca.top || py > ca.bottom) continue;
+
+            ctx.save();
+            if (m.past) ctx.globalAlpha = 0.3;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.lineJoin = 'round';
+
+            if (m.kind === 'stop') {
+              drawOctagon(ctx, cx, py, R, '#dc2626');
+            } else if (m.kind === 'resume') {
+              drawTriangle(ctx, cx, py, R, 'right', '#22c55e');
+            } else if (m.kind === 'increase') {
+              drawTriangle(ctx, cx, py, R, 'up', '#22c55e');
+            } else if (m.kind === 'decrease') {
+              drawTriangle(ctx, cx, py, R, 'down', '#22c55e');
+            } else if (m.kind === 'bolus') {
+              drawDoubleUpArrow(ctx, cx, py, R, '#22c55e');
+            }
+
+            ctx.restore();
+          }
+        },
+      },
     ],
   });
 
@@ -831,6 +965,25 @@ export function createChart(canvas, config = {}) {
     chart.update('none');
   }
 
+  /** Replace the set of future-event markers. `markers` = [{ time, kind }]. */
+  function setEventAnnotations(markers) {
+    eventMarkers = Array.isArray(markers) ? markers : [];
+    chart.update('none');
+  }
+
+  /** Toggle the futureEventMarkers overlay. Returns the new enabled state. */
+  function toggleEventAnnotations() {
+    eventAnnotationsEnabled = !eventAnnotationsEnabled;
+    chart.update('none');
+    return eventAnnotationsEnabled;
+  }
+
+  /** Set the event-marker shape radius in px (clamped to 4–16). */
+  function setEventMarkerSize(px) {
+    eventMarkerSize = Math.max(4, Math.min(16, Math.round(px)));
+    chart.update('none');
+  }
+
   return {
     setCurveData,
     setCursorTime,
@@ -850,8 +1003,12 @@ export function createChart(canvas, config = {}) {
     setCpOpacity,
     setNomogramOpacity,
     setOverlayOpacity,
+    setEventAnnotations,
+    toggleEventAnnotations,
+    setEventMarkerSize,
     destroy,
     get tooltipEnabled() { return tooltipEnabled; },
+    get eventAnnotationsEnabled() { return eventAnnotationsEnabled; },
     get chart() { return chart; },
   };
 }

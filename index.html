@@ -849,6 +849,7 @@
             <div class="chart-controls" id="chart-controls" style="display:none">
               <button class="chart-btn" id="btn-chart-reset" title="Reset zoom (or double-tap chart)">⟳</button>
               <button class="chart-btn" id="btn-chart-tooltip" title="Toggle crosshair values">╋</button>
+              <button class="chart-btn" id="btn-chart-events" title="Toggle future event markers (TCI)">⚑</button>
               <button class="chart-btn" id="btn-chart-expand" title="Expand chart">⤢</button>
             </div>
           </div>
@@ -1121,6 +1122,13 @@
               <div class="settings-control">
                 <input type="range" id="set-overlay-opacity" min="10" max="100" step="5" value="100">
                 <span id="set-overlay-opacity-val">100%</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <label>Event marker size</label>
+              <div class="settings-control">
+                <input type="range" id="set-event-marker-size" min="4" max="16" step="1" value="7">
+                <span id="set-event-marker-size-val">7 px</span>
               </div>
             </div>
           </div>

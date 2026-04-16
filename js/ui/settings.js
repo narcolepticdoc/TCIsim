@@ -28,6 +28,7 @@ const DEFAULTS     = {
   cpOpacity:   1.0,    // Cp line opacity (0.1–1.0)
   nomogramOpacity: 1.0, // BIS nomogram band opacity (0.1–1.0, applied as multiplier)
   overlayOpacity:  1.0, // Threshold/target line opacity (0.1–1.0)
+  eventMarkerSize: 7,   // Future-event marker radius in px (4–16)
 };
 
 const DRUG_NAMES = {
@@ -88,6 +89,10 @@ export function getSettings() {
                               && p.overlayOpacity >= 0.1 && p.overlayOpacity <= 1.0)
         ? p.overlayOpacity : DEFAULTS.overlayOpacity;
 
+      const eventMarkerSize = (typeof p.eventMarkerSize === 'number'
+                               && p.eventMarkerSize >= 4 && p.eventMarkerSize <= 16)
+        ? p.eventMarkerSize : DEFAULTS.eventMarkerSize;
+
       return {
         prepSec:           (typeof p.prepSec           === 'number'  && p.prepSec  >= 0) ? p.prepSec           : DEFAULTS.prepSec,
         prepSound:         (typeof p.prepSound         === 'boolean')                    ? p.prepSound          : DEFAULTS.prepSound,
@@ -101,14 +106,15 @@ export function getSettings() {
         cpOpacity,
         nomogramOpacity,
         overlayOpacity,
+        eventMarkerSize,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────

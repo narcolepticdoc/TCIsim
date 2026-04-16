@@ -11,6 +11,35 @@ import { ceForBIS } from '../pk/pd.js';
 
 const $ = id => document.getElementById(id);
 
+/**
+ * Classify TCI events into chart-marker kinds by walking the full event
+ * list forward while tracking the running rate. Skips system-generated events
+ * (e.g. rate-restore after a bolus). Tags each marker as past or future so
+ * the chart can render past events dimmed.
+ */
+function classifyFutureEvents(events, now) {
+  let currentRate = 0;
+  const out = [];
+  for (const e of events) {
+    if (e.source === 'system') continue;
+    const past = e.time <= now;
+    if (e.type === 'pause' || (e.type === 'rate' && e.value === 0)) {
+      out.push({ time: e.time, kind: 'stop', past });
+      currentRate = 0;
+    } else if (e.type === 'rate' && e.value > 0) {
+      let kind = null;
+      if (currentRate === 0) kind = 'resume';
+      else if (e.value > currentRate) kind = 'increase';
+      else if (e.value < currentRate) kind = 'decrease';
+      if (kind) out.push({ time: e.time, kind, past });
+      currentRate = e.value;
+    } else if (e.type === 'bolus') {
+      out.push({ time: e.time, kind: 'bolus', past });
+    }
+  }
+  return out;
+}
+
 // ---- Per-Drug Chart Configuration ----
 // yScale: multiply canonical mcg/mL curve values before passing to chart
 // yLabel: y-axis title
@@ -49,6 +78,8 @@ export function createChartBridge({
   let lastCpOpacity = null;
   let lastNomogramOpacity = null;
   let lastOverlayOpacity = null;
+  let lastEventMarkersKey = '';
+  let lastEventMarkerSize = null;
 
   function getConfig(drugId) {
     return CHART_DRUG_CONFIG[drugId] || { yScale: 1, yLabel: '\u03bcg/mL', yDefault: 10 };
@@ -209,6 +240,26 @@ export function createChartBridge({
         lastPlateauRegion = null;
         chart.setPlateauRegion(null);
       }
+
+      // Future-event markers — only when the overlay is enabled.
+      // Gated to TCI mode (manual mode rarely has pre-scheduled future events).
+      if (chart.eventAnnotationsEnabled) {
+        if (m === 'tci' && model) {
+          const evts = model.getEvents(selectedDrug) || [];
+          const markers = classifyFutureEvents(evts, t);
+          const key = markers.map(x => `${x.time}:${x.kind}:${x.past ? 1 : 0}`).join('|');
+          if (key !== lastEventMarkersKey) {
+            lastEventMarkersKey = key;
+            chart.setEventAnnotations(markers);
+          }
+        } else if (lastEventMarkersKey) {
+          lastEventMarkersKey = '';
+          chart.setEventAnnotations([]);
+        }
+      } else if (lastEventMarkersKey) {
+        lastEventMarkersKey = '';
+        chart.setEventAnnotations([]);
+      }
     }
     // Appearance settings — only update chart when values change
     if (chart) {
@@ -227,6 +278,11 @@ export function createChartBridge({
       if (lastOverlayOpacity !== ovOp) {
         lastOverlayOpacity = ovOp;
         chart.setOverlayOpacity(ovOp);
+      }
+      const mkSize = s.eventMarkerSize ?? 7;
+      if (lastEventMarkerSize !== mkSize) {
+        lastEventMarkerSize = mkSize;
+        chart.setEventMarkerSize(mkSize);
       }
     }
     // Check for upcoming events requiring advance warning
