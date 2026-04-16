@@ -573,6 +573,7 @@ export function createChart(canvas, config = {}) {
             if (py < ca.top || py > ca.bottom) continue;
 
             ctx.save();
+            if (m.past) ctx.globalAlpha = 0.3;
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 1.5;
             ctx.lineJoin = 'round';

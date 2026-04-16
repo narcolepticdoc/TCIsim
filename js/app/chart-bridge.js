@@ -12,28 +12,29 @@ import { ceForBIS } from '../pk/pd.js';
 const $ = id => document.getElementById(id);
 
 /**
- * Classify future TCI events into chart-marker kinds by walking the full event
+ * Classify TCI events into chart-marker kinds by walking the full event
  * list forward while tracking the running rate. Skips system-generated events
- * (e.g. rate-restore after a bolus). Returns markers for events with time > now.
+ * (e.g. rate-restore after a bolus). Tags each marker as past or future so
+ * the chart can render past events dimmed.
  */
 function classifyFutureEvents(events, now) {
   let currentRate = 0;
   const out = [];
   for (const e of events) {
     if (e.source === 'system') continue;
-    const isFuture = e.time > now;
+    const past = e.time <= now;
     if (e.type === 'pause' || (e.type === 'rate' && e.value === 0)) {
-      if (isFuture) out.push({ time: e.time, kind: 'stop' });
+      out.push({ time: e.time, kind: 'stop', past });
       currentRate = 0;
     } else if (e.type === 'rate' && e.value > 0) {
       let kind = null;
       if (currentRate === 0) kind = 'resume';
       else if (e.value > currentRate) kind = 'increase';
       else if (e.value < currentRate) kind = 'decrease';
-      if (kind && isFuture) out.push({ time: e.time, kind });
+      if (kind) out.push({ time: e.time, kind, past });
       currentRate = e.value;
     } else if (e.type === 'bolus') {
-      if (isFuture) out.push({ time: e.time, kind: 'bolus' });
+      out.push({ time: e.time, kind: 'bolus', past });
     }
   }
   return out;
@@ -245,7 +246,7 @@ export function createChartBridge({
         if (m === 'tci' && model) {
           const evts = model.getEvents(selectedDrug) || [];
           const markers = classifyFutureEvents(evts, t);
-          const key = markers.map(x => `${x.time}:${x.kind}`).join('|');
+          const key = markers.map(x => `${x.time}:${x.kind}:${x.past ? 1 : 0}`).join('|');
           if (key !== lastEventMarkersKey) {
             lastEventMarkersKey = key;
             chart.setEventAnnotations(markers);
