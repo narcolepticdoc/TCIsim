@@ -485,7 +485,7 @@ function boot() {
   const btnChartTooltip = $('btn-chart-tooltip');
   if (btnChartTooltip) btnChartTooltip.addEventListener('click', () => {
     if (chart) {
-      const enabled = chart.toggleTooltip();
+      const enabled = chart.toggleInspect();
       btnChartTooltip.classList.toggle('active', enabled);
     }
   });
