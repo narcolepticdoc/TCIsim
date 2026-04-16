@@ -69,8 +69,8 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
   let simTime = startTime;
 
   // ---- Target increase ----
-  // Large deficit (Ce < 80% of target): bolus → pause → maintenance
-  // Small deficit (Ce 80-95% of target): skip bolus, just adjust rate
+  // Large deficit (Ce < bolusDeficitThreshold of target, default 90%): bolus → pause → maintenance
+  // Small deficit (Ce between threshold and tolerance band): skip bolus, just adjust rate
   const ceDeficitRatio = currentCe / ceTarget;
   const needsBolus = currentCe < lowerBound && ceDeficitRatio < cfg.bolusDeficitThreshold;
 
