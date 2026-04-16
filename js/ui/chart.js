@@ -148,6 +148,18 @@ export function createChart(canvas, config = {}) {
     return a.y + frac * (b.y - a.y);
   }
 
+  // Last-sample-before-or-at lookup for step functions (rate is stepped:'before')
+  function nearestIndexAtTime(data, time) {
+    if (!data || data.length === 0) return -1;
+    let lo = 0, hi = data.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (data[mid].x < time) lo = mid + 1; else hi = mid;
+    }
+    const i = Math.min(lo, data.length - 1);
+    return (i > 0 && data[i].x > time) ? i - 1 : i;
+  }
+
   // Build datasets
   const datasets = [];
 
@@ -611,13 +623,44 @@ export function createChart(canvas, config = {}) {
           if (!ca) return;
           const ctx = ch.ctx;
 
-          // Interpolate Ce and Cp at inspectTime
-          let ceVal = null, cpVal = null;
+          // Interpolate Ce and Cp at inspectTime; remember a reference dataset
+          // for the rate index lookup (rate is stepped, not interpolated).
+          let ceVal = null, cpVal = null, refData = null;
           for (const ds of ch.data.datasets) {
             if (!ds.data || ds.data.length === 0) continue;
             const color = ds.borderColor;
-            if (color.startsWith(COLORS.ce)) ceVal = interpolateAtTime(ds.data, inspectTime);
-            else if (color.startsWith(COLORS.cp)) cpVal = interpolateAtTime(ds.data, inspectTime);
+            if (color.startsWith(COLORS.ce)) {
+              ceVal = interpolateAtTime(ds.data, inspectTime);
+              refData = ds.data;
+            } else if (color.startsWith(COLORS.cp)) {
+              cpVal = interpolateAtTime(ds.data, inspectTime);
+              if (!refData) refData = ds.data;
+            }
+          }
+
+          // Look up rate at inspectTime (step function — last-sample-before)
+          let rateStr = '';
+          if (refData && rateValues.length > 0) {
+            const idx = nearestIndexAtTime(refData, inspectTime);
+            if (idx >= 0 && idx < rateValues.length) {
+              const rateMgMin = rateValues[idx];
+              try {
+                const prefKey = getPrefKey(_currentDrugId, 'rate');
+                let displayUnit = getDefaultUnit(_currentDrugId, 'rate');
+                if (prefKey) {
+                  try {
+                    const saved = localStorage.getItem(prefKey);
+                    const allowed = getAllowedUnits(_currentDrugId, 'rate');
+                    if (saved && allowed.includes(saved)) displayUnit = saved;
+                  } catch (e) {}
+                }
+                const cv = { weightKg: patientWeightKg || undefined };
+                const dv = fromCanonical(rateMgMin, displayUnit, _currentDrugId, 'rate', cv);
+                rateStr = 'Rate ' + formatValue(dv, displayUnit) + ' ' + displayUnit;
+              } catch (e) {
+                rateStr = 'Rate ' + rateMgMin.toFixed(2) + ' mg/min';
+              }
+            }
           }
 
           // Compute eBIS from Ce (unscale to canonical mcg/mL)
@@ -637,14 +680,17 @@ export function createChart(canvas, config = {}) {
           if (cpVal !== null) parts2.push('Cp ' + cpVal.toFixed(2));
           if (bisStr) parts2.push(bisStr);
           const line2 = parts2.join('  ');
+          const line3 = rateStr;
 
           // Measure and draw panel
           ctx.save();
           ctx.font = '11px monospace';
           const w1 = ctx.measureText(line1).width;
           const w2 = ctx.measureText(line2).width;
-          const panelW = Math.max(w1, w2) + 16;
-          const panelH = 34;
+          const w3 = line3 ? ctx.measureText(line3).width : 0;
+          const panelW = Math.max(w1, w2, w3) + 16;
+          const lineCount = line3 ? 3 : 2;
+          const panelH = 6 + lineCount * 14 + 2;
           const px = ca.right - panelW - 4;
           // Buttons sit at top:8 and are 38px tall. Anchor readout below them
           // (with 6px gap), but never above chartArea.top.
@@ -660,6 +706,7 @@ export function createChart(canvas, config = {}) {
           ctx.fillText(line1, px + 8, py + 4);
           ctx.fillStyle = '#e2e8f0';
           ctx.fillText(line2, px + 8, py + 18);
+          if (line3) ctx.fillText(line3, px + 8, py + 32);
           ctx.restore();
         },
       },
