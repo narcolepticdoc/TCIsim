@@ -6,7 +6,7 @@
  * commits a TCI plan during a running case.
  */
 
-import { getAllowedUnits, getDefaultUnit, fromCanonical, formatValue, getQuantizeConfig } from '../util/units.js';
+import { getAllowedUnits, getDefaultUnit, getPrefKey, fromCanonical, formatValue, getQuantizeConfig } from '../util/units.js';
 import { getPumpSettings } from '../util/constants.js';
 import { playAlert } from '../ui/alert-sound.js';
 
@@ -81,7 +81,16 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal })
 
     function buildActionHtml(task, canonicalValue, prefix) {
       const allowed = getAllowedUnits(drugId, task);
-      const primary = getDefaultUnit(drugId, task) || allowed[0];
+      // Prefer the clinician's saved display unit (same as history / step bar /
+      // drug panel); fall back to the static default when no pref is stored.
+      let primary = getDefaultUnit(drugId, task) || allowed[0];
+      const prefKey = getPrefKey(drugId, task);
+      if (prefKey) {
+        try {
+          const saved = localStorage.getItem(prefKey);
+          if (saved && allowed.includes(saved)) primary = saved;
+        } catch (e) { /* ignore */ }
+      }
       const primaryVal = fromCanonical(canonicalValue, primary, drugId, task, ctx);
       const primaryStr = `${prefix}${formatValue(primaryVal, primary)} ${primary}`;
       const secondaryParts = allowed

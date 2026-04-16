@@ -31,7 +31,7 @@ export const DEFAULT_SCHEME_CONFIG = {
   rateSearchIter: 35,       // binary search iterations
   minStepDuration: 3.0,     // minimum 3 minutes per rate step
   rateStablePct: 0.05,      // rate stable if <5% change from previous
-  bolusDeficitThreshold: 0.8, // Ce must be < 80% of target to trigger loading bolus
+  bolusDeficitThreshold: 0.9, // Ce must be < 90% of target to trigger loading bolus
   // Bolus delivery config (set from drug config by simulation.js)
   bolusConcentration: 10,   // mg/mL
   bolusRateMlH: 750,        // mL/h pump bolus delivery rate
