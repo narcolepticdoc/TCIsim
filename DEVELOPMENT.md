@@ -4,6 +4,18 @@
 
 ## Session History
 
+### Interim — Fix chart-button state on new case (v0.5.23.1)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+Bug fix: chart-control buttons (tooltip, events, expand) retained their `.active` CSS class across case resets while the freshly created chart's internal state (`inspectEnabled`, `eventAnnotationsEnabled`) was back to `false`. `sim-content.chart-expanded` and the expand button's glyph/title had the same problem. Result: after a user toggled any of these buttons during one case and then started a new case, the buttons looked lit/expanded but the chart showed neither inspect panel nor future-event markers (and the layout glyph lied about whether the chart was expanded).
+
+**Fix:** `initSimScreen()` in `js/app.js` now clears the `.active` class on `btn-chart-tooltip` and `btn-chart-events`, resets `btn-chart-expand` glyph/title/`.active`, and removes `chart-expanded` from `sim-content` before creating the new chart — so the DOM matches the fresh chart state (everything off, not expanded).
+
+**Files changed:** `js/app.js`, `js/version.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Chart visuals & appearance settings (v0.5.20.2)
 
 *Between Sessions 25 and 26. Not tracked in session numbering.*

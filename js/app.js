@@ -114,6 +114,19 @@ function initSimScreen(patient) {
   if (canvas) canvas.style.display = 'none';
   if (chartControls) chartControls.style.display = 'none';
 
+  // Reset chart-control button state so it matches the fresh chart below.
+  // The new chart starts with inspect/event-annotations off and unexpanded,
+  // but the `.active` classes (and expand glyph) persist across cases.
+  $('btn-chart-tooltip')?.classList.remove('active');
+  $('btn-chart-events')?.classList.remove('active');
+  const btnExpand = $('btn-chart-expand');
+  if (btnExpand) {
+    btnExpand.classList.remove('active');
+    btnExpand.textContent = '⤢';
+    btnExpand.title = 'Expand chart';
+  }
+  $('sim-content')?.classList.remove('chart-expanded');
+
   // Destroy old chart if exists
   if (chart) { chart.destroy(); chart = null; }
 

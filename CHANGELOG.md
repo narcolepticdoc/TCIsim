@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.23.1] — 2026-04-20
+
+Fix chart-control button state at the start of a new case. The chart's internal toggles (`inspectEnabled`, `eventAnnotationsEnabled`) reset to `false` whenever `initSimScreen` destroys and recreates the chart, but the `.active` CSS class on the tooltip and event-markers buttons persisted across case boundaries — leaving the buttons lit while the chart showed neither inspect panel nor future-event markers. The expand button's glyph/`.active` class and the `sim-content.chart-expanded` layout class had the same problem. `initSimScreen` now clears all four button states (tooltip, events, expand glyph + class, and the expanded-layout class) before creating the new chart so the DOM matches the fresh chart state.
+
+---
+
 ## [0.5.19] — 2026-04-11
 
 Opt-in "Round TCI plan in display units" mode. Makes every bolus and rate emitted by the planner line up with pump-enterable numbers in the clinician's chosen display units (e.g. integer mL/h, multiples of 10 mcg/kg).
