@@ -24,8 +24,16 @@ const ssSlopeToSlider = (tol) => {
 const INFO_TEXTS = {
   notifications: 'Configure how the simulator alerts you to upcoming pump events. Prep alerts provide early visual warning with an amber pulse on drug cards. Alert popups appear closer to the event with optional sound cues. The status indicator colors the drug card edge based on event proximity.',
   simulation: 'Fine-tune how the simulator evaluates targets and steady-state. Target tolerance sets how close the effect-site concentration must get to target before it is considered reached \u2014 lower values are stricter. Plateau slope tolerance determines how flat the concentration curve must be to qualify as steady-state.',
-  appearance: 'Adjust the visual presentation of the chart. Reducing Cp line opacity pushes the plasma concentration curve into the background so the effect-site (Ce) curve stands out more clearly.',
+  appearance: 'Adjust the visual presentation of the chart and readouts. Reducing Cp line opacity pushes the plasma concentration curve into the background so the effect-site (Ce) curve stands out more clearly. Text size enlarges the drug-panel and history informational text; it is gated to screens that have the space for it.',
 };
+
+/** Apply the text-size body class. Only one of `.text-lg` / `.text-xl` is active at a time. */
+function applyTextSize(size) {
+  const cls = document.body.classList;
+  cls.remove('text-lg', 'text-xl');
+  if (size === 'large') cls.add('text-lg');
+  else if (size === 'xl') cls.add('text-xl');
+}
 
 /**
  * Wire the settings modal: populate controls from saved settings,
@@ -59,6 +67,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
   const overlayVal        = $('set-overlay-opacity-val');
   const markerSizeSlider  = $('set-event-marker-size');
   const markerSizeVal     = $('set-event-marker-size-val');
+  const textSizeGroup     = $('set-text-size');
+  const textSizeBtns      = textSizeGroup ? [...textSizeGroup.querySelectorAll('.seg-btn')] : [];
   if (!prepSlider || !alertSlider) return;
 
   // Populate controls from saved settings
@@ -85,6 +95,9 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (overlayVal)        overlayVal.textContent        = Math.round((savedSettings.overlayOpacity ?? 1.0) * 100) + '%';
   if (markerSizeSlider)  markerSizeSlider.value        = (savedSettings.eventMarkerSize ?? 7);
   if (markerSizeVal)     markerSizeVal.textContent     = (savedSettings.eventMarkerSize ?? 7) + ' px';
+  let currentTextSize = savedSettings.textSize ?? 'normal';
+  for (const btn of textSizeBtns) btn.classList.toggle('active', btn.dataset.size === currentTextSize);
+  applyTextSize(currentTextSize);
 
   function saveAll() {
     const prepSec           = parseInt(prepSlider.value,  10);
@@ -106,6 +119,7 @@ export function initSettingsUI({ getSettings, setSettings }) {
     const overlayPct        = overlaySlider ? parseInt(overlaySlider.value, 10) : 100;
     const overlayOpacity    = overlayPct / 100;
     const eventMarkerSize   = markerSizeSlider ? parseInt(markerSizeSlider.value, 10) : 7;
+    const textSize          = currentTextSize;
     if (prepVal)         prepVal.textContent         = prepSec           + 's';
     if (alertVal)        alertVal.textContent        = alertSec          + 's';
     if (statusWarnVal)   statusWarnVal.textContent   = statusWarnMinutes + ' min';
@@ -116,7 +130,7 @@ export function initSettingsUI({ getSettings, setSettings }) {
     if (nomogramVal)     nomogramVal.textContent     = nomogramPct       + '%';
     if (overlayVal)      overlayVal.textContent      = overlayPct        + '%';
     if (markerSizeVal)   markerSizeVal.textContent   = eventMarkerSize   + ' px';
-    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize });
+    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize });
   }
 
   prepSlider.addEventListener('input',    saveAll);
@@ -132,6 +146,16 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (nomogramSlider)    nomogramSlider.addEventListener('input',    saveAll);
   if (overlaySlider)     overlaySlider.addEventListener('input',     saveAll);
   if (markerSizeSlider)  markerSizeSlider.addEventListener('input',  saveAll);
+  for (const btn of textSizeBtns) {
+    btn.addEventListener('click', () => {
+      const size = btn.dataset.size;
+      if (!size || size === currentTextSize) return;
+      currentTextSize = size;
+      for (const b of textSizeBtns) b.classList.toggle('active', b.dataset.size === size);
+      applyTextSize(size);
+      saveAll();
+    });
+  }
 
   // Tab switching + info panel
   const infoText = $('settings-info-text');

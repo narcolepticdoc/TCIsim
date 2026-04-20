@@ -11,6 +11,21 @@
 
 ---
 
+## [0.5.24] — 2026-04-20
+
+"Large type" option in the Appearance settings tab. Segmented control with three levels — Normal / Large / XL — that bumps drug-panel and history informational text by roughly +15% and +30%. The `.ce-current` and `.cp-current` readouts are deliberately left alone since they are already large, so the Ce row stays on one line.
+
+**Implementation:**
+
+- New `textSize` setting (`'normal' | 'large' | 'xl'`) in `js/ui/settings.js` with validator and persistence.
+- `body.text-lg` / `body.text-xl` CSS classes in `index.html` override `font-size` on targeted drug-panel selectors (`.drug-name`, `.drug-approach`, `.drug-status`, `.drug-rate`, `.drug-bis`, `.drug-model`, labels, `.cp-current`, `.step-bar-countdown`) and history selectors (`.history-row`, `.h-time`, `.h-type`, `.h-detail`, `.history-empty`).
+- Overrides are wrapped in `@media (min-width:601px) and (min-height:421px)` so they do not fight the compact-layout rules on phone landscape (`max-width:900 and max-height:420`) or small portrait phones (`max-width:500`). The cards grow taller, not wider; the drug panel is already `overflow-y:auto` so the extra height simply scrolls.
+- Segmented-control UI in the Appearance pane, styled with new `.seg-group` / `.seg-btn` classes. `js/app/settings-ui.js` applies the body class on load and on change, persisting via `setSettings`.
+
+**Files changed:** `js/version.js`, `js/ui/settings.js`, `js/app/settings-ui.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.23.1] — 2026-04-20
 
 Fix chart-control button state at the start of a new case. The chart's internal toggles (`inspectEnabled`, `eventAnnotationsEnabled`) reset to `false` whenever `initSimScreen` destroys and recreates the chart, but the `.active` CSS class on the tooltip and event-markers buttons persisted across case boundaries — leaving the buttons lit while the chart showed neither inspect panel nor future-event markers. The expand button's glyph/`.active` class and the `sim-content.chart-expanded` layout class had the same problem. `initSimScreen` now clears all four button states (tooltip, events, expand glyph + class, and the expanded-layout class) before creating the new chart so the DOM matches the fresh chart state.
