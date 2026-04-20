@@ -4,6 +4,35 @@
 
 ## Session History
 
+### Interim — Large type option in Appearance settings (v0.5.24)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+Accessibility/readability improvement: users on larger screens can now opt into bigger drug-panel and history text without touching the chart or the large `.ce-current` readouts. Exposed as a three-position segmented control (Normal / Large / XL) in the Appearance settings tab.
+
+**Targeted selectors:**
+
+- Drug panel: `.drug-name` (inactive + `.active` variant), `.drug-model`, `.ce-label` / `.cp-label` / `.bis-label`, `.cp-current`, `.ce-unit`, `.drug-approach`, `.drug-status`, `.drug-rate`, `.drug-bis`, `.step-bar-countdown`.
+- History: `.history-row` base, `.h-time`, `.h-type`, `.h-detail`, `.history-empty`.
+- Deliberately excluded: `.ce-current` (already 22/27px — bumping it causes the Ce row to wrap on the fixed-width card).
+
+**Size ladder:**
+
+- Large: ~+15% (e.g. `.drug-name` 13 → 15px, `.history-row` 11 → 13px).
+- XL: ~+30% (e.g. `.drug-name` 13 → 17px, `.history-row` 11 → 14.5px).
+
+**Screen-size gate:**
+
+The large-type overrides are wrapped in `@media (min-width:601px) and (min-height:421px)`. This deliberately excludes the two compact-layout breakpoints — `(max-width:900) and (max-height:420)` for phone landscape and `(orientation:portrait) and (max-width:500)` for small portrait phones. Specificity forced the gate: `body.text-lg .drug-card .drug-name` (0,0,3,1) outranks the compact-layout selector `.drug-card .drug-name` (0,0,2,0), so without the media gate it would override the compact rules even on phones where they are needed.
+
+**Layout behaviour:**
+
+Drug-panel width is fixed (210/175–285px at different breakpoints), and cards are vertical flex containers with no fixed height, sitting inside a panel that is `overflow-y:auto`. Larger text therefore grows cards taller, not wider — the chart area keeps its size and the panel just scrolls if needed. The Ce row's big readout is unchanged, so that row does not wrap; other single-line rows (`.drug-status`, `.drug-rate`) stay on one line at +30%. `.step-bar-countdown` already truncates with `text-overflow:ellipsis`.
+
+**Files changed:** `js/version.js`, `js/ui/settings.js`, `js/app/settings-ui.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Fix chart-button state on new case (v0.5.23.1)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*

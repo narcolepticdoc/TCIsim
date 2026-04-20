@@ -189,6 +189,11 @@
     .settings-control{display:flex;align-items:center;gap:10px}
     .settings-control input[type=range]{flex:1;accent-color:var(--amber)}
     .settings-control span{font-family:var(--font-mono);font-size:12px;color:var(--amber);min-width:32px;text-align:right}
+    .seg-group{display:flex;flex:1;gap:0;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);overflow:hidden}
+    .seg-btn{flex:1;background:var(--bg-input);border:none;color:var(--text-muted);font-family:var(--font-mono);font-size:11px;padding:6px 10px;cursor:pointer;transition:all .15s;border-right:1px solid var(--border-subtle)}
+    .seg-btn:last-child{border-right:none}
+    .seg-btn:hover{background:var(--bg-hover);color:var(--text-secondary)}
+    .seg-btn.active{background:var(--blue-dim);color:var(--text-primary)}
     .settings-check{margin-top:5px;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);cursor:pointer}
     .settings-check input[type=checkbox]{accent-color:var(--amber);width:14px;height:14px;cursor:pointer}
     /* Settings panel — tabbed layout with info sidebar */
@@ -286,6 +291,47 @@
     .mode-label.target-mode{background:rgba(245,158,11,.15);color:var(--amber)}
     .mode-label.manual-mode{background:rgba(139,92,246,.15);color:var(--purple)}
     .mode-label.no-mode{background:var(--bg-input);color:var(--text-muted)}
+
+    /* Large type — bumps drug-panel + history text when screen has space */
+    @media(min-width:601px) and (min-height:421px){
+      body.text-lg .drug-card .drug-name{font-size:15px}
+      body.text-lg .drug-card.active .drug-name{font-size:19px}
+      body.text-lg .drug-card .drug-model{font-size:10.5px}
+      body.text-lg .drug-card .ce-label,
+      body.text-lg .drug-card .cp-label,
+      body.text-lg .drug-card .bis-label{font-size:11.5px}
+      body.text-lg .drug-card .cp-current{font-size:14px}
+      body.text-lg .drug-card .ce-unit{font-size:10.5px}
+      body.text-lg .drug-card .drug-approach{font-size:12px}
+      body.text-lg .drug-card .drug-status{font-size:13px}
+      body.text-lg .drug-card .drug-rate{font-size:13px}
+      body.text-lg .drug-card .drug-bis{font-size:13px}
+      body.text-lg .drug-card .step-bar-countdown{font-size:11.5px}
+      body.text-lg .history-area .history-empty{font-size:14px}
+      body.text-lg .history-row{font-size:13px}
+      body.text-lg .history-row .h-time{font-size:11.5px}
+      body.text-lg .history-row .h-type{font-size:11.5px}
+      body.text-lg .history-row .h-detail{font-size:11.5px}
+
+      body.text-xl .drug-card .drug-name{font-size:17px}
+      body.text-xl .drug-card.active .drug-name{font-size:22px}
+      body.text-xl .drug-card .drug-model{font-size:12px}
+      body.text-xl .drug-card .ce-label,
+      body.text-xl .drug-card .cp-label,
+      body.text-xl .drug-card .bis-label{font-size:13px}
+      body.text-xl .drug-card .cp-current{font-size:15.5px}
+      body.text-xl .drug-card .ce-unit{font-size:12px}
+      body.text-xl .drug-card .drug-approach{font-size:13.5px}
+      body.text-xl .drug-card .drug-status{font-size:14.5px}
+      body.text-xl .drug-card .drug-rate{font-size:14.5px}
+      body.text-xl .drug-card .drug-bis{font-size:14.5px}
+      body.text-xl .drug-card .step-bar-countdown{font-size:13px}
+      body.text-xl .history-area .history-empty{font-size:15.5px}
+      body.text-xl .history-row{font-size:14.5px}
+      body.text-xl .history-row .h-time{font-size:13px}
+      body.text-xl .history-row .h-type{font-size:13px}
+      body.text-xl .history-row .h-detail{font-size:13px}
+    }
 
     /* Responsive short */
     @media(max-height:380px){
@@ -1129,6 +1175,16 @@
               <div class="settings-control">
                 <input type="range" id="set-event-marker-size" min="4" max="16" step="1" value="7">
                 <span id="set-event-marker-size-val">7 px</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <label>Text size (drug panel &amp; history)</label>
+              <div class="settings-control">
+                <div class="seg-group" id="set-text-size">
+                  <button type="button" class="seg-btn active" data-size="normal">Normal</button>
+                  <button type="button" class="seg-btn" data-size="large">Large</button>
+                  <button type="button" class="seg-btn" data-size="xl">XL</button>
+                </div>
               </div>
             </div>
           </div>
