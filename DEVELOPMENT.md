@@ -4,6 +4,20 @@
 
 ## Session History
 
+### Interim — Phone-portrait layout fixes (v0.5.24.15)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+Three phone-portrait issues from an iPhone screenshot:
+
+1. **Topbar clipping.** Case-time button still showed the `CASE START 13:56 |` segment on iPhone portrait even though the phone-portrait media query hid `.ct-start-group`. Root cause was CSS source-order: the phone-portrait rule sat at line ~506 but the canonical base rule (`.elapsed-timer .ct-start-group { display: inline-flex }`) sat at line ~634. Equal specificity, so the later rule always won regardless of the media query. Fix: relocated the canonical `.elapsed-timer` / `.ct-*` / `.timer-popover` base block up to ~line 140 next to the other sim-topbar base rules, before any `@media` blocks. All responsive overrides now correctly win at matching specificity.
+2. **Chart axis floating-point noise.** `x.max` auto-computed by Chart.js could produce labels like `30.00000000000002`. Added a `fmtTick(v)` helper in `js/ui/chart/index.js` — snaps to 3 decimals, returns integer string for integer values and 1-decimal for non-integers. Wired into `ticks.callback` on the x, y, and yRate axes.
+3. **Phone-portrait bottom bar.** Stop Pump wrapped to a second row at 390–430px viewports. Tightened the phone-portrait `.sim-controls` / `.btn-ctrl` / `.mode-label` metrics so all six controls fit on one row on iPhone 14 / 15 Pro Max. `flex-wrap: wrap` kept as a safety fallback.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/chart/index.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Field taps re-arm replace-on-first-keypress (v0.5.24.14)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
