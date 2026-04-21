@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.24.22] — 2026-04-21
+
+Third attempt at the inspect-drag hijack. `stopImmediatePropagation` on an ancestor (v0.5.24.21) wasn't enough on iPad — hammerjs's pan recognizer state outlived my event-level intercepts, so after the user's finger crossed hammer's pan-threshold (~10px), pan activated even though my listeners had handled the earlier touchmove events.
+
+Fix: during an active handle drag, flip `chart.options.plugins.zoom.pan.enabled = false` at touchstart/mousedown on the handle, and restore `true` at touchend/mouseup/touchcancel. Pan refuses to run while disabled regardless of hammer's internal state. `stopImmediatePropagation` + capture-phase listener on the canvas parent from v0.5.24.21 stays as defense-in-depth, as does `touch-action: none` on the canvas from v0.5.24.20.
+
+**Files changed:** `js/version.js`, `js/ui/chart/gestures.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.21] — 2026-04-21
 
 Actually fix the inspect-drag hijack on iPad.
