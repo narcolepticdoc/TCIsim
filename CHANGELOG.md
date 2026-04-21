@@ -11,6 +11,24 @@
 
 ---
 
+## [0.5.24.11] — 2026-04-21
+
+Patient Demographics modal with built-in numeric keypad — eliminates the iPadOS keyboard entirely for patient entry.
+
+**Main setup screen:** the four inputs (age / sex / height / weight) collapse into a single clickable summary row `[ Tap to edit patient demographics ✎ ]` (dim placeholder before entry) or `[ 35y · M · 170 cm · 70 kg ✎ ]` after entry. The underlying `<input>` elements stay in the DOM as `type="hidden"` so everything downstream (`validate()`, `getHeightCm()`, `getWeightKg()`, `updateDerived()`, `confirmPatient()`, restore) is unchanged.
+
+**Patient modal** (`#modal-patient`, new): four field cells (age, sex, height, weight), a Metric/Imperial toggle in the header (kept in sync with the main-screen toggle via the shared `setUnits()` path), a 3×5 numeric keypad (with Clear and Backspace), and Cancel / Confirm buttons. On open, the first empty numeric field auto-selects; tapping any other field switches the active target; keypad feeds the active field. Sex is two toggle buttons, default none (required on confirm). Decimal key is disabled when Age is active. Confirming writes to the hidden inputs and dispatches `input` events so the existing reactive pipeline runs; Cancel discards.
+
+**Why a custom keypad:** on iPadOS, `type="number"` and `inputmode="numeric"`/`"decimal"` still show the numbers-and-symbols keyboard with an ABC switch — there's no way to force a pure numeric pad via HTML on iPad. The app already uses custom numeric keypads for Set Rate / Add Bolus / Set Target in the sim; this brings setup in line with that pattern.
+
+**New module:** `js/ui/patient-modal.js` owns the modal state (active field, per-field buffers, sex, active unit) plus the keypad wiring and validation (age 1–100, height 30–250 cm or 12–98 in, weight 0.5–300 kg or 1–660 lbs).
+
+**Shared units state:** `setUnits()` in `setup.js` remains the single source of truth (localStorage + main-screen toggle state). Tapping Metric/Imperial inside the modal calls back into `setUnits()`; it in turn calls `patientModal.onUnitsChanged()` to re-render modal labels, re-sync toggle state, and clear the modal's height/weight buffers (so a `170 cm` value can't be misread as `170 in`). Unit switches also re-render the summary on the main screen. Skips the clear on the initial `restoreUnits()` call at app load (prev === next).
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/patient-modal.js` (new), `js/ui/setup.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.10] — 2026-04-21
 
 **Bugfix — chart settings not re-applied on new case.** Reported as "Cp line dimming not respected on case startup"; confirmed systemic.

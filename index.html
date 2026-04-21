@@ -68,6 +68,40 @@
     .form-row.error input,.form-row.error select{border-color:var(--red)}
     .error-msg{font-size:10px;color:var(--red);min-height:0}
     .error-msg:empty{display:none}
+    /* Patient summary display on the setup screen (clickable, opens the modal) */
+    .patient-summary-display{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);cursor:pointer;font-family:var(--font-mono);transition:border-color .15s,background .15s;flex-shrink:0}
+    .patient-summary-display:hover,.patient-summary-display:focus{background:var(--bg-hover);border-color:var(--border-focus);outline:none}
+    .patient-summary-placeholder{color:var(--text-muted);font-size:13px;letter-spacing:.3px}
+    .patient-summary-text{color:var(--text-primary);font-size:14px;letter-spacing:1px}
+    .patient-summary-text[hidden]{display:none}
+    .patient-summary-placeholder[hidden]{display:none}
+    .patient-summary-icon{color:var(--text-muted);font-size:14px;margin-left:10px}
+    /* Patient Demographics modal */
+    .modal-patient-box{max-width:480px;width:96%;padding:20px}
+    .pm-header{display:flex;align-items:center;justify-content:space-between;margin:0 0 14px;gap:10px}
+    .pm-title{font-family:var(--font-mono);font-size:14px;color:var(--text-secondary);letter-spacing:2px;text-transform:uppercase;margin:0;font-weight:500}
+    .pm-units{flex-shrink:0}
+    .pm-field{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);margin-bottom:6px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+    .pm-field.active{border-color:var(--blue);box-shadow:inset 0 0 0 1px var(--blue)}
+    .pm-field.error{border-color:var(--red);box-shadow:inset 0 0 0 1px var(--red)}
+    .pm-field.pm-field-sex{cursor:default}
+    .pm-field label{font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);font-weight:500}
+    .pm-field label .pm-unit{color:var(--text-muted);font-weight:400}
+    .pm-value{font-family:var(--font-mono);font-size:18px;color:var(--text-primary);letter-spacing:1px;min-width:90px;text-align:right}
+    .pm-value.empty{color:var(--text-muted);opacity:.45}
+    .pm-sex-toggle{display:flex;gap:0;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);overflow:hidden}
+    .pm-sex-btn{background:var(--bg-card);border:none;color:var(--text-muted);font-family:var(--font-mono);font-size:12px;padding:6px 16px;cursor:pointer;transition:all .15s;border-right:1px solid var(--border-subtle)}
+    .pm-sex-btn:last-child{border-right:none}
+    .pm-sex-btn:hover:not(.active){color:var(--text-secondary);background:var(--bg-hover)}
+    .pm-sex-btn.active{background:var(--blue-dim);color:var(--text-primary)}
+    .pm-error{font-family:var(--font-mono);font-size:11px;color:var(--red);margin:4px 0 0;min-height:0}
+    .pm-error:empty{display:none}
+    .pm-keypad{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:12px 0}
+    .pm-key{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:20px;padding:14px 0;cursor:pointer;transition:background .15s,opacity .15s;-webkit-tap-highlight-color:transparent}
+    .pm-key:hover{background:var(--bg-hover)}
+    .pm-key:active{background:var(--bg-card)}
+    .pm-key[disabled]{opacity:.25;cursor:default;pointer-events:none}
+    .pm-key-back{font-size:18px}
     .derived-bar{display:flex;gap:10px;padding:7px 12px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border-subtle);flex-shrink:0}
     .pump-settings{padding:6px 0 0;border-top:1px solid var(--border-subtle);margin-top:2px}
     .pump-settings .card-title{font-size:11px;margin-bottom:4px;display:block}
@@ -728,12 +762,23 @@
     <div class="setup-brand"><h1>TCI <span>Sim</span></h1><div class="subtitle">Target-Controlled Infusion Simulator</div><div id="app-version-tag" class="version-tag"></div><div class="disclaimer"><strong>Not for clinical use</strong>Teaching &amp; simulation only.<br>Not a medical device.</div></div>
     <div class="setup-form">
       <div class="setup-toprow"><span class="card-title">Patient Demographics</span><div class="unit-toggle"><button id="btn-metric" class="active">Metric</button><button id="btn-imperial">Imperial</button></div></div>
-      <div class="input-grid">
-        <div class="form-row" id="row-age"><label for="input-age">Age <span class="unit-hint">(years)</span></label><input type="text" id="input-age" inputmode="numeric" pattern="[0-9]*" placeholder="35"><div class="error-msg" id="err-age"></div></div>
-        <div class="form-row" id="row-sex"><label for="input-sex">Sex</label><select id="input-sex"><option value="" disabled selected>Select</option><option value="male">Male</option><option value="female">Female</option></select><div class="error-msg" id="err-sex"></div></div>
-        <div class="form-row" id="row-height"><label for="input-height">Height <span class="unit-hint" id="hint-height">(cm)</span></label><input type="text" id="input-height" inputmode="decimal" pattern="[0-9.]*" placeholder="170"><div class="metric-preview hidden" id="preview-height"></div><div class="error-msg" id="err-height"></div></div>
-        <div class="form-row" id="row-weight"><label for="input-weight">Weight <span class="unit-hint" id="hint-weight">(kg)</span></label><input type="text" id="input-weight" inputmode="decimal" pattern="[0-9.]*" placeholder="70"><div class="metric-preview hidden" id="preview-weight"></div><div class="error-msg" id="err-weight"></div></div>
+      <div class="patient-summary-display" id="patient-summary-display" tabindex="0" role="button" aria-label="Edit patient demographics">
+        <span class="patient-summary-placeholder">Tap to edit patient demographics</span>
+        <span class="patient-summary-text" id="patient-summary-text" hidden></span>
+        <span class="patient-summary-icon">&#9998;</span>
       </div>
+      <div id="hint-height" hidden>(cm)</div>
+      <div id="hint-weight" hidden>(kg)</div>
+      <input type="hidden" id="input-age">
+      <input type="hidden" id="input-sex">
+      <input type="hidden" id="input-height">
+      <input type="hidden" id="input-weight">
+      <div class="metric-preview hidden" id="preview-height" hidden></div>
+      <div class="metric-preview hidden" id="preview-weight" hidden></div>
+      <div id="row-age" hidden><span id="err-age"></span></div>
+      <div id="row-sex" hidden><span id="err-sex"></span></div>
+      <div id="row-height" hidden><span id="err-height"></span></div>
+      <div id="row-weight" hidden><span id="err-weight"></span></div>
       <div class="derived-bar" id="derived-bar" style="display:none"><div class="derived-item"><span class="d-label">BMI</span><span class="d-value" id="derived-bmi">—</span></div><div class="derived-item"><span class="d-label">FFM</span><span class="d-value" id="derived-ffm">—</span></div><div class="derived-item"><span class="d-label">Ce50</span><span class="d-value" id="derived-ce50">—</span></div></div>
       <div class="pump-settings">
         <span class="card-title">Pump Configuration</span>
@@ -1031,6 +1076,58 @@
       <h3>End Current Simulation?</h3>
       <p>This will discard all simulation data and return to patient setup. This cannot be undone.</p>
       <div class="modal-actions"><button class="modal-btn-cancel" id="btn-new-case-cancel">Cancel</button><button class="modal-btn-danger" id="btn-new-case-confirm">End &amp; New Case</button></div>
+    </div>
+  </div>
+
+  <!-- =========== PATIENT DEMOGRAPHICS MODAL =========== -->
+  <div class="modal-overlay" id="modal-patient">
+    <div class="modal-box modal-patient-box">
+      <div class="pm-header">
+        <h2 class="pm-title">Patient Demographics</h2>
+        <div class="unit-toggle pm-units">
+          <button type="button" id="pm-metric" class="active">Metric</button>
+          <button type="button" id="pm-imperial">Imperial</button>
+        </div>
+      </div>
+      <div class="pm-field" data-field="age">
+        <label>Age <span class="pm-unit">(years)</span></label>
+        <div class="pm-value empty" id="pm-age-val">&mdash;</div>
+      </div>
+      <div class="pm-field pm-field-sex" data-field="sex">
+        <label>Sex</label>
+        <div class="pm-sex-toggle">
+          <button type="button" class="pm-sex-btn" data-sex="male">Male</button>
+          <button type="button" class="pm-sex-btn" data-sex="female">Female</button>
+        </div>
+      </div>
+      <div class="pm-field" data-field="height">
+        <label>Height <span class="pm-unit" id="pm-height-unit">(cm)</span></label>
+        <div class="pm-value empty" id="pm-height-val">&mdash;</div>
+      </div>
+      <div class="pm-field" data-field="weight">
+        <label>Weight <span class="pm-unit" id="pm-weight-unit">(kg)</span></label>
+        <div class="pm-value empty" id="pm-weight-val">&mdash;</div>
+      </div>
+      <div class="pm-error" id="pm-error"></div>
+      <div class="pm-keypad">
+        <button class="pm-key" data-key="7">7</button>
+        <button class="pm-key" data-key="8">8</button>
+        <button class="pm-key" data-key="9">9</button>
+        <button class="pm-key" data-key="4">4</button>
+        <button class="pm-key" data-key="5">5</button>
+        <button class="pm-key" data-key="6">6</button>
+        <button class="pm-key" data-key="1">1</button>
+        <button class="pm-key" data-key="2">2</button>
+        <button class="pm-key" data-key="3">3</button>
+        <button class="pm-key pm-key-clear" data-key="clear">C</button>
+        <button class="pm-key" data-key="0">0</button>
+        <button class="pm-key pm-key-dot" data-key=".">.</button>
+        <button class="pm-key pm-key-back" data-key="back">&#9003;</button>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="pm-cancel">Cancel</button>
+        <button class="modal-btn-confirm-target" id="pm-confirm">Confirm</button>
+      </div>
     </div>
   </div>
 

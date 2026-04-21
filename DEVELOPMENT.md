@@ -4,6 +4,34 @@
 
 ## Session History
 
+### Interim — Patient Demographics modal (v0.5.24.11)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+iPadOS won't show a pure 10-key numeric keypad for `type="text" + inputmode="numeric"` or `inputmode="decimal"`; it shows the numbers-and-symbols layout with an ABC toggle. The four patient fields (age / sex / height / weight) each triggered that keyboard on tap — visually noisy for what is purely numeric entry.
+
+Collapsed the four inputs into a single "Tap to edit patient demographics" summary on the main setup screen, plus a new full-featured Patient Demographics modal (`#modal-patient`) that owns entry via a custom in-app numeric keypad. Matches the app's existing pattern of custom numeric keypads for Set Rate / Add Bolus / Set Target in the sim.
+
+**Architecture — hidden inputs preserved:** the four original `<input>` elements stay in the DOM as `type="hidden"` so every downstream consumer (`validate()`, `getHeightCm()`, `getWeightKg()`, `updateDerived()`, `confirmPatient()`, error-row toggles, session restore) keeps working unchanged. The modal writes values and dispatches `input` / `change` events on the hidden fields; the existing reactive pipeline in `setup.js` picks those up.
+
+**Modal (`js/ui/patient-modal.js`, new):**
+- 4 field cells: age, sex (two toggle buttons), height, weight. First empty numeric field auto-selects on open; tapping any other switches the active target; keypad digits feed the active buffer.
+- Metric/Imperial toggle in the header. Uses shared `setUnits()` from `setup.js` so the main-screen toggle + localStorage + modal stay in lockstep. `setUnits()` now also calls `patientModal.onUnitsChanged()` to re-render modal labels and clear modal's height/weight buffers on a unit flip (so `170 cm` can't be misread as `170 in`). Skips the buffer clear when `prev === next` (the no-op initial restore at app load).
+- Validation with range messages per field (age 1–100, height 30–250 cm / 12–98 in, weight 0.5–300 kg / 1–660 lbs). Errors highlight the offending field and set it active.
+- Decimal key disabled when Age is active (integer-only).
+- Click-outside-overlay closes without saving.
+- 6-char max per field to guard against runaway input.
+
+**`setup.js` changes:**
+- Removed the `.input-grid` block from `index.html`; replaced with a clickable summary display. The old `<input>`/`<select>`/`.error-msg`/`.metric-preview` elements still exist as `hidden` siblings so setup.js DOM lookups don't need to change.
+- New `updateSummary()` helper renders `{age}y · {M|F} · {h} {cm|in} · {w} {kg|lbs}` into `#patient-summary-text`, or shows the placeholder when anything's missing. Called from the hidden-input `input` listeners, from `setUnits()`, from the modal's `onConfirm`, and from `reset()`.
+- `setUnits()` gained a `prev !== u` guard so the initial restore-from-localStorage call doesn't clobber input values, and now calls `updateSummary()` + `patientModal.onUnitsChanged()` to propagate unit changes through all three surfaces.
+- `patientModal.init(...)` wired from `setup.init()` with `onConfirm` / `getUnits` / `setUnits` callbacks — no changes needed in `app.js`.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/patient-modal.js` (new), `js/ui/setup.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Fix chart-setting re-apply on new case (v0.5.24.10)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
