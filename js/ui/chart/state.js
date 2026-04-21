@@ -21,6 +21,7 @@ export function createState(cfg) {
     yScale: 1,
     overlayAlpha: 'ff',
     nomogramOpacity: 1.0,
+    cpOpacity: 1.0,
     fontScale: 1.0,
     eventMarkers: [],
     eventAnnotationsEnabled: false,

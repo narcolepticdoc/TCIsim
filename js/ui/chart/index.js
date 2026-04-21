@@ -469,21 +469,28 @@ export function createChart(canvas, config = {}) {
 
   function setCpOpacity(opacity) {
     if (!cfg.showCp) return;
+    const clamped = Math.max(0.1, Math.min(1.0, opacity));
+    if (s.cpOpacity === clamped) return;
+    s.cpOpacity = clamped;
     const ds = datasets[0];
-    const a = Math.round(Math.max(0.1, Math.min(1.0, opacity)) * 255).toString(16).padStart(2, '0');
+    const a = Math.round(clamped * 255).toString(16).padStart(2, '0');
     ds.borderColor = COLORS.cp + a;
-    ds.backgroundColor = COLORS.cp + Math.round(opacity * 0x18).toString(16).padStart(2, '0');
+    ds.backgroundColor = COLORS.cp + Math.round(clamped * 0x18).toString(16).padStart(2, '0');
     chart.update('none');
   }
 
   function setNomogramOpacity(opacity) {
-    s.nomogramOpacity = Math.max(0.1, Math.min(1.0, opacity));
+    const clamped = Math.max(0.1, Math.min(1.0, opacity));
+    if (s.nomogramOpacity === clamped) return;
+    s.nomogramOpacity = clamped;
     chart.options.plugins.annotation.annotations = buildAnnotations(s);
     chart.update('none');
   }
 
   function setOverlayOpacity(opacity) {
-    s.overlayAlpha = Math.round(Math.max(0.1, Math.min(1.0, opacity)) * 255).toString(16).padStart(2, '0');
+    const hex = Math.round(Math.max(0.1, Math.min(1.0, opacity)) * 255).toString(16).padStart(2, '0');
+    if (s.overlayAlpha === hex) return;
+    s.overlayAlpha = hex;
     chart.options.plugins.annotation.annotations = buildAnnotations(s);
     chart.update('none');
   }
@@ -500,7 +507,9 @@ export function createChart(canvas, config = {}) {
   }
 
   function setEventMarkerSize(px) {
-    s.eventMarkerSize = Math.max(4, Math.min(16, Math.round(px)));
+    const clamped = Math.max(4, Math.min(16, Math.round(px)));
+    if (s.eventMarkerSize === clamped) return;
+    s.eventMarkerSize = clamped;
     chart.update('none');
   }
 
