@@ -11,6 +11,19 @@
 
 ---
 
+## [0.5.24.13] — 2026-04-21
+
+Patient modal: first keypress on a pre-populated field replaces rather than appends — matching the existing `keypad.js` behavior in the sim.
+
+- Added per-field `_prefilled` map (age / height / weight). A field is marked prefilled when its value comes from an external source: hidden inputs on `open()` or a unit conversion in `onUnitsChanged()`.
+- On the first digit / decimal keypress, prefilled fields clear their buffer before appending — so tapping Age (which shows `35`) and typing `5` yields `5`, not `355`.
+- Clear and Backspace also clear the flag. A single backspace on a prefilled field blanks the whole value (same as the sim keypad's behavior).
+- Switching active field via tap does **not** change the flag, only typing does.
+
+**Files changed:** `js/version.js`, `js/ui/patient-modal.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.12] — 2026-04-21
 
 Metric/Imperial toggle now **converts** height and weight instead of clearing them. Old behavior was defensive (avoid misreading `170 cm` as `170 in`), but users reasonably expect a unit flip to preserve the entered values in the new units.

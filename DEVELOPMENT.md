@@ -4,6 +4,18 @@
 
 ## Session History
 
+### Interim — Prefilled fields replace on first keypress (v0.5.24.13)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+Parity fix with the sim's `js/ui/keypad.js` — the patient modal's three numeric fields now replace their buffer on the first keypress when pre-populated, instead of appending. Tapping Age (reads `35`) and typing `5` now yields `5`, not `355`.
+
+**Mechanism:** added a per-field `_prefilled` map. Set to `true` for any non-empty value at `open()` (carried over from hidden inputs or a prior confirm) or after a unit conversion in `onUnitsChanged()`. The first digit / decimal keypress on a prefilled field clears the buffer before appending and flips the flag to `false`. Clear / Backspace also clear the flag; a single backspace on a prefilled field blanks the whole value (matches the existing keypad's behavior for pre-populated buffers — the "backspace" there undoes the seed).
+
+**Files changed:** `js/version.js`, `js/ui/patient-modal.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Unit toggle converts instead of clearing (v0.5.24.12)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
