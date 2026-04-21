@@ -118,7 +118,10 @@
     #drug-ketamine    {--drug-color:#eab308;--drug-color-muted:rgba(234,179,8,.25)}
     #drug-fentanyl    {--drug-color:#3b82f6;--drug-color-muted:rgba(59,130,246,.25)}
     #drug-remifentanil{--drug-color:#3b82f6;--drug-color-muted:rgba(59,130,246,.25)}
+    .drug-card .drug-header-row{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
     .drug-card .drug-name{font-family:var(--font-mono);font-size:13px;font-weight:500;color:var(--text-primary);text-transform:uppercase;letter-spacing:.5px}
+    .drug-card .drug-bis-header{font-family:var(--font-mono);font-size:13px;font-weight:600;line-height:1;white-space:nowrap}
+    .drug-card .drug-bis-header:empty{display:none}
     .drug-card .drug-model{font-size:9px;color:var(--text-muted)}
     /* Combined Cp / Ce row */
     .drug-card .drug-conc-row{display:flex;align-items:baseline;gap:3px;margin-top:2px}
@@ -155,7 +158,8 @@
     .drug-card.active::before{content:'';position:absolute;left:4px;top:50%;transform:translateY(-50%);width:0;height:0;border-top:7px solid transparent;border-bottom:7px solid transparent;border-left:6px solid var(--drug-color,var(--blue));z-index:1}
     .drug-card.active .drug-name  { font-size: 17px }
     .drug-card.active .ce-current { font-size: 27px }
-    .exit-readout{position:absolute;top:6px;right:10px;font-family:var(--font-mono);font-size:9.5px;color:#ef4444;white-space:nowrap;letter-spacing:.3px}
+    .exit-readout{font-family:var(--font-mono);font-size:10px;color:#ef4444;white-space:nowrap;letter-spacing:.3px;line-height:1.3}
+    .exit-readout .appr-time{color:var(--amber)}
     .exit-readout:empty{display:none}
     /* ── Warning system ─────────────────────────────────────────────── */
     /* Prep pulse: inset border glow on drug card (inset is not clipped by overflow-y:auto on .drug-panel) */
@@ -296,6 +300,9 @@
     @media(min-width:601px) and (min-height:421px){
       body.text-lg .drug-card .drug-name{font-size:15px}
       body.text-lg .drug-card.active .drug-name{font-size:19px}
+      body.text-lg .drug-card .drug-bis-header{font-size:15px}
+      body.text-lg .drug-card.active .drug-bis-header{font-size:17px}
+      body.text-lg .drug-card .exit-readout{font-size:12px}
       body.text-lg .drug-card .ce-current{font-size:25px}
       body.text-lg .drug-card.active .ce-current{font-size:30px}
       body.text-lg .drug-card .drug-model{font-size:10.5px}
@@ -324,6 +331,9 @@
 
       body.text-xl .drug-card .drug-name{font-size:17px}
       body.text-xl .drug-card.active .drug-name{font-size:22px}
+      body.text-xl .drug-card .drug-bis-header{font-size:17px}
+      body.text-xl .drug-card.active .drug-bis-header{font-size:20px}
+      body.text-xl .drug-card .exit-readout{font-size:13px}
       body.text-xl .drug-card .ce-current{font-size:28px}
       body.text-xl .drug-card.active .ce-current{font-size:34px}
       body.text-xl .drug-card .drug-model{font-size:12px}
@@ -355,6 +365,9 @@
     @media(min-width:1020px){
       body.text-xxl .drug-card .drug-name{font-size:19px}
       body.text-xxl .drug-card.active .drug-name{font-size:25px}
+      body.text-xxl .drug-card .drug-bis-header{font-size:19px}
+      body.text-xxl .drug-card.active .drug-bis-header{font-size:23px}
+      body.text-xxl .drug-card .exit-readout{font-size:14.5px}
       body.text-xxl .drug-card .ce-current{font-size:32px}
       body.text-xxl .drug-card.active .ce-current{font-size:39px}
       body.text-xxl .drug-card .drug-model{font-size:13px}
@@ -396,6 +409,9 @@
       .drug-panel{width:215px;min-width:175px}
       .drug-card{padding:5px 8px;gap:1px}
       .drug-card .drug-model{display:none}
+      .drug-card .drug-header-row{display:block}
+      .drug-card .drug-bis-header{display:none}
+      .drug-card .exit-readout{font-size:9px;white-space:normal}
       .drug-card .drug-name{font-size:10px}
       .drug-card .ce-current{font-size:16px}
       .drug-card.active .drug-name{font-size:12px}
@@ -440,6 +456,9 @@
       .drug-panel{order:1;width:100%;min-width:unset;flex:0 0 auto;border-right:none;border-top:1px solid var(--border-subtle);max-height:45%;overflow-y:auto}
       .drug-card{padding:6px 10px;gap:2px}
       .drug-card .drug-model{display:none}
+      .drug-card .drug-header-row{display:block}
+      .drug-card .drug-bis-header{display:none}
+      .drug-card .exit-readout{font-size:9px;white-space:normal}
       .drug-card .drug-name{font-size:12px}
       .drug-card .ce-current{font-size:18px}
       .drug-card.active .drug-name{font-size:14px}
@@ -862,8 +881,10 @@
     <div class="sim-main">
       <div class="drug-panel">
         <div class="drug-card active" id="drug-propofol">
-          <div class="drug-name">Propofol</div>
-          <div class="exit-readout" id="propofol-exit"></div>
+          <div class="drug-header-row">
+            <div class="drug-name">Propofol</div>
+            <div class="drug-bis-header" id="propofol-bis-header"></div>
+          </div>
           <div class="drug-model" id="propofol-model-label"></div>
           <div class="drug-conc-row">
             <span class="ce-label">Ce</span>
@@ -871,61 +892,62 @@
             <span class="cp-sep">|</span>
             <span class="cp-label">Cp</span>
             <span class="cp-current" id="propofol-cp">0.00</span>
-            <span class="bis-sep cp-sep" id="propofol-bis-sep" style="display:none">|</span>
-            <span class="bis-label" id="propofol-bis-label" style="display:none">eBIS</span>
-            <span class="drug-bis" id="propofol-bis"></span>
+            <span class="ce-unit">&mu;g/mL</span>
           </div>
           <div class="drug-approach" id="propofol-approach"></div>
           <div class="drug-status-row">
             <span class="drug-status stopped" id="propofol-status">Stopped</span>
             <span class="drug-rate" id="propofol-rate"></span>
           </div>
+          <div class="exit-readout" id="propofol-exit"></div>
           <div class="step-bar-area">
             <div class="step-bar-countdown" id="propofol-bar-countdown"></div>
             <div class="step-bar-wrap"><div class="step-bar" id="propofol-bar" style="width:0%"></div></div>
           </div>
         </div>
         <div class="drug-card" id="drug-fentanyl">
-          <div class="drug-name">Fentanyl</div>
-          <div class="exit-readout" id="fentanyl-exit"></div>
+          <div class="drug-header-row">
+            <div class="drug-name">Fentanyl</div>
+          </div>
           <div class="drug-model" id="fentanyl-model-label"></div>
           <div class="drug-conc-row">
             <span class="ce-label">Ce</span>
             <span class="ce-current" id="fentanyl-ce">0.0</span>
-            <span class="ce-unit" id="fentanyl-ce-unit">ng/mL</span>
             <span class="cp-sep">|</span>
             <span class="cp-label">Cp</span>
             <span class="cp-current" id="fentanyl-cp">0.0</span>
-            <span class="ce-unit">ng/mL</span>
+            <span class="ce-unit" id="fentanyl-ce-unit">ng/mL</span>
           </div>
           <div class="drug-approach" id="fentanyl-approach"></div>
           <div class="drug-status-row">
             <span class="drug-status stopped" id="fentanyl-status">Stopped</span>
             <span class="drug-rate" id="fentanyl-rate"></span>
           </div>
+          <div class="exit-readout" id="fentanyl-exit"></div>
           <div class="step-bar-area">
             <div class="step-bar-countdown" id="fentanyl-bar-countdown"></div>
             <div class="step-bar-wrap"><div class="step-bar" id="fentanyl-bar" style="width:0%"></div></div>
           </div>
         </div>
         <div class="drug-card" id="drug-ketamine">
-          <div class="drug-name">Ketamine</div>
-          <div class="exit-readout" id="ketamine-exit"></div>
+          <div class="drug-header-row">
+            <div class="drug-name">Ketamine</div>
+          </div>
           <div class="drug-model" id="ketamine-model-label"></div>
           <div class="drug-conc-row">
             <span class="ce-label">Ce</span>
             <span class="ce-current" id="ketamine-ce">0.0</span>
-            <span class="ce-unit" id="ketamine-ce-unit">ng/mL</span>
             <span class="cp-sep">|</span>
             <span class="cp-label">Cp</span>
             <span class="cp-current" id="ketamine-cp">0.0</span>
-            <span class="ce-unit">ng/mL</span>
+            <span class="ce-unit" id="ketamine-ce-unit">ng/mL</span>
           </div>
           <div class="drug-approach" id="ketamine-approach"></div>
           <div class="drug-status-row">
             <span class="drug-status stopped" id="ketamine-status">Stopped</span>
             <span class="drug-rate" id="ketamine-rate"></span>
           </div>
+          <div class="exit-readout" id="ketamine-exit"></div>
           <div class="step-bar-area">
             <div class="step-bar-countdown" id="ketamine-bar-countdown"></div>
             <div class="step-bar-wrap"><div class="step-bar" id="ketamine-bar" style="width:0%"></div></div>
@@ -959,7 +981,7 @@
     <div class="sim-controls">
       <div class="mode-label no-mode" id="mode-label">NO MODE</div>
       <button class="btn-ctrl btn-ctrl-target" id="btn-target">Set Target</button>
-      <button class="btn-ctrl btn-ctrl-exit" id="btn-exit">Set Exit Ce</button>
+      <button class="btn-ctrl btn-ctrl-exit" id="btn-exit">Set Emergence</button>
       <div class="ctrl-divider"></div>
       <button class="btn-ctrl btn-ctrl-rate" id="btn-rate">Set Rate</button>
       <button class="btn-ctrl btn-ctrl-bolus" id="btn-bolus">Add Bolus</button>
