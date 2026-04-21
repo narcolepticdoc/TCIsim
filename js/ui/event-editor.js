@@ -223,14 +223,29 @@ function renderUnitToggle(allowed) {
     btn.textContent = u;
     btn.className = u === _currentUnit ? 'active' : '';
     btn.addEventListener('click', () => {
+      const prev = _currentUnit;
       _currentUnit = u;
-      const prefKey = getPrefKey(_selectedDrug, _currentType === 'bolus' ? 'bolus' : 'rate');
+      const task = _currentType === 'bolus' ? 'bolus' : 'rate';
+      const prefKey = getPrefKey(_selectedDrug, task);
       if (prefKey) {
         try { localStorage.setItem(prefKey, u); } catch (e) {}
       }
       container.querySelectorAll('button').forEach(b =>
         b.classList.toggle('active', b.textContent === u));
-      _buffer = ''; _prefilled = false;
+      // Convert the current buffer value from the previous unit to the new
+      // unit, preserving the user's entry and re-arming prefilled so the next
+      // keypress overwrites. Leave empty buffer empty.
+      const v = parseFloat(_buffer);
+      if (!isNaN(v) && prev && prev !== u) {
+        try {
+          const patient = _getPatient();
+          const ctx = { weightKg: patient?.weight || 70 };
+          const canonical = toCanonical(v, prev, _selectedDrug, task, ctx);
+          const displayVal = fromCanonical(canonical.value, u, _selectedDrug, task, ctx);
+          _buffer = formatValue(displayVal, u);
+          _prefilled = true;
+        } catch (e) { /* leave buffer alone on conversion error */ }
+      }
       updateDisplay();
     });
     container.appendChild(btn);
