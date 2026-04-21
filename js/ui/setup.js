@@ -17,6 +17,7 @@ import {
   MODEL_NAME as ELEVELD_MODEL_NAME,
   MODEL_DESCRIPTION as ELEVELD_MODEL_DESCRIPTION,
 } from '../pk/eleveld.js';
+import * as patientModal from './patient-modal.js';
 import {
   MODEL_NAME as FENTANYL_MODEL_NAME,
   MODEL_DESCRIPTION as FENTANYL_MODEL_DESCRIPTION,
@@ -54,16 +55,34 @@ let onConfirm = null; // callback: (patient) => void
 export function init(opts = {}) {
   onConfirm = opts.onConfirm || null;
 
+  // Patient Demographics modal owns numeric entry now — init it and wire
+  // the summary row as its trigger.
+  patientModal.init({
+    onConfirm: () => { updatePreviews(); updateDerived(); updateSummary(); },
+    getUnits: () => currentUnits,
+    setUnits: (u) => setUnits(u),
+  });
+  const summaryEl = $('patient-summary-display');
+  if (summaryEl) {
+    summaryEl.addEventListener('click', () => patientModal.open());
+    summaryEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); patientModal.open(); }
+    });
+  }
+
   // Restore saved unit preference
   restoreUnits();
 
-  // Wire input listeners for live validation and derived values
+  // Hidden inputs still dispatch 'input'/'change' events when the modal
+  // writes to them; keep the same reactive pipeline so downstream previews /
+  // derived values / summary all recompute.
   ['input-age', 'input-height', 'input-weight'].forEach(id => {
     const el = $(id);
     if (el) {
       el.addEventListener('input', () => {
         updatePreviews();
         updateDerived();
+        updateSummary();
         const row = el.closest('.form-row');
         if (row) row.classList.remove('error');
       });
@@ -76,6 +95,7 @@ export function init(opts = {}) {
     sexEl.addEventListener('change', () => {
       updatePreviews();
       updateDerived();
+      updateSummary();
       const row = sexEl.closest('.form-row');
       if (row) row.classList.remove('error');
     });
@@ -282,6 +302,7 @@ function formatStep(step) {
 // ---- Units ----
 
 function setUnits(u) {
+  const prev = currentUnits;
   currentUnits = u;
   try { localStorage.setItem('tci-sim-units', u); } catch (e) {}
 
@@ -300,11 +321,17 @@ function setUnits(u) {
     $('input-weight').placeholder = '70';
   }
 
-  // Clear values when switching units to avoid confusion
-  $('input-height').value = '';
-  $('input-weight').value = '';
+  // Clear height/weight on unit change — don't misread 170 cm as 170 in, etc.
+  // Skip on initial restore (prev === u).
+  if (prev && prev !== u) {
+    $('input-height').value = '';
+    $('input-weight').value = '';
+  }
   updatePreviews();
   updateDerived();
+  updateSummary();
+  // Keep the Patient modal's internal state (labels, buffers) in sync if it's open.
+  patientModal.onUnitsChanged();
 }
 
 function restoreUnits() {
@@ -327,6 +354,36 @@ function getHeightCm() {
 function getWeightKg() {
   const r = parseFloat($('input-weight').value);
   return isNaN(r) ? NaN : currentUnits === 'imperial' ? r * 0.453592 : r;
+}
+
+// ---- Summary row (clickable row on the setup screen that opens the modal) ----
+
+/**
+ * Read the hidden inputs + current units and render the compact summary.
+ * Shows the placeholder when anything's missing.
+ */
+function updateSummary() {
+  const placeholder = $('patient-summary-placeholder') ||
+    document.querySelector('#patient-summary-display .patient-summary-placeholder');
+  const text = $('patient-summary-text');
+  if (!placeholder || !text) return;
+
+  const age = ($('input-age')?.value || '').trim();
+  const sex = ($('input-sex')?.value || '').trim();
+  const h   = ($('input-height')?.value || '').trim();
+  const w   = ($('input-weight')?.value || '').trim();
+  if (!age || !sex || !h || !w) {
+    placeholder.hidden = false;
+    text.hidden = true;
+    text.textContent = '';
+    return;
+  }
+  const hUnit = currentUnits === 'imperial' ? 'in' : 'cm';
+  const wUnit = currentUnits === 'imperial' ? 'lbs' : 'kg';
+  const sexLbl = sex === 'male' ? 'M' : 'F';
+  text.textContent = `${age}y · ${sexLbl} · ${h} ${hUnit} · ${w} ${wUnit}`;
+  text.hidden = false;
+  placeholder.hidden = true;
 }
 
 // ---- Metric previews (shown when imperial units selected) ----
@@ -660,4 +717,5 @@ export function reset() {
     $(id).textContent = '';
   });
   updatePreviews();
+  updateSummary();
 }
