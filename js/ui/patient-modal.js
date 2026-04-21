@@ -25,6 +25,10 @@ let _setUnits  = null;
 
 // Modal-local state (display-unit values, not canonical)
 let _values = { age: '', sex: '', height: '', weight: '' };
+// Per-field "prefilled" flag — true when the buffer came from an external source
+// (hidden inputs at open, or a unit conversion) and hasn't been typed into yet.
+// The first digit / decimal keypress replaces the buffer instead of appending.
+let _prefilled = { age: false, height: false, weight: false };
 let _active = 'age'; // 'age' | 'height' | 'weight' — sex is toggle-only
 let _lastUnits = 'metric'; // tracks the unit that _values.height / _values.weight are in
 
@@ -61,6 +65,12 @@ export function open() {
     height: ($('input-height')?.value || '').trim(),
     weight: ($('input-weight')?.value || '').trim(),
   };
+  // Any non-empty field is prefilled — first keypress on it replaces.
+  _prefilled = {
+    age:    !!_values.age,
+    height: !!_values.height,
+    weight: !!_values.weight,
+  };
   _lastUnits = _getUnits();
   _syncUnitToggle();
   _applyUnitLabels();
@@ -85,10 +95,17 @@ export function onUnitsChanged() {
     return;
   }
   // Convert the modal's buffers between the previous and new unit so the user's
-  // in-progress entry is preserved across a unit flip.
+  // in-progress entry is preserved across a unit flip. Mark the converted
+  // values as prefilled so the next keypress replaces rather than appends.
   if (_lastUnits !== newU) {
-    if (_values.height) _values.height = _convertLength(_values.height, _lastUnits, newU);
-    if (_values.weight) _values.weight = _convertWeight(_values.weight, _lastUnits, newU);
+    if (_values.height) {
+      _values.height = _convertLength(_values.height, _lastUnits, newU);
+      _prefilled.height = true;
+    }
+    if (_values.weight) {
+      _values.weight = _convertWeight(_values.weight, _lastUnits, newU);
+      _prefilled.weight = true;
+    }
   }
   _lastUnits = newU;
   _syncUnitToggle();
@@ -173,15 +190,25 @@ function _handleKey(key) {
   let v = _values[f] || '';
   if (key === 'clear') {
     v = '';
+    _prefilled[f] = false;
   } else if (key === 'back') {
-    v = v.slice(0, -1);
+    // If the field is still prefilled, one backspace clears the whole value —
+    // matches the existing keypad.js behavior for pre-populated buffers.
+    if (_prefilled[f]) {
+      v = '';
+      _prefilled[f] = false;
+    } else {
+      v = v.slice(0, -1);
+    }
   } else if (key === '.') {
     if (f === 'age') return;
+    if (_prefilled[f]) { v = ''; _prefilled[f] = false; }
     if (v.includes('.')) return;
     v = v === '' ? '0.' : v + '.';
   } else if (/^[0-9]$/.test(key)) {
-    // Guard against unreasonably long numbers
-    if (v.length >= 6) return;
+    // First digit on a prefilled field replaces rather than appends.
+    if (_prefilled[f]) { v = ''; _prefilled[f] = false; }
+    if (v.length >= 6) return; // guard against runaway input
     v = v + key;
   } else {
     return;
