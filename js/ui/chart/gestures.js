@@ -97,8 +97,7 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
     const rect = canvas.getBoundingClientRect();
     const x = clientX - rect.left;
     const y = clientY - rect.top;
-    const dx = x - h.cx, dy = y - h.cy;
-    return (dx * dx + dy * dy) <= h.r * h.r;
+    return x >= h.left && x <= h.right && y >= h.top && y <= h.bottom;
   }
 
   function xToTime(clientX) {
@@ -121,16 +120,24 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
     const t = xToTime(t0.clientX);
     if (t != null) setInspectTime(t);
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
   }
   function handleInspectTouchMove(e) {
-    if (!inspectDragActive || e.touches.length !== 1) return;
+    if (!inspectDragActive) return;
+    if (e.touches.length !== 1) { inspectDragActive = false; return; }
     const t = xToTime(e.touches[0].clientX);
     if (t != null) setInspectTime(t);
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
   }
-  function handleInspectTouchEnd() { inspectDragActive = false; }
+  function handleInspectTouchEnd(e) {
+    if (!inspectDragActive) return;
+    inspectDragActive = false;
+    // Swallow the terminating touchend so Chart.js doesn't synthesize a click
+    // that would re-fire onClick and snap the cursor to the release point.
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
 
   function handleInspectMouseDown(e) {
     if (!setInspectTime) return;
@@ -140,7 +147,7 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
     const t = xToTime(e.clientX);
     if (t != null) setInspectTime(t);
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
   }
   function handleInspectMouseMove(e) {
     if (!inspectDragActive) return;

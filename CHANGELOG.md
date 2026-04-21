@@ -11,6 +11,17 @@
 
 ---
 
+## [0.5.24.20] — 2026-04-21
+
+Two fixes on the draggable inspect handle from v0.5.24.19.
+
+- **Handle moved to bottom of cursor with left/right arrows.** Replaced the top-of-chart circle-with-chevrons knob with a horizontal pill at `chartArea.bottom - 14`, drawn with crisp left (`<`) and right (`>`) chevrons and a subtle halo for touch-target hint. Hit region switched from 22px-radius circle to a 48×32px rectangle around the pill. Visual now reads clearly as "drag horizontally".
+- **Drag no longer gets hijacked into page scroll.** On iPad Safari the gesture-recognizer would pick a direction after the first ~50px of movement and take over, scrolling the whole page instead of continuing our handle drag. Two fixes: (1) `touch-action: none` added to the chart canvas so the browser never attempts native scroll/zoom interpretation — Chart.js's own touch listeners still fire normally because `touch-action` only blocks *native* gestures, not JS touch events. (2) `stopPropagation()` upgraded to `stopImmediatePropagation()` in all inspect-drag handlers so any same-element bubble listeners (Chart.js / hammerjs) never get the event. Also added a `touchend` handler that swallows the release so Chart.js doesn't synthesize a click and re-snap the cursor.
+
+**Files changed:** `js/version.js`, `js/ui/chart/plugins/inspect-handle.js`, `js/ui/chart/gestures.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.19] — 2026-04-21
 
 Draggable inspect cursor with handle.
