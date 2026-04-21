@@ -11,6 +11,18 @@
 
 ---
 
+## [0.5.24.12] — 2026-04-21
+
+Metric/Imperial toggle now **converts** height and weight instead of clearing them. Old behavior was defensive (avoid misreading `170 cm` as `170 in`), but users reasonably expect a unit flip to preserve the entered values in the new units.
+
+- `setUnits()` in `js/ui/setup.js`: when `prev !== next`, converts the hidden `#input-height` / `#input-weight` values between systems using two new exported helpers `_convertLength` / `_convertWeight` (1 cm = 0.393701 in, 1 kg = 2.20462 lbs, both rounded to 1 decimal for display). No-ops on blank values and on same-unit transitions.
+- `patientModal.onUnitsChanged()` in `js/ui/patient-modal.js`: when the modal is open, converts the in-buffer `_values.height` / `_values.weight` between units using the shared helpers. Tracks `_lastUnits` to know the "from" side of the transition (set on `open()` and on each `onUnitsChanged` call, even when the modal is closed, so the tracker stays current).
+- Applies in both directions: flipping on the main-screen toggle converts hidden inputs (and the summary re-renders); flipping on the modal's header toggle converts in-progress modal buffers and the hidden inputs.
+
+**Files changed:** `js/version.js`, `js/ui/setup.js`, `js/ui/patient-modal.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.11] — 2026-04-21
 
 Patient Demographics modal with built-in numeric keypad — eliminates the iPadOS keyboard entirely for patient entry.

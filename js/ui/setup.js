@@ -321,11 +321,15 @@ function setUnits(u) {
     $('input-weight').placeholder = '70';
   }
 
-  // Clear height/weight on unit change — don't misread 170 cm as 170 in, etc.
-  // Skip on initial restore (prev === u).
+  // Convert height / weight between systems on unit change. Skip on initial
+  // restore (prev === u) and leave blank values alone.
   if (prev && prev !== u) {
-    $('input-height').value = '';
-    $('input-weight').value = '';
+    const hEl = $('input-height');
+    const wEl = $('input-weight');
+    const hStr = (hEl?.value || '').trim();
+    const wStr = (wEl?.value || '').trim();
+    if (hStr) hEl.value = _convertLength(hStr, prev, u);
+    if (wStr) wEl.value = _convertWeight(wStr, prev, u);
   }
   updatePreviews();
   updateDerived();
@@ -343,6 +347,28 @@ function restoreUnits() {
 }
 
 export function getUnits() { return currentUnits; }
+
+// ---- Unit conversion helpers (exported for patient-modal.js) ----
+
+/** Convert a length display value between 'metric' (cm) and 'imperial' (in). */
+export function _convertLength(valStr, from, to) {
+  const v = parseFloat(valStr);
+  if (isNaN(v)) return valStr;
+  if (from === to) return valStr;
+  const cm  = from === 'imperial' ? v * 2.54 : v;
+  const out = to === 'imperial'   ? cm / 2.54 : cm;
+  return String(Math.round(out * 10) / 10);
+}
+
+/** Convert a weight display value between 'metric' (kg) and 'imperial' (lbs). */
+export function _convertWeight(valStr, from, to) {
+  const v = parseFloat(valStr);
+  if (isNaN(v)) return valStr;
+  if (from === to) return valStr;
+  const kg  = from === 'imperial' ? v * 0.453592 : v;
+  const out = to === 'imperial'   ? kg / 0.453592 : kg;
+  return String(Math.round(out * 10) / 10);
+}
 
 // ---- Unit conversion ----
 
