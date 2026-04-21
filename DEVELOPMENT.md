@@ -4,6 +4,21 @@
 
 ## Session History
 
+### Interim — Inspect handle: bottom position + fix drag hijack (v0.5.24.20)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+Two issues with the v0.5.24.19 handle:
+
+1. **Visual placement + shape.** User wanted the handle at the bottom of the cursor line (not top) with clear left/right arrows. Redesigned as a horizontal 34×16 pill at `chartArea.bottom - 14`, with crisp `<` and `>` chevrons inside and a subtle halo ring for the touch-target hint. Hit region switched from 22px-radius circle to a 48×32 rectangle around the pill.
+2. **Drag hijack on iPad.** After the user started dragging the handle, iPad Safari's built-in pan-gesture recognizer picked the direction after ~50px of movement and took over, scrolling the whole page. Two root-cause fixes:
+   - **`touch-action: none` on the chart canvas.** Tells the browser "don't try to interpret any touches on this element as native scroll/pinch/zoom". Our JS listeners still fire normally — `touch-action` only blocks native gesture recognition, not event delivery. This alone resolves most hijack cases.
+   - **`stopImmediatePropagation()` in all inspect-drag handlers.** Replaces the previous `stopPropagation()`. Stops *same-element* bubble-phase listeners (Chart.js / hammerjs internal handlers) from receiving the event in addition to stopping ancestor propagation. Also added a `touchend` inspect handler that swallows the release so Chart.js doesn't synthesize a click and re-snap the cursor to the release-point coordinates.
+
+**Files changed:** `js/version.js`, `js/ui/chart/plugins/inspect-handle.js`, `js/ui/chart/gestures.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Draggable inspect cursor handle (v0.5.24.19)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
