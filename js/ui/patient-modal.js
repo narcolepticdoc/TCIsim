@@ -15,6 +15,8 @@
  *              summary row.
  */
 
+import { _convertLength, _convertWeight } from './setup.js';
+
 const $ = id => document.getElementById(id);
 
 let _onConfirm = null;
@@ -24,6 +26,7 @@ let _setUnits  = null;
 // Modal-local state (display-unit values, not canonical)
 let _values = { age: '', sex: '', height: '', weight: '' };
 let _active = 'age'; // 'age' | 'height' | 'weight' — sex is toggle-only
+let _lastUnits = 'metric'; // tracks the unit that _values.height / _values.weight are in
 
 const FIELDS = ['age', 'sex', 'height', 'weight'];
 
@@ -58,6 +61,7 @@ export function open() {
     height: ($('input-height')?.value || '').trim(),
     weight: ($('input-weight')?.value || '').trim(),
   };
+  _lastUnits = _getUnits();
   _syncUnitToggle();
   _applyUnitLabels();
   _render();
@@ -72,15 +76,23 @@ export function close() {
   $('pm-error').textContent = '';
 }
 
-/** Called by setup.js when units change externally (main-screen toggle). */
+/** Called by setup.js when units change externally or via the modal's own toggle. */
 export function onUnitsChanged() {
-  if (!$('modal-patient').classList.contains('open')) return;
+  const newU = _getUnits();
+  if (!$('modal-patient').classList.contains('open')) {
+    // Keep tracker in sync even when closed so the next open reflects the right unit.
+    _lastUnits = newU;
+    return;
+  }
+  // Convert the modal's buffers between the previous and new unit so the user's
+  // in-progress entry is preserved across a unit flip.
+  if (_lastUnits !== newU) {
+    if (_values.height) _values.height = _convertLength(_values.height, _lastUnits, newU);
+    if (_values.weight) _values.weight = _convertWeight(_values.weight, _lastUnits, newU);
+  }
+  _lastUnits = newU;
   _syncUnitToggle();
   _applyUnitLabels();
-  // Height / weight buffers are display-unit values; clear them to avoid
-  // misinterpreting a 170 cm value as 170 in.
-  _values.height = '';
-  _values.weight = '';
   _render();
 }
 

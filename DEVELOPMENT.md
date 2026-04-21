@@ -4,6 +4,28 @@
 
 ## Session History
 
+### Interim — Unit toggle converts instead of clearing (v0.5.24.12)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+v0.5.24.11 cleared height / weight on a Metric ↔ Imperial flip as a defensive measure against misreading `170 cm` as `170 in`. The more intuitive UX — and what the user actually wants — is to preserve the entered value in the new units. Swap "clear" for "convert".
+
+**New exports in `js/ui/setup.js`:** `_convertLength(valStr, from, to)` and `_convertWeight(valStr, from, to)`, both rounded to 1 decimal for display. No-op on same-unit or blank input.
+
+**`setUnits()` change:** replaced the `input.value = ''` clear with in-place conversion via the new helpers. Skips when `prev === next` (initial restore path).
+
+**`patient-modal.js` change:** added `_lastUnits` tracker, set on `open()` and on every `onUnitsChanged()` call (even when the modal is closed — keeps the next open's conversion accurate). `onUnitsChanged()` now converts `_values.height` / `_values.weight` between `_lastUnits` and the new unit instead of blanking them. Modal re-imports the helpers from setup.js (circular import OK — ES modules handle it).
+
+**Behaviour:**
+
+- Modal closed, user taps Imperial on main screen → hidden inputs convert; summary re-renders; `patientModal.onUnitsChanged` updates `_lastUnits` so the next open starts correct.
+- Modal open, user taps Imperial in the header → the modal's own toggle calls `setUnits('imperial')`, which converts hidden inputs **and** `patientModal.onUnitsChanged` converts the modal's buffers in place. User sees their mid-entry values in the new units.
+- Round-trip precision: 1-decimal rounding so `170 cm → 66.9 in → 169.9 cm`. Acceptable for display; on Confirm the patient object uses full-precision conversion anyway.
+
+**Files changed:** `js/version.js`, `js/ui/setup.js`, `js/ui/patient-modal.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Patient Demographics modal (v0.5.24.11)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
