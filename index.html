@@ -536,9 +536,12 @@
       .drug-card .step-bar-countdown{font-size:9px;min-height:9px}
 
       .content-tab{padding:5px 12px;font-size:10px}
-      .sim-controls{padding:4px 6px;gap:3px;flex-wrap:wrap}
-      .btn-ctrl{padding:5px 6px;font-size:9.5px;letter-spacing:0}
-      .mode-label{font-size:9.5px;padding:2px 6px}
+      /* iPhone portrait bottom bar — tight enough for all 6 controls on one
+         row, plus env(safe-area-inset-bottom) so the bottom row sits above
+         the iPhone home-indicator curve. */
+      .sim-controls{padding:4px 5px calc(6px + env(safe-area-inset-bottom, 0px));gap:2px;flex-wrap:wrap}
+      .btn-ctrl{padding:5px 5px;font-size:9px;letter-spacing:0;min-width:0}
+      .mode-label{font-size:9px;padding:2px 5px;letter-spacing:0}
 
       /* Keypad modal: stack vertically on narrow screens */
       .modal-box{width:96%;padding:14px}

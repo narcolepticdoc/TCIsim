@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.24.17] — 2026-04-21
+
+Phone-portrait bottom bar: tightened button metrics further (`.btn-ctrl` font 9.5 → 9px, padding 5px 6px → 5px 5px, added `min-width:0`; `.mode-label` 9.5 → 9px; `.sim-controls` gap 3 → 2px) so all six controls fit on one row at 390–430px viewports. Stop Pump no longer wraps.
+
+Also added `padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px))` on `.sim-controls` so the row sits above the iPhone home-indicator curve instead of getting clipped by the rounded screen corner.
+
+**Files changed:** `js/version.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.16] — 2026-04-21
 
 Consistent unit-toggle behavior across all keypad modals: **keep the value, convert to the new unit, re-arm prefilled so the next keypress overwrites**.

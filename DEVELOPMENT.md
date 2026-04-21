@@ -4,6 +4,19 @@
 
 ## Session History
 
+### Interim — Phone bottom-bar tighten + safe-area padding (v0.5.24.17)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+iPhone 15 Pro Max portrait screenshot (430px wide) still had Stop Pump wrapping to a second row despite the v0.5.24.15 tighten pass. Two concurrent fixes:
+
+1. **Tighter metrics.** `.btn-ctrl` font 9.5 → 9px, padding 5px 6px → 5px 5px, added `min-width:0` so flex items shrink past content if needed. `.mode-label` 9.5 → 9px, padding 2px 6px → 2px 5px. `.sim-controls` gap 3 → 2px. Width budget at 430px: container pad 10 + 6 gaps × 2 + ~48 MANUAL + ~62 Target + ~72 Emergence + ~66 Rate + ~54 Bolus + ~54 Pump ≈ 378px. Fits.
+2. **Safe-area padding.** Added `padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px))` to `.sim-controls` on the phone-portrait breakpoint. The iPhone home-indicator curves the bottom of the screen; without the inset, the Stop Pump button was clipped by the rounded corner. `env(safe-area-inset-bottom)` returns the OS-reported inset (usually ~34px on iPhone with home indicator, 0 on devices without).
+
+**Files changed:** `js/version.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Consistent keypad unit-toggle conversion (v0.5.24.16)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
