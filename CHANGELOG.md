@@ -11,6 +11,14 @@
 
 ---
 
+## [0.5.24.18] — 2026-04-21
+
+More bottom-bar padding on phone portrait. Switched from `calc(6px + env(safe-area-inset-bottom))` to `max(18px, env(safe-area-inset-bottom))` so devices without a home indicator still get 18px of breathing room under the button row, and iPhones with one still get the full OS-reported inset (which is usually more than 18px).
+
+**Files changed:** `js/version.js`, `index.html`, `CHANGELOG.md`.
+
+---
+
 ## [0.5.24.17] — 2026-04-21
 
 Phone-portrait bottom bar: tightened button metrics further (`.btn-ctrl` font 9.5 → 9px, padding 5px 6px → 5px 5px, added `min-width:0`; `.mode-label` 9.5 → 9px; `.sim-controls` gap 3 → 2px) so all six controls fit on one row at 390–430px viewports. Stop Pump no longer wraps.
