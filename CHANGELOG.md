@@ -11,6 +11,17 @@
 
 ---
 
+## [0.5.24.14] — 2026-04-21
+
+Follow-up to v0.5.24.13. Tapping a different field in the patient modal now re-arms the "replace on first keypress" state — matches the user's mental model of tapping to edit. Previous release only set the flag on `open()` and unit conversion, so once a flag was consumed by typing, switching to another field and typing would append instead of replace.
+
+- `_setActive(field)` now sets `_prefilled[field] = true` when the target has existing content.
+- Re-tapping the currently-active field is now a no-op (preserves in-progress typing state instead of re-arming).
+
+**Files changed:** `js/version.js`, `js/ui/patient-modal.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.13] — 2026-04-21
 
 Patient modal: first keypress on a pre-populated field replaces rather than appends — matching the existing `keypad.js` behavior in the sim.

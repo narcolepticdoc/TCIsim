@@ -4,6 +4,20 @@
 
 ## Session History
 
+### Interim — Field taps re-arm replace-on-first-keypress (v0.5.24.14)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+Follow-up to v0.5.24.13. The prefilled flag was set on `open()` and on unit conversion, but once a flag was consumed (user typed a digit), tapping another field and typing would append rather than replace — because the flag was only ever armed at modal/open time.
+
+Fixed by arming `_prefilled[field] = true` inside `_setActive(field)` when the target has existing content. Matches the user's mental model: tapping a different field with data → next keypress replaces.
+
+Also added a same-field guard at the top of `_setActive` — re-tapping the currently-active field is a no-op, so mid-typing doesn't get interrupted by an accidental re-tap.
+
+**Files changed:** `js/version.js`, `js/ui/patient-modal.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Prefilled fields replace on first keypress (v0.5.24.13)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
