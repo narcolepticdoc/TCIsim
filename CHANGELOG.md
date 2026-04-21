@@ -11,6 +11,18 @@
 
 ---
 
+## [0.5.24.15] — 2026-04-21
+
+Phone-portrait layout fixes.
+
+- **Topbar clipping on iPhone portrait.** The phone-portrait rule `.elapsed-timer .ct-start-group { display: none }` was being overridden by a later-in-source base rule `display: inline-flex` — both had identical specificity, so source order won. As a result the "CASE START HH:MM |" segment stayed visible on phones and pushed the gear + New Case buttons off the right edge. Fix: relocate the canonical base rules for `.elapsed-timer`, `.ct-label`, `.ct-value`, `.ct-sep`, `.ct-start-group`, and `.timer-popover` from their original spot (line ~627 in `index.html`) up to the base sim-topbar block (line ~140), before any `@media` blocks. All responsive overrides now win at equal specificity as intended.
+- **Chart axis labels rendering raw floats.** X-axis max read `30.00000000000002` and similar when Chart.js auto-computed the scale. Added a `fmtTick(v)` helper in `js/ui/chart/index.js` wired into `ticks.callback` on the x, y, and yRate axes — snaps to 3 decimals, drops the decimal on integers, one decimal otherwise. `30.0` → `30`, `30.00000000000002` → `30`, `11.1` → `11.1`.
+- **Phone-portrait bottom bar wrap.** Stop Pump was wrapping to a second row at 390–430px viewports. Tightened `.sim-controls` padding (4px 8px → 4px 6px), `.btn-ctrl` (padding 6px 8px → 5px 6px, font 10px → 9.5px, letter-spacing 0) and `.mode-label` (font 10px → 9.5px, padding 2px 6px) so all six controls fit on one row on iPhone.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/chart/index.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.14] — 2026-04-21
 
 Follow-up to v0.5.24.13. Tapping a different field in the patient modal now re-arms the "replace on first keypress" state — matches the user's mental model of tapping to edit. Previous release only set the flag on `open()` and unit conversion, so once a flag was consumed by typing, switching to another field and typing would append instead of replace.

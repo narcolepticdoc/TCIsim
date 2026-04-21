@@ -33,6 +33,17 @@ const BASE_FONTS = {
 };
 
 /**
+ * Format an axis tick value. Chart.js's auto-computed min/max can produce
+ * floating-point noise like 30.00000000000002; snap to 3 decimals and drop
+ * the decimal entirely on integers so ticks read cleanly.
+ */
+function fmtTick(v) {
+  if (!Number.isFinite(v)) return '';
+  const r = Math.round(v * 1000) / 1000;
+  return Number.isInteger(r) ? r.toString() : r.toFixed(1);
+}
+
+/**
  * Create a TCI chart instance.
  *
  * @param {HTMLCanvasElement} canvas - The canvas element to render into
@@ -141,6 +152,7 @@ export function createChart(canvas, config = {}) {
             color: '#6b7280',
             font: { size: 9 },
             maxTicksLimit: 12,
+            callback: fmtTick,
           },
           grid: { color: '#1e293b' },
         },
@@ -152,6 +164,7 @@ export function createChart(canvas, config = {}) {
           ticks: {
             color: '#6b7280',
             font: { size: 9 },
+            callback: fmtTick,
           },
           grid: { color: '#1e293b' },
         },
@@ -162,7 +175,7 @@ export function createChart(canvas, config = {}) {
             title: { display: true, text: 'mg/min', color: COLORS.rate, font: { size: 10 } },
             min: 0,
             grid: { display: false },
-            ticks: { color: COLORS.rate, font: { size: 9 } },
+            ticks: { color: COLORS.rate, font: { size: 9 }, callback: fmtTick },
           },
         } : {}),
       },

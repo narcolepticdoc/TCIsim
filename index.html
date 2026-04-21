@@ -139,6 +139,17 @@
     .topbar-spacer{flex:1}
     .btn-new-case{background:none;border:1px solid #7f1d1d;color:#fca5a5;font-family:var(--font-mono);font-size:10px;padding:3px 9px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;margin-left:8px}
     .btn-new-case:hover{border-color:var(--red);color:var(--text-primary);background:rgba(239,68,68,.1)}
+    /* Case-time button (base rules — media queries below override) */
+    .timer-wrap{position:relative}
+    .elapsed-timer{font-family:var(--font-mono);font-size:16px;font-weight:500;color:var(--text-secondary);letter-spacing:.5px;cursor:pointer;padding:4px 12px;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);background:transparent;display:inline-flex;align-items:baseline;gap:6px;transition:border-color .15s,background .15s}
+    .elapsed-timer:hover{background:var(--bg-hover);border-color:var(--border-focus)}
+    .elapsed-timer .ct-label{color:var(--text-muted);font-size:.78em;letter-spacing:.4px;text-transform:uppercase}
+    .elapsed-timer .ct-value{color:var(--text-primary);font-weight:500;letter-spacing:1px}
+    .elapsed-timer .ct-value-et{color:var(--green)}
+    .elapsed-timer .ct-sep{color:var(--border);margin:0 2px}
+    .elapsed-timer .ct-start-group{display:inline-flex;align-items:baseline;gap:6px}
+    .timer-popover{display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:12px 14px;z-index:100;width:220px;box-shadow:0 8px 24px rgba(0,0,0,.4);flex-direction:column;gap:8px}
+    .timer-popover.open{display:flex}
 
     .sim-main{flex:1;display:flex;overflow:hidden;min-height:0}
 
@@ -525,9 +536,9 @@
       .drug-card .step-bar-countdown{font-size:9px;min-height:9px}
 
       .content-tab{padding:5px 12px;font-size:10px}
-      .sim-controls{padding:4px 8px;gap:3px;flex-wrap:wrap}
-      .btn-ctrl{padding:6px 8px;font-size:10px}
-      .mode-label{font-size:10px}
+      .sim-controls{padding:4px 6px;gap:3px;flex-wrap:wrap}
+      .btn-ctrl{padding:5px 6px;font-size:9.5px;letter-spacing:0}
+      .mode-label{font-size:9.5px;padding:2px 6px}
 
       /* Keypad modal: stack vertically on narrow screens */
       .modal-box{width:96%;padding:14px}
@@ -623,17 +634,6 @@
       body.edit-history-mode .modal-overlay{align-items:flex-start;padding-top:6vh}
     }
 
-    /* Timer wrap & popover */
-    .timer-wrap{position:relative}
-    .elapsed-timer{font-family:var(--font-mono);font-size:16px;font-weight:500;color:var(--text-secondary);letter-spacing:.5px;cursor:pointer;padding:4px 12px;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);background:transparent;display:inline-flex;align-items:baseline;gap:6px;transition:border-color .15s,background .15s}
-    .elapsed-timer:hover{background:var(--bg-hover);border-color:var(--border-focus)}
-    .elapsed-timer .ct-label{color:var(--text-muted);font-size:.78em;letter-spacing:.4px;text-transform:uppercase}
-    .elapsed-timer .ct-value{color:var(--text-primary);font-weight:500;letter-spacing:1px}
-    .elapsed-timer .ct-value-et{color:var(--green)}
-    .elapsed-timer .ct-sep{color:var(--border);margin:0 2px}
-    .elapsed-timer .ct-start-group{display:inline-flex;align-items:baseline;gap:6px}
-    .timer-popover{display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:12px 14px;z-index:100;width:220px;box-shadow:0 8px 24px rgba(0,0,0,.4);flex-direction:column;gap:8px}
-    .timer-popover.open{display:flex}
     .tp-title{font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px}
     .tp-mode-toggle{display:flex;gap:4px;margin-bottom:6px}
     .tp-mode{flex:1;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-display);font-size:10px;font-weight:600;padding:4px 0;cursor:pointer;text-align:center;transition:all .15s}
