@@ -167,7 +167,11 @@ function _wireActions() {
 
 function _setActive(field) {
   if (!FIELDS.includes(field) || field === 'sex') return;
+  if (_active === field) return;            // re-tapping the same field is a no-op
   _active = field;
+  // Tapping a different field with existing data arms "replace on first keypress" —
+  // matches the user's mental model of tapping to edit.
+  if (_values[field]) _prefilled[field] = true;
   document.querySelectorAll('.pm-field').forEach(el =>
     el.classList.toggle('active', el.dataset.field === field));
   // Age is integer-only
