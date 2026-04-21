@@ -11,6 +11,18 @@
 
 ---
 
+## [0.5.24.21] — 2026-04-21
+
+Actually fix the inspect-drag hijack on iPad.
+
+v0.5.24.20's capture-phase listeners on the canvas weren't firing early enough. Root cause: when the event target IS the canvas, DOM event dispatch fires **all** listeners on that element in registration order during the target phase, regardless of each listener's `useCapture` flag. Chart.js's hammerjs listeners were registered first (at chart creation), so they ran before our capture-flagged listener in that registration order — `stopImmediatePropagation` was too late.
+
+Fix: attach the inspect-drag listeners to `canvas.parentElement` (i.e. `.chart-area`) in capture phase. Capture-phase listeners on ancestor elements run during the real capturing phase, **before** the target phase on the canvas — so we beat Chart.js's hammer listeners with time to spare. `touch-action: none` on the canvas (from v0.5.24.20) stays.
+
+**Files changed:** `js/version.js`, `js/ui/chart/gestures.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.20] — 2026-04-21
 
 Two fixes on the draggable inspect handle from v0.5.24.19.
