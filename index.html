@@ -111,7 +111,7 @@
     .drug-panel{width:210px;min-width:170px;flex-shrink:0;display:flex;flex-direction:column;gap:1px;background:var(--border-subtle);border-right:1px solid var(--border-subtle);overflow-y:auto}
     .drug-card{background:var(--bg-card);padding:9px 11px;cursor:pointer;transition:background .15s;display:flex;flex-direction:column;gap:3px;border-left:4px solid var(--drug-color-muted,rgba(59,130,246,.25));position:relative}
     .drug-card:hover{background:var(--bg-hover)}
-    .drug-card.active{background:var(--bg-input);border-left:4px solid var(--drug-color,var(--blue));box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 0 0 1px var(--drug-color-muted,rgba(59,130,246,.3)),0 0 18px -2px var(--drug-color-muted,rgba(59,130,246,.5))}
+    .drug-card.active{background:var(--bg-input);border-left:8px solid var(--drug-color,var(--blue));box-shadow:inset 0 0 0 2px var(--drug-color,var(--blue)),inset 0 0 60px -15px var(--drug-color,var(--blue))}
     .drug-card.disabled{opacity:.3;cursor:default;pointer-events:none}
     /* Drug-type color strips — yellow for hypnotics, blue for narcotics */
     #drug-propofol    {--drug-color:#eab308;--drug-color-muted:rgba(234,179,8,.25)}
@@ -260,7 +260,7 @@
     body.edit-history-mode .history-row{cursor:pointer;background:var(--bg-input);outline:1px solid rgba(245,158,11,.45)}
     body.edit-history-mode .history-row:hover{background:var(--bg-hover);outline-color:var(--amber)}
     /* Selected row — strongly highlighted while the editor is open on that event */
-    .history-row.h-row-selected{background:rgba(245,158,11,.22);outline:2px solid var(--amber);outline-offset:-1px;box-shadow:0 0 14px -2px rgba(245,158,11,.5)}
+    .history-row.h-row-selected{background:rgba(245,158,11,.45);outline:3px solid var(--amber);outline-offset:0;box-shadow:0 0 0 2px rgba(0,0,0,.6),0 0 28px 2px rgba(245,158,11,.6);transform:scale(1.03);z-index:3;position:relative;transition:all .12s ease-out}
     /* Edit mode — dim/blur non-history surface so the panel reads as the active tool */
     body.edit-history-mode .sim-topbar,
     body.edit-history-mode .drug-panel,
