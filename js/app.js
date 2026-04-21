@@ -464,9 +464,12 @@ function boot() {
 
   const btnHistoryTime = $('btn-history-time');
   if (btnHistoryTime) {
+    const etEl = btnHistoryTime.querySelector('.t-et');
+    const rtEl = btnHistoryTime.querySelector('.t-rt');
     btnHistoryTime.addEventListener('click', () => {
       const fmt = history.toggleTimeFormat();
-      btnHistoryTime.textContent = fmt === 'et' ? 'ET' : 'RT';
+      if (etEl) etEl.classList.toggle('active', fmt === 'et');
+      if (rtEl) rtEl.classList.toggle('active', fmt === 'rt');
     });
   }
   const btnHistoryEdit = $('btn-history-edit');

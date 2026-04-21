@@ -11,6 +11,33 @@
 
 ---
 
+## [0.5.24.8] — 2026-04-21
+
+Single-line Case Time display in the topbar.
+
+- Collapsed the two-line `19:26:52 / start 15:15` stack into one bordered button: `CASE START 15:15 | ET 0:00:00` on a single line. Labels muted + uppercase; values crisp monospace (ET in green, Case start in `--text-primary`).
+- `.elapsed-timer` is now a `<button>` with a 1px subtle border + hover state (bg brightens, border darkens) so the click affordance reads at a glance — it had always been clickable but never looked like it.
+- `.timer-wall-hint` element and CSS rules removed throughout. Canonical base `.elapsed-timer` rule at `index.html:104` consolidated into the single rule near the popover definition (was duplicated before).
+- On phone portrait (`orientation:portrait and max-width:500px`) the `Case start HH:MM |` segment hides via `.ct-start-group { display: none }`, leaving just `ET X:XX:XX` to fit the narrow topbar.
+- `timer.js renderDisplay()` now writes to `#elapsed-time-val`; `updateWallHint()` writes to `#case-start-val` (dropping the `start ` prefix — the label is in the markup now). Pre-case renders as `CASE START --:-- | ET 0:00:00`. Click handler at `timer.js:29-30` unchanged (still targets `#elapsed-timer`, now the button).
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/timer.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
+## [0.5.24.7] — 2026-04-21
+
+Clinical-style trim pass on v0.5.24.6:
+
+- **Active drug-tile highlight** — dropped the soft inner halo (`inset 0 0 60px -15px var(--drug-color)`). Now just a 6px `border-left` + crisp `inset 0 0 0 2px var(--drug-color)` frame. Full-color but no glow; reads like a clinical device indicator rather than a consumer app accent.
+- **Selected history row** — dropped the `transform:scale(1.03)`, the dark ring, and the 28px amber halo. Now a subtle amber tint (`rgba(245,158,11,.18)`) with a crisp `inset 0 0 0 2px var(--amber)` border. The `border-left-color:var(--amber)` overrides the event-type color to reinforce the "this is the one you're editing" signal without any animation.
+- **Portrait edit modal position** — when the edit panel opens in the portrait tablet grid layout, the modal now anchors to the top of the viewport (`align-items:flex-start; padding-top:6vh`) so it sits over the chart area instead of covering the history tiles in the bottom-right quadrant. Landscape layout keeps the default centered position (the modal naturally sits over the chart between the drug panel and history panel).
+- **ET/RT button** — replaced the single-letter label with a two-state indicator `[ET / RT]` with the active mode highlighted. The inactive mode stays visible but dimmed, so it reads as a toggle affordance at a glance rather than a generic text button. Minimum button width bumped from 52 → 68px to fit the dual label.
+
+**Files changed:** `js/version.js`, `index.html`, `js/app.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.6] — 2026-04-21
 
 Four fixes from iPad Pro screenshots after v0.5.24.5:

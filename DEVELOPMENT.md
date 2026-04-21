@@ -4,6 +4,38 @@
 
 ## Session History
 
+### Interim — Single-line Case Time display (v0.5.24.8)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+The topbar's case-time display was a two-line stack: `19:26:52` (ET) over a tiny muted `start 15:15`. Awkward vertically, and the whole thing being a clickable popover-trigger was invisible — the muted wall-clock hint didn't read as part of a button.
+
+Collapsed to a single bordered button: `[ CASE START 15:15 | ET 0:00:00 ]`. Two-line → one-line. Labels muted + uppercase for tone; values crisp (ET in `--green`, start in `--text-primary`). 1px subtle border on the button with a hover state (bg brightens, border darkens via `--border-focus`) so the tap affordance is obvious.
+
+- Markup: `.timer-wall-hint` element removed. `.elapsed-timer` is now a `<button>` wrapping `.ct-start-group` (Case start label + value + separator) followed by `ET` label + elapsed value. Outer `id="elapsed-timer"` preserved so `timer.js:29` click-binding still works.
+- CSS: the duplicate base `.elapsed-timer` rule at line 104 was removed; the canonical rule near the popover definition now carries all the button styling. `.timer-wall-hint` rules (base + `@media(max-height:380px)`) deleted.
+- Compact phone portrait (`orientation:portrait and max-width:500px`) hides the `Case start` segment with `.ct-start-group { display: none }`, leaving just `ET X:XX:XX`.
+- `timer.js renderDisplay()` targets `#elapsed-time-val`; `updateWallHint()` targets `#case-start-val`, drops the `start ` prefix (label is in markup now), and falls back to `--:--` when no wall-clock start is set.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/timer.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
+### Interim — Clinical trim on highlights + portrait modal + ET/RT toggle affordance (v0.5.24.7)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+Iterating on v0.5.24.6. The stronger highlights landed in the right direction but were too "consumer app" — halos, scale transforms, soft glows — not appropriate for a clinical device aesthetic. Pared back to crisp borders + subtle tints only. Plus two functional fixes.
+
+1. **Active drug-tile** — removed the soft `inset 0 0 60px -15px` inner halo. Kept the 6px `border-left` and the `inset 0 0 0 2px var(--drug-color)` crisp 2px frame. Reads as a device indicator.
+2. **Selected history row** — dropped `transform:scale(1.03)`, the dark-on-black ring, and the 28px amber halo. Now `background:rgba(245,158,11,.18)` + `inset 0 0 0 2px var(--amber)` + amber `border-left-color`. Still very clear which row is selected; no animation, no glow.
+3. **Portrait edit modal position** — in the portrait tablet grid layout the modal overlay was centering vertically and landing on top of the history panel in the bottom-right quadrant. Added `align-items:flex-start; padding-top:6vh` on `.modal-overlay` scoped to `@media(orientation:portrait) and (min-width:700px)` + `body.edit-history-mode`. The modal now sits in the chart half so the history tile being edited remains visible. Landscape unaffected.
+4. **ET/RT time-format button** — was just "ET" or "RT" with no affordance suggesting it toggles. Replaced with a two-state indicator: `[<active>ET</active> / RT]`. The inactive option stays visible but muted so the toggle affordance reads at a glance. `app.js` click handler toggles the `.active` class on the `.t-et` and `.t-rt` spans instead of overwriting `textContent`.
+
+**Files changed:** `js/version.js`, `index.html`, `js/app.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Stronger highlights + portrait resize fix + click-outside exit (v0.5.24.6)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
