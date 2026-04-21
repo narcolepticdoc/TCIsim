@@ -4,6 +4,26 @@
 
 ## Session History
 
+### Interim — Expand Large type to all sim-screen text (v0.5.24.1)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+0.5.24 shipped a Large type option scoped to drug-panel + history informational text. iPad Mini screenshots revealed three misses worth addressing immediately:
+
+1. **Big Ce readout didn't grow.** It was deliberately excluded to protect the fixed-width Ce row from wrapping — but visual inspection on iPad Mini confirmed the row has headroom. Added modest bumps: `.ce-current` 22 → 25 → 28px, `.ce-current.active` 27 → 30 → 34px.
+2. **Chart text was completely untouched.** Axis ticks (9px), legend (10px), axis titles (10px), BIS band labels (9px), target/exit pills (10px) all stayed tiny no matter what the user chose. This is the centerpiece of the screen — now scales via a new `setFontScale(scale)` controller method that rewrites `chart.options.*.font.size` from canonical `BASE_FONTS` constants and rebuilds annotations. Three canvas-drawing plugins (target-label, readout-panel, annotations' BIS labels) multiply their hardcoded `ctx.font` sizes by `s.fontScale` on each draw.
+3. **`.step-bar-countdown` truncated at XL** — "Rate → 110.0 mcg/kg/min in ..." lost the actionable countdown to ellipsis because the element had `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`. When large-type is on, those rules are overridden with `white-space:normal; text-overflow:clip; min-height:0`, letting the line wrap to two rows instead.
+
+Also bumped the topbar (app-name, patient summary, elapsed timer, New Case, gear) and bottom controls (`.btn-ctrl`, `.mode-label`) — easy wins that were visibly too small at Normal.
+
+**Text-scale ladder (map in `chart-bridge.js`):** `normal → 1.0`, `large → 1.15`, `xl → 1.30`. Propagated to the chart from `onFrame` following the existing opacity pattern, but the change-guard lives inside `chart.setFontScale` itself (early-return on `s.fontScale === k`) instead of in a bridge-level `lastFontScale`. This makes chart recreation on new case self-healing — a fresh chart starts with `fontScale = 1.0` and the next frame's setFontScale call correctly fires because the fresh state doesn't match.
+
+**Specificity gate still holds.** All new CSS sits inside the existing `@media (min-width:601px) and (min-height:421px)` wrapper, so phone-landscape (`max-width:900 and max-height:420`) and small-portrait-phone (`max-width:500`) compact layouts are unaffected.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/chart/index.js`, `js/ui/chart/state.js`, `js/ui/chart/annotations.js`, `js/ui/chart/plugins/target-label.js`, `js/ui/chart/plugins/readout-panel.js`, `js/app/chart-bridge.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Large type option in Appearance settings (v0.5.24)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*

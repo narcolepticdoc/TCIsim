@@ -55,14 +55,18 @@ export function createReadoutPanelPlugin(s) {
       const line2 = parts2.join('  ');
       const line3 = rateStr;
 
+      const k = s.fontScale || 1;
+      const fontPx = Math.round(11 * k);
+      const lineH = Math.round(14 * k);
+
       ctx.save();
-      ctx.font = '11px monospace';
+      ctx.font = `${fontPx}px monospace`;
       const w1 = ctx.measureText(line1).width;
       const w2 = ctx.measureText(line2).width;
       const w3 = line3 ? ctx.measureText(line3).width : 0;
       const panelW = Math.max(w1, w2, w3) + 16;
       const lineCount = line3 ? 3 : 2;
-      const panelH = 6 + lineCount * 14 + 2;
+      const panelH = 6 + lineCount * lineH + 2;
       const px = ca.right - panelW - 4;
       const py = Math.max(ca.top + 4, 52);
 
@@ -75,8 +79,8 @@ export function createReadoutPanelPlugin(s) {
       ctx.textBaseline = 'top';
       ctx.fillText(line1, px + 8, py + 4);
       ctx.fillStyle = '#e2e8f0';
-      ctx.fillText(line2, px + 8, py + 18);
-      if (line3) ctx.fillText(line3, px + 8, py + 32);
+      ctx.fillText(line2, px + 8, py + 4 + lineH);
+      if (line3) ctx.fillText(line3, px + 8, py + 4 + lineH * 2);
       ctx.restore();
     },
   };

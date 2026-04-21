@@ -23,6 +23,15 @@ if (!Chart) {
   console.warn('[TCI Sim] Chart.js not loaded — chart features disabled');
 }
 
+// Base font sizes for Chart.js config — multiplied by s.fontScale
+// when the user picks a "Large type" setting.
+const BASE_FONTS = {
+  xTick: 9, xTitle: 10,
+  yTick: 9, yTitle: 10,
+  yRateTick: 9, yRateTitle: 10,
+  legend: 10,
+};
+
 /**
  * Create a TCI chart instance.
  *
@@ -495,6 +504,25 @@ export function createChart(canvas, config = {}) {
     chart.update('none');
   }
 
+  function setFontScale(scale) {
+    const k = Math.max(0.8, Math.min(2.0, Number(scale) || 1.0));
+    if (s.fontScale === k) return;
+    s.fontScale = k;
+    const opts = chart.options;
+    opts.scales.x.ticks.font.size = Math.round(BASE_FONTS.xTick * k);
+    opts.scales.x.title.font.size = Math.round(BASE_FONTS.xTitle * k);
+    opts.scales.y.ticks.font.size = Math.round(BASE_FONTS.yTick * k);
+    opts.scales.y.title.font.size = Math.round(BASE_FONTS.yTitle * k);
+    if (opts.scales.yRate) {
+      opts.scales.yRate.ticks.font.size = Math.round(BASE_FONTS.yRateTick * k);
+      opts.scales.yRate.title.font.size = Math.round(BASE_FONTS.yRateTitle * k);
+    }
+    opts.plugins.legend.labels.font.size = Math.round(BASE_FONTS.legend * k);
+    // BIS band labels live inside the annotation plugin; rebuild picks up fontScale.
+    opts.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
   return {
     setCurveData,
     setCursorTime,
@@ -519,6 +547,7 @@ export function createChart(canvas, config = {}) {
     setEventAnnotations,
     toggleEventAnnotations,
     setEventMarkerSize,
+    setFontScale,
     destroy,
     get inspectEnabled() { return s.inspectEnabled; },
     get eventAnnotationsEnabled() { return s.eventAnnotationsEnabled; },
