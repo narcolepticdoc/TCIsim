@@ -91,6 +91,26 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
 
   let inspectDragActive = false;
 
+  // Helpers to temporarily disable Chart.js pan while the user is dragging
+  // the handle. Capture-phase listeners alone aren't enough on iPad — hammerjs
+  // pan tracking sometimes survives `stopImmediatePropagation` depending on
+  // the recognizer state. Flipping `pan.enabled` at the source of the gesture
+  // guarantees hammer refuses to pan while the inspect drag owns the touch.
+  function disablePan() {
+    try {
+      if (chart.options.plugins?.zoom?.pan?.enabled !== undefined) {
+        chart.options.plugins.zoom.pan.enabled = false;
+      }
+    } catch (e) { /* ignore */ }
+  }
+  function restorePan() {
+    try {
+      if (chart.options.plugins?.zoom?.pan?.enabled !== undefined) {
+        chart.options.plugins.zoom.pan.enabled = true;
+      }
+    } catch (e) { /* ignore */ }
+  }
+
   function isOnHandle(clientX, clientY) {
     const h = s._inspectHandleHit;
     if (!h) return false;
@@ -117,6 +137,7 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
     const t0 = e.touches[0];
     if (!isOnHandle(t0.clientX, t0.clientY)) return;
     inspectDragActive = true;
+    disablePan();
     const t = xToTime(t0.clientX);
     if (t != null) setInspectTime(t);
     e.preventDefault();
@@ -124,7 +145,7 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
   }
   function handleInspectTouchMove(e) {
     if (!inspectDragActive) return;
-    if (e.touches.length !== 1) { inspectDragActive = false; return; }
+    if (e.touches.length !== 1) { inspectDragActive = false; restorePan(); return; }
     const t = xToTime(e.touches[0].clientX);
     if (t != null) setInspectTime(t);
     e.preventDefault();
@@ -133,6 +154,7 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
   function handleInspectTouchEnd(e) {
     if (!inspectDragActive) return;
     inspectDragActive = false;
+    restorePan();
     // Swallow the terminating touchend so Chart.js doesn't synthesize a click
     // that would re-fire onClick and snap the cursor to the release point.
     e.preventDefault();
@@ -144,6 +166,7 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
     if (e.button !== 0) return;
     if (!isOnHandle(e.clientX, e.clientY)) return;
     inspectDragActive = true;
+    disablePan();
     const t = xToTime(e.clientX);
     if (t != null) setInspectTime(t);
     e.preventDefault();
@@ -154,7 +177,11 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
     const t = xToTime(e.clientX);
     if (t != null) setInspectTime(t);
   }
-  function handleInspectMouseUp() { inspectDragActive = false; }
+  function handleInspectMouseUp() {
+    if (!inspectDragActive) return;
+    inspectDragActive = false;
+    restorePan();
+  }
 
   // Capture phase on the canvas PARENT so our listener fires during the actual
   // ancestor-capture phase — before any target-phase listeners on the canvas

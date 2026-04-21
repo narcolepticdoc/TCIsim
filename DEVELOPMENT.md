@@ -4,6 +4,26 @@
 
 ## Session History
 
+### Interim — Disable Chart.js pan during handle drag (v0.5.24.22)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+v0.5.24.21's fix (capture-phase listener on `canvas.parentElement` + `stopImmediatePropagation`) still allowed Chart.js's pan to hijack the handle drag on iPad. Observed behavior: cursor moves briefly, then pan takes over.
+
+Root cause: hammerjs's pan recognizer has an internal state machine that tracks touches across the whole gesture. Even when my capture-phase listener swallows each event, some aspect of hammer's touch tracking was surviving — likely the recognizer already armed via side channels (PointerEvents vs TouchEvents discrepancy, or a touch listener registered on `document` for drag tracking).
+
+Rather than fighting hammer's internals further, flip `chart.options.plugins.zoom.pan.enabled` at the source: off at `touchstart` / `mousedown` on the handle, back on at `touchend` / `touchcancel` / `mouseup`. Pan plugin checks this flag and refuses to pan while disabled, regardless of recognizer state.
+
+Belt-and-suspenders kept:
+- Capture-phase listener on `canvas.parentElement` with `stopImmediatePropagation` (v0.5.24.21).
+- `touch-action: none` on the canvas (v0.5.24.20).
+
+The flag toggle is the actual fix; the others reduce edge cases around the toggle boundaries.
+
+**Files changed:** `js/version.js`, `js/ui/chart/gestures.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Actually fix inspect-drag hijack (v0.5.24.21)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
