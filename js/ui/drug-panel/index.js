@@ -154,16 +154,16 @@ function update() {
       rateEl.textContent = (caseStarted && rate > 0) ? fmtRateInline(ctx, dId, rate) : '';
     }
 
-    // ── eBIS (propofol-only DOM elements; null for other drugs) ──
-    const bisEl    = ctx.$(dId + '-bis');
-    const bisLabel = ctx.$(dId + '-bis-label');
-    const bisSep   = ctx.$(dId + '-bis-sep');
-    if (bisEl) {
+    // ── eBIS header-row placement (propofol-only; empty hides via :empty CSS rule) ──
+    const bisHeaderEl = ctx.$(dId + '-bis-header');
+    if (bisHeaderEl) {
       const bisVis = bis !== null && caseStarted && t > 0;
-      bisEl.textContent = bisVis ? bis.toFixed(0) : '';
-      bisEl.style.color = bisVis ? bisColor(bis) : '';
-      if (bisLabel) bisLabel.style.display = bisVis ? '' : 'none';
-      if (bisSep)   bisSep.style.display   = bisVis ? '' : 'none';
+      if (bisVis) {
+        bisHeaderEl.textContent = 'eBIS ' + bis.toFixed(0);
+        bisHeaderEl.style.color = bisColor(bis);
+      } else {
+        bisHeaderEl.textContent = '';
+      }
     }
 
     // ── Step bar ──────────────────────────────────────────────────

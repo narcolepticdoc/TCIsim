@@ -35,7 +35,7 @@ const TITLES = {
   rate: 'Set Manual Rate',
   bolus: 'Add Bolus',
   intermittent: 'Set Redose Threshold',
-  exitCe: 'Set Exit Ce',
+  exitCe: 'Set Emergence',
 };
 
 const CONFIRM_LABELS = {
@@ -43,7 +43,7 @@ const CONFIRM_LABELS = {
   rate: { label: 'Set Rate', cls: 'modal-btn-confirm-rate' },
   bolus: { label: 'Pump Bolus', cls: 'modal-btn-confirm-bolus' },
   intermittent: { label: 'Set Threshold', cls: 'modal-btn-confirm-target' },
-  exitCe: { label: 'Set Exit Ce', cls: 'modal-btn-confirm-exit' },
+  exitCe: { label: 'Set Emergence', cls: 'modal-btn-confirm-exit' },
 };
 
 /**
@@ -115,6 +115,8 @@ export function show(type) {
     title = 'Change Ce Target';
   } else if (type === 'intermittent' && getIntermittentThreshold() > 0) {
     title = 'Change Redose Threshold';
+  } else if (type === 'exitCe' && getExitCe() > 0) {
+    title = 'Change Emergence';
   }
   $('keypad-title').textContent = title;
 

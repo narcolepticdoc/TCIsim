@@ -4,6 +4,41 @@
 
 ## Session History
 
+### Interim — Drug-card layout reshuffle + Exit Ce rename (v0.5.24.3)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+XXL iPad Mini screenshots revealed three problems on the propofol drug card:
+
+1. eBIS clipped in the Ce/Cp/eBIS row even after propofol deliberately dropped `μg/mL` units to make space.
+2. Exit Ce banner squeezed against the drug name at top-right (it was absolutely-positioned at top:6px/right:10px).
+3. Inserting eBIS between Ce/Cp and "At Target" would break a load-bearing visual adjacency — Cp 3.45 directly above At Target 3.5 reads as "here's the concentration, here's where it's heading," and eBIS as an unrelated PD-derived value doesn't belong wedged in there.
+
+**Layout changes:**
+
+- eBIS moves to the drug-name row as a new `.drug-bis-header` right-justified element. Container is a flex `.drug-header-row`. `:empty{display:none}` collapses on non-propofol cards and pre-case.
+- Emergence countdown moves to a new location between `.drug-status-row` and `.step-bar-area`, rendered in-flow as a red block element. `.exit-readout` loses its `position:absolute; top:6px; right:10px` rules.
+- Propofol's `.drug-conc-row` restored with a single trailing `μg/mL` unit (shared between Ce and Cp). Fentanyl/ketamine switched to the same shared-unit style for consistency.
+
+**Naming rework** — "Exit Ce" was clinically imprecise (readers had to remember it meant "time for Ce to decay to X if pump is off"). Renamed to Emerge/Emergence throughout user-facing text:
+
+| Location | Before | After |
+|---|---|---|
+| Drug-card readout | `Exit Ce 3.0 in 3:39` | `Emerge → 3.0 in 3:39` |
+| Reached state | `Exit Ce Reached` | `Emergence Reached` |
+| Button (idle / set) | `Set Exit Ce` / `Change Exit Ce` | `Set Emergence` / `Change Emergence` |
+| Keypad modal title + confirm | same as button | same as button |
+
+Verb on the readout (`Emerge →`) parallels the existing `Rate →` predictive line; noun on the button (`Emergence`) parallels `Target`. Internal symbols (`exitCe`, `setExitLine`, `.btn-ctrl-exit`, `.exit-readout`, `#<drug>-exit` id) kept to avoid a multi-file rename churn with no user-facing benefit.
+
+**Large-type bumps added for new selectors** — `.drug-bis-header` 13/15/17/19px, active variant 17/20/23px at Large/XL/XXL; `.exit-readout` 10/12/13/14.5px. Compact media queries (`max-width:900 and max-height:420` for phone-landscape, `orientation:portrait and max-width:500` for phone-portrait) hide the bis-header and let the exit-readout wrap with `white-space:normal` so it never truncates.
+
+**Dynamic keypad title** — added `else if (type === 'exitCe' && getExitCe() > 0)` branch in `js/ui/keypad.js show()` so the modal reads `Change Emergence` when an emergence value is already set, matching the pattern already in use for `ceTarget` and `intermittent`.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/drug-panel/index.js`, `js/ui/drug-panel/exit-readout.js`, `js/ui/mode.js`, `js/ui/keypad.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Add XXL text size + fix label (v0.5.24.2)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*

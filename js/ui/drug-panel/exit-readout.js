@@ -21,7 +21,7 @@ export function updateExitReadout(ctx, drugId, t, Ce, caseStarted) {
 
   // Ce already at or below exit threshold
   if (Ce <= exitCe) {
-    const html = '<span style="color:var(--green)">Exit Ce Reached</span>';
+    const html = '<span style="color:var(--green)">Emergence Reached</span>';
     if (el.innerHTML !== html) el.innerHTML = html;
     return;
   }
@@ -42,7 +42,7 @@ export function updateExitReadout(ctx, drugId, t, Ce, caseStarted) {
     const lbl = ctx.getExitCeLabelForDrug ? ctx.getExitCeLabelForDrug(drugId) : '';
     const numPart = lbl ? parseFloat(lbl.split(' ')[0]).toFixed(1) : '';
     const ceSpan = numPart ? ` <span style="color:var(--cyan)">${numPart}</span>` : '';
-    html = `Exit Ce${ceSpan} in <span class="appr-time">${fmtCountdown(rem)}</span>`;
+    html = `Emerge &rarr;${ceSpan} in <span class="appr-time">${fmtCountdown(rem)}</span>`;
   }
   cache.lastUpdate = now;
   cache.html = html;

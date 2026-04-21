@@ -11,6 +11,33 @@
 
 ---
 
+## [0.5.24.3] — 2026-04-21
+
+Drug-card layout reshuffle and rename `Exit Ce` → `Emerge / Emergence` throughout the UI.
+
+**Layout changes driven by XXL iPad Mini screenshots** where eBIS was clipped, the Exit Ce banner was squeezed against the drug name, and the Cp → At Target narrative was at risk of being interrupted by a new eBIS row.
+
+- **eBIS moves to the drug-name row** as a new right-justified header element (`.drug-bis-header`), color-coded via `bisColor()`. Header-level prominence matches how clinicians scan for depth-of-anesthesia; `:empty { display:none }` collapses the element on non-propofol cards and pre-case.
+- **Emergence line moves to bottom of card** between the status row and the step-bar area, in the existing red color. Preserves the Cp / At Target visual adjacency (they're now vertically next to each other with nothing between them).
+- **Propofol gets units back:** `Ce 3.48 │ Cp 3.45 μg/mL` — single trailing unit (shared between Ce and Cp). Fentanyl/ketamine updated to match the shared-unit style for consistency.
+- **Rename in user-facing text:**
+  - Drug-card readout: `Exit Ce 3.0 in 3:39` → `Emerge → 3.0 in 3:39` (parallels the existing `Rate → …` line).
+  - Reached state: `Exit Ce Reached` → `Emergence Reached`.
+  - Button: `Set Exit Ce` / `Change Exit Ce` → `Set Emergence` / `Change Emergence`.
+  - Keypad modal title + confirm button: `Set Emergence` / `Change Emergence` (dynamic title swap when a value is already set, mirroring the intermittent-threshold flow).
+  - Internal symbols unchanged (`.btn-ctrl-exit`, `.exit-readout`, `setExitLine`, `getExitCeForDrug`, `exitCe` state field) — renaming those would balloon the diff for no user benefit.
+
+**Mechanics:**
+
+- `.exit-readout` dropped from absolutely-positioned top-right floater to an inline block child of `.drug-card`. Line-height bumped slightly so wrapping (when it occurs on compact layouts) reads cleanly.
+- `.drug-header-row` uses `display:flex; justify-content:space-between; align-items:baseline` so drug-name and bis-header align at the baseline regardless of their font sizes.
+- `.drug-bis-header` large-type bumps: Normal 13 → Large 15 → XL 17 → XXL 19; active-card variant 17 → 20 → 23.
+- Compact media queries (`max-width:900 and max-height:420`, phone portrait `max-width:500`) hide the bis-header and fall back to `white-space:normal` on `.exit-readout` so the emerge line wraps rather than overflows on tight screens.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/drug-panel/index.js`, `js/ui/drug-panel/exit-readout.js`, `js/ui/mode.js`, `js/ui/keypad.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.2] — 2026-04-21
 
 Adds a fourth "XXL" option to the Text size segmented control, and renames the Appearance-tab label from "Text size (drug panel & history)" to just "Text size" (accurate now that the scope is global).
