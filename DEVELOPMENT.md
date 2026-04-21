@@ -4,6 +4,21 @@
 
 ## Session History
 
+### Interim — Clinical trim on highlights + portrait modal + ET/RT toggle affordance (v0.5.24.7)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+Iterating on v0.5.24.6. The stronger highlights landed in the right direction but were too "consumer app" — halos, scale transforms, soft glows — not appropriate for a clinical device aesthetic. Pared back to crisp borders + subtle tints only. Plus two functional fixes.
+
+1. **Active drug-tile** — removed the soft `inset 0 0 60px -15px` inner halo. Kept the 6px `border-left` and the `inset 0 0 0 2px var(--drug-color)` crisp 2px frame. Reads as a device indicator.
+2. **Selected history row** — dropped `transform:scale(1.03)`, the dark-on-black ring, and the 28px amber halo. Now `background:rgba(245,158,11,.18)` + `inset 0 0 0 2px var(--amber)` + amber `border-left-color`. Still very clear which row is selected; no animation, no glow.
+3. **Portrait edit modal position** — in the portrait tablet grid layout the modal overlay was centering vertically and landing on top of the history panel in the bottom-right quadrant. Added `align-items:flex-start; padding-top:6vh` on `.modal-overlay` scoped to `@media(orientation:portrait) and (min-width:700px)` + `body.edit-history-mode`. The modal now sits in the chart half so the history tile being edited remains visible. Landscape unaffected.
+4. **ET/RT time-format button** — was just "ET" or "RT" with no affordance suggesting it toggles. Replaced with a two-state indicator: `[<active>ET</active> / RT]`. The inactive option stays visible but muted so the toggle affordance reads at a glance. `app.js` click handler toggles the `.active` class on the `.t-et` and `.t-rt` spans instead of overwriting `textContent`.
+
+**Files changed:** `js/version.js`, `index.html`, `js/app.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Stronger highlights + portrait resize fix + click-outside exit (v0.5.24.6)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*

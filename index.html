@@ -111,7 +111,7 @@
     .drug-panel{width:210px;min-width:170px;flex-shrink:0;display:flex;flex-direction:column;gap:1px;background:var(--border-subtle);border-right:1px solid var(--border-subtle);overflow-y:auto}
     .drug-card{background:var(--bg-card);padding:9px 11px;cursor:pointer;transition:background .15s;display:flex;flex-direction:column;gap:3px;border-left:4px solid var(--drug-color-muted,rgba(59,130,246,.25));position:relative}
     .drug-card:hover{background:var(--bg-hover)}
-    .drug-card.active{background:var(--bg-input);border-left:8px solid var(--drug-color,var(--blue));box-shadow:inset 0 0 0 2px var(--drug-color,var(--blue)),inset 0 0 60px -15px var(--drug-color,var(--blue))}
+    .drug-card.active{background:var(--bg-input);border-left:6px solid var(--drug-color,var(--blue));box-shadow:inset 0 0 0 2px var(--drug-color,var(--blue))}
     .drug-card.disabled{opacity:.3;cursor:default;pointer-events:none}
     /* Drug-type color strips — yellow for hypnotics, blue for narcotics */
     #drug-propofol    {--drug-color:#eab308;--drug-color-muted:rgba(234,179,8,.25)}
@@ -259,8 +259,8 @@
     /* Edit mode — rows become tappable with amber outline */
     body.edit-history-mode .history-row{cursor:pointer;background:var(--bg-input);outline:1px solid rgba(245,158,11,.45)}
     body.edit-history-mode .history-row:hover{background:var(--bg-hover);outline-color:var(--amber)}
-    /* Selected row — strongly highlighted while the editor is open on that event */
-    .history-row.h-row-selected{background:rgba(245,158,11,.45);outline:3px solid var(--amber);outline-offset:0;box-shadow:0 0 0 2px rgba(0,0,0,.6),0 0 28px 2px rgba(245,158,11,.6);transform:scale(1.03);z-index:3;position:relative;transition:all .12s ease-out}
+    /* Selected row — clinical highlight: amber tint + crisp 2px border, no halo or transform */
+    .history-row.h-row-selected{background:rgba(245,158,11,.18);box-shadow:inset 0 0 0 2px var(--amber);border-left-color:var(--amber)}
     /* Edit mode — dim/blur non-history surface so the panel reads as the active tool */
     body.edit-history-mode .sim-topbar,
     body.edit-history-mode .drug-panel,
@@ -272,7 +272,11 @@
     .history-actions{display:flex;gap:6px;padding:6px 12px}
     .history-actions .evt-action-btn{text-align:center;font-size:12px;padding:8px 10px}
     .history-actions .h-action-add{flex:1}
-    .history-actions .h-action-time{flex:0 0 auto;min-width:52px;font-family:var(--font-mono)}
+    .history-actions .h-action-time{flex:0 0 auto;min-width:68px;font-family:var(--font-mono);padding:8px 10px}
+    .history-actions .h-action-time .t-et,
+    .history-actions .h-action-time .t-rt{color:var(--text-muted);transition:color .15s}
+    .history-actions .h-action-time .active{color:var(--text-primary);font-weight:600}
+    .history-actions .h-action-time .t-sep{color:var(--border);margin:0 3px}
     .history-actions .h-action-edit{flex:0 0 auto;min-width:60px}
     .history-actions .h-action-edit.active{background:var(--amber);color:#000;border-color:var(--amber);box-shadow:0 0 0 1px var(--amber)}
     .h-badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;margin-right:5px;vertical-align:middle}
@@ -580,6 +584,8 @@
       #panel-history{display:flex;flex-direction:column;grid-column:2;grid-row:2;border-left:1px solid var(--border-subtle);min-height:0}
       .drug-panel{grid-column:1;grid-row:2;width:auto;min-width:unset;border-right:none;overflow-y:auto}
       #btn-chart-expand{display:none}
+      /* In edit mode: anchor the edit modal to the chart area (top half) so the history tiles below stay visible */
+      body.edit-history-mode .modal-overlay{align-items:flex-start;padding-top:6vh}
     }
 
     /* Timer wrap & popover */
@@ -988,7 +994,7 @@
         <div class="content-view" id="panel-history">
           <div class="history-area"><div class="history-empty" id="history-empty">No events yet.</div><div class="history-list" id="history-list"></div></div>
           <div class="history-actions">
-            <button class="evt-action-btn h-action-time" id="btn-history-time">ET</button>
+            <button class="evt-action-btn h-action-time" id="btn-history-time" title="Toggle time display"><span class="t-et active">ET</span><span class="t-sep">/</span><span class="t-rt">RT</span></button>
             <button class="evt-action-btn h-action-add" id="btn-add-event">+ Add Event</button>
             <button class="evt-action-btn h-action-edit" id="btn-history-edit">Edit</button>
           </div>

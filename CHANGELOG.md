@@ -11,6 +11,19 @@
 
 ---
 
+## [0.5.24.7] — 2026-04-21
+
+Clinical-style trim pass on v0.5.24.6:
+
+- **Active drug-tile highlight** — dropped the soft inner halo (`inset 0 0 60px -15px var(--drug-color)`). Now just a 6px `border-left` + crisp `inset 0 0 0 2px var(--drug-color)` frame. Full-color but no glow; reads like a clinical device indicator rather than a consumer app accent.
+- **Selected history row** — dropped the `transform:scale(1.03)`, the dark ring, and the 28px amber halo. Now a subtle amber tint (`rgba(245,158,11,.18)`) with a crisp `inset 0 0 0 2px var(--amber)` border. The `border-left-color:var(--amber)` overrides the event-type color to reinforce the "this is the one you're editing" signal without any animation.
+- **Portrait edit modal position** — when the edit panel opens in the portrait tablet grid layout, the modal now anchors to the top of the viewport (`align-items:flex-start; padding-top:6vh`) so it sits over the chart area instead of covering the history tiles in the bottom-right quadrant. Landscape layout keeps the default centered position (the modal naturally sits over the chart between the drug panel and history panel).
+- **ET/RT button** — replaced the single-letter label with a two-state indicator `[ET / RT]` with the active mode highlighted. The inactive mode stays visible but dimmed, so it reads as a toggle affordance at a glance rather than a generic text button. Minimum button width bumped from 52 → 68px to fit the dual label.
+
+**Files changed:** `js/version.js`, `index.html`, `js/app.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.6] — 2026-04-21
 
 Four fixes from iPad Pro screenshots after v0.5.24.5:
