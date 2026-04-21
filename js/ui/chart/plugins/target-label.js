@@ -12,15 +12,19 @@ export function createTargetLabelPlugin(s) {
       const ca = ch.chartArea;
       if (!yScl || !ca) return;
 
+      const k = s.fontScale || 1;
+      const fontPx = Math.round(10 * k);
+      const padH = Math.round(5 * k);
+      const padV = Math.round(3 * k);
+
       function drawPillLabel(ctx, value, text, bgColor) {
         const y = yScl.getPixelForValue(value);
         if (y < ca.top || y > ca.bottom) return;
         ctx.save();
-        ctx.font = 'bold 10px sans-serif';
+        ctx.font = `bold ${fontPx}px sans-serif`;
         const tw = ctx.measureText(text).width;
-        const padH = 5, padV = 3;
         const pillW = tw + padH * 2;
-        const pillH = 10 + padV * 2;
+        const pillH = fontPx + padV * 2;
         const r = pillH / 2;
         const x = ca.right - pillW - 2;
         ctx.beginPath();

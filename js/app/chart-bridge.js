@@ -93,6 +93,8 @@ export function createChartBridge({
   let lastEventMarkersKey = '';
   let lastEventMarkerSize = null;
 
+  const TEXT_SCALE = { normal: 1.0, large: 1.15, xl: 1.30 };
+
   function getConfig(drugId) {
     return CHART_DRUG_CONFIG[drugId] || { yScale: 1, yLabel: '\u03bcg/mL', yDefault: 10 };
   }
@@ -296,6 +298,9 @@ export function createChartBridge({
       if (lastEventMarkerSize !== mkSize) {
         lastEventMarkerSize = mkSize;
         chart.setEventMarkerSize(mkSize);
+      }
+      if (typeof chart.setFontScale === 'function') {
+        chart.setFontScale(TEXT_SCALE[s.textSize] ?? 1.0);
       }
     }
     // Check for upcoming events requiring advance warning

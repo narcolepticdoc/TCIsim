@@ -91,7 +91,7 @@ export function buildAnnotations(s) {
         position: { x: 'end', y: 'center' },
         xAdjust: -36,
         color: '#ffffff' + labelAlpha,
-        font: { size: 9 },
+        font: { size: Math.round(9 * (s.fontScale || 1)) },
       } : undefined,
     };
   });

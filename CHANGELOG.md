@@ -11,6 +11,30 @@
 
 ---
 
+## [0.5.24.1] — 2026-04-21
+
+Expands "Large type" from drug-panel + history to every small-text element on the sim screen — based on iPad Mini screenshots showing plenty of unused space and several glaring misses at the previous scope (big Ce readout, chart text, topbar, bottom controls, and a step-bar countdown that was disappearing into ellipsis at XL).
+
+**Added to the large-type CSS block** (`index.html`, already gated behind `@media (min-width:601px) and (min-height:421px)`):
+
+- `.ce-current` and `.ce-current.active` now scale (22 → 25 → 28; active 27 → 30 → 34). These were intentionally excluded in 0.5.24 to protect the fixed-width Ce row from wrapping — bumps are modest and verified to fit on a 210px panel.
+- Topbar: `.app-name`, `.patient-summary`, `.elapsed-timer`, `.btn-new-case`, `.btn-settings` (gear).
+- Bottom controls: `.btn-ctrl` (Change Target / Change Exit Ce / Set Rate / Add Bolus / Stop Pump) and the `.mode-label` pill.
+- `.step-bar-countdown` gets `white-space:normal; text-overflow:clip; min-height:0` when large-type is on, so the rate + countdown line ("Rate → 110.0 mcg/kg/min in 1:12") wraps to two lines instead of truncating to "Rate → 110.0 mcg/kg/min in ...". Actionable info no longer disappears at XL.
+
+**Chart.js text scaling** (doesn't read CSS):
+
+- New `setFontScale(scale)` on the chart controller in `js/ui/chart/index.js`. Stores `s.fontScale` in chart state and rescales `chart.options.scales.{x,y,yRate}.{ticks,title}.font.size`, `chart.options.plugins.legend.labels.font.size`, then rebuilds annotations. Base sizes are held in a `BASE_FONTS` constant so the scale multiplier always applies to the canonical base, not a previously-scaled value. Internal early-return on same-scale keeps it idempotent and self-synces a freshly-created chart after `initSimScreen`.
+- Canvas-drawing plugins now multiply their hardcoded font sizes by `s.fontScale`:
+  - `js/ui/chart/plugins/target-label.js` — target/threshold/SS/exit pill labels (base 10px).
+  - `js/ui/chart/plugins/readout-panel.js` — inspect-mode time/Ce/Cp/eBIS/Rate panel (base 11px, line-height 14px also scales).
+  - `js/ui/chart/annotations.js` — BIS band labels (base 9px) in `buildAnnotations`.
+- `js/app/chart-bridge.js onFrame` pushes the mapped scale (`normal → 1.0`, `large → 1.15`, `xl → 1.30`) into `chart.setFontScale()` every frame. The idempotent guard lives on the chart side so chart recreation (new case) picks up the scale on the first frame without needing a bridge-level reset.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/chart/index.js`, `js/ui/chart/state.js`, `js/ui/chart/annotations.js`, `js/ui/chart/plugins/target-label.js`, `js/ui/chart/plugins/readout-panel.js`, `js/app/chart-bridge.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24] — 2026-04-20
 
 "Large type" option in the Appearance settings tab. Segmented control with three levels — Normal / Large / XL — that bumps drug-panel and history informational text by roughly +15% and +30%. The `.ce-current` and `.cp-current` readouts are deliberately left alone since they are already large, so the Ce row stays on one line.
