@@ -11,6 +11,23 @@
 
 ---
 
+## [0.5.24.19] — 2026-04-21
+
+Draggable inspect cursor with handle.
+
+When the chart is in inspect mode (ⓘ on) and a cursor is set, a small circular handle now appears at the top of the cursor line. Dragging the handle sweeps the cursor across the chart; the readout panel, inspect dots, and cursor annotation all update live. Pan, pinch-zoom, double-tap-recenter, Y-axis drag, and tap-to-set-cursor all continue to work exactly as before — only touches that start inside the handle's 44px hit area trigger drag.
+
+**Implementation:**
+
+- New plugin `js/ui/chart/plugins/inspect-handle.js` — `afterDraw` hook draws a halo + knob + horizontal chevrons at `(cursorX, chartArea.top + 10)` when inspect is on and a cursor is set. Publishes `s._inspectHandleHit = { cx, cy, r: 22 }` so `gestures.js` can hit-test without recomputing pixel positions.
+- `js/ui/chart/gestures.js` — added inspect-drag handlers (touch + mouse). Listeners attached in **capture phase** so they run before Chart.js's internal bubble-phase gesture listeners; `preventDefault()` + `stopPropagation()` on handle-hit touchstart stops Chart.js from interpreting the gesture as pan. Mouse move/up bound on `window` (not canvas) so the drag tracks when the pointer briefly leaves the canvas.
+- `js/ui/chart/index.js` — registered the new plugin between `inspect-dots` and `readout-panel`; `attachGestures()` signature gains `setInspectTime` as a parameter.
+- No change to `pan.enabled` — pan/zoom pass through unaffected for non-handle gestures.
+
+**Files changed:** `js/version.js`, `js/ui/chart/plugins/inspect-handle.js` (new), `js/ui/chart/gestures.js`, `js/ui/chart/index.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.18] — 2026-04-21
 
 More bottom-bar padding on phone portrait. Switched from `calc(6px + env(safe-area-inset-bottom))` to `max(18px, env(safe-area-inset-bottom))` so devices without a home indicator still get 18px of breathing room under the button row, and iPhones with one still get the full OS-reported inset (which is usually more than 18px).

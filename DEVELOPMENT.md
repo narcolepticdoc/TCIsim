@@ -4,6 +4,26 @@
 
 ## Session History
 
+### Interim — Draggable inspect cursor handle (v0.5.24.19)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+Cursor inspection used to be tap-only: to see values at a different time, the user had to tap again. Added a draggable handle on the cursor line so the user can sweep across the curve and watch the readout panel update live.
+
+**Key design choice:** handle-gated, not mode-exclusive. The handle is the only region that captures gesture events for inspect-drag. Pan, pinch-zoom, double-tap-recenter, Y-axis drag, and tap-to-set-cursor all remain intact because touches that miss the handle fall through to Chart.js's default gesture pipeline. No `pan.enabled` toggling, no mode conflicts.
+
+**Handle (`js/ui/chart/plugins/inspect-handle.js`, new):** afterDraw hook. Draws a subtle outer halo + inner knob + horizontal chevrons at `(cursorX, chartArea.top + 10)` when inspect is on and a cursor is set. Publishes `s._inspectHandleHit = { cx, cy, r: 22 }` each frame so `gestures.js` hit-tests without recomputing pixel positions. 44px hit diameter (iOS / Material minimum touch target).
+
+**Gestures (`js/ui/chart/gestures.js`):** added inspect-drag (touch + mouse) with `isOnHandle(clientX, clientY)` hit-test and `xToTime(clientX)` clamping. Bound in **capture phase** on the canvas so our listeners run before Chart.js's internal bubble-phase listeners — `preventDefault() + stopPropagation()` inside the handle region prevents Chart.js from interpreting the gesture as pan, while touches outside the handle skip our handler and pass through normally. Mouse `mousemove` / `mouseup` listeners bound on `window` (not canvas) so the drag tracks when the pointer briefly leaves the canvas — standard web drag-handle pattern.
+
+**Wiring (`js/ui/chart/index.js`):** registered the new plugin between `inspect-dots` and `readout-panel`; `attachGestures(canvas, chart, s, recenter, setInspectTime)` signature gains the last param so the gesture handlers can move the cursor.
+
+**Cleanup:** `detach()` removes all capture-phase listeners and the window-level mouse listeners.
+
+**Files changed:** `js/version.js`, `js/ui/chart/plugins/inspect-handle.js` (new), `js/ui/chart/gestures.js`, `js/ui/chart/index.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Phone bottom-bar tighten + safe-area padding (v0.5.24.17)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*

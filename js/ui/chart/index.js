@@ -14,6 +14,7 @@ import { attachGestures } from './gestures.js';
 import { createTargetLabelPlugin } from './plugins/target-label.js';
 import { createCursorDotsPlugin } from './plugins/cursor-dots.js';
 import { createInspectDotsPlugin } from './plugins/inspect-dots.js';
+import { createInspectHandlePlugin } from './plugins/inspect-handle.js';
 import { createReadoutPanelPlugin } from './plugins/readout-panel.js';
 import { createEventMarkersPlugin } from './plugins/event-markers.js';
 
@@ -274,6 +275,7 @@ export function createChart(canvas, config = {}) {
       createTargetLabelPlugin(s),
       createCursorDotsPlugin(s),
       createInspectDotsPlugin(s),
+      createInspectHandlePlugin(s),
       createReadoutPanelPlugin(s),
       createEventMarkersPlugin(s),
     ],
@@ -473,7 +475,7 @@ export function createChart(canvas, config = {}) {
   }
 
   // Attach gestures (Y-axis drag, double-tap recenter)
-  const detachGestures = attachGestures(canvas, chart, s, recenter);
+  const detachGestures = attachGestures(canvas, chart, s, recenter, setInspectTime);
 
   function destroy() {
     detachGestures();
