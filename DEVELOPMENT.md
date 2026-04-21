@@ -4,6 +4,27 @@
 
 ## Session History
 
+### Interim — Consistent keypad unit-toggle conversion (v0.5.24.16)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+User audit surfaced inconsistent behavior across the app's numeric-keypad modals when toggling units mid-entry. The three surfaces behaved differently:
+
+| Modal | Before | After |
+|---|---|---|
+| `keypad.js` non-bolus (Set Target / Change Emergence / Set Rate / Set Redose Threshold) | Kept buffer literally, re-interpreted as new unit (silently wrong) | Round-trip convert via canonical, `prefilled = true` |
+| `keypad.js` bolus (Add Bolus) | Ignored current buffer, reloaded last saved bolus converted | Convert current buffer if non-empty; fall back to saved-last only on empty buffer |
+| `event-editor.js` (Edit Event) | Cleared buffer on unit change | Round-trip convert via canonical, `_prefilled = true` |
+| `patient-modal.js` (new case) | Already correct per v0.5.24.12 | (unchanged — audit pass) |
+
+Conversion uses the existing `toCanonical(v, prev, drug, task, ctx)` → `fromCanonical(canonical.value, new, drug, task, ctx)` → `formatValue(...)` pipeline from `js/util/units.js`. `ctx.weightKg` pulled from the modal's patient getter (already present in both modules).
+
+`prefilled` is set `true` after conversion so the next keypress replaces rather than appends — matches the "typing should overwrite after switching units" requirement, consistent with how `patient-modal.js` tracks its per-field prefilled flag.
+
+**Files changed:** `js/version.js`, `js/ui/keypad.js`, `js/ui/event-editor.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Phone-portrait layout fixes (v0.5.24.15)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*

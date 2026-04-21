@@ -236,8 +236,10 @@ function handleKey(k) {
 }
 
 function setUnit(u) {
+  const prev = currentUnit;
   currentUnit = u;
   const unitTask = (currentType === 'intermittent' || currentType === 'exitCe') ? 'ceTarget' : currentType;
+  const convTask = (currentType === 'intermittent' || currentType === 'exitCe') ? 'ceTarget' : currentType;
   const prefKey = getPrefKey(currentDrug, unitTask);
   if (prefKey) {
     try { localStorage.setItem(prefKey, u); } catch (e) {}
@@ -246,8 +248,22 @@ function setUnit(u) {
   document.querySelectorAll('#keypad-units button').forEach(btn => {
     btn.classList.toggle('active', btn.textContent === u);
   });
-  // Reload last bolus dose converted to new unit (if switching units in bolus mode)
-  if (currentType === 'bolus') {
+  // Default behavior: convert the current buffer value from the previous unit
+  // to the new unit. Preserves what the user typed (or what was pre-filled) and
+  // re-arms `prefilled` so the next keypress overwrites.
+  const v = parseFloat(buffer);
+  if (!isNaN(v) && prev && prev !== u) {
+    try {
+      const patient = getPatient();
+      const ctx = { weightKg: patient?.weight || 70 };
+      const canonical = toCanonical(v, prev, currentDrug, convTask, ctx);
+      const displayVal = fromCanonical(canonical.value, u, currentDrug, convTask, ctx);
+      buffer = formatValue(displayVal, u);
+      prefilled = true;
+    } catch (e) { /* ignore conversion errors — leave buffer alone */ }
+  } else if (buffer === '' && currentType === 'bolus') {
+    // Nothing typed yet: reload the last saved bolus so the default reflects
+    // recent drug practice in the new unit.
     try {
       const lastMg = localStorage.getItem(`tci_lastBolus_${currentDrug}`);
       if (lastMg) {
@@ -256,9 +272,6 @@ function setUnit(u) {
         const displayVal = fromCanonical(parseFloat(lastMg), u, currentDrug, 'bolus', ctx);
         buffer = formatValue(displayVal, u);
         prefilled = true;
-      } else {
-        buffer = '';
-        prefilled = false;
       }
     } catch (e) {}
   }

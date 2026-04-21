@@ -11,6 +11,24 @@
 
 ---
 
+## [0.5.24.16] — 2026-04-21
+
+Consistent unit-toggle behavior across all keypad modals: **keep the value, convert to the new unit, re-arm prefilled so the next keypress overwrites**.
+
+Previously:
+
+- `js/ui/keypad.js setUnit(u)` (Set Target / Change Emergence / Set Rate / Add Bolus / Set Redose Threshold): kept the buffer literally but re-interpreted it in the new unit (so `3.5 mcg/kg` would silently become `3.5 mg`). The bolus mode did a different thing — reloaded the saved last bolus converted, ignoring what the user was typing.
+- `js/ui/event-editor.js` unit-toggle (Edit Event): **cleared** the buffer entirely on unit change.
+- `js/ui/patient-modal.js` (new case): already converted correctly (v0.5.24.12). Audit confirmed.
+
+Now all three modals round-trip `parseFloat(buffer) → toCanonical(v, prev, drug, task, ctx) → fromCanonical(canonical.value, new, drug, task, ctx) → formatValue(...)` and set the prefilled flag so the next keypress replaces — matching the user's "typing should overwrite after switching units" requirement.
+
+Empty-buffer fallbacks unchanged: `keypad.js` still reloads `tci_lastBolus_{drug}` when the user switches units before typing anything in bolus mode; `event-editor.js` leaves an empty buffer empty.
+
+**Files changed:** `js/version.js`, `js/ui/keypad.js`, `js/ui/event-editor.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.15] — 2026-04-21
 
 Phone-portrait layout fixes.
