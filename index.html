@@ -111,7 +111,7 @@
     .drug-panel{width:210px;min-width:170px;flex-shrink:0;display:flex;flex-direction:column;gap:1px;background:var(--border-subtle);border-right:1px solid var(--border-subtle);overflow-y:auto}
     .drug-card{background:var(--bg-card);padding:9px 11px;cursor:pointer;transition:background .15s;display:flex;flex-direction:column;gap:3px;border-left:4px solid var(--drug-color-muted,rgba(59,130,246,.25));position:relative}
     .drug-card:hover{background:var(--bg-hover)}
-    .drug-card.active{background:var(--bg-input);border-left:4px solid var(--drug-color,var(--blue))}
+    .drug-card.active{background:var(--bg-input);border-left:4px solid var(--drug-color,var(--blue));box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 0 0 1px var(--drug-color-muted,rgba(59,130,246,.3)),0 0 18px -2px var(--drug-color-muted,rgba(59,130,246,.5))}
     .drug-card.disabled{opacity:.3;cursor:default;pointer-events:none}
     /* Drug-type color strips — yellow for hypnotics, blue for narcotics */
     #drug-propofol    {--drug-color:#eab308;--drug-color-muted:rgba(234,179,8,.25)}
@@ -120,8 +120,10 @@
     #drug-remifentanil{--drug-color:#3b82f6;--drug-color-muted:rgba(59,130,246,.25)}
     .drug-card .drug-header-row{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
     .drug-card .drug-name{font-family:var(--font-mono);font-size:13px;font-weight:500;color:var(--text-primary);text-transform:uppercase;letter-spacing:.5px}
-    .drug-card .drug-bis-header{font-family:var(--font-mono);font-size:13px;font-weight:600;line-height:1;white-space:nowrap}
+    .drug-card .drug-bis-header{font-family:var(--font-mono);font-size:13px;font-weight:600;line-height:1;white-space:nowrap;color:var(--text-muted)}
     .drug-card .drug-bis-header:empty{display:none}
+    .drug-card .drug-bis-header .bis-label{font-size:.72em;color:var(--text-muted);font-weight:400;letter-spacing:.5px}
+    .drug-card .drug-bis-header .bis-value{font-weight:600}
     .drug-card .drug-model{font-size:9px;color:var(--text-muted)}
     /* Combined Cp / Ce row */
     .drug-card .drug-conc-row{display:flex;align-items:baseline;gap:3px;margin-top:2px}
@@ -244,20 +246,28 @@
     .history-area{flex:1;overflow-y:auto;padding:8px 12px}
     .history-area .history-empty{text-align:center;color:var(--text-muted);font-size:12px;padding-top:30px}
     .history-list{display:flex;flex-direction:column;gap:2px}
-    .history-row{display:flex;align-items:center;gap:10px;padding:5px 10px;background:var(--bg-card);border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:11px;border-left:3px solid transparent;transition:background .15s,outline-color .15s}
+    .history-row{display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:1px;align-items:baseline;padding:5px 10px;background:var(--bg-card);border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:11px;border-left:3px solid transparent;transition:background .15s,outline-color .15s}
     .history-row.h-evt-bolus{border-left-color:#6d28d9}
     .history-row.h-evt-rate{border-left-color:var(--cyan)}
     .history-row.h-evt-pause{border-left-color:var(--text-muted)}
     .history-row.h-future{opacity:0.45}
     .history-row.h-system{opacity:0.35;font-style:italic;border-left-color:var(--border-subtle)}
-    .history-row .h-time{color:var(--text-secondary);min-width:72px;font-size:10px}
-    .history-row .h-desc{flex:1;color:var(--text-primary);display:flex;flex-direction:column;gap:1px}
-    .history-row .h-type{font-size:10px;color:var(--text-muted);line-height:1.3}
-    .history-row .h-value{line-height:1.3;text-align:center}
+    .history-row .h-time{grid-column:1;grid-row:1;color:var(--text-secondary);font-size:10px;white-space:nowrap}
+    .history-row .h-type{grid-column:2;grid-row:1;font-size:10px;color:var(--text-muted);line-height:1.3}
+    .history-row .h-value{grid-column:1/-1;grid-row:2;line-height:1.3;text-align:center;color:var(--text-primary)}
     .history-row .h-value strong{color:var(--text-primary);font-weight:600}
     /* Edit mode — rows become tappable with amber outline */
     body.edit-history-mode .history-row{cursor:pointer;background:var(--bg-input);outline:1px solid rgba(245,158,11,.45)}
     body.edit-history-mode .history-row:hover{background:var(--bg-hover);outline-color:var(--amber)}
+    /* Selected row — strongly highlighted while the editor is open on that event */
+    .history-row.h-row-selected{background:rgba(245,158,11,.22);outline:2px solid var(--amber);outline-offset:-1px;box-shadow:0 0 14px -2px rgba(245,158,11,.5)}
+    /* Edit mode — dim/blur non-history surface so the panel reads as the active tool */
+    body.edit-history-mode .sim-topbar,
+    body.edit-history-mode .drug-panel,
+    body.edit-history-mode #panel-chart,
+    body.edit-history-mode .sim-controls{filter:blur(2px);opacity:.45;pointer-events:none;transition:filter .2s,opacity .2s}
+    /* Edit mode — strip the modal backdrop's dark/blur so the history panel stays visible behind the editor */
+    body.edit-history-mode .modal-overlay{background:transparent;backdrop-filter:none}
     /* History bottom action bar */
     .history-actions{display:flex;gap:6px;padding:6px 12px}
     .history-actions .evt-action-btn{text-align:center;font-size:12px;padding:8px 10px}
@@ -510,7 +520,7 @@
       .elapsed-timer{font-size:19px}
 
       /* Drug panel */
-      .drug-panel{width:280px}
+      .drug-panel{width:fit-content;min-width:280px;max-width:35vw}
       .drug-card{padding:11px 13px;gap:4px}
       .drug-card .drug-name{font-size:14px}
       .drug-card .ce-current{font-size:26px}
@@ -549,7 +559,7 @@
     @media(min-width:1200px){
       .setup-brand{width:280px}.setup-brand h1{font-size:30px}
       .setup-form{max-width:600px}
-      .drug-panel{width:320px}
+      .drug-panel{min-width:320px}
       .drug-card .drug-name{font-size:15px}
       .drug-card .ce-current{font-size:30px}
       .drug-card.active .drug-name{font-size:20px}
@@ -563,7 +573,7 @@
     /* ==== TABLET PORTRAIT — chart top, drugs + history bottom ==== */
     /* Placed after tablet landscape queries so portrait grid wins on wide iPads */
     @media(orientation:portrait) and (min-width:700px){
-      .sim-main{display:grid;grid-template-columns:280px 1fr;grid-template-rows:1fr 1fr;min-height:0}
+      .sim-main{display:grid;grid-template-columns:minmax(280px,max-content) 1fr;grid-template-rows:1fr 1fr;min-height:0}
       .sim-content{display:contents}
       .content-tabs{display:none}
       #panel-chart{display:flex;flex-direction:column;grid-column:1/-1;grid-row:1;min-height:0}

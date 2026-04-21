@@ -4,6 +4,27 @@
 
 ## Session History
 
+### Interim — Edit mode focus + history grid + drug-tile glow (v0.5.24.5)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+Six related polish items, mostly CSS:
+
+1. **Edit-mode dim/blur** — when `body.edit-history-mode` is active, the rest of the sim (topbar, drug panel, chart, bottom controls) gets `filter:blur(2px); opacity:.45; pointer-events:none`. The modal overlay's normal backdrop is neutralized while in edit mode (`background:transparent; backdrop-filter:none`) so the history panel and selected row stay visible behind the editor.
+2. **Selected-row highlight** — new `.h-row-selected` class (amber outline + halo) applied to the tapped row. Cleared via a `MutationObserver` on the modal's `.open` class — keeps history decoupled from event-editor.
+3. **History row grid** — flattened the `.h-desc` wrapper. `.history-row` is now a 2-column / 2-row grid: `[time | type]` on line 1, `[value centered, spanning both columns]` on line 2. Pause events with no value naturally collapse to single-line.
+4. **eBIS label/value split** — `.drug-bis-header` renders `<span class="bis-label">eBIS</span> <span class="bis-value">37</span>`. Label muted + 0.72em; only the value carries the `bisColor()` color. The number-with-color is the information; the label is just context.
+5. **Active drug-tile glow** — adds `inset 0 1px 0 rgba(255,255,255,.04), 0 0 0 1px var(--drug-color-muted), 0 0 18px -2px var(--drug-color-muted)` box-shadow on `.drug-card.active`. Uses the existing per-card `--drug-color` / `--drug-color-muted` vars (yellow for propofol/ketamine, blue for fentanyl/remifentanil) so the halo color matches the card's identity.
+6. **Dynamic drug-panel width** — replaced fixed `width:280px` / `width:320px` at tablet breakpoints with `width:fit-content; min-width:Xpx; max-width:35vw`. Portrait grid template column became `minmax(280px, max-content) 1fr`. Browser sizes the panel to the widest unwrapped line in any card (typically the drug-model line at XXL), clamped to min/max. No JS — adapts automatically when text-size or content changes.
+
+**Why MutationObserver and not a callback in event-editor:** keeps the dependency arrow pointing the right way. History panel observes a known DOM id (`#modal-evt-editor.open` class change). Event-editor doesn't need to know history exists.
+
+**Why `fit-content` and not JS measurement:** browser-native intrinsic sizing handles all the edge cases (text-size change, content change, orientation change) without manual hooks. The clamps prevent runaway in either direction.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/history.js`, `js/ui/drug-panel/index.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — History UX + layout polish (v0.5.24.4)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*

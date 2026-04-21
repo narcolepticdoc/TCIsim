@@ -155,14 +155,16 @@ function update() {
     }
 
     // ── eBIS header-row placement (propofol-only; empty hides via :empty CSS rule) ──
+    // Label is muted + smaller; value carries the color from bisColor().
     const bisHeaderEl = ctx.$(dId + '-bis-header');
     if (bisHeaderEl) {
       const bisVis = bis !== null && caseStarted && t > 0;
       if (bisVis) {
-        bisHeaderEl.textContent = 'eBIS ' + bis.toFixed(0);
-        bisHeaderEl.style.color = bisColor(bis);
+        bisHeaderEl.innerHTML = `<span class="bis-label">eBIS</span> <span class="bis-value">${bis.toFixed(0)}</span>`;
+        const valEl = bisHeaderEl.querySelector('.bis-value');
+        if (valEl) valEl.style.color = bisColor(bis);
       } else {
-        bisHeaderEl.textContent = '';
+        bisHeaderEl.innerHTML = '';
       }
     }
 

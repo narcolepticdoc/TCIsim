@@ -48,9 +48,31 @@ export function init(opts) {
       const row = e.target.closest('.history-row');
       if (!row || !_onEventTap) return;
       const evtId = row.dataset.evtId;
-      if (evtId) _onEventTap(evtId);
+      if (!evtId) return;
+      // Clear any prior selection, mark this row as the one being edited.
+      list.querySelectorAll('.history-row.h-row-selected').forEach(el => el.classList.remove('h-row-selected'));
+      row.classList.add('h-row-selected');
+      _onEventTap(evtId);
     });
   }
+  _watchEditorModal();
+}
+
+/** Clear the highlighted-row marker. Called when the event editor closes. */
+export function clearSelectedRow() {
+  document.querySelectorAll('.history-row.h-row-selected').forEach(el => el.classList.remove('h-row-selected'));
+}
+
+/**
+ * Watch the event-editor modal so the highlighted row clears when the modal closes.
+ * Decouples history from event-editor — we just observe the known DOM id.
+ */
+function _watchEditorModal() {
+  const modal = document.getElementById('modal-evt-editor');
+  if (!modal || typeof MutationObserver === 'undefined') return;
+  new MutationObserver(() => {
+    if (!modal.classList.contains('open')) clearSelectedRow();
+  }).observe(modal, { attributes: true, attributeFilter: ['class'] });
 }
 
 /** Toggle edit mode on the history panel. Returns the new state (true = on). */
@@ -220,7 +242,7 @@ export function render(drugId) {
     rows.push(
       `<div class="history-row ${tc}${dimClass}${sysClass}" data-evt-id="${evt.id}" data-evt-time="${evt.time}">` +
         `<span class="h-time">${fmtTime(evt.time)}</span>` +
-        `<span class="h-desc">${desc}</span>` +
+        desc +
       `</div>`
     );
   }

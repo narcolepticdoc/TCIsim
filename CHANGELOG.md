@@ -11,6 +11,24 @@
 
 ---
 
+## [0.5.24.5] — 2026-04-21
+
+Six visual / interaction polish items in one release.
+
+**Edit mode dim & focus** — when the user taps the `Edit` button, the rest of the sim (topbar, drug panel, chart, bottom controls) gets `filter:blur(2px); opacity:.45; pointer-events:none` so the history panel reads as the active tool. Tapping a row marks it with `.h-row-selected` (amber outline + halo) and opens the event editor. The modal's normal dark/blur backdrop is neutralized while in edit mode (`background:transparent; backdrop-filter:none`) so the highlighted row stays visible behind the editor. `clearSelectedRow()` fires on modal close via a MutationObserver on the modal's `.open` class — keeps history decoupled from the event-editor module.
+
+**History row → grid layout** — replaced the flex-column `.h-desc` wrapper with a 2-column / 2-row grid on `.history-row`: `[time | type]` on line 1, `[value centered, spanning both columns]` on line 2. Pause events naturally collapse to single-line because the value row has no content.
+
+**eBIS label demoted** — the `.drug-bis-header` now renders as `<span class="bis-label">eBIS</span> <span class="bis-value">37</span>`. Label is `0.72em` and muted-grey; only the numeric value carries the BIS-band color (`bisColor()` applied to `.bis-value` via inline style). The number-with-color is what conveys depth-of-anesthesia at a glance; the "eBIS" label is just context.
+
+**Active drug-tile glow** — the active card gains a colored halo using the existing `--drug-color` / `--drug-color-muted` per-card variables: `box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 0 0 1px var(--drug-color-muted), 0 0 18px -2px var(--drug-color-muted)`. Combined with the existing border-left and `::before` triangle, the active tile is hard to miss without dimming the inactive tiles.
+
+**Dynamic drug-panel width** — replaced fixed `width:280px` / `width:320px` at tablet breakpoints with `width:fit-content; min-width:Xpx; max-width:35vw`. Browser sizes the panel to the widest unwrapped line in any card (typically the drug-model line at XXL), clamped to `min` and `max`. Portrait grid template column now `minmax(280px, max-content) 1fr`. No JS needed — adapts automatically when text-size or content changes.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/history.js`, `js/ui/drug-panel/index.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.4] — 2026-04-21
 
 History UX + layout polish.
