@@ -537,9 +537,9 @@
 
       .content-tab{padding:5px 12px;font-size:10px}
       /* iPhone portrait bottom bar — tight enough for all 6 controls on one
-         row, plus env(safe-area-inset-bottom) so the bottom row sits above
-         the iPhone home-indicator curve. */
-      .sim-controls{padding:4px 5px calc(6px + env(safe-area-inset-bottom, 0px));gap:2px;flex-wrap:wrap}
+         row, plus max(safe-area-inset-bottom, 18px) so the bottom row sits
+         comfortably above the iPhone home-indicator curve. */
+      .sim-controls{padding:6px 5px max(18px, env(safe-area-inset-bottom));gap:2px;flex-wrap:wrap}
       .btn-ctrl{padding:5px 5px;font-size:9px;letter-spacing:0;min-width:0}
       .mode-label{font-size:9px;padding:2px 5px;letter-spacing:0}
 
