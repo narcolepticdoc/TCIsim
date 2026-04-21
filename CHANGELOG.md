@@ -11,6 +11,34 @@
 
 ---
 
+## [0.5.24.4] — 2026-04-21
+
+History UX + layout polish.
+
+**History** — removed the illegible pencil column and the hidden tap-on-time-cell gesture, replaced with explicit bottom-bar buttons:
+
+```
+[ ET ]  [ + Add Event ]  [ Edit ]
+```
+
+- `ET` flips to `RT` on tap (wall-clock mode); no longer hides behind a timestamp tap.
+- `Edit` toggles a panel-wide `body.edit-history-mode` — while on, every history row gets an amber outline + pointer cursor and becomes tappable (opens the event editor). The button itself gains an amber `.active` state to mirror the other mode toggles.
+- Row markup simplified: `[time] | [type] / [value centered]`. Dropped the pump-bolus and IV-push duration detail (troubleshooting cruft), the `.h-detail` span, and the `.h-edit-btn` pencil entirely. Row padding tightened from 7px to 5px vertical.
+
+**Drug panel widths** bumped on tablet breakpoints to give the cards more horizontal room — the Ce/Cp row no longer clips `μg/mL` at XXL:
+
+- `@media (min-width:1020px)`: 250px → 280px.
+- `@media (min-width:1200px)`: 285px → 320px.
+- Portrait tablet grid column (`@media (orientation:portrait) and (min-width:700px)`): 250px → 280px.
+
+**Portrait dynamic row sizing** — new module `js/app/portrait-layout.js` measures the drug panel's `scrollHeight` and sets `grid-template-rows: 1fr <measured>px` on `.sim-main`, so the chart takes all slack when drug cards are compact. ResizeObserver on the drug panel + `matchMedia` gating so the dynamic sizing only applies in the portrait-tablet layout; on phones/landscape the `.sim-main` inline style is cleared and the base CSS template takes over. Capped at 50% of window height so a pathologically tall drug panel never starves the chart.
+
+Re-synced on text-size change via `applyTextSize()` in `js/app/settings-ui.js`.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/history.js`, `js/app.js`, `js/app/settings-ui.js`, `js/app/portrait-layout.js` (new), `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.3] — 2026-04-21
 
 Drug-card layout reshuffle and rename `Exit Ce` → `Emerge / Emergence` throughout the UI.
