@@ -26,6 +26,7 @@ import * as settings from './ui/settings.js';
 import { initSettingsUI } from './app/settings-ui.js';
 import { createTciModal } from './app/tci-modal.js';
 import { createSession } from './app/session.js';
+import { initPortraitLayout } from './app/portrait-layout.js';
 import { createChartBridge } from './app/chart-bridge.js';
 
 const $ = id => document.getElementById(id);
@@ -455,6 +456,23 @@ function boot() {
     getWallClockStart: () => timer.getWallClockStart(),
     onEventTap: (evtId) => eventEditor.openEdit(evtId),
   });
+
+  const btnHistoryTime = $('btn-history-time');
+  if (btnHistoryTime) {
+    btnHistoryTime.addEventListener('click', () => {
+      const fmt = history.toggleTimeFormat();
+      btnHistoryTime.textContent = fmt === 'et' ? 'ET' : 'RT';
+    });
+  }
+  const btnHistoryEdit = $('btn-history-edit');
+  if (btnHistoryEdit) {
+    btnHistoryEdit.addEventListener('click', () => {
+      const on = history.toggleEditMode();
+      btnHistoryEdit.classList.toggle('active', on);
+    });
+  }
+
+  initPortraitLayout();
 
   eventEditor.init({
     model,

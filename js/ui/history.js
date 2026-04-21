@@ -10,7 +10,7 @@
  * and future (after current time, dimmed).
  */
 
-import { DRUG_DEFS, bolusDeliveryMinutes, pushDeliveryMinutes } from '../util/constants.js';
+import { DRUG_DEFS } from '../util/constants.js';
 import { fromCanonical, getPrefKey, getDefaultUnit, formatValue }
   from '../util/units.js';
 
@@ -40,25 +40,29 @@ export function init(opts) {
   _onEventTap = opts.onEventTap || null;
   _getWallClockStart = opts.getWallClockStart || null;
 
-  // Delegate click on edit buttons in history list
+  // Delegate click: in edit mode, any row click opens the event editor.
   const list = $('history-list');
   if (list) {
     list.addEventListener('click', (e) => {
-      // Edit button
-      const btn = e.target.closest('.h-edit-btn');
-      if (btn && _onEventTap) {
-        const evtId = btn.dataset.editId;
-        if (evtId) _onEventTap(evtId);
-        return;
-      }
-      // Timestamp click — toggle ET/RT
-      const timeEl = e.target.closest('.h-time');
-      if (timeEl) {
-        _timeFormat = _timeFormat === 'et' ? 'rt' : 'et';
-        render(_selectedDrug);
-      }
+      if (!document.body.classList.contains('edit-history-mode')) return;
+      const row = e.target.closest('.history-row');
+      if (!row || !_onEventTap) return;
+      const evtId = row.dataset.evtId;
+      if (evtId) _onEventTap(evtId);
     });
   }
+}
+
+/** Toggle edit mode on the history panel. Returns the new state (true = on). */
+export function toggleEditMode() {
+  return document.body.classList.toggle('edit-history-mode');
+}
+
+/** Toggle the time-format display between elapsed (ET) and real-time (RT). */
+export function toggleTimeFormat() {
+  _timeFormat = _timeFormat === 'et' ? 'rt' : 'et';
+  render(_selectedDrug);
+  return _timeFormat;
 }
 
 /**
@@ -141,17 +145,6 @@ function fmtBolusDose(mg, drugId) {
   }
 }
 
-function fmtBolusDelivery(evt) {
-  if (evt.deliveryMode === 'push') {
-    const durMin = pushDeliveryMinutes(evt.value, evt.drug);
-    return durMin < 1
-      ? Math.round(durMin * 60) + ' sec push'
-      : durMin.toFixed(1) + ' min push';
-  }
-  const durMin = bolusDeliveryMinutes(evt.value, evt.drug);
-  return durMin < 1 ? Math.round(durMin * 60) + ' sec' : durMin.toFixed(1) + ' min';
-}
-
 // ---- Source badge ----
 
 function sourceBadge(source) {
@@ -207,10 +200,9 @@ export function render(drugId) {
     let desc = '';
     if (evt.type === 'bolus') {
       const dose = fmtBolusDose(evt.value, evt.drug);
-      const delivery = fmtBolusDelivery(evt);
       const modeLabel = evt.deliveryMode === 'push' ? 'IV Push' : 'Pump Bolus';
       desc = `<span class="h-type">${badge}${modeLabel}</span>` +
-             `<span class="h-value"><strong>${dose}</strong> <span class="h-detail">${delivery}</span></span>`;
+             `<span class="h-value"><strong>${dose}</strong></span>`;
     } else if (evt.type === 'rate') {
       if (evt.value === 0 && evt.source === 'tci') {
         // TCI-scheduled pause (pump holds until next TCI step)
@@ -225,13 +217,10 @@ export function render(drugId) {
       desc = `<span class="h-type">${badge}Pump Stopped</span>`;
     }
 
-    const editBtn = `<button class="h-edit-btn" data-edit-id="${evt.id}" title="Edit">✎</button>`;
-
     rows.push(
       `<div class="history-row ${tc}${dimClass}${sysClass}" data-evt-id="${evt.id}" data-evt-time="${evt.time}">` +
         `<span class="h-time">${fmtTime(evt.time)}</span>` +
         `<span class="h-desc">${desc}</span>` +
-        editBtn +
       `</div>`
     );
   }

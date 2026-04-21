@@ -6,6 +6,8 @@
  * for the settings modal.
  */
 
+import { syncPortraitLayout } from './portrait-layout.js';
+
 const $ = id => document.getElementById(id);
 
 // Plateau slope tolerance — continuous range 0.05–0.20 %/min.
@@ -34,6 +36,8 @@ function applyTextSize(size) {
   if (size === 'large') cls.add('text-lg');
   else if (size === 'xl') cls.add('text-xl');
   else if (size === 'xxl') cls.add('text-xxl');
+  // Drug-card height may have changed — re-sync the portrait grid rows.
+  try { syncPortraitLayout(); } catch (e) { /* module may not have been init'd yet */ }
 }
 
 /**

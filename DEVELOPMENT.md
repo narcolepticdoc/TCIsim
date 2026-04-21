@@ -4,6 +4,30 @@
 
 ## Session History
 
+### Interim — History UX + layout polish (v0.5.24.4)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+Follow-up to the drug-card reshuffle — the iPad Mini screenshots revealed that the history panel was visually cluttered and used vertical space poorly, the drug panel at XXL was still clipping the Ce/Cp unit, and the portrait tablet layout was splitting vertical space 50/50 regardless of how much room the drug cards actually needed.
+
+**History refactor:**
+
+- Bottom action bar is now three buttons: `[ET]` `[+ Add Event]` `[Edit]`. The time-format toggle and the edit affordance are no longer hidden gestures.
+- Tapping `Edit` toggles `body.edit-history-mode`. While on, rows get an amber outline + pointer cursor and clicking a row calls the existing `onEventTap` hook (opens the event editor for that event — same flow the pencil icon used). The button gains an `.active` amber fill, mirroring the `.btn-ctrl-target.active-mode` pattern already used elsewhere.
+- Tapping `ET` / `RT` flips the time-format and re-renders. No longer fires when tapping the timestamp cell — the old tap-on-time handler is gone.
+- Row markup: `[time] | [type] / [value centered]`. Dropped the pencil `.h-edit-btn`, the `.h-detail` duration span ("29 sec" / "2.5 min push"), and the `fmtBolusDelivery` formatter entirely. The imports for `bolusDeliveryMinutes` and `pushDeliveryMinutes` were dropped from `js/ui/history.js`.
+- CSS: row padding 7px → 5px vertical; `.h-value` text-align:center; dead `.h-detail` selectors pruned from the text-lg/xl/xxl blocks.
+
+**Drug panel widths:** `@media (min-width:1020px)` drug-panel 250px → 280px; `@media (min-width:1200px)` 285px → 320px; portrait grid column 250px → 280px. Addresses the XXL `μg/mL` clip on the Ce/Cp row without any changes to the text-size ladder.
+
+**Portrait dynamic row sizing** — new module `js/app/portrait-layout.js` using `ResizeObserver` on the drug panel + `matchMedia('(orientation:portrait) and (min-width:700px)')` to gate the behavior to the portrait-tablet layout. Computes `min(drugPanel.scrollHeight + 4, 50% of window height)` and applies it as inline `grid-template-rows: 1fr <measured>px` on `.sim-main`. Re-synced from `applyTextSize()` in `settings-ui.js` so the layout updates immediately when the user changes Text size. Inline style is cleared when the media query doesn't match, so phones/landscape fall back to the base CSS template.
+
+**Why ResizeObserver and not a setTimeout:** browser-native change detection. Fires whenever anything affects the panel's rendered size (event added/removed, text size changed, card expanded via `.active`, drug-model detail wrap/unwrap at smaller widths).
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/history.js`, `js/app.js`, `js/app/settings-ui.js`, `js/app/portrait-layout.js` (new), `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Drug-card layout reshuffle + Exit Ce rename (v0.5.24.3)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
