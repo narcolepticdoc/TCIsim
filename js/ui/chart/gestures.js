@@ -1,14 +1,16 @@
 /**
  * gestures.js — Touch/mouse gesture handlers for the chart canvas.
  *
- * Handles Y-axis finger drag, double-tap recenter, and multi-touch guards.
- * Returns a detach() function for cleanup.
+ * Handles Y-axis finger drag, double-tap recenter, inspect-cursor handle
+ * drag, and multi-touch guards. Returns a detach() function for cleanup.
  */
 
-export function attachGestures(canvas, chart, s, recenter) {
+export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
   let yDragActive = false;
   let yDragStartY = 0;
   let yDragStartMax = 0;
+
+  // ── Y-axis drag (left 20px edge) ─────────────────────────────────────────
 
   function handleYTouchStart(e) {
     if (e.touches.length !== 1) return;
@@ -51,7 +53,8 @@ export function attachGestures(canvas, chart, s, recenter) {
   canvas.addEventListener('touchmove', handleYTouchMove, { passive: false });
   canvas.addEventListener('touchend', handleYTouchEnd);
 
-  // Double-tap / double-click recenter
+  // ── Double-tap / double-click recenter ──────────────────────────────────
+
   let lastTap = 0;
   let wasMultiTouch = false;
 
@@ -80,10 +83,94 @@ export function attachGestures(canvas, chart, s, recenter) {
 
   canvas.addEventListener('touchend', handleTouchEnd);
 
+  // ── Inspect-cursor handle drag ──────────────────────────────────────────
+  // Only fires when the touch / click starts inside the handle's hit region
+  // (published on `s._inspectHandleHit` by the inspectHandle plugin). Uses
+  // capture phase so Chart.js's internal gesture listeners never see the
+  // event and pan / zoom on the rest of the chart stay intact.
+
+  let inspectDragActive = false;
+
+  function isOnHandle(clientX, clientY) {
+    const h = s._inspectHandleHit;
+    if (!h) return false;
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const dx = x - h.cx, dy = y - h.cy;
+    return (dx * dx + dy * dy) <= h.r * h.r;
+  }
+
+  function xToTime(clientX) {
+    const xScl = chart.scales.x;
+    const ca = chart.chartArea;
+    if (!xScl || !ca) return null;
+    const rect = canvas.getBoundingClientRect();
+    const raw = clientX - rect.left;
+    const clamped = Math.max(ca.left, Math.min(ca.right, raw));
+    const t = xScl.getValueForPixel(clamped);
+    return Number.isFinite(t) && t >= 0 ? t : null;
+  }
+
+  function handleInspectTouchStart(e) {
+    if (!setInspectTime) return;
+    if (e.touches.length !== 1) return;
+    const t0 = e.touches[0];
+    if (!isOnHandle(t0.clientX, t0.clientY)) return;
+    inspectDragActive = true;
+    const t = xToTime(t0.clientX);
+    if (t != null) setInspectTime(t);
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  function handleInspectTouchMove(e) {
+    if (!inspectDragActive || e.touches.length !== 1) return;
+    const t = xToTime(e.touches[0].clientX);
+    if (t != null) setInspectTime(t);
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  function handleInspectTouchEnd() { inspectDragActive = false; }
+
+  function handleInspectMouseDown(e) {
+    if (!setInspectTime) return;
+    if (e.button !== 0) return;
+    if (!isOnHandle(e.clientX, e.clientY)) return;
+    inspectDragActive = true;
+    const t = xToTime(e.clientX);
+    if (t != null) setInspectTime(t);
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  function handleInspectMouseMove(e) {
+    if (!inspectDragActive) return;
+    const t = xToTime(e.clientX);
+    if (t != null) setInspectTime(t);
+  }
+  function handleInspectMouseUp() { inspectDragActive = false; }
+
+  // Capture phase so we beat Chart.js's own listeners and preventDefault sticks.
+  canvas.addEventListener('touchstart', handleInspectTouchStart, { passive: false, capture: true });
+  canvas.addEventListener('touchmove',  handleInspectTouchMove,  { passive: false, capture: true });
+  canvas.addEventListener('touchend',   handleInspectTouchEnd,   { capture: true });
+  canvas.addEventListener('touchcancel', handleInspectTouchEnd,  { capture: true });
+  canvas.addEventListener('mousedown',  handleInspectMouseDown,  { capture: true });
+  // Mouse move/up bind on window so the drag tracks when the pointer
+  // briefly leaves the canvas (normal web drag-handle pattern).
+  window.addEventListener('mousemove', handleInspectMouseMove);
+  window.addEventListener('mouseup',   handleInspectMouseUp);
+
   return function detach() {
     canvas.removeEventListener('touchstart', handleYTouchStart);
     canvas.removeEventListener('touchmove', handleYTouchMove);
     canvas.removeEventListener('touchend', handleYTouchEnd);
     canvas.removeEventListener('touchend', handleTouchEnd);
+    canvas.removeEventListener('touchstart', handleInspectTouchStart, { capture: true });
+    canvas.removeEventListener('touchmove',  handleInspectTouchMove,  { capture: true });
+    canvas.removeEventListener('touchend',   handleInspectTouchEnd,   { capture: true });
+    canvas.removeEventListener('touchcancel', handleInspectTouchEnd,  { capture: true });
+    canvas.removeEventListener('mousedown',  handleInspectMouseDown,  { capture: true });
+    window.removeEventListener('mousemove', handleInspectMouseMove);
+    window.removeEventListener('mouseup',   handleInspectMouseUp);
   };
 }
