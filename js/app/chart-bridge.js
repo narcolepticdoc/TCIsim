@@ -87,11 +87,13 @@ export function createChartBridge({
   let lastHistoryDimUpdate = 0;
   let lastSsCe = null;
   let lastPlateauRegion = null;
-  let lastCpOpacity = null;
-  let lastNomogramOpacity = null;
-  let lastOverlayOpacity = null;
   let lastEventMarkersKey = '';
-  let lastEventMarkerSize = null;
+
+  // Opacity / marker-size / font-scale setters are idempotent inside the chart
+  // (early-return when the value matches) so we can call them every frame without
+  // a bridge-level cache. Crucially, this makes chart recreation (new case) self-
+  // heal: the fresh chart's state defaults differ from the user's settings, so the
+  // first frame's push takes effect.
 
   const TEXT_SCALE = { normal: 1.0, large: 1.15, xl: 1.30, xxl: 1.45 };
 
@@ -276,29 +278,13 @@ export function createChartBridge({
         chart.setEventAnnotations([]);
       }
     }
-    // Appearance settings — only update chart when values change
+    // Appearance settings — setters are idempotent; safe to call every frame.
     if (chart) {
       const s = settings.getSettings();
-      const cpOp = s.cpOpacity ?? 1.0;
-      if (lastCpOpacity !== cpOp) {
-        lastCpOpacity = cpOp;
-        chart.setCpOpacity(cpOp);
-      }
-      const nomOp = s.nomogramOpacity ?? 1.0;
-      if (lastNomogramOpacity !== nomOp) {
-        lastNomogramOpacity = nomOp;
-        chart.setNomogramOpacity(nomOp);
-      }
-      const ovOp = s.overlayOpacity ?? 1.0;
-      if (lastOverlayOpacity !== ovOp) {
-        lastOverlayOpacity = ovOp;
-        chart.setOverlayOpacity(ovOp);
-      }
-      const mkSize = s.eventMarkerSize ?? 7;
-      if (lastEventMarkerSize !== mkSize) {
-        lastEventMarkerSize = mkSize;
-        chart.setEventMarkerSize(mkSize);
-      }
+      chart.setCpOpacity(s.cpOpacity ?? 1.0);
+      chart.setNomogramOpacity(s.nomogramOpacity ?? 1.0);
+      chart.setOverlayOpacity(s.overlayOpacity ?? 1.0);
+      chart.setEventMarkerSize(s.eventMarkerSize ?? 7);
       if (typeof chart.setFontScale === 'function') {
         chart.setFontScale(TEXT_SCALE[s.textSize] ?? 1.0);
       }

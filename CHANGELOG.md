@@ -11,6 +11,40 @@
 
 ---
 
+## [0.5.24.10] — 2026-04-21
+
+**Bugfix — chart settings not re-applied on new case.** Reported as "Cp line dimming not respected on case startup"; confirmed systemic.
+
+`js/app/chart-bridge.js onFrame()` used closure-level `last*` guards (`lastCpOpacity`, `lastNomogramOpacity`, `lastOverlayOpacity`, `lastEventMarkerSize`) to avoid re-pushing unchanged values each frame. Those guards survived chart destruction in `initSimScreen()`: when a new case started, the fresh chart defaulted to `cpOpacity=1.0`, but the bridge still remembered `lastCpOpacity=0.5` from the previous case, so the value-change check fired false and the setter was never invoked — new chart stayed at full opacity. Same pattern applied to the BIS-nomogram, overlay, and event-marker-size settings.
+
+Fix: moved the idempotent guard into each chart setter (early-return if the incoming value matches chart state), mirroring the pattern already in place for `setFontScale`. Bridge now calls the setters every frame; they no-op when nothing changes, and fire correctly the first frame after a chart recreate because the fresh chart's defaults differ from the user's saved settings. No bridge-level reset needed.
+
+Setters now idempotent: `setCpOpacity`, `setNomogramOpacity`, `setOverlayOpacity`, `setEventMarkerSize` (`setFontScale` already was). New `cpOpacity` field added to chart state to back the guard.
+
+**Files changed:** `js/version.js`, `js/ui/chart/state.js`, `js/ui/chart/index.js`, `js/app/chart-bridge.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
+## [0.5.24.9] — 2026-04-21
+
+Tightened the New Case (setup) screen on three fronts:
+
+- **Numeric keyboard always.** Age / height / weight inputs changed from `type="number"` to `type="text"` with `inputmode="numeric"` (age) and `inputmode="decimal"` (height, weight) plus `pattern` attributes. iPadOS Safari shows a pure numeric keypad instead of the full alphanumeric keyboard it sometimes falls back to with `type="number"`. Validation is JS-side via `parseFloat` / `parseInt` — no behavior change.
+- **Default numbers clearly dim.** Placeholders (`35` / `170` / `70`) previously rendered at near-full contrast, making them look like real entries. Added `.form-row input::placeholder { color: var(--text-muted); opacity: .45 }` so they read as hints.
+- **Less dead space, buttons no longer fall off the bottom.**
+  - `.setup-form` padding 14→10px vertical, gap 10→6px.
+  - `.input-grid` gap 8 14 → 6 12.
+  - Inputs: padding 7 10 → 6 10; font-size 15 → 14.
+  - `.error-msg` + `.metric-preview` `min-height:13/15 → 0`, `:empty{display:none}` — no reserved space when there's nothing to show.
+  - `.model-info` padding 6 9 → 5 9, margin-bottom 8 → 4.
+  - `.pump-settings` padding-top 10 → 6; card-title margin-bottom 6 → 4.
+  - `.rounding-note` padding-top 4 → 2; margin-top 4 → 2; `:empty{display:none}`.
+  - Responsive rule at `@media(min-width:1020px)` bumped from `16px / 8px 11px` → `15px / 7px 11px` for consistency.
+
+**Files changed:** `js/version.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.8] — 2026-04-21
 
 Single-line Case Time display in the topbar.

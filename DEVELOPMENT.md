@@ -4,6 +4,38 @@
 
 ## Session History
 
+### Interim — Fix chart-setting re-apply on new case (v0.5.24.10)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+User reported that the Cp-line dimming setting wasn't respected at case startup. Investigation confirmed a systemic bug: four chart settings (`cpOpacity`, `nomogramOpacity`, `overlayOpacity`, `eventMarkerSize`) suffered the same issue.
+
+**Root cause:** `js/app/chart-bridge.js onFrame()` had closure-level `last*` cache variables that survived chart destruction. `initSimScreen()` in `js/app.js` destroys and recreates the chart on New Case, but the bridge closure keeps its cached values. New chart → default state (e.g. `cpOpacity = 1.0`); bridge still holds `lastCpOpacity = 0.5` from the old chart; equality check fails, setter never fires on the fresh chart.
+
+**Why `setFontScale` was fine:** it already had its own idempotent guard (`if (s.fontScale === k) return`) inside the setter. Bridge called it unconditionally, and the chart-side guard handled dedup. Chart recreate → fresh `s.fontScale = 1.0`; bridge pushes `1.30`; setter sees mismatch, applies. Self-healing.
+
+**Fix:** applied the same pattern to the four other setters. Each now clamps the input, compares against chart state (`s.cpOpacity`, `s.nomogramOpacity`, `s.overlayAlpha`, `s.eventMarkerSize`), and early-returns if unchanged. Dropped the bridge-level `last*` caches for these four; `onFrame` now calls the setters unconditionally every frame. State-derived guards (`lastSsCe`, `lastPlateauRegion`, `lastEventMarkersKey`) left alone — those track computed state, not settings, and their job is to avoid work in the non-change case, not to mirror settings across chart recreates.
+
+Added `cpOpacity` field to `js/ui/chart/state.js` to back the new guard; the other three setters already had state-tracking fields, just needed the comparison added.
+
+**Files changed:** `js/version.js`, `js/ui/chart/state.js`, `js/ui/chart/index.js`, `js/app/chart-bridge.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
+### Interim — Setup screen tightening (v0.5.24.9)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+New Case setup screen polish. Three asks from iPad screenshots:
+
+1. **Numeric keyboard on iPad always.** `type="number"` on iPadOS Safari can still pop the full alphanumeric keyboard with a numeric row on top, which is what the user was seeing. Switched age / height / weight to `type="text"` with `inputmode="numeric"` (age) and `inputmode="decimal"` (height / weight), plus matching `pattern` attributes. iPad now shows the pure numeric keypad. All validation is JS-side via `parseFloat` / `parseInt` on `.value` — nothing in the codebase uses `valueAsNumber`, so the type change is behaviorally transparent. `min / max / step` dropped (they only enforce on `type="number"`; JS-side bounds checks in `setup.js` are the source of truth).
+2. **Placeholder numbers looked like real entries.** No `::placeholder` rule existed, so the browser-default placeholder color was close to the input text color. Added `.form-row input::placeholder { color: var(--text-muted); opacity: .45 }`.
+3. **Confirm / Restore buttons falling below the visible form.** Tightened `.setup-form` padding + gap, `.input-grid` gap, input padding + font-size, and collapsed the reserved `min-height` on `.error-msg` / `.metric-preview` / `.rounding-note` so they don't eat vertical space when empty. Also trimmed `.model-info` and `.pump-settings` padding. The `@media (max-height:380px)` and `@media (min-width:1020px)` responsive selectors updated to match the new `input[type="text"]` shape.
+
+**Files changed:** `js/version.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Single-line Case Time display (v0.5.24.8)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
