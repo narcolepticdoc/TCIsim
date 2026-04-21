@@ -47,35 +47,37 @@
     .setup-brand .version-tag{font-family:var(--font-mono);font-size:9px;color:var(--text-muted);letter-spacing:.5px;opacity:.6}
     .setup-brand .disclaimer{font-size:10px;color:var(--amber);text-align:center;line-height:1.55;letter-spacing:.2px;margin-top:auto;padding:8px 10px;border:1px solid var(--amber);border-radius:6px;opacity:.9}
     .setup-brand .disclaimer strong{display:block;font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
-    .setup-form{flex:1;display:flex;flex-direction:column;padding:14px 20px;gap:10px;overflow-y:auto;min-width:0}
+    .setup-form{flex:1;display:flex;flex-direction:column;padding:10px 20px;gap:6px;overflow-y:auto;min-width:0}
     .setup-toprow{display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
     .setup-toprow .card-title{font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px}
     .unit-toggle{display:flex;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);overflow:hidden}
     .unit-toggle button{background:none;border:none;color:var(--text-muted);font-family:var(--font-mono);font-size:11px;padding:4px 11px;cursor:pointer;transition:all .15s}
     .unit-toggle button.active{background:var(--blue-dim);color:var(--text-primary)}
     .unit-toggle button:hover:not(.active){color:var(--text-secondary);background:var(--bg-hover)}
-    .input-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;flex-shrink:0}
+    .input-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;flex-shrink:0}
     .form-row{display:flex;flex-direction:column;gap:2px}
     .form-row label{font-size:11px;color:var(--text-secondary);font-weight:500}
     .form-row label .unit-hint{color:var(--text-muted);font-weight:400}
-    .form-row input[type="number"],.form-row select{width:100%;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:15px;padding:7px 10px;outline:none;transition:border-color .15s;-moz-appearance:textfield}
-    .form-row input[type="number"]::-webkit-inner-spin-button,.form-row input[type="number"]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+    .form-row input[type="text"],.form-row select{width:100%;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:14px;padding:6px 10px;outline:none;transition:border-color .15s}
+    .form-row input::placeholder{color:var(--text-muted);opacity:.45}
     .form-row input:focus,.form-row select:focus{border-color:var(--border-focus)}
     .form-row select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
     .form-row select option{background:var(--bg-card);color:var(--text-primary)}
-    .metric-preview{font-family:var(--font-mono);font-size:11px;color:var(--cyan);min-height:15px;transition:opacity .15s}
+    .metric-preview{font-family:var(--font-mono);font-size:11px;color:var(--cyan);min-height:0;transition:opacity .15s}
     .metric-preview.hidden{opacity:0}
     .form-row.error input,.form-row.error select{border-color:var(--red)}
-    .error-msg{font-size:10px;color:var(--red);min-height:13px}
+    .error-msg{font-size:10px;color:var(--red);min-height:0}
+    .error-msg:empty{display:none}
     .derived-bar{display:flex;gap:10px;padding:7px 12px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border-subtle);flex-shrink:0}
-    .pump-settings{padding:10px 0 0;border-top:1px solid var(--border-subtle);margin-top:2px}
-    .pump-settings .card-title{font-size:11px;margin-bottom:6px;display:block}
+    .pump-settings{padding:6px 0 0;border-top:1px solid var(--border-subtle);margin-top:2px}
+    .pump-settings .card-title{font-size:11px;margin-bottom:4px;display:block}
     .pump-settings .input-grid{gap:6px 12px}
-    .pump-derived{font-family:var(--font-mono);font-size:10px;color:var(--cyan);margin-top:4px}
-    .model-info{padding:6px 9px;margin-bottom:8px;background:var(--bg-input);border-left:3px solid var(--blue);border-radius:var(--radius-sm)}
+    .pump-derived{font-family:var(--font-mono);font-size:10px;color:var(--cyan);margin-top:2px}
+    .model-info{padding:5px 9px;margin-bottom:4px;background:var(--bg-input);border-left:3px solid var(--blue);border-radius:var(--radius-sm)}
     .model-info-name{font-family:var(--font-mono);font-size:11px;font-weight:500;color:var(--text-primary);display:block}
     .model-info-desc{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);display:block;margin-top:3px;line-height:1.35}
-    .rounding-note{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);padding:4px 9px;margin-top:4px;line-height:1.4}
+    .rounding-note{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);padding:2px 9px;margin-top:2px;line-height:1.35}
+    .rounding-note:empty{display:none}
     .rounding-note.active{color:var(--text-primary)}
     .drug-setup-tabs{display:flex;gap:3px;margin-bottom:6px}
     .drug-setup-tab{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-mono);font-size:10px;padding:3px 10px;cursor:pointer;transition:all .15s}
@@ -90,7 +92,7 @@
     .btn-restore{width:100%;padding:9px;background:transparent;border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-secondary);font-family:var(--font-display);font-size:12px;cursor:pointer;transition:all .15s;flex-shrink:0}
     .btn-restore:hover{background:var(--bg-hover);color:var(--text-primary)}
     .btn-restore .restore-summary{display:block;font-size:10px;color:var(--text-muted);margin-top:2px}
-    @media(max-height:380px){.setup-brand{width:160px;min-width:140px;padding:12px 10px;gap:6px}.setup-brand h1{font-size:20px}.setup-form{padding:8px 14px;gap:6px}.input-grid{gap:5px 10px}.form-row input[type="number"],.form-row select{padding:5px 8px;font-size:14px}.form-row label{font-size:10px}.btn-confirm{padding:8px;font-size:13px}.derived-bar{padding:5px 8px}.derived-item .d-value{font-size:12px}}
+    @media(max-height:380px){.setup-brand{width:160px;min-width:140px;padding:12px 10px;gap:6px}.setup-brand h1{font-size:20px}.setup-form{padding:8px 14px;gap:6px}.input-grid{gap:5px 10px}.form-row input[type="text"],.form-row select{padding:5px 8px;font-size:13px}.form-row label{font-size:10px}.btn-confirm{padding:8px;font-size:13px}.derived-bar{padding:5px 8px}.derived-item .d-value{font-size:12px}}
     @media(min-width:900px){.setup-form{max-width:540px}}
 
     /* ==== SIM SCREEN ==== */
@@ -513,7 +515,7 @@
       .setup-brand{width:260px}.setup-brand h1{font-size:28px}.setup-brand .subtitle{font-size:12px}
       .setup-form{padding:18px 24px;gap:12px}
       .form-row label{font-size:12px}
-      .form-row input[type="number"],.form-row select{font-size:16px;padding:8px 11px}
+      .form-row input[type="text"],.form-row select{font-size:15px;padding:7px 11px}
       .btn-confirm{font-size:15px;padding:12px}
 
       /* Topbar */
@@ -727,10 +729,10 @@
     <div class="setup-form">
       <div class="setup-toprow"><span class="card-title">Patient Demographics</span><div class="unit-toggle"><button id="btn-metric" class="active">Metric</button><button id="btn-imperial">Imperial</button></div></div>
       <div class="input-grid">
-        <div class="form-row" id="row-age"><label for="input-age">Age <span class="unit-hint">(years)</span></label><input type="number" id="input-age" min="1" max="100" step="1" placeholder="35" inputmode="numeric"><div class="error-msg" id="err-age"></div></div>
+        <div class="form-row" id="row-age"><label for="input-age">Age <span class="unit-hint">(years)</span></label><input type="text" id="input-age" inputmode="numeric" pattern="[0-9]*" placeholder="35"><div class="error-msg" id="err-age"></div></div>
         <div class="form-row" id="row-sex"><label for="input-sex">Sex</label><select id="input-sex"><option value="" disabled selected>Select</option><option value="male">Male</option><option value="female">Female</option></select><div class="error-msg" id="err-sex"></div></div>
-        <div class="form-row" id="row-height"><label for="input-height">Height <span class="unit-hint" id="hint-height">(cm)</span></label><input type="number" id="input-height" min="30" max="250" step="0.1" placeholder="170" inputmode="decimal"><div class="metric-preview hidden" id="preview-height"></div><div class="error-msg" id="err-height"></div></div>
-        <div class="form-row" id="row-weight"><label for="input-weight">Weight <span class="unit-hint" id="hint-weight">(kg)</span></label><input type="number" id="input-weight" min="1" max="300" step="0.1" placeholder="70" inputmode="decimal"><div class="metric-preview hidden" id="preview-weight"></div><div class="error-msg" id="err-weight"></div></div>
+        <div class="form-row" id="row-height"><label for="input-height">Height <span class="unit-hint" id="hint-height">(cm)</span></label><input type="text" id="input-height" inputmode="decimal" pattern="[0-9.]*" placeholder="170"><div class="metric-preview hidden" id="preview-height"></div><div class="error-msg" id="err-height"></div></div>
+        <div class="form-row" id="row-weight"><label for="input-weight">Weight <span class="unit-hint" id="hint-weight">(kg)</span></label><input type="text" id="input-weight" inputmode="decimal" pattern="[0-9.]*" placeholder="70"><div class="metric-preview hidden" id="preview-weight"></div><div class="error-msg" id="err-weight"></div></div>
       </div>
       <div class="derived-bar" id="derived-bar" style="display:none"><div class="derived-item"><span class="d-label">BMI</span><span class="d-value" id="derived-bmi">—</span></div><div class="derived-item"><span class="d-label">FFM</span><span class="d-value" id="derived-ffm">—</span></div><div class="derived-item"><span class="d-label">Ce50</span><span class="d-value" id="derived-ce50">—</span></div></div>
       <div class="pump-settings">

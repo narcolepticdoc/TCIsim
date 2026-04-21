@@ -4,6 +4,20 @@
 
 ## Session History
 
+### Interim — Setup screen tightening (v0.5.24.9)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+New Case setup screen polish. Three asks from iPad screenshots:
+
+1. **Numeric keyboard on iPad always.** `type="number"` on iPadOS Safari can still pop the full alphanumeric keyboard with a numeric row on top, which is what the user was seeing. Switched age / height / weight to `type="text"` with `inputmode="numeric"` (age) and `inputmode="decimal"` (height / weight), plus matching `pattern` attributes. iPad now shows the pure numeric keypad. All validation is JS-side via `parseFloat` / `parseInt` on `.value` — nothing in the codebase uses `valueAsNumber`, so the type change is behaviorally transparent. `min / max / step` dropped (they only enforce on `type="number"`; JS-side bounds checks in `setup.js` are the source of truth).
+2. **Placeholder numbers looked like real entries.** No `::placeholder` rule existed, so the browser-default placeholder color was close to the input text color. Added `.form-row input::placeholder { color: var(--text-muted); opacity: .45 }`.
+3. **Confirm / Restore buttons falling below the visible form.** Tightened `.setup-form` padding + gap, `.input-grid` gap, input padding + font-size, and collapsed the reserved `min-height` on `.error-msg` / `.metric-preview` / `.rounding-note` so they don't eat vertical space when empty. Also trimmed `.model-info` and `.pump-settings` padding. The `@media (max-height:380px)` and `@media (min-width:1020px)` responsive selectors updated to match the new `input[type="text"]` shape.
+
+**Files changed:** `js/version.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Single-line Case Time display (v0.5.24.8)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
