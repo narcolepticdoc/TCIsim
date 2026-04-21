@@ -11,6 +11,20 @@
 
 ---
 
+## [0.5.24.8] — 2026-04-21
+
+Single-line Case Time display in the topbar.
+
+- Collapsed the two-line `19:26:52 / start 15:15` stack into one bordered button: `CASE START 15:15 | ET 0:00:00` on a single line. Labels muted + uppercase; values crisp monospace (ET in green, Case start in `--text-primary`).
+- `.elapsed-timer` is now a `<button>` with a 1px subtle border + hover state (bg brightens, border darkens) so the click affordance reads at a glance — it had always been clickable but never looked like it.
+- `.timer-wall-hint` element and CSS rules removed throughout. Canonical base `.elapsed-timer` rule at `index.html:104` consolidated into the single rule near the popover definition (was duplicated before).
+- On phone portrait (`orientation:portrait and max-width:500px`) the `Case start HH:MM |` segment hides via `.ct-start-group { display: none }`, leaving just `ET X:XX:XX` to fit the narrow topbar.
+- `timer.js renderDisplay()` now writes to `#elapsed-time-val`; `updateWallHint()` writes to `#case-start-val` (dropping the `start ` prefix — the label is in the markup now). Pre-case renders as `CASE START --:-- | ET 0:00:00`. Click handler at `timer.js:29-30` unchanged (still targets `#elapsed-timer`, now the button).
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/timer.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.7] — 2026-04-21
 
 Clinical-style trim pass on v0.5.24.6:

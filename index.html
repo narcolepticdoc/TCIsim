@@ -101,7 +101,6 @@
     .patient-summary{display:flex;gap:8px;font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);margin-left:8px}
     .patient-summary .ps-val{color:var(--text-primary)}
     .topbar-spacer{flex:1}
-    .elapsed-timer{font-family:var(--font-mono);font-size:16px;font-weight:500;color:var(--green);letter-spacing:1px}
     .btn-new-case{background:none;border:1px solid #7f1d1d;color:#fca5a5;font-family:var(--font-mono);font-size:10px;padding:3px 9px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;margin-left:8px}
     .btn-new-case:hover{border-color:var(--red);color:var(--text-primary);background:rgba(239,68,68,.1)}
 
@@ -417,8 +416,7 @@
 
     /* Responsive short */
     @media(max-height:380px){
-      .sim-topbar{height:28px}.elapsed-timer{font-size:14px}
-      .timer-wall-hint{font-size:8px}
+      .sim-topbar{height:28px}.elapsed-timer{font-size:14px;padding:3px 8px}
       .drug-panel{width:175px;min-width:140px}.drug-card{padding:6px 8px;gap:2px}.drug-card .drug-name{font-size:11px}.drug-card .ce-current{font-size:18px}.drug-card.active .drug-name{font-size:14px}.drug-card.active .ce-current{font-size:22px}
       .content-tab{padding:5px 12px;font-size:10px}
       .sim-controls{padding:4px 8px;gap:3px}.btn-ctrl{padding:6px 10px;font-size:11px}
@@ -468,7 +466,8 @@
       .sim-topbar{height:30px;padding:0 8px;gap:6px}
       .sim-topbar .app-name{display:none}
       .patient-summary{margin-left:0;font-size:10px;gap:5px}
-      .elapsed-timer{font-size:14px}
+      .elapsed-timer{font-size:13px;padding:3px 8px}
+      .elapsed-timer .ct-start-group{display:none}
 
       /* Layout: chart on top, drug panel on bottom (normal vertical cards) */
       .sim-main{flex-direction:column}
@@ -589,10 +588,14 @@
     }
 
     /* Timer wrap & popover */
-    .timer-wrap{position:relative;display:flex;flex-direction:column;align-items:flex-end}
-    .elapsed-timer{font-family:var(--font-mono);font-size:16px;font-weight:500;color:var(--green);letter-spacing:1px;cursor:pointer;padding:2px 6px;border-radius:var(--radius-sm);transition:background .15s}
-    .elapsed-timer:hover{background:rgba(34,197,94,.08)}
-    .timer-wall-hint{font-family:var(--font-mono);font-size:9px;color:var(--text-muted);text-align:right;min-height:12px}
+    .timer-wrap{position:relative}
+    .elapsed-timer{font-family:var(--font-mono);font-size:16px;font-weight:500;color:var(--text-secondary);letter-spacing:.5px;cursor:pointer;padding:4px 12px;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);background:transparent;display:inline-flex;align-items:baseline;gap:6px;transition:border-color .15s,background .15s}
+    .elapsed-timer:hover{background:var(--bg-hover);border-color:var(--border-focus)}
+    .elapsed-timer .ct-label{color:var(--text-muted);font-size:.78em;letter-spacing:.4px;text-transform:uppercase}
+    .elapsed-timer .ct-value{color:var(--text-primary);font-weight:500;letter-spacing:1px}
+    .elapsed-timer .ct-value-et{color:var(--green)}
+    .elapsed-timer .ct-sep{color:var(--border);margin:0 2px}
+    .elapsed-timer .ct-start-group{display:inline-flex;align-items:baseline;gap:6px}
     .timer-popover{display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:12px 14px;z-index:100;width:220px;box-shadow:0 8px 24px rgba(0,0,0,.4);flex-direction:column;gap:8px}
     .timer-popover.open{display:flex}
     .tp-title{font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.5px}
@@ -872,8 +875,15 @@
       <div class="patient-summary" id="patient-summary"></div>
       <div class="topbar-spacer"></div>
       <div class="timer-wrap" id="timer-wrap">
-        <div class="elapsed-timer" id="elapsed-timer">0:00:00</div>
-        <div class="timer-wall-hint" id="timer-wall-hint"></div>
+        <button class="elapsed-timer case-time-btn" id="elapsed-timer" type="button">
+          <span class="ct-start-group">
+            <span class="ct-label">Case start</span>
+            <span class="ct-value" id="case-start-val">--:--</span>
+            <span class="ct-sep">|</span>
+          </span>
+          <span class="ct-label">ET</span>
+          <span class="ct-value ct-value-et" id="elapsed-time-val">0:00:00</span>
+        </button>
         <div class="timer-popover" id="timer-popover">
           <div class="tp-mode-toggle">
             <button class="tp-mode active" id="tp-mode-start">Start Time</button>

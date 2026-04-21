@@ -143,7 +143,7 @@ function tick() {
 }
 
 function renderDisplay() {
-  const el = $('elapsed-timer');
+  const el = $('elapsed-time-val');
   if (!el) return;
   const t = Math.floor(getElapsedMs() / 1000);
   const h = Math.floor(t / 3600);
@@ -153,14 +153,14 @@ function renderDisplay() {
 }
 
 function updateWallHint() {
-  const el = $('timer-wall-hint');
+  const el = $('case-start-val');
   if (!el) return;
   if (wallClockStart) {
     const h = String(wallClockStart.getHours()).padStart(2, '0');
     const m = String(wallClockStart.getMinutes()).padStart(2, '0');
-    el.textContent = 'start ' + h + ':' + m;
+    el.textContent = h + ':' + m;
   } else {
-    el.textContent = '';
+    el.textContent = '--:--';
   }
 }
 

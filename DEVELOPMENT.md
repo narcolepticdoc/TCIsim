@@ -4,6 +4,23 @@
 
 ## Session History
 
+### Interim — Single-line Case Time display (v0.5.24.8)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+The topbar's case-time display was a two-line stack: `19:26:52` (ET) over a tiny muted `start 15:15`. Awkward vertically, and the whole thing being a clickable popover-trigger was invisible — the muted wall-clock hint didn't read as part of a button.
+
+Collapsed to a single bordered button: `[ CASE START 15:15 | ET 0:00:00 ]`. Two-line → one-line. Labels muted + uppercase for tone; values crisp (ET in `--green`, start in `--text-primary`). 1px subtle border on the button with a hover state (bg brightens, border darkens via `--border-focus`) so the tap affordance is obvious.
+
+- Markup: `.timer-wall-hint` element removed. `.elapsed-timer` is now a `<button>` wrapping `.ct-start-group` (Case start label + value + separator) followed by `ET` label + elapsed value. Outer `id="elapsed-timer"` preserved so `timer.js:29` click-binding still works.
+- CSS: the duplicate base `.elapsed-timer` rule at line 104 was removed; the canonical rule near the popover definition now carries all the button styling. `.timer-wall-hint` rules (base + `@media(max-height:380px)`) deleted.
+- Compact phone portrait (`orientation:portrait and max-width:500px`) hides the `Case start` segment with `.ct-start-group { display: none }`, leaving just `ET X:XX:XX`.
+- `timer.js renderDisplay()` targets `#elapsed-time-val`; `updateWallHint()` targets `#case-start-val`, drops the `start ` prefix (label is in markup now), and falls back to `--:--` when no wall-clock start is set.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/timer.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Clinical trim on highlights + portrait modal + ET/RT toggle affordance (v0.5.24.7)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
