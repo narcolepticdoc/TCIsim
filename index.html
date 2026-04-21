@@ -351,6 +351,37 @@
       body.text-xl .mode-label{font-size:13px}
     }
 
+    /* XXL type — gated to ≥1020px so it only applies when the drug panel widens to 250px+ */
+    @media(min-width:1020px){
+      body.text-xxl .drug-card .drug-name{font-size:19px}
+      body.text-xxl .drug-card.active .drug-name{font-size:25px}
+      body.text-xxl .drug-card .ce-current{font-size:32px}
+      body.text-xxl .drug-card.active .ce-current{font-size:39px}
+      body.text-xxl .drug-card .drug-model{font-size:13px}
+      body.text-xxl .drug-card .ce-label,
+      body.text-xxl .drug-card .cp-label,
+      body.text-xxl .drug-card .bis-label{font-size:14.5px}
+      body.text-xxl .drug-card .cp-current{font-size:17.5px}
+      body.text-xxl .drug-card .ce-unit{font-size:13px}
+      body.text-xxl .drug-card .drug-approach{font-size:15.5px}
+      body.text-xxl .drug-card .drug-status{font-size:16px}
+      body.text-xxl .drug-card .drug-rate{font-size:16px}
+      body.text-xxl .drug-card .drug-bis{font-size:16px}
+      body.text-xxl .drug-card .step-bar-countdown{font-size:14.5px;white-space:normal;text-overflow:clip;min-height:0;line-height:1.25}
+      body.text-xxl .history-area .history-empty{font-size:17.5px}
+      body.text-xxl .history-row{font-size:16px}
+      body.text-xxl .history-row .h-time{font-size:14.5px}
+      body.text-xxl .history-row .h-type{font-size:14.5px}
+      body.text-xxl .history-row .h-detail{font-size:14.5px}
+      body.text-xxl .sim-topbar .app-name{font-size:16px}
+      body.text-xxl .patient-summary{font-size:16px}
+      body.text-xxl .elapsed-timer{font-size:23px}
+      body.text-xxl .btn-new-case{font-size:14.5px}
+      body.text-xxl .btn-settings{font-size:20px}
+      body.text-xxl .btn-ctrl{font-size:17.5px}
+      body.text-xxl .mode-label{font-size:14.5px}
+    }
+
     /* Responsive short */
     @media(max-height:380px){
       .sim-topbar{height:28px}.elapsed-timer{font-size:14px}
@@ -1202,6 +1233,7 @@
                   <button type="button" class="seg-btn active" data-size="normal">Normal</button>
                   <button type="button" class="seg-btn" data-size="large">Large</button>
                   <button type="button" class="seg-btn" data-size="xl">XL</button>
+                  <button type="button" class="seg-btn" data-size="xxl">XXL</button>
                 </div>
               </div>
             </div>

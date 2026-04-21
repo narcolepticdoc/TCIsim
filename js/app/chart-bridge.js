@@ -93,7 +93,7 @@ export function createChartBridge({
   let lastEventMarkersKey = '';
   let lastEventMarkerSize = null;
 
-  const TEXT_SCALE = { normal: 1.0, large: 1.15, xl: 1.30 };
+  const TEXT_SCALE = { normal: 1.0, large: 1.15, xl: 1.30, xxl: 1.45 };
 
   function getConfig(drugId) {
     return CHART_DRUG_CONFIG[drugId] || { yScale: 1, yLabel: '\u03bcg/mL', yDefault: 10 };

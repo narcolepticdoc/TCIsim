@@ -11,6 +11,18 @@
 
 ---
 
+## [0.5.24.2] — 2026-04-21
+
+Adds a fourth "XXL" option to the Text size segmented control, and renames the Appearance-tab label from "Text size (drug panel & history)" to just "Text size" (accurate now that the scope is global).
+
+**XXL ladder:** ~+45% from base. Examples — `.drug-name` 13 → 19px, `.drug-name.active` 17 → 25px, `.ce-current` 22 → 32px, `.ce-current.active` 27 → 39px, `.history-row` 11 → 16px, `.btn-ctrl` 12 → 17.5px, `.elapsed-timer` 16 → 23px, chart fontScale 1.45.
+
+**Gated behind `@media (min-width:1020px)`** — only applies when the drug panel widens to 250px+ at the existing desktop breakpoint. On narrower screens (phones, iPad Mini portrait) the `.text-xxl` body class is still set but the CSS rules do not match, so the layout falls back to base sizes and avoids wrapping the Ce row. Chart fontScale still applies since it is pushed through JS.
+
+**Files changed:** `js/version.js`, `js/ui/settings.js` (TEXT_SIZES adds `xxl`), `js/app/settings-ui.js` (`applyTextSize` handles `text-xxl`), `js/app/chart-bridge.js` (TEXT_SCALE adds `xxl: 1.45`), `index.html` (new XXL button + CSS block + label rename), `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.1] — 2026-04-21
 
 Expands "Large type" from drug-panel + history to every small-text element on the sim screen — based on iPad Mini screenshots showing plenty of unused space and several glaring misses at the previous scope (big Ce readout, chart text, topbar, bottom controls, and a step-bar countdown that was disappearing into ellipsis at XL).
