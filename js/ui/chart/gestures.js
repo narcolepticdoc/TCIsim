@@ -156,12 +156,18 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
   }
   function handleInspectMouseUp() { inspectDragActive = false; }
 
-  // Capture phase so we beat Chart.js's own listeners and preventDefault sticks.
-  canvas.addEventListener('touchstart', handleInspectTouchStart, { passive: false, capture: true });
-  canvas.addEventListener('touchmove',  handleInspectTouchMove,  { passive: false, capture: true });
-  canvas.addEventListener('touchend',   handleInspectTouchEnd,   { capture: true });
-  canvas.addEventListener('touchcancel', handleInspectTouchEnd,  { capture: true });
-  canvas.addEventListener('mousedown',  handleInspectMouseDown,  { capture: true });
+  // Capture phase on the canvas PARENT so our listener fires during the actual
+  // ancestor-capture phase — before any target-phase listeners on the canvas
+  // itself (including Chart.js / hammerjs). On the target element, all
+  // listeners fire in registration order regardless of useCapture, so binding
+  // capture:true directly on canvas would still run AFTER Chart.js's
+  // earlier-registered hammer listeners. Binding on the parent dodges that.
+  const captureTarget = canvas.parentElement || canvas;
+  captureTarget.addEventListener('touchstart', handleInspectTouchStart, { passive: false, capture: true });
+  captureTarget.addEventListener('touchmove',  handleInspectTouchMove,  { passive: false, capture: true });
+  captureTarget.addEventListener('touchend',   handleInspectTouchEnd,   { capture: true });
+  captureTarget.addEventListener('touchcancel', handleInspectTouchEnd,  { capture: true });
+  captureTarget.addEventListener('mousedown',  handleInspectMouseDown,  { capture: true });
   // Mouse move/up bind on window so the drag tracks when the pointer
   // briefly leaves the canvas (normal web drag-handle pattern).
   window.addEventListener('mousemove', handleInspectMouseMove);
@@ -172,11 +178,11 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
     canvas.removeEventListener('touchmove', handleYTouchMove);
     canvas.removeEventListener('touchend', handleYTouchEnd);
     canvas.removeEventListener('touchend', handleTouchEnd);
-    canvas.removeEventListener('touchstart', handleInspectTouchStart, { capture: true });
-    canvas.removeEventListener('touchmove',  handleInspectTouchMove,  { capture: true });
-    canvas.removeEventListener('touchend',   handleInspectTouchEnd,   { capture: true });
-    canvas.removeEventListener('touchcancel', handleInspectTouchEnd,  { capture: true });
-    canvas.removeEventListener('mousedown',  handleInspectMouseDown,  { capture: true });
+    captureTarget.removeEventListener('touchstart', handleInspectTouchStart, { capture: true });
+    captureTarget.removeEventListener('touchmove',  handleInspectTouchMove,  { capture: true });
+    captureTarget.removeEventListener('touchend',   handleInspectTouchEnd,   { capture: true });
+    captureTarget.removeEventListener('touchcancel', handleInspectTouchEnd,  { capture: true });
+    captureTarget.removeEventListener('mousedown',  handleInspectMouseDown,  { capture: true });
     window.removeEventListener('mousemove', handleInspectMouseMove);
     window.removeEventListener('mouseup',   handleInspectMouseUp);
   };

@@ -4,6 +4,22 @@
 
 ## Session History
 
+### Interim — Actually fix inspect-drag hijack (v0.5.24.21)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+v0.5.24.20 tried to fix the "drag hijack after ~50px" bug by binding inspect-drag listeners on the canvas with `capture: true`, reasoning that capture-phase listeners fire before bubble-phase ones. **This is wrong when the event target IS the canvas** — at the target element, all listeners fire in registration order regardless of `useCapture`. Chart.js's hammerjs listeners were registered first (during chart creation) and ran first. `stopImmediatePropagation` in the later-registered capture-flagged listener was too late to stop hammer from initiating its pan.
+
+Correct fix: attach the inspect-drag listeners to `canvas.parentElement` (`.chart-area`) in capture phase. Capture-phase on an **ancestor** really does fire before any target-phase listeners on the descendant canvas. So we intercept the touch before hammer sees it.
+
+One-line change of `canvas.addEventListener(...)` → `(canvas.parentElement || canvas).addEventListener(...)` for the five inspect-drag handlers, plus matching removeEventListener in `detach()`.
+
+`touch-action: none` on the canvas from v0.5.24.20 stays — belt and suspenders.
+
+**Files changed:** `js/version.js`, `js/ui/chart/gestures.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Inspect handle: bottom position + fix drag hijack (v0.5.24.20)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*
