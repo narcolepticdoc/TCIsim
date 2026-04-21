@@ -4,6 +4,22 @@
 
 ## Session History
 
+### Interim — Add XXL text size + fix label (v0.5.24.2)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+After 0.5.24.1 shipped, iPad Mini XL screenshots still showed unused vertical space below the KETAMINE card and the chart band labels were modestly sized relative to available area — so the ladder benefits from one more step. Also renamed the Appearance-tab label from "Text size (drug panel & history)" to just "Text size" since the scope is now global.
+
+**XXL sizing (~+45% base):** `.drug-name` 13 → 19px, `.ce-current` 22 → 32px, active `.ce-current` 27 → 39px, `.drug-approach` 10.5 → 15.5px, `.history-row` 11 → 16px, topbar `.elapsed-timer` 16 → 23px, `.btn-ctrl` 12 → 17.5px, chart fontScale 1.45. Rounded to 0.5px increments to match the existing ladder.
+
+**Screen gate:** `@media (min-width:1020px)` — only applies when the drug panel has widened to 250px+ at the existing desktop breakpoint. On phones / iPad Mini portrait the `.text-xxl` body class is still written but the CSS rules do not match, so the drug-panel text falls back to base sizes and the fixed-width Ce row does not wrap. Chart fonts still get 1.45× because the push path is pure JS — acceptable asymmetry, and consistent with how Large/XL already behave at their own gate.
+
+**Segmented control:** grew from three to four buttons. The existing `.seg-btn { flex: 1 }` rule makes them share width evenly so no extra CSS needed — at the settings modal's 780px max-width each button gets roughly 180px, with labels "Normal / Large / XL / XXL" all short enough to fit comfortably.
+
+**Files changed:** `js/version.js`, `js/ui/settings.js`, `js/app/settings-ui.js`, `js/app/chart-bridge.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Expand Large type to all sim-screen text (v0.5.24.1)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*

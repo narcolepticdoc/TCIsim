@@ -29,10 +29,10 @@ const DEFAULTS     = {
   nomogramOpacity: 1.0, // BIS nomogram band opacity (0.1–1.0, applied as multiplier)
   overlayOpacity:  1.0, // Threshold/target line opacity (0.1–1.0)
   eventMarkerSize: 7,   // Future-event marker radius in px (4–16)
-  textSize:    'normal',// Drug-panel + history type scale: 'normal' | 'large' | 'xl'
+  textSize:    'normal',// Text scale: 'normal' | 'large' | 'xl' | 'xxl'
 };
 
-const TEXT_SIZES = ['normal', 'large', 'xl'];
+const TEXT_SIZES = ['normal', 'large', 'xl', 'xxl'];
 
 const DRUG_NAMES = {
   propofol:     'Propofol',

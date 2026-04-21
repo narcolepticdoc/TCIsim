@@ -27,12 +27,13 @@ const INFO_TEXTS = {
   appearance: 'Adjust the visual presentation of the chart and readouts. Reducing Cp line opacity pushes the plasma concentration curve into the background so the effect-site (Ce) curve stands out more clearly. Text size enlarges the drug-panel and history informational text; it is gated to screens that have the space for it.',
 };
 
-/** Apply the text-size body class. Only one of `.text-lg` / `.text-xl` is active at a time. */
+/** Apply the text-size body class. Only one of `.text-lg` / `.text-xl` / `.text-xxl` is active at a time. */
 function applyTextSize(size) {
   const cls = document.body.classList;
-  cls.remove('text-lg', 'text-xl');
+  cls.remove('text-lg', 'text-xl', 'text-xxl');
   if (size === 'large') cls.add('text-lg');
   else if (size === 'xl') cls.add('text-xl');
+  else if (size === 'xxl') cls.add('text-xxl');
 }
 
 /**
