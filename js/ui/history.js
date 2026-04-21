@@ -56,6 +56,29 @@ export function init(opts) {
     });
   }
   _watchEditorModal();
+  _wireOutsideClickToExit();
+}
+
+/**
+ * While edit mode is active, a click anywhere outside the history panel
+ * (and outside any open modal) exits edit mode. Lets the user dismiss the
+ * focus state by tapping the dimmed surrounding area.
+ */
+function _wireOutsideClickToExit() {
+  document.addEventListener('click', (e) => {
+    if (!document.body.classList.contains('edit-history-mode')) return;
+    const historyPanel = document.getElementById('panel-history');
+    if (historyPanel && historyPanel.contains(e.target)) return;
+    // Respect any open modal — don't exit while the editor is up.
+    const modal = document.getElementById('modal-evt-editor');
+    if (modal && modal.classList.contains('open') && modal.contains(e.target)) return;
+    // Any other modal backdrop is also respected
+    const anyOpenModal = document.querySelector('.modal-overlay.open');
+    if (anyOpenModal && anyOpenModal.contains(e.target)) return;
+    exitEditMode();
+    const btn = document.getElementById('btn-history-edit');
+    if (btn) btn.classList.remove('active');
+  }, true);
 }
 
 /** Clear the highlighted-row marker. Called when the event editor closes. */
@@ -77,7 +100,17 @@ function _watchEditorModal() {
 
 /** Toggle edit mode on the history panel. Returns the new state (true = on). */
 export function toggleEditMode() {
-  return document.body.classList.toggle('edit-history-mode');
+  const on = document.body.classList.toggle('edit-history-mode');
+  if (!on) clearSelectedRow();
+  return on;
+}
+
+/** Force-exit edit mode. Returns true if state changed. */
+export function exitEditMode() {
+  const was = document.body.classList.contains('edit-history-mode');
+  document.body.classList.remove('edit-history-mode');
+  clearSelectedRow();
+  return was;
 }
 
 /** Toggle the time-format display between elapsed (ET) and real-time (RT). */

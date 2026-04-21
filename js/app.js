@@ -26,7 +26,7 @@ import * as settings from './ui/settings.js';
 import { initSettingsUI } from './app/settings-ui.js';
 import { createTciModal } from './app/tci-modal.js';
 import { createSession } from './app/session.js';
-import { initPortraitLayout } from './app/portrait-layout.js';
+import { initPortraitLayout, syncPortraitLayout } from './app/portrait-layout.js';
 import { createChartBridge } from './app/chart-bridge.js';
 
 const $ = id => document.getElementById(id);
@@ -51,6 +51,11 @@ let chartBridge = null;
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   $(id).classList.add('active');
+  // When the sim screen becomes visible, re-measure the drug panel for the
+  // portrait-layout dynamic row sizing — scrollHeight lies while display:none.
+  if (id === 'sim-screen') {
+    requestAnimationFrame(() => requestAnimationFrame(syncPortraitLayout));
+  }
 }
 
 // ---- Sim Screen Initialization ----

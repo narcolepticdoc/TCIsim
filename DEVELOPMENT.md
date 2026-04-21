@@ -4,6 +4,25 @@
 
 ## Session History
 
+### Interim — Stronger highlights + portrait resize fix + click-outside exit (v0.5.24.6)
+
+*Between Sessions 26 and 27. Not tracked in session numbering.*
+
+Follow-up fixes for four things iPad Pro screenshots surfaced after v0.5.24.5:
+
+1. **Active drug-tile glow wasn't visible enough.** The v0.5.24.5 version used `--drug-color-muted` (alpha 0.25) for the outline and halo — too subtle on a dark panel background. Replaced with full-alpha `--drug-color` applied via a thicker `border-left:8px` and two inset box-shadows: a hard 2px inner frame and a soft 60px inner halo. Both inset so the overflow:auto on `.drug-panel` doesn't clip them.
+2. **Selected history row `.h-row-selected` was barely visible** — amber at .22 alpha against the edit-mode dimmed backdrop didn't pop. Bumped to .45 bg alpha, 3px outline, 28px amber halo, 1.03 scale transform, and a dark `0 0 0 2px rgba(0,0,0,.6)` ring to separate it from neighbors.
+3. **No way to exit edit mode except tapping Edit.** Added a capture-phase document click listener in `history.init()`: any click outside `#panel-history` (and outside any `.modal-overlay.open`) clears the edit-mode class and the Edit button's active state. New `exitEditMode()` export also covers this path. Checks modal containment first so clicks inside the event editor (while it's open over a dimmed backdrop) don't trigger exit.
+4. **Portrait dynamic row sizing wasn't working.** Bug: `Element.scrollHeight` returns `clientHeight` when content fits without scrolling. The grid sized the panel to 50% of the screen (1fr), content was smaller, so scrollHeight = clientHeight = 50% of screen — my `min(content, 50%)` calculation always picked 50%, making the "shrink to fit" a no-op. Fix: sum the children's `getBoundingClientRect().height` + gap. Also wired a `syncPortraitLayout()` call into `showScreen()` so the measurement runs after the sim screen becomes visible (wrapped in 2× `requestAnimationFrame` to let layout settle). Cap raised slightly from 50% → 55% to allow a tiny bit more room for tall drug-card content.
+
+**Why `getBoundingClientRect().height` per child instead of `offsetHeight`:** accounts for CSS transforms (the active-tile scale/shadow don't change layout size, but we're also not using transforms on cards — both work, chose GBCR for future-proofing).
+
+**Why capture phase on the document click:** ensures we see the event before any `stopPropagation()` handler in a child. Fires once per click no matter which element receives it.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/history.js`, `js/app.js`, `js/app/portrait-layout.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ### Interim — Edit mode focus + history grid + drug-tile glow (v0.5.24.5)
 
 *Between Sessions 26 and 27. Not tracked in session numbering.*

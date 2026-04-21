@@ -11,6 +11,19 @@
 
 ---
 
+## [0.5.24.6] — 2026-04-21
+
+Four fixes from iPad Pro screenshots after v0.5.24.5:
+
+- **Active drug-tile highlight was too subtle.** Replaced the muted-alpha outer glow with: `border-left: 8px solid var(--drug-color)`, plus two inset box-shadows — `inset 0 0 0 2px var(--drug-color)` (full-alpha 2px inner frame) and `inset 0 0 60px -15px var(--drug-color)` (soft inner halo). All full-opacity `--drug-color`, so the active card now clearly stands out even with inactive cards fully visible.
+- **Selected history row in edit mode was barely visible.** `.h-row-selected` now uses `background:rgba(245,158,11,.45)` (up from .22), `outline:3px solid var(--amber)` (up from 2px), plus a dark ring + 28px amber halo and `transform:scale(1.03)` to lift the row off the page.
+- **No escape from edit mode without tapping the Edit button.** Added a document-level click listener (capture phase) in `history.init()` — clicking any dimmed element outside the history panel (and outside any open modal) now exits edit mode. New `exitEditMode()` export; click handler clears the button's `.active` state along with the body class.
+- **Portrait dynamic row sizing didn't work.** Root cause: `drugPanel.scrollHeight` returns the container's `clientHeight` when content fits without scrolling — so if the grid had already sized the panel larger than its content, `scrollHeight` was that larger size, defeating the "shrink to fit" logic. Fix: sum the children's `getBoundingClientRect().height` + gap instead. Also hooked an explicit `syncPortraitLayout()` call into `showScreen('sim-screen')` (via 2× `requestAnimationFrame`) so the measurement runs once the screen is visible, not while it's still `display:none`. Cap bumped from 50% → 55% of window height.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/history.js`, `js/app.js`, `js/app/portrait-layout.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.5] — 2026-04-21
 
 Six visual / interaction polish items in one release.

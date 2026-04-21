@@ -49,6 +49,23 @@ export function initPortraitLayout() {
 /** Force a re-sync — call after text-size change or other layout-affecting event. */
 export function syncPortraitLayout() { sync(); }
 
+/**
+ * Measure the drug panel's intrinsic content height. `scrollHeight` returns
+ * `clientHeight` when content fits without scrolling — so if the grid has
+ * already sized the panel larger than its content, scrollHeight lies.
+ * Sum the children's own heights instead.
+ */
+function measureContentHeight(drugPanel) {
+  const cards = drugPanel.querySelectorAll('.drug-card');
+  if (!cards.length) return 0;
+  let h = 0;
+  for (const card of cards) h += card.getBoundingClientRect().height;
+  const style = getComputedStyle(drugPanel);
+  const gap = parseFloat(style.rowGap || style.gap || '0') || 0;
+  h += gap * Math.max(0, cards.length - 1);
+  return Math.ceil(h);
+}
+
 function sync() {
   const simMain = document.querySelector('.sim-main');
   const drugPanel = document.querySelector('.drug-panel');
@@ -58,6 +75,11 @@ function sync() {
     simMain.style.gridTemplateRows = '';
     return;
   }
-  const needed = Math.min(drugPanel.scrollHeight + 4, Math.round(window.innerHeight * 0.5));
+
+  const content = measureContentHeight(drugPanel);
+  if (!content) return; // DOM not ready — will re-fire on the next observer tick
+
+  const cap = Math.round(window.innerHeight * 0.55);
+  const needed = Math.min(content + 8, cap);
   simMain.style.gridTemplateRows = `1fr ${needed}px`;
 }
