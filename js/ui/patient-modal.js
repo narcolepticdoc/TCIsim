@@ -33,6 +33,7 @@ let _active = 'age'; // 'age' | 'height' | 'weight' — sex is toggle-only
 let _lastUnits = 'metric'; // tracks the unit that _values.height / _values.weight are in
 
 const FIELDS = ['age', 'sex', 'height', 'weight'];
+const NUMERIC_ORDER = ['age', 'height', 'weight']; // order the Next key cycles through
 
 /**
  * Initialize the modal. Idempotent.
@@ -177,6 +178,12 @@ function _setActive(field) {
   // Age is integer-only
   const dot = document.querySelector('.pm-key-dot');
   if (dot) dot.toggleAttribute('disabled', field === 'age');
+  // Next advances age → height → weight; disable at the end of the chain.
+  const next = document.querySelector('.pm-key-next');
+  if (next) {
+    const idx = NUMERIC_ORDER.indexOf(field);
+    next.toggleAttribute('disabled', idx < 0 || idx >= NUMERIC_ORDER.length - 1);
+  }
   // Clear field-level error when user returns
   const row = document.querySelector(`.pm-field[data-field="${field}"]`);
   if (row) row.classList.remove('error');
@@ -190,6 +197,15 @@ function _selectFirstEmpty() {
 }
 
 function _handleKey(key) {
+  // Next advances active to the next numeric field (age → height → weight)
+  // so users can toggle sex once and then type-type-type through the rest.
+  if (key === 'next') {
+    const idx = NUMERIC_ORDER.indexOf(_active);
+    if (idx >= 0 && idx < NUMERIC_ORDER.length - 1) {
+      _setActive(NUMERIC_ORDER[idx + 1]);
+    }
+    return;
+  }
   const f = _active;
   let v = _values[f] || '';
   if (key === 'clear') {

@@ -102,6 +102,9 @@
     .pm-key:active{background:var(--bg-card)}
     .pm-key[disabled]{opacity:.25;cursor:default;pointer-events:none}
     .pm-key-back{font-size:18px}
+    .pm-key-next{grid-column:span 2;font-size:14px;font-weight:600;background:var(--blue-dim);color:var(--text-primary);letter-spacing:1px}
+    .pm-key-next:hover{background:var(--blue);color:#fff}
+    .pm-key-next[disabled]{opacity:.35;cursor:default;pointer-events:none;background:var(--bg-input);color:var(--text-muted)}
     .derived-bar{display:flex;gap:10px;padding:7px 12px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border-subtle);flex-shrink:0}
     .pump-settings{padding:6px 0 0;border-top:1px solid var(--border-subtle);margin-top:2px}
     .pump-settings .card-title{font-size:11px;margin-bottom:4px;display:block}
@@ -1092,16 +1095,16 @@
           <button type="button" id="pm-imperial">Imperial</button>
         </div>
       </div>
-      <div class="pm-field" data-field="age">
-        <label>Age <span class="pm-unit">(years)</span></label>
-        <div class="pm-value empty" id="pm-age-val">&mdash;</div>
-      </div>
       <div class="pm-field pm-field-sex" data-field="sex">
         <label>Sex</label>
         <div class="pm-sex-toggle">
           <button type="button" class="pm-sex-btn" data-sex="male">Male</button>
           <button type="button" class="pm-sex-btn" data-sex="female">Female</button>
         </div>
+      </div>
+      <div class="pm-field" data-field="age">
+        <label>Age <span class="pm-unit">(years)</span></label>
+        <div class="pm-value empty" id="pm-age-val">&mdash;</div>
       </div>
       <div class="pm-field" data-field="height">
         <label>Height <span class="pm-unit" id="pm-height-unit">(cm)</span></label>
@@ -1126,6 +1129,7 @@
         <button class="pm-key" data-key="0">0</button>
         <button class="pm-key pm-key-dot" data-key=".">.</button>
         <button class="pm-key pm-key-back" data-key="back">&#9003;</button>
+        <button class="pm-key pm-key-next" data-key="next">Next &#8594;</button>
       </div>
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="pm-cancel">Cancel</button>
