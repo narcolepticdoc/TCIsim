@@ -71,7 +71,266 @@ it wouldn't change plan shape for typical from-zero cases.
 
 ---
 
-## 2. Where the real drift-tolerance knobs live
+## 2. How our planner works (plain-English walkthrough)
+
+### The problem
+
+A TCI pump runs at one rate at a time. To hold a patient's effect-site
+drug level (Ce) at a target, we need a sequence of rate steps — a handful
+per case is tolerable, every 30 seconds is unworkable.
+
+The catch: the "correct" rate isn't constant. It starts high (to fill up
+peripheral tissues) and decreases over minutes to hours (as those tissues
+equilibrate). A flat rate either overshoots late or undershoots early.
+
+### The mental picture — three linked buckets
+
+- **Plasma** — what you pour drug into; the liver slowly clears it.
+- **Fast tissue (muscle)** — slowly absorbs from plasma, slowly returns.
+- **Slow tissue (fat)** — very slowly absorbs, very slowly returns.
+
+You want a steady level in the plasma bucket. Pour fast and plasma fills
+AND the side-buckets start filling. Once the side-buckets approach
+equilibrium, you can maintain plasma with a trickle. The ideal pour rate
+**declines** over time.
+
+A fourth compartment, **effect site** (Ce), lags plasma slightly. For this
+walkthrough, treat Ce as "basically plasma, delayed a bit".
+
+### SimTIVA's strategy — continuous replanning
+
+SimTIVA is a live training simulator (see §5). Its `deliver_cpt`:
+1. Right now, compute the ideal rate that would bring plasma back to
+   target over the next 2 min.
+2. Hold that rate.
+3. As simulated time advances (`runinfusion2` tick, every ~1 s of
+   sim-time), re-run the whole computation with fresh state.
+4. The pump only sees a new setting when the newly computed ideal has
+   drifted more than `cpt_threshold` from the last programmed rate.
+
+Between pump changes, the actual pump rate and SimTIVA's ideal drift
+apart — but SimTIVA absorbs the drift by replanning so frequently that it
+never accumulates.
+
+### Our strategy — one-shot plan with built-in drift-checking
+
+We run the whole planner once, at the start. No live replanning. So the
+plan has to stay accurate for hours, not just a few minutes. Three
+phases:
+
+**Phase 1 — SimTIVA's forward ideal-rate scan** (`emulation.js:307-344`).
+Walk forward in 2-min slots for 12 hours (360 slots; SimTIVA itself does
+6 hours in `deliver_cpt`). At each slot, compute the ideal Cp-targeting
+rate using pure eigenstate arithmetic. Store all 360 ideal rates in
+`cptRates[]`. Ported verbatim from SimTIVA.
+
+**Phase 2 — SimTIVA's step extraction** (`emulation.js:367-441`). Scan
+`cptRates[]` and emit a new pump step when consecutive ideals differ by
+more than `cptThreshold`. The emitted value is a weighted blend of old
+and new ideal rates (`cptAvgFactor`, biased toward the old — the smoothing
+lag we've discussed elsewhere). Ported verbatim.
+
+If we stopped here, the first 10-20 minutes would track target Ce very
+well (SimTIVA's ideal computation is accurate at short range), but by 30
+min and beyond, Ce would drift off target. SimTIVA never experiences that
+drift because it replans continuously. We would.
+
+**Phase 3 — our correction pass** (`emulation.js:454-521`). The part
+SimTIVA doesn't have. Walk the phase-2 plan forward through a simulated
+engine and break steps wherever Ce would actually drift outside ±`CE_TOL`.
+Detailed below in §3.
+
+### Why the trade-off works
+
+SimTIVA does **frequent soft replans with lag-smoothing**. We do **one
+plan with active drift-checking**. Both converge on similar Ce
+trajectories. Theirs is a live tool; ours is a static schedule a
+clinician can print and follow.
+
+### Knobs, in plain English
+
+- **`CE_TOL` (1.5%)** — how far Ce is allowed to drift before we break
+  the current step. Smaller = more steps, tighter tracking; larger =
+  fewer steps, more wander.
+- **`PROBE` (15 min)** — how far ahead we look AND the step-extension
+  increment. Effective floor on step duration.
+- **`MAX_DUR` (90 min)** — hard cap on any single step's duration, so
+  even at perfect steady state a rate refresh gets issued.
+
+### Why "lazy / accurate" should bind to `CE_TOL`, not `cpt_threshold`
+
+SimTIVA's lazy/accurate toggle fires during phase 2 — the step extraction.
+Our phase 3 then deletes and regenerates everything from `maintTime`
+onward based on `CE_TOL`. So moving `cpt_threshold` in our port has a
+muted effect (phase 3 rewrites most of what it did). `CE_TOL` is where
+our plan actually reacts to drift, and where a clinician would feel the
+difference.
+
+---
+
+## 3. Our correction pass in detail
+
+Lives in `js/sim/tci/emulation.js:454-521`. Its job: replace phase 2's
+SimTIVA-style maintenance steps (weighted averages held for 30–120+ min)
+with steps produced by actually simulating the plan forward and breaking
+wherever Ce would drift past tolerance.
+
+### Setup (lines 455-457)
+
+```js
+const PROBE      = 15;    // min
+const MAX_DUR    = 90;    // min
+const CE_TOL     = 0.015; // 1.5%
+```
+
+Three constants govern everything.
+
+### Identify `corrStart` (lines 462-463)
+
+```js
+const rateSteps = scheme.filter(s => s.type === 'rate');
+const firstCorrIdx = rateSteps.findIndex(s => s.time >= maintTime);
+```
+
+Scheme events before `maintTime` — the loading bolus delivery window, the
+zero-rate pause while the bolus peaks — are preserved untouched. They
+represent the bolus phase; SimTIVA handles that correctly, and they're
+already baked into `maintState` (the engine state snapshot taken at line
+267 before phase 2 ran).
+
+`corrStart` is the time of the first maintenance-phase rate event.
+Everything at or after it gets regenerated.
+
+### Horizon (line 467)
+
+```js
+const corrEnd = maintTime + cptIntervalCount * cptInterval / 60 + 180;
+```
+
+With `cptIntervalCount = 360` and `cptInterval = 120 sec`, that's
+`maintTime + 720 + 180 = maintTime + 15 hours`. Long enough to plan
+through full V3 equilibration (fat takes 4-6 h to fill).
+
+### Re-position the engine at `corrStart` (lines 472-478)
+
+Replay any uncorrected rate steps between `maintTime` and `corrStart`
+through the engine, so we know the true compartment state at `corrStart`.
+In practice `firstCorrIdx` is usually 0 or 1, so this loop runs rarely.
+
+### Delete what we're about to regenerate (lines 481-485)
+
+```js
+for (let i = scheme.length - 1; i >= 0; i--) {
+  if (scheme[i].type === 'rate' && scheme[i].time >= corrStart) {
+    scheme.splice(i, 1);
+  }
+}
+```
+
+Wipe all rate events at or after `corrStart`. Bolus events and
+pre-`corrStart` rates stay.
+
+### The main loop (lines 490-519) — the heart of the correction pass
+
+```js
+for (let t = corrStart; t < corrEnd; ) {
+  const state = engine.getState();
+
+  // Binary search: rate where Ce = ceTarget after PROBE minutes
+  let lo = 0, hi = cfg.maxRate;
+  for (let iter = 0; iter < 25; iter++) {
+    const mid = (lo + hi) / 2;
+    engine.setState(state);
+    engine.advance(PROBE, mid);
+    if (engine.getConcentrations().Ce < ceTarget) lo = mid; else hi = mid;
+  }
+  const rate = qRate((lo + hi) / 2);
+
+  // Probe forward: extend this rate while Ce stays within tolerance
+  let dur = PROBE;
+  while (dur + PROBE <= MAX_DUR && t + dur + PROBE <= corrEnd) {
+    engine.setState(state);
+    engine.advance(dur + PROBE, rate);
+    if (Math.abs(engine.getConcentrations().Ce - ceTarget) / ceTarget > CE_TOL) break;
+    dur += PROBE;
+  }
+
+  scheme.push({ type: 'rate', time: t, value: rate });
+  engine.setState(state);
+  engine.advance(dur, rate);
+  t += dur;
+}
+```
+
+Five substeps per iteration:
+
+**(A) Snapshot engine state at `t`.** Needed so the forthcoming probes
+can each start clean.
+
+**(B) Binary-search the rate hitting Ce = target at `t + PROBE`**
+(25 iterations over `[0, cfg.maxRate]`). 2²⁵-fold precision — effectively
+exact. Monotonic: higher rate → higher Ce, no local traps.
+
+**(C) Quantize with `qRate` BEFORE the extension loop** (line 504).
+Critical: we need to probe with the rate the pump will actually deliver,
+not an idealized fractional rate. Quantizing after would make extension
+stop too early or too late under rounding.
+
+**(D) Extension loop** (lines 507-513). Probe: "if we held this rate for
+`dur + PROBE` minutes, would `|Ce - target| / target` exceed `CE_TOL`?"
+Reset engine to `state` between each probe. Stop when the answer becomes
+yes — current `dur` is the longest hold.
+
+**(E) Commit the step** (lines 515-518). Push `{type: 'rate', time: t,
+value: rate}`, advance the engine `dur` minutes at `rate`, jump `t` by
+`dur`. Repeat.
+
+### Emergent adaptive step spacing
+
+The comment at lines 450-453 says it well:
+
+> This gives tight control when V3 equilibrates fast (~15-30 min steps
+> early) and relaxed control when the rate barely changes (~60-90 min
+> steps late).
+
+Why it happens:
+- **Early in maintenance**, V3 is still filling. The rate needed to hold
+  Ce at target is declining noticeably over 15-30 min windows. The
+  binary-search rate at minute 20 is already wrong 30 minutes later, so
+  the extension loop bails after one or two extensions. Short steps.
+- **Late in maintenance**, V3 is near-equilibrium. The rate needed
+  changes slowly. The binary-searched rate holds Ce within 1.5% for a
+  long time. Extension succeeds up to the `MAX_DUR` cap. Long steps.
+
+No explicit "early vs late" logic. It falls out of physics + `CE_TOL`.
+
+### What makes this different from SimTIVA
+
+SimTIVA's step extraction (phase 2) asks: *"has the ideal rate changed
+enough to warrant a new pump setting?"* (`cpt_threshold`,
+`cpt_avgfactor`). A heuristic comparing consecutive ideal-rate values.
+
+Our correction pass asks: *"if I held this rate, would Ce actually drift
+outside tolerance?"* A simulation of the plan's real behaviour.
+
+Both arrive at similar places for the first few minutes (where V3 is
+filling fast), but diverge later — where SimTIVA's heuristic emits huge
+steps that look fine by rate-change metrics but would accumulate Ce drift
+under a non-replanning model, and ours catches the drift by direct
+simulation.
+
+### One caveat worth knowing
+
+This pass is why TCIsim tracks Ce very tightly but can emit more steps
+than SimTIVA over the same plan horizon. If a clinician compares
+"SimTIVA shows 4 rate steps, TCIsim shows 8" and complains about
+clutter, the correct response is: TCIsim's extra steps each correct real
+drift that SimTIVA would also correct — SimTIVA just hides them by
+replanning continuously instead of showing the full plan upfront.
+
+---
+
+## 4. Where the real drift-tolerance knobs live
 
 The CET emulation planner's **post-extraction Ce correction pass** at
 `js/sim/tci/emulation.js:454-521` is what actually decides how far Ce is
@@ -109,15 +368,83 @@ that pass deletes and regenerates everything at `maintTime` onward
 
 ---
 
-## 3. SimTIVA's "auto / lazy / accurate" presets
+## 5. SimTIVA — live-sim architecture and preset semantics
 
-Source: `luktinghin/simtiva` on GitHub, `pharmacology.js` ≈ lines 1950-2003.
-**GPL-3.0 — reference only, do not import or copy code.** Mechanics below
-are described, not lifted, for the purpose of informing our own design.
+Source: `luktinghin/simtiva` on GitHub. **GPL-3.0 — reference only, do
+not import or copy code.** Mechanics below are described, not lifted,
+for the purpose of informing our own design.
 
-The presets toggle two constants — `cpt_threshold` (rate-change emission
-threshold) and `cpt_avgfactor` (weighting toward the prior rate). The
-mapping is **per-drug**, and not every drug has all three modes.
+### Live-sim architecture
+
+SimTIVA is a live training simulator, not a one-shot planner. This matters
+for interpreting every claim elsewhere in this doc about "SimTIVA does X".
+
+**Wall-clock-driven advancement with a `simspeed` multiplier** (`main.js`):
+
+```js
+var now = Date.now();
+time += (now - offset) * simspeed;
+offset = now;
+time_in_s = time / 1000;
+```
+
+`simspeed = 1` by default (1:1 real time); setting it higher accelerates
+the simulator (e.g. `simspeed = 10` runs 10 sim-seconds per wall-clock
+second). Standard training-sim time-compression pattern.
+
+**Three parallel `setInterval` loops** (`main.js`):
+
+```js
+loop1 = setInterval(update, 500);         // UI refresh @ 500 ms
+loop2 = setInterval(runinfusion2, refresh_interval);  // PK tick (~1 s)
+loop3 = setInterval(updatechart, 5000);   // Chart render @ 5 s
+```
+
+Each loop reads the `simspeed`-scaled `time_in_s`, so acceleration works
+across all of them without per-loop special-casing.
+
+**Separate time axes:**
+- `time_in_s` — simulated elapsed seconds, the PK engine's time axis.
+- `working_clock` — integer timestamp used as an array index into
+  per-second precomputed values. Matches the 1-sec eigenstate stepping
+  from ARCHITECTURE.md:22.
+- `offset` — wall-clock reference point for computing deltas between
+  ticks.
+
+**`deliver_cpt` replanning is event-driven, not strictly periodic.**
+Target changes trigger an immediate call:
+
+```js
+deliver_cpt(parse_historyarray[count][3], 0, 0, 0);  // immediate on target change
+```
+
+Plus it's invoked periodically by `runinfusion2` to keep the plan fresh
+as sim-time advances. The `cpt_interval = 120 sec` value that appears
+inside `deliver_cpt` is the **internal forward-scan grain** within one
+call, **not the replan cadence**. The actual replan cadence is
+continuous at the `runinfusion2` tick rate (~1 s), plus on events.
+
+> **Correction to earlier notes in this doc and in code comments:**
+> Several places (including `emulation.js:443-448`) describe SimTIVA as
+> "replanning every 2 min". That's inaccurate. SimTIVA replans
+> continuously; "2 min" is the internal forward-scan interval within
+> `deliver_cpt`. A future comment cleanup could restate this as:
+> "SimTIVA replans continuously as sim-time advances; our one-shot
+> planner substitutes that with an active drift-checking pass."
+
+**Pause / jump / suspend:**
+- `drug_sets[ind].running` — per-drug pause flag.
+- `timeFxSuspend()` / `timeFxResume()` — time-freeze utilities.
+- `jump()` — fast-forward through periods. The `sendtoreanimate` /
+  `sendtowakeup` flows accept duration parameters, so users can skip
+  ahead to emergence or wakeup.
+
+### The "auto / lazy / accurate" presets
+
+Located in `pharmacology.js` ≈ lines 1950-2003. The presets toggle two
+constants — `cpt_threshold` (rate-change emission threshold) and
+`cpt_avgfactor` (weighting toward the prior rate). The mapping is
+**per-drug**, and not every drug has all three modes.
 
 ### Per-drug table (threshold / avgfactor)
 
@@ -172,7 +499,7 @@ ketamine).
 
 ---
 
-## 4. Design options if we ever wire a real tolerance toggle
+## 6. Design options if we ever wire a real tolerance toggle
 
 ### Option A — relabel, do nothing to the planner
 
@@ -220,7 +547,9 @@ importing those constants wholesale.
 
 ---
 
-## 5. Quick references
+## 7. Quick references
+
+### Our codebase
 
 | Symbol | Location | Value |
 |---|---|---|
@@ -233,15 +562,30 @@ importing those constants wholesale.
 | `needsBolus` gate | `js/sim/tci/emulation.js:49` | uses `tolerancePct` |
 | `cptInterval` | `js/sim/tci/emulation.js:214` | 120 sec |
 | `cptIntervalCount` | `js/sim/tci/emulation.js:281` | 360 intervals (720 min) |
+| Phase 1 (forward ideal scan) | `js/sim/tci/emulation.js:307-344` | 360-slot eigenstate scan |
+| Phase 2 (step extraction) | `js/sim/tci/emulation.js:367-441` | `cptThreshold`/`cptAvgFactor` logic |
+| Phase 3 (correction pass) | `js/sim/tci/emulation.js:454-521` | `CE_TOL` drift-checking |
 | `cptThreshold` (auto) | `js/sim/tci/emulation.js:353` | 0.08 or 0.05 |
 | `cptAvgFactor` (auto) | `js/sim/tci/emulation.js:354` | 0.667 or 0.62 |
 | `rf` (rounding factor) | `js/sim/tci/emulation.js:355` | 360 |
 | `PROBE` | `js/sim/tci/emulation.js:455` | 15 min |
 | `MAX_DUR` | `js/sim/tci/emulation.js:456` | 90 min |
 | `CE_TOL` | `js/sim/tci/emulation.js:457` | 0.015 (1.5%) |
+| Correction horizon | `js/sim/tci/emulation.js:467` | `maintTime + 15h` |
+| Binary-search iterations | `js/sim/tci/emulation.js:495` | 25 |
 | Diagnostic script | `tests/test-tci-tolerance-diagnostic.mjs` | Loop A + Loop B |
 
-SimTIVA reference (read-only, GPL-3.0, not to be imported):
-- `pharmacology.js` ≈ lines 1950-2003 — the per-drug `cpt_threshold` /
-  `cpt_avgfactor` preset logic.
-- Upstream repo: `https://github.com/luktinghin/simtiva`.
+### SimTIVA (read-only, GPL-3.0, not to be imported)
+
+| Symbol | Location | Value |
+|---|---|---|
+| `simspeed` | `main.js` | time multiplier, default 1 |
+| `time_in_s` | `main.js` | simulated seconds axis |
+| `working_clock` | `main.js` | integer-sec indexer |
+| `offset` | `main.js` | wall-clock reference point |
+| `loop1 = setInterval(update, 500)` | `main.js` | UI refresh @ 500 ms |
+| `loop2 = setInterval(runinfusion2, …)` | `main.js` | PK tick (~1 s) |
+| `loop3 = setInterval(updatechart, 5000)` | `main.js` | chart render @ 5 s |
+| `deliver_cpt` replan cadence | `main.js` + events | continuous, not fixed-period |
+| `cpt_threshold` / `cpt_avgfactor` presets | `pharmacology.js` ≈ 1950-2003 | per-drug lazy/accurate/auto |
+| Upstream repo | `https://github.com/luktinghin/simtiva` | reference only |
