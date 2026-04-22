@@ -9,6 +9,14 @@ CET emulation planner's internal drift-control knobs, and SimTIVA's
 
 ## 1. The "TCI target tolerance" slider is disconnected from the planner
 
+> **Status update (historical finding, now resolved):** The slider has
+> since been rebound to `ceTolerance`, which the correction pass reads
+> at `emulation.js:457`. Label renamed to "Ce drift tolerance"; range
+> remapped to 0.5%–3.0% in 0.5% increments. See §6 Option C (chosen)
+> and §7–§9 for the portability and PD-related follow-ups that shipped
+> alongside. The text below documents the original disconnect for
+> historical reference.
+
 ### The slider
 
 - **DOM:** `index.html:1341` — `<input type="range" id="set-tci-fraction" min="90" max="99" step="1" value="95">` with label "TCI target tolerance (% of target)".
@@ -520,17 +528,37 @@ maintenance.**
   `js/sim/simulation.js:234-246`.
 - Pull `tciFraction` from `settings.getSettings()` in `js/app.js:338`.
 
-### Option C — expose `CE_TOL` as a three-way preset (recommended if clinicians want to feel it)
+### Option C — expose `CE_TOL` as a continuous slider (CHOSEN AND IMPLEMENTED)
 
-New setting, e.g. `ceTolerance ∈ { accurate: 0.005, auto: 0.015, lazy: 0.030 }`.
+Setting `ceTolerance`, range 0.005–0.030, default 0.015, exposed via the
+existing slider at `index.html:1341` (relabeled "Ce drift tolerance",
+remapped to min=5, max=30, step=5 representing tenths of a percent).
 
-- Add a segmented control to `index.html` Behavior tab + wire in `js/app/settings-ui.js` and `js/ui/settings.js`.
-- Replace the hardcoded `const CE_TOL = 0.015` at `js/sim/tci/emulation.js:457` with `cfg.ceTolerance ?? 0.015`.
-- Add `ceTolerance` to `planConfig` in `js/sim/simulation.js:234-246`.
+**Implementation landed (commits `4cabdfe`, `76ad049`, `af58f8c` on
+branch `claude/test-tci-tolerance-slider-bqElU`):**
 
-Optional companion adjustments to keep the three presets distinct:
-- `accurate`: also tighten `PROBE` (15 → 10) and/or `MAX_DUR` (90 → 60).
-- `lazy`: loosen `PROBE` (15 → 30), `MAX_DUR` (90 → 180).
+- `index.html:1341-1346` — slider DOM + label updated.
+- `js/ui/settings.js` — `ceTolerance` in DEFAULTS (validator clamps
+  [0.005, 0.030]); `tciFraction` retired from the settings blob.
+- `js/app/settings-ui.js` — wiring rebound + `INFO_TEXTS.simulation`
+  rewritten to explain the new meaning and the default's tightness.
+- `js/app.js:338` — `ceTolerance` spread into `tciConfig` passed to
+  `model.planTCI(...)`. `js/app/tci-modal.js` carries the value across
+  the pending-TCI → commit-after-delay bridge.
+- `js/app.js:451` — drug-panel time-to-target readout (`getTciFraction`)
+  now hardcoded to 0.95 (sensible clinical default). The readout was
+  the only consumer of `tciFraction` and didn't need to be
+  user-tunable.
+- `js/sim/tci/emulation.js:457` — `CE_TOL` now reads `cfg.ceTolerance`
+  with validation + 0.015 fallback.
+- `tests/test-tci-tolerance-diagnostic.mjs` — Loop A flipped: the
+  `ceTolerance` sweep now asserts plans DIFFER (slider is wired). At
+  the default patient/target, 0.005 → 47 rate steps and 0.030 → 18.
+
+Companion adjustments NOT shipped (left for future if presets are
+wanted instead of a continuous slider):
+- `accurate` also tightening `PROBE` / `MAX_DUR`.
+- `lazy` loosening them.
 
 ### Option D — SimTIVA-faithful per-drug `cptThreshold`/`cptAvgFactor` toggle
 
@@ -547,16 +575,159 @@ importing those constants wholesale.
 
 ---
 
-## 7. Quick references
+## 7. ke0-aware PROBE for drug portability
+
+`PROBE` used to be hardcoded at 15 min in `emulation.js:455`. Fine for
+propofol and fentanyl (both τ ≈ 6.8 min, so 15 ≈ 2τ), but poorly scaled
+for drugs with very different `ke0`.
+
+**Physics:** Ce responds to Cp changes with a first-order delay whose
+time constant is `τ = 1/ke0`. Binary-searching for "the rate that makes
+Ce hit target at `+PROBE` min" is asking physics to settle in that
+window. If `PROBE < τ`, the search either rate-clamps at `cfg.maxRate`
+or returns a peaky rate that causes overshoot at step commitment.
+
+**Shipped formula** (`emulation.js:455`):
+
+```js
+const PROBE = Math.max(10, Math.min(30, 2 / engine.params.ke0));
+```
+
+- Physics floor `2/ke0` ≈ 2τ — enough time for Ce to substantially
+  respond to a rate change.
+- Clinical floor 10 min — even where pharmacology permits a shorter
+  window, plans with sub-10-min step durations are an ergonomic burden.
+- Ceiling 30 min — avoids pathologically long initial probes on slow
+  drugs.
+
+**Per-drug effective values:**
+
+| Drug | Model | ke0 (/min) | 2/ke0 | PROBE after clamp |
+|---|---|---|---|---|
+| Propofol | Eleveld 2018 | 0.146 | 13.7 | 13.7 |
+| Fentanyl | Shafer 1990 | ~0.147 | 13.6 | 13.6 |
+| Ketamine | Domino/Navarrete | model-dependent | varies | varies |
+| Remifentanil (future) | Minto 1997 | ~0.595 | 3.4 | 10 (clinical floor) |
+
+All existing PK models (Eleveld, Shafer/Fentanyl, Ketamine) export `ke0`
+in the params object, so `engine.params.ke0` is universally available
+at the correction-pass call site.
+
+---
+
+## 8. Peak-aware rate selection in the correction pass
+
+### The problem
+
+The pre-change correction pass ran a single binary search: "rate where
+`Ce(+PROBE) = target`". The extension loop then tested whether that same
+rate held for `dur + PROBE` minutes kept Ce within ±`CE_TOL`. If a step
+extended successfully, nothing prevented Ce from overshooting
+`target * (1 + CE_TOL)` at an intermediate time during the extension —
+the check only looked at the endpoint.
+
+Result: early-maintenance steps could overshoot by 1–2% past the target
+ceiling before the extension probe caught it. The overshoot was real,
+visible, and unnecessary.
+
+### The shipped fix
+
+Port the dual-constraint pattern from
+`js/sim/tci/shared.js:138-182` (`findMaintenanceRate`) into the
+correction pass. See `emulation.js:494-534`:
+
+1. **Endpoint search** — rate where `Ce(+PROBE) = target`.
+2. **Peak-bounded search** — rate where max `Ce` over the full `MAX_DUR`
+   window ≤ `target * (1 + CE_TOL)`. 1-min sampling grain, 25 binary
+   iterations.
+3. **Return `min(endpoint, peak)`** — whichever is stricter wins.
+4. **Skip peak search when `currentCe ≥ ceTarget`** — the peak cap would
+   otherwise return ~0 and force free-fall when Ce is already above
+   target. Mirrors the same safety case in `findMaintenanceRate`.
+
+### Cost
+
+1-min peak granularity × 90 min × 25 iterations ≈ 2250 extra
+`engine.advance` calls per maintenance step. The engine's
+matrix-exponential cache makes each advance a single 4×4 matrix-vector
+multiply (~16 mults + 16 adds) once the cache is warm, so total
+overhead is sub-millisecond per step.
+
+### Validation
+
+Added `tests/test-tci-peak-overshoot.mjs` — replays each emitted plan
+through a fresh engine across four patient fixtures and asserts
+`max(Ce) ≤ target * (1 + CE_TOL) + ε`. All pass. The epsilon absorbs
+(a) 1-min peak-search sampling vs 0.05-min replay sampling, (b) rate
+quantization rounding, (c) bolus-pause timing at sub-CE_TOL precision.
+
+---
+
+## 9. Ce tolerance scaling across drugs
+
+### Fractional by construction
+
+The tolerance check at `emulation.js:511` is:
+
+```js
+if (Math.abs(engine.getConcentrations().Ce - ceTarget) / ceTarget > CE_TOL) break;
+```
+
+Fractional — `|Ce - target| / target`. Unit-independent. `CE_TOL = 0.015`
+means 1.5% of target regardless of whether target is 3 μg/mL of propofol
+or 2 ng/mL of fentanyl.
+
+Per-drug absolute bands at typical targets:
+
+| Drug | Target | Absolute ±CE_TOL band |
+|---|---|---|
+| Propofol | 3.0 μg/mL | ±0.045 μg/mL |
+| Fentanyl | 2.0 ng/mL | ±0.030 ng/mL |
+| Ketamine | 1.0 μg/mL | ±0.015 μg/mL |
+
+### Two subtle weaknesses worth knowing about
+
+**(a) Very low targets become numerical noise.** A fentanyl target of
+0.5 ng/mL gives a ±0.0075 ng/mL band — below typical PK model precision
+at the tails and potentially below assay resolution. The correction pass
+still runs, but it's chasing numerical noise rather than clinical
+signal. Not a problem at typical TCI targets (1+ ng/mL fentanyl, 1.5+
+μg/mL propofol), but worth remembering.
+
+**(b) The same fractional tolerance isn't equally PD-meaningful across
+drugs.** 1.5% of target relates to the drug's Ce50 differently for
+propofol (target ≈ Ce50_BIS ≈ 3 μg/mL, so 1.5% sits on the steep part
+of the sigmoid and produces real BIS change) vs fentanyl (target 2
+ng/mL, Ce50_analgesia ≈ 0.6 ng/mL, so target is well past saturation
+and 1.5% drift is PD-invisible).
+
+Not a planner bug — just a reminder that fractional PK tolerance and
+PD-meaningful tolerance aren't the same knob. A "same perceived tightness
+across drugs" tolerance would need to scale with `Ce50`, not with target.
+
+### Decision: ship the fractional version, revisit if low-target cases surface
+
+**Option considered but not shipped:** floor the band with an absolute
+minimum per drug (e.g. `max(0.015 × target, 0.01 ng/mL)` for fentanyl).
+Adds per-drug constants; probably unnecessary at current usage patterns.
+Left as a clean future option if a clinician reports the planner
+chasing noise at very low targets.
+
+---
+
+## 10. Quick references
 
 ### Our codebase
 
 | Symbol | Location | Value |
 |---|---|---|
-| `#set-tci-fraction` slider | `index.html:1341` | 90..99, default 95 |
-| `tciFraction` default | `js/ui/settings.js:25` (via DEFAULTS) | 0.95 |
-| `DEFAULT_SCHEME_CONFIG.tolerancePct` | `js/sim/tci/shared.js:26` | 0.05 |
-| `planTCI` call site | `js/app.js:338` | (tciConfig excludes `tolerancePct`) |
+| Ce drift tolerance slider | `index.html:1341` | range 5..30 step 5 (= 0.5%..3.0%) |
+| `ceTolerance` default | `js/ui/settings.js:25` (via DEFAULTS) | 0.015 (validator clamps [0.005, 0.030]) |
+| `INFO_TEXTS.simulation` | `js/app/settings-ui.js:28` | describes the slider's tradeoffs |
+| `DEFAULT_SCHEME_CONFIG.tolerancePct` | `js/sim/tci/shared.js:26` | 0.05 (loading-bolus + target-decrease only) |
+| `planTCI` call site | `js/app.js:338` | now spreads `ceTolerance` into `tciConfig` |
+| TCI-delay bridge | `js/app/tci-modal.js:61, 66` | carries `ceTolerance` across pending → commit |
+| `getTciFraction` | `js/app.js:451` | hardcoded 0.95 (time-to-target readout only) |
 | `planConfig` assembly | `js/sim/simulation.js:234-246` | spreads tciConfig + pump + quantize |
 | `upperBound` (target-decrease) | `js/sim/tci/emulation.js:42,197` | uses `tolerancePct` |
 | `needsBolus` gate | `js/sim/tci/emulation.js:49` | uses `tolerancePct` |
@@ -564,16 +735,19 @@ importing those constants wholesale.
 | `cptIntervalCount` | `js/sim/tci/emulation.js:281` | 360 intervals (720 min) |
 | Phase 1 (forward ideal scan) | `js/sim/tci/emulation.js:307-344` | 360-slot eigenstate scan |
 | Phase 2 (step extraction) | `js/sim/tci/emulation.js:367-441` | `cptThreshold`/`cptAvgFactor` logic |
-| Phase 3 (correction pass) | `js/sim/tci/emulation.js:454-521` | `CE_TOL` drift-checking |
+| Phase 3 (correction pass) | `js/sim/tci/emulation.js:454-534` | `CE_TOL` drift-checking + peak-aware rate selection |
 | `cptThreshold` (auto) | `js/sim/tci/emulation.js:353` | 0.08 or 0.05 |
 | `cptAvgFactor` (auto) | `js/sim/tci/emulation.js:354` | 0.667 or 0.62 |
 | `rf` (rounding factor) | `js/sim/tci/emulation.js:355` | 360 |
-| `PROBE` | `js/sim/tci/emulation.js:455` | 15 min |
+| `PROBE` | `js/sim/tci/emulation.js:455` | `max(10, min(30, 2/ke0))` |
 | `MAX_DUR` | `js/sim/tci/emulation.js:456` | 90 min |
-| `CE_TOL` | `js/sim/tci/emulation.js:457` | 0.015 (1.5%) |
+| `CE_TOL` | `js/sim/tci/emulation.js:457-461` | from `cfg.ceTolerance` (default 0.015) |
+| Peak-aware rate search | `js/sim/tci/emulation.js:506-529` | dual-constraint (endpoint + peak-bounded) |
 | Correction horizon | `js/sim/tci/emulation.js:467` | `maintTime + 15h` |
-| Binary-search iterations | `js/sim/tci/emulation.js:495` | 25 |
-| Diagnostic script | `tests/test-tci-tolerance-diagnostic.mjs` | Loop A + Loop B |
+| Binary-search iterations | `js/sim/tci/emulation.js:499, 520` | 25 each (endpoint, peak) |
+| `findMaintenanceRate` (reference impl) | `js/sim/tci/shared.js:138-182` | dual-constraint pattern the correction pass ports |
+| Diagnostic script | `tests/test-tci-tolerance-diagnostic.mjs` | Loop A (ceTolerance sweep) + Loop B (historical) |
+| Peak-overshoot test | `tests/test-tci-peak-overshoot.mjs` | 4 fixtures, asserts max Ce ≤ target*(1+CE_TOL)+ε |
 
 ### SimTIVA (read-only, GPL-3.0, not to be imported)
 
