@@ -11,6 +11,46 @@
 
 ---
 
+## [0.5.25] — 2026-04-22
+
+Make the TCI tolerance slider do what its label says, add a drift-band visualization, and make the correction pass portable across drugs with different ke0.
+
+### The original bug
+
+The "TCI target tolerance (% of target)" slider at the top of the Simulation settings tab was persisted to localStorage but never threaded into `planTCI()`. `tciFraction` was only consumed by the drug-panel time-to-target readout. The CET emulation planner hardcoded `tolerancePct = 0.05` (for the loading-bolus and target-decrease gates) and `CE_TOL = 0.015` (for the maintenance-phase drift check) — both invisible to the UI. Diagnostic in `tests/test-tci-tolerance-diagnostic.mjs`; analysis write-up in `TCI-TOLERANCE-ANALYSIS.md`.
+
+### Shipped
+
+- **Slider rebound** to `ceTolerance`, the correction-pass drift tolerance. Label renamed to "Ce drift tolerance"; range remapped from `90..99` (% of target) to `5..30` step `5` (= 0.5%–3.0% in 0.5% increments, default 15 = 1.5%). Old `tciFraction` retired from settings; drug-panel time-to-target readout uses a hardcoded 0.95 internal default.
+- **Moving the slider changes the plan.** At the 35 y / 70 kg reference patient and propofol target 3 μg/mL, `0.005` gives 47 maintenance rate steps over 12 hours, `0.030` gives 18 — tradeoff is tighter tracking vs simpler plans.
+- **Info text** in the Simulation tab rewritten to describe the new semantic: lower values = tighter tracking + more rate changes; higher values = simpler plans with more visible Ce variation. Notes that the 1.5% default is already tighter than a live clinician could hold manually.
+- **Optional drift-band visualization** on the chart. Appearance tab gets a "Show Ce drift band" checkbox (off by default). When on and a TCI target is set, the single dashed target line is replaced by a pair of dashed lines at `target × (1 ± ceTolerance)` — the zone between is the tolerance window. Initial implementation used a low-opacity fill but was imperceptible against the BIS nomogram overlays; dual lines are crisp against any background.
+- **`PROBE` (correction-pass binary-search lookahead) is now derived from `ke0`** instead of hardcoded at 15 min. New formula at `emulation.js:459`: `max(10, min(30, 2/ke0))` — i.e. two time-constants, clamped to a 10-min clinical floor and a 30-min ceiling. For propofol and fentanyl this is ~13.7 min (was 15); for a future remifentanil model (ke0 ≈ 0.6/min) it'd clamp to 10. Makes the planner auto-adjust to each drug's equilibration speed without per-drug PROBE tuning.
+
+### Planner experiment — tried and reverted
+
+Attempted peak-aware dual-constraint rate selection (`min(endpointRate, peakRate)`, capping `max Ce` over `MAX_DUR = 90 min` at `target × (1 + CE_TOL)`). Caused clinically significant undershoot during V3 filling: Ce dipped to ~3.0 for a 3.5 target in a 90 kg adult. Root cause is that during V3 filling the rate needed to hold Ce at target *now* is higher than long-term steady-state — the peak constraint was systematically stricter than endpoint, and `min(endpoint, peak)` picked the too-low rate. Documented in `TCI-TOLERANCE-ANALYSIS.md §8` with requirements for any future peak-aware attempt.
+
+### Testing improvements
+
+- New `tests/test-tci-ce-tracking.mjs` — bidirectional tracking test across 4 patient fixtures (70, 60, 75, 90 kg). Asserts `max Ce ≤ target × 1.07`, `min Ce ≥ target × 0.93`, and a hard clinical floor `min Ce ≥ target × 0.90`. Replaces the retired `test-tci-peak-overshoot.mjs`, which only checked the upper bound and would have passed even on gross undershoot. 12 assertions.
+- `tests/test-tci-tolerance-diagnostic.mjs` Loop A flipped from "slider is dead" to "slider is wired" — now asserts plans differ across the `ceTolerance` sweep.
+
+### Comments / code documentation
+
+- `js/sim/tci/shared.js:26` — `DEFAULT_SCHEME_CONFIG.tolerancePct` now comments that this is a BINARY-decision knob (loading-bolus + target-decrease gates), distinct from the maintenance-phase drift tolerance `ceTolerance`.
+- `js/sim/tci/emulation.js:42, 49, 461` — call sites for `tolerancePct` and `CE_TOL` cross-reference each other so the distinction is hard to miss.
+
+### New documentation
+
+- `TCI-TOLERANCE-ANALYSIS.md` (new). Ten sections covering the original disconnect, a plain-English walkthrough of the CET emulation planner, a code-level deep-dive on the correction pass, SimTIVA's live-sim architecture and preset semantics (read-only reference), design options considered, the ke0 portability fix, the peak-aware experiment (tried / reverted / requirements for a future attempt), tolerance scaling across drugs, and a cross-referenced symbol table.
+
+### Files changed
+
+`js/version.js`, `index.html`, `js/ui/settings.js`, `js/app/settings-ui.js`, `js/app.js`, `js/app/tci-modal.js`, `js/sim/tci/emulation.js`, `js/sim/tci/shared.js`, `js/ui/chart/state.js`, `js/ui/chart/index.js`, `js/ui/chart/annotations.js`, `js/app/chart-bridge.js`, `tests/test-tci-tolerance-diagnostic.mjs` (new), `tests/test-tci-ce-tracking.mjs` (new), `TCI-TOLERANCE-ANALYSIS.md` (new), `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## Session 27 summary — v0.5.24 → v0.5.24.23 (UI polish arc)
 
 Single long session delivering a coherent UI polish pass. 23 interim version bumps grouped into themes below; detailed per-version notes follow. See `DEVELOPMENT.md` for the session narrative.
