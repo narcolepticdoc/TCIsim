@@ -11,11 +11,13 @@ CET emulation planner's internal drift-control knobs, and SimTIVA's
 
 > **Status update (historical finding, now resolved):** The slider has
 > since been rebound to `ceTolerance`, which the correction pass reads
-> at `emulation.js:457`. Label renamed to "Ce drift tolerance"; range
-> remapped to 0.5%–3.0% in 0.5% increments. See §6 Option C (chosen)
-> and §7–§9 for the portability and PD-related follow-ups that shipped
-> alongside. The text below documents the original disconnect for
-> historical reference.
+> at `emulation.js:461`. Label renamed to "Ce drift tolerance"; range
+> remapped to 0.5%–3.0% in 0.5% increments. An opt-in visual band
+> (Appearance → "Show Ce drift band") now renders the ±tolerance around
+> the target line on the chart. See §6 Option C (chosen), §7 and §9 for
+> the follow-ups that shipped, and §8 for the peak-aware attempt that
+> was tried and reverted. The text below documents the original
+> disconnect for historical reference.
 
 ### The slider
 
@@ -615,51 +617,90 @@ at the correction-pass call site.
 
 ---
 
-## 8. Peak-aware rate selection in the correction pass
+## 8. Peak-aware rate selection — tried and reverted
 
-### The problem
+> **Status: reverted.** Shipped in commit `76ad049`, reverted in
+> commit `60b57c2` after clinical testing showed it produced serious
+> undershoot instead of the intended overshoot reduction. The
+> endpoint-only search is back in place at `emulation.js:509-539`.
+> **Read this section before attempting peak-awareness again.**
 
-The pre-change correction pass ran a single binary search: "rate where
-`Ce(+PROBE) = target`". The extension loop then tested whether that same
-rate held for `dur + PROBE` minutes kept Ce within ±`CE_TOL`. If a step
-extended successfully, nothing prevented Ce from overshooting
-`target * (1 + CE_TOL)` at an intermediate time during the extension —
-the check only looked at the endpoint.
+### The motivating problem
 
-Result: early-maintenance steps could overshoot by 1–2% past the target
-ceiling before the extension probe caught it. The overshoot was real,
-visible, and unnecessary.
+The endpoint-only correction pass binary-searches for the rate where
+`Ce(+PROBE) = target`. The extension loop then checks `|Ce - target|`
+only at PROBE-multiples. If a step extends successfully but the rate
+would cause Ce to *overshoot* `target * (1 + CE_TOL)` between extension
+checks, the overshoot is invisible to the extension logic.
 
-### The shipped fix
+Observed in practice: early-maintenance steps overshoot target by ~1–2%,
+visible briefly at step boundaries. Clinically trivial but real.
 
-Port the dual-constraint pattern from
-`js/sim/tci/shared.js:138-182` (`findMaintenanceRate`) into the
-correction pass. See `emulation.js:494-534`:
+### The attempted fix (now reverted)
 
-1. **Endpoint search** — rate where `Ce(+PROBE) = target`.
-2. **Peak-bounded search** — rate where max `Ce` over the full `MAX_DUR`
-   window ≤ `target * (1 + CE_TOL)`. 1-min sampling grain, 25 binary
-   iterations.
-3. **Return `min(endpoint, peak)`** — whichever is stricter wins.
-4. **Skip peak search when `currentCe ≥ ceTarget`** — the peak cap would
-   otherwise return ~0 and force free-fall when Ce is already above
-   target. Mirrors the same safety case in `findMaintenanceRate`.
+Port the dual-constraint pattern from `js/sim/tci/shared.js:138-182`
+(`findMaintenanceRate`) into the correction pass:
 
-### Cost
+1. Endpoint search — rate where `Ce(+PROBE) = target`.
+2. Peak-bounded search — rate where max Ce over the full `MAX_DUR`
+   window ≤ `target * (1 + CE_TOL)`.
+3. Return `min(endpoint, peak)`.
+4. Skip peak search when `currentCe ≥ target` (prevents free-fall).
 
-1-min peak granularity × 90 min × 25 iterations ≈ 2250 extra
-`engine.advance` calls per maintenance step. The engine's
-matrix-exponential cache makes each advance a single 4×4 matrix-vector
-multiply (~16 mults + 16 adds) once the cache is warm, so total
-overhead is sub-millisecond per step.
+### Why it failed
 
-### Validation
+During V3 filling, the rate needed to **hold Ce at target right now** is
+**higher** than the long-term steady-state rate — it's pushing drug into
+the V3 sink while also maintaining plasma. Any rate that successfully
+keeps Ce at target in the near term will, after 90 minutes of V3
+equilibration, produce a Ce above target.
 
-Added `tests/test-tci-peak-overshoot.mjs` — replays each emitted plan
-through a fresh engine across four patient fixtures and asserts
-`max(Ce) ≤ target * (1 + CE_TOL) + ε`. All pass. The epsilon absorbs
-(a) 1-min peak-search sampling vs 0.05-min replay sampling, (b) rate
-quantization rounding, (c) bolus-pause timing at sub-CE_TOL precision.
+So the peak-bounded search (which caps max Ce over 90 min at
+`target * 1.015`) is systematically **stricter** than the endpoint
+search. `min(endpoint, peak) = peakRate` — a rate too low to maintain
+Ce now, chosen because it won't overshoot 90 min later. Ce dips.
+
+Observed clinically on propofol target 3.5 μg/mL, 90 kg adult:
+- Ce reaches target after bolus + pause ✓
+- Ce dips to ~3.0 (~14% below target) during first 15 min of maintenance
+- Extension loop fails at minimum PROBE, emits duplicate 110 mcg/kg/min
+  rate events every ~13 min, Ce slowly recovers over the next hour
+- Hard below the 95% "patient stays asleep" clinical floor
+
+Pattern is worse for heavier patients (bigger V3 = faster redistribution
+draw on plasma).
+
+### Why the original test didn't catch it
+
+`tests/test-tci-peak-overshoot.mjs` only asserted `max Ce ≤ target *
+(1 + CE_TOL) + ε`. Undershoot satisfies an upper-bound trivially — the
+test passed green while shipping a clinically worse planner.
+
+Replaced by `tests/test-tci-ce-tracking.mjs`, which asserts BOTH
+directions plus a hard clinical floor. Would have failed loudly on the
+14% dip.
+
+### Requirements for a future peak-aware implementation
+
+If someone wants to retry this, the constraint that broke the first
+attempt was **`MAX_DUR = 90 min` peak window during V3 filling**. Viable
+alternatives:
+
+- **Shorter peak window.** Use `PROBE` (≈13.7 min for propofol) instead
+  of `MAX_DUR`. Peak constraint then matches the endpoint's time
+  horizon — no 90-minute V3 equilibration fight.
+- **Conditional application.** Only run peak search when the endpoint
+  rate is clearly excessive — e.g. endpoint > 1.5× analytical steady-
+  state rate. Avoids the pathological V3-filling interaction.
+- **Loosen the peak ceiling.** `target * (1 + 2 * CE_TOL)` or higher
+  gives the endpoint room without letting gross overshoot through.
+- **Floor-bounded search instead of peak-bounded.** Flip the sign: find
+  the rate where min Ce over MAX_DUR ≥ `target * (1 - CE_TOL)`. This
+  prevents the midpoint undershoot we actually see today without
+  touching overshoot behavior. Never tried.
+
+Any future attempt must validate against the CE_TOL-margin bidirectional
+tracking test, not just an upper-bound overshoot test.
 
 ---
 
@@ -735,19 +776,20 @@ chasing noise at very low targets.
 | `cptIntervalCount` | `js/sim/tci/emulation.js:281` | 360 intervals (720 min) |
 | Phase 1 (forward ideal scan) | `js/sim/tci/emulation.js:307-344` | 360-slot eigenstate scan |
 | Phase 2 (step extraction) | `js/sim/tci/emulation.js:367-441` | `cptThreshold`/`cptAvgFactor` logic |
-| Phase 3 (correction pass) | `js/sim/tci/emulation.js:454-534` | `CE_TOL` drift-checking + peak-aware rate selection |
+| Phase 3 (correction pass) | `js/sim/tci/emulation.js:454-539` | `CE_TOL` drift-checking, endpoint-only binary search (peak-aware reverted — see §8) |
 | `cptThreshold` (auto) | `js/sim/tci/emulation.js:353` | 0.08 or 0.05 |
 | `cptAvgFactor` (auto) | `js/sim/tci/emulation.js:354` | 0.667 or 0.62 |
 | `rf` (rounding factor) | `js/sim/tci/emulation.js:355` | 360 |
-| `PROBE` | `js/sim/tci/emulation.js:455` | `max(10, min(30, 2/ke0))` |
-| `MAX_DUR` | `js/sim/tci/emulation.js:456` | 90 min |
-| `CE_TOL` | `js/sim/tci/emulation.js:457-461` | from `cfg.ceTolerance` (default 0.015) |
-| Peak-aware rate search | `js/sim/tci/emulation.js:506-529` | dual-constraint (endpoint + peak-bounded) |
+| `PROBE` | `js/sim/tci/emulation.js:459` | `max(10, min(30, 2/ke0))` |
+| `MAX_DUR` | `js/sim/tci/emulation.js:460` | 90 min |
+| `CE_TOL` | `js/sim/tci/emulation.js:461-466` | from `cfg.ceTolerance` (default 0.015) |
 | Correction horizon | `js/sim/tci/emulation.js:467` | `maintTime + 15h` |
-| Binary-search iterations | `js/sim/tci/emulation.js:499, 520` | 25 each (endpoint, peak) |
-| `findMaintenanceRate` (reference impl) | `js/sim/tci/shared.js:138-182` | dual-constraint pattern the correction pass ports |
+| Binary-search iterations | `js/sim/tci/emulation.js:527` | 25 (endpoint) |
+| `findMaintenanceRate` (Stepped planner's peak-aware impl) | `js/sim/tci/shared.js:138-182` | dual-constraint pattern — see §8 for why we don't use it here |
+| Ce drift tolerance band | `js/ui/chart/annotations.js` (after effectBands forEach) | `type: 'box'`, fill 0x24 + border 0x50 of `COLORS.target`, scaled by `overlayAlpha`. Inserted after `band_N` entries so it renders on top of BIS overlays. |
+| `showCeBand` setting | `js/ui/settings.js` DEFAULTS | bool, default false. Drives `setCeToleranceBand` via chart-bridge onFrame. |
 | Diagnostic script | `tests/test-tci-tolerance-diagnostic.mjs` | Loop A (ceTolerance sweep) + Loop B (historical) |
-| Peak-overshoot test | `tests/test-tci-peak-overshoot.mjs` | 4 fixtures, asserts max Ce ≤ target*(1+CE_TOL)+ε |
+| Ce tracking test | `tests/test-tci-ce-tracking.mjs` | 4 fixtures × 3 assertions: overshoot cap (7% margin), undershoot cap (7% margin), clinical floor (≥ 90% of target) |
 
 ### SimTIVA (read-only, GPL-3.0, not to be imported)
 
