@@ -10,6 +10,10 @@ export function createState(cfg) {
     cursorTime: 0,
     targetCe: null,
     thresholdCe: null,
+    // ceBandTolerance: null when the Ce-drift band is hidden, or the
+    // current tolerance fraction (e.g. 0.015) when visible. Drawn as a
+    // low-opacity box around targetCe in annotations.js.
+    ceBandTolerance: null,
     effectBands: [],
     plateauRegion: null,
     steadyStateCe: null,

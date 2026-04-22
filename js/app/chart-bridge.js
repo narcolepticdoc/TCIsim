@@ -285,6 +285,11 @@ export function createChartBridge({
       chart.setNomogramOpacity(s.nomogramOpacity ?? 1.0);
       chart.setOverlayOpacity(s.overlayOpacity ?? 1.0);
       chart.setEventMarkerSize(s.eventMarkerSize ?? 7);
+      // Ce drift band: visible only when the Appearance toggle is on AND
+      // the active drug has a TCI target set. Null hides it.
+      if (typeof chart.setCeToleranceBand === 'function') {
+        chart.setCeToleranceBand(s.showCeBand ? (s.ceTolerance ?? 0.015) : null);
+      }
       if (typeof chart.setFontScale === 'function') {
         chart.setFontScale(TEXT_SCALE[s.textSize] ?? 1.0);
       }

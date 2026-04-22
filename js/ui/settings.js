@@ -30,6 +30,7 @@ const DEFAULTS     = {
   overlayOpacity:  1.0, // Threshold/target line opacity (0.1–1.0)
   eventMarkerSize: 7,   // Future-event marker radius in px (4–16)
   textSize:    'normal',// Text scale: 'normal' | 'large' | 'xl' | 'xxl'
+  showCeBand:  false,   // Show the Ce drift tolerance band around target lines
 };
 
 const TEXT_SIZES = ['normal', 'large', 'xl', 'xxl'];
@@ -99,6 +100,9 @@ export function getSettings() {
       const textSize = (typeof p.textSize === 'string' && TEXT_SIZES.includes(p.textSize))
         ? p.textSize : DEFAULTS.textSize;
 
+      const showCeBand = (typeof p.showCeBand === 'boolean')
+        ? p.showCeBand : DEFAULTS.showCeBand;
+
       return {
         prepSec:           (typeof p.prepSec           === 'number'  && p.prepSec  >= 0) ? p.prepSec           : DEFAULTS.prepSec,
         prepSound:         (typeof p.prepSound         === 'boolean')                    ? p.prepSound          : DEFAULTS.prepSound,
@@ -114,14 +118,15 @@ export function getSettings() {
         overlayOpacity,
         eventMarkerSize,
         textSize,
+        showCeBand,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize, showCeBand }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize, showCeBand })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
