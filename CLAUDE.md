@@ -187,6 +187,7 @@ correct; `0.5.9` → `0.6.0` for a routine patch is not.
 
 ## Common Workflows
 
+- **When committing, open a PR by default.** After pushing the branch, create a pull request on `narcolepticdoc/tcisim` via the GitHub MCP tools unless the user explicitly says not to.
 - **Adding a feature.** Bump `js/version.js`, add an entry at the top of `CHANGELOG.md` and a matching "Interim" block at the top of `DEVELOPMENT.md`. Confirm `node tests/run-tests.js` is green before committing.
 - **Adding a drug.** Implement `js/pk/<drug>.js` with `MODEL_NAME`, `MODEL_DESCRIPTION`, `calc<Drug>Params(patient)` exports; register it in `DRUG_DEFS`, `DRUG_IDS`, and `DRUG_TASK_UNITS` in `js/util/constants.js`; wire model name in `simulation.js modelNames`; add a chart-config entry in `js/app/chart-bridge.js CHART_DRUG_CONFIG`; add the setup tab + drug card markup in `index.html`.
 - **Editing a TCI planner.** Always thread `cfg` through and call `makeQuantizers(cfg)` so the planner participates in display-unit rounding when enabled. After any direct `engine.advance()` in the emulation planner, call `refitEigenstate()` before resuming Cp-targeting.
