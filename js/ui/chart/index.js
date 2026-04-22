@@ -369,6 +369,19 @@ export function createChart(canvas, config = {}) {
     chart.update('none');
   }
 
+  /**
+   * Show/hide the Ce drift tolerance band around the current target line.
+   * Pass the tolerance fraction (e.g. 0.015 for ±1.5%) to show; pass null
+   * or 0 to hide. Idempotent — safe to call every frame from the bridge.
+   */
+  function setCeToleranceBand(tolerance) {
+    const next = (typeof tolerance === 'number' && tolerance > 0) ? tolerance : null;
+    if (s.ceBandTolerance === next) return;
+    s.ceBandTolerance = next;
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
   function setExitLine(ce) {
     s.exitCe = (ce && ce > 0) ? ce : null;
     chart.options.plugins.annotation.annotations = buildAnnotations(s);
@@ -552,6 +565,7 @@ export function createChart(canvas, config = {}) {
     setCursorTime,
     setEffectOverlay,
     setTargetLine,
+    setCeToleranceBand,
     setThresholdLine,
     setPlateauRegion,
     setSteadyStateLine,

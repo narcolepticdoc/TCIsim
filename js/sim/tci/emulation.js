@@ -39,6 +39,11 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   engine.setState(startState);
 
   const currentCe = engine.getConcentrations().Ce;
+  // upperBound: target-decrease pause cap. If the user drops target and Ce
+  // starts above this level, pause the pump until Ce decays below it. This
+  // is a BINARY gate (pause-or-not), driven by cfg.tolerancePct — distinct
+  // from the maintenance drift tolerance (CE_TOL) set later in the
+  // correction pass.
   const upperBound = ceTarget * (1 + cfg.tolerancePct);
 
   let simTime = startTime;
@@ -46,6 +51,9 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   // ---- Loading: CET bolus + pause (same as conservative) ----
   // SimTIVA always gives a bolus for any CET target increase (no threshold).
   // The bolus size is computed accounting for existing drug.
+  // needsBolus: loading-bolus gate. If Ce is already within tolerancePct of
+  // target (i.e. within ±5% by default), skip the bolus. BINARY gate, same
+  // semantic as upperBound above — not the maintenance drift band.
   const needsBolus = currentCe < ceTarget * (1 - cfg.tolerancePct);
 
   if (needsBolus) {
@@ -452,9 +460,23 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   // This gives tight control when V3 equilibrates fast (~15-30 min steps early)
   // and relaxed control when the rate barely changes (~60-90 min steps late).
   {
-    const PROBE      = 15;    // min: binary search lookahead and extension increment
+    // PROBE scales with ke0: Ce needs ~2τ = 2/ke0 to meaningfully respond
+    // to a rate change. Clamped to a 10-min clinical floor (keep plans
+    // readable) and a 30-min ceiling (avoid pathological long intervals
+    // on slow drugs).
+    const PROBE      = Math.max(10, Math.min(30, 2 / engine.params.ke0));
     const MAX_DUR    = 90;    // min: maximum step duration
-    const CE_TOL     = 0.015; // 1.5%: max Ce deviation before new step required
+    // CE_TOL: the maintenance-phase drift band — max |Ce - target|/target
+    // before this step is closed and a new one is emitted. Continuous
+    // control, NOT a binary gate (contrast with cfg.tolerancePct at line 42
+    // / line 49 which drives the loading-bolus and target-decrease gates).
+    // User-configurable via the Ce drift tolerance slider (range
+    // 0.005–0.030, default 0.015). Clamped here as a safety belt because
+    // the planner can also be invoked programmatically without going
+    // through the settings validator.
+    const CE_TOL     = (typeof cfg.ceTolerance === 'number'
+                        && cfg.ceTolerance >= 0.005 && cfg.ceTolerance <= 0.030)
+      ? cfg.ceTolerance : 0.015;
 
     // Start correcting from the first SimTIVA rate at or after maintTime.
     // Rate steps before maintTime (e.g. zero-rate pause during bolus delivery)
@@ -485,23 +507,52 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
       }
 
       // Generate corrected rates with adaptive spacing.
-      // Each step: binary-search rate for Ce=target at PROBE, then extend
-      // while Ce stays within ±CE_TOL.
+      // Each step: dual-constraint rate selection (endpoint + peak-bounded),
+      // then extend while Ce stays within ±CE_TOL.
       for (let t = corrStart; t < corrEnd; ) {
         const state = engine.getState();
 
-        // Binary search: rate where Ce = ceTarget after PROBE minutes
-        let lo = 0, hi = cfg.maxRate;
+        // Search 1: endpoint — rate where Ce = ceTarget after PROBE minutes.
+        let lo1 = 0, hi1 = cfg.maxRate;
         for (let iter = 0; iter < 25; iter++) {
-          const mid = (lo + hi) / 2;
+          const mid = (lo1 + hi1) / 2;
           engine.setState(state);
           engine.advance(PROBE, mid);
-          if (engine.getConcentrations().Ce < ceTarget) lo = mid; else hi = mid;
+          if (engine.getConcentrations().Ce < ceTarget) lo1 = mid; else hi1 = mid;
         }
+        const endpointRate = (lo1 + hi1) / 2;
+
+        // Search 2: peak-bounded — rate where max Ce over MAX_DUR ≤ target*(1+CE_TOL).
+        // Skipped when currentCe ≥ ceTarget (peak search would return ~0 and
+        // force free-fall since Ce already exceeds the cap). Mirrors the
+        // dual-constraint pattern in shared.js findMaintenanceRate.
+        engine.setState(state);
+        const currentCe = engine.getConcentrations().Ce;
+        let peakRate = endpointRate;
+        if (currentCe < ceTarget) {
+          const peakCeiling = ceTarget * (1 + CE_TOL);
+          const peakStep = 1; // 1-min granularity; matrix-exp cache keeps this cheap
+          const peakSteps = Math.ceil(MAX_DUR / peakStep);
+          let lo2 = 0, hi2 = cfg.maxRate;
+          for (let iter = 0; iter < 25; iter++) {
+            const mid = (lo2 + hi2) / 2;
+            engine.setState(state);
+            let maxCe = 0;
+            for (let s = 0; s < peakSteps; s++) {
+              engine.advance(peakStep, mid);
+              const ce = engine.getConcentrations().Ce;
+              if (ce > maxCe) maxCe = ce;
+            }
+            if (maxCe > peakCeiling) hi2 = mid; else lo2 = mid;
+          }
+          peakRate = (lo2 + hi2) / 2;
+        }
+
         // Quantize BEFORE the forward-probe extension loop so the probe
         // uses the same rate the pump will deliver — otherwise extension
         // stops too early (or too late) under display-unit rounding.
-        const rate = qRate((lo + hi) / 2);
+        engine.setState(state);
+        const rate = qRate(Math.min(endpointRate, peakRate));
 
         // Probe forward: extend this rate while Ce stays within tolerance
         let dur = PROBE;

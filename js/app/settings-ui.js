@@ -25,8 +25,8 @@ const ssSlopeToSlider = (tol) => {
 
 const INFO_TEXTS = {
   notifications: 'Configure how the simulator alerts you to upcoming pump events. Prep alerts provide early visual warning with an amber pulse on drug cards. Alert popups appear closer to the event with optional sound cues. The status indicator colors the drug card edge based on event proximity.',
-  simulation: 'Fine-tune how the simulator evaluates targets and steady-state. Target tolerance sets how close the effect-site concentration must get to target before it is considered reached \u2014 lower values are stricter. Plateau slope tolerance determines how flat the concentration curve must be to qualify as steady-state.',
-  appearance: 'Adjust the visual presentation of the chart and readouts. Reducing Cp line opacity pushes the plasma concentration curve into the background so the effect-site (Ce) curve stands out more clearly. Text size enlarges the drug-panel and history informational text; it is gated to screens that have the space for it.',
+  simulation: 'Fine-tune how the simulator generates TCI plans. Ce drift tolerance sets how far the effect-site concentration is allowed to drift from target before the planner emits a new pump rate step \u2014 lower values give tighter tracking at the cost of more frequent rate changes; higher values produce simpler plans with more visible Ce variation. The default (1.5%) is already tighter than a live clinician could hold manually. Plateau slope tolerance determines how flat the concentration curve must be to qualify as steady-state.',
+  appearance: 'Adjust the visual presentation of the chart and readouts. Reducing Cp line opacity pushes the plasma concentration curve into the background so the effect-site (Ce) curve stands out more clearly. The Ce drift band highlights the \u00b1drift tolerance around each TCI target \u2014 Ce may briefly touch this boundary at planned step transitions by design. Text size enlarges the drug-panel and history informational text; it is gated to screens that have the space for it.',
 };
 
 /** Apply the text-size body class. Only one of `.text-lg` / `.text-xl` / `.text-xxl` is active at a time. */
@@ -58,8 +58,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
   const redoseSoundChk    = $('set-redose-sound');
   const statusWarnSlider  = $('set-status-warn');
   const statusWarnVal     = $('set-status-warn-val');
-  const tciFractionSlider = $('set-tci-fraction');
-  const tciFractionVal    = $('set-tci-fraction-val');
+  const ceTolSlider       = $('set-tci-fraction');
+  const ceTolVal          = $('set-tci-fraction-val');
   const ssSlopeSlider     = $('set-ss-slope');
   const ssSlopeVal        = $('set-ss-slope-val');
   const exitBandSlider    = $('set-exit-band');
@@ -72,6 +72,7 @@ export function initSettingsUI({ getSettings, setSettings }) {
   const overlayVal        = $('set-overlay-opacity-val');
   const markerSizeSlider  = $('set-event-marker-size');
   const markerSizeVal     = $('set-event-marker-size-val');
+  const showCeBandChk     = $('set-show-ce-band');
   const textSizeGroup     = $('set-text-size');
   const textSizeBtns      = textSizeGroup ? [...textSizeGroup.querySelectorAll('.seg-btn')] : [];
   if (!prepSlider || !alertSlider) return;
@@ -86,8 +87,10 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (redoseSoundChk)    redoseSoundChk.checked        = savedSettings.redoseSound ?? true;
   if (statusWarnSlider)  statusWarnSlider.value        = savedSettings.statusWarnMinutes ?? 2;
   if (statusWarnVal)     statusWarnVal.textContent     = (savedSettings.statusWarnMinutes ?? 2) + ' min';
-  if (tciFractionSlider) tciFractionSlider.value       = Math.round((savedSettings.tciFraction ?? 0.95) * 100);
-  if (tciFractionVal)    tciFractionVal.textContent    = Math.round((savedSettings.tciFraction ?? 0.95) * 100) + '%';
+  // Slider value represents tenths of a percent: 5..30 step 5 maps to 0.5%..3.0%.
+  // Stored ceTolerance is a fraction (0.005..0.030); slider value = ceTolerance * 1000.
+  if (ceTolSlider) ceTolSlider.value                   = Math.round((savedSettings.ceTolerance ?? 0.015) * 1000);
+  if (ceTolVal)    ceTolVal.textContent                = ((savedSettings.ceTolerance ?? 0.015) * 100).toFixed(1) + '%';
   if (ssSlopeSlider)     ssSlopeSlider.value           = ssSlopeToSlider(savedSettings.ssSlopeTol ?? SS_SLOPE_DEFAULT);
   if (ssSlopeVal)        ssSlopeVal.textContent        = ssSlopeLabel(savedSettings.ssSlopeTol ?? SS_SLOPE_DEFAULT);
   if (exitBandSlider)    exitBandSlider.value          = Math.round((savedSettings.exitBandPct ?? 0.05) * 100);
@@ -100,6 +103,7 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (overlayVal)        overlayVal.textContent        = Math.round((savedSettings.overlayOpacity ?? 1.0) * 100) + '%';
   if (markerSizeSlider)  markerSizeSlider.value        = (savedSettings.eventMarkerSize ?? 7);
   if (markerSizeVal)     markerSizeVal.textContent     = (savedSettings.eventMarkerSize ?? 7) + ' px';
+  if (showCeBandChk)     showCeBandChk.checked         = savedSettings.showCeBand ?? false;
   let currentTextSize = savedSettings.textSize ?? 'normal';
   for (const btn of textSizeBtns) btn.classList.toggle('active', btn.dataset.size === currentTextSize);
   applyTextSize(currentTextSize);
@@ -111,8 +115,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
     const alertSound        = alertSoundChk     ? alertSoundChk.checked     : true;
     const redoseSound       = redoseSoundChk    ? redoseSoundChk.checked    : true;
     const statusWarnMinutes = statusWarnSlider ? parseInt(statusWarnSlider.value, 10) : 2;
-    const tciFractionPct    = tciFractionSlider ? parseInt(tciFractionSlider.value, 10) : 95;
-    const tciFraction       = tciFractionPct / 100;
+    const ceTolTenths       = ceTolSlider ? parseInt(ceTolSlider.value, 10) : 15;
+    const ceTolerance       = ceTolTenths / 1000;
     const ssSlopePct        = ssSlopeSlider ? parseFloat(ssSlopeSlider.value) : 0.10;
     const ssSlopeTol        = ssSlopePct / 100;
     const exitBandInt       = exitBandSlider ? parseInt(exitBandSlider.value, 10) : 5;
@@ -125,17 +129,18 @@ export function initSettingsUI({ getSettings, setSettings }) {
     const overlayOpacity    = overlayPct / 100;
     const eventMarkerSize   = markerSizeSlider ? parseInt(markerSizeSlider.value, 10) : 7;
     const textSize          = currentTextSize;
+    const showCeBand        = showCeBandChk ? showCeBandChk.checked : false;
     if (prepVal)         prepVal.textContent         = prepSec           + 's';
     if (alertVal)        alertVal.textContent        = alertSec          + 's';
     if (statusWarnVal)   statusWarnVal.textContent   = statusWarnMinutes + ' min';
-    if (tciFractionVal)  tciFractionVal.textContent  = tciFractionPct    + '%';
+    if (ceTolVal)        ceTolVal.textContent        = (ceTolTenths / 10).toFixed(1) + '%';
     if (ssSlopeVal)      ssSlopeVal.textContent      = ssSlopeLabel(ssSlopeTol);
     if (exitBandVal)     exitBandVal.textContent     = '±' + exitBandInt + '%';
     if (cpOpacityVal)    cpOpacityVal.textContent    = cpOpacityPct      + '%';
     if (nomogramVal)     nomogramVal.textContent     = nomogramPct       + '%';
     if (overlayVal)      overlayVal.textContent      = overlayPct        + '%';
     if (markerSizeVal)   markerSizeVal.textContent   = eventMarkerSize   + ' px';
-    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize });
+    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize, showCeBand });
   }
 
   prepSlider.addEventListener('input',    saveAll);
@@ -144,13 +149,14 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (alertSoundChk)     alertSoundChk.addEventListener('change',    saveAll);
   if (redoseSoundChk)    redoseSoundChk.addEventListener('change',   saveAll);
   if (statusWarnSlider)  statusWarnSlider.addEventListener('input',  saveAll);
-  if (tciFractionSlider) tciFractionSlider.addEventListener('input', saveAll);
+  if (ceTolSlider)       ceTolSlider.addEventListener('input',       saveAll);
   if (ssSlopeSlider)     ssSlopeSlider.addEventListener('input',     saveAll);
   if (exitBandSlider)    exitBandSlider.addEventListener('input',    saveAll);
   if (cpOpacitySlider)   cpOpacitySlider.addEventListener('input',   saveAll);
   if (nomogramSlider)    nomogramSlider.addEventListener('input',    saveAll);
   if (overlaySlider)     overlaySlider.addEventListener('input',     saveAll);
   if (markerSizeSlider)  markerSizeSlider.addEventListener('input',  saveAll);
+  if (showCeBandChk)     showCeBandChk.addEventListener('change',    saveAll);
   for (const btn of textSizeBtns) {
     btn.addEventListener('click', () => {
       const size = btn.dataset.size;

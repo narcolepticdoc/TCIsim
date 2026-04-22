@@ -22,7 +22,7 @@ const DEFAULTS     = {
   alertSec: 10, alertSound: true,
   redoseSound: true,
   statusWarnMinutes: 2,
-  tciFraction: 0.95,   // TCI "time to target" — tight (0.90–0.99)
+  ceTolerance: 0.015,  // CET emulation post-extraction drift tolerance (0.005–0.030)
   ssSlopeTol:  0.0010, // Manual-mode plateau slope — per-minute relative (0.10 %/min)
   exitBandPct: 0.05,   // Plateau exit ±% band (0.05 = ±5%)
   cpOpacity:   1.0,    // Cp line opacity (0.1–1.0)
@@ -30,6 +30,7 @@ const DEFAULTS     = {
   overlayOpacity:  1.0, // Threshold/target line opacity (0.1–1.0)
   eventMarkerSize: 7,   // Future-event marker radius in px (4–16)
   textSize:    'normal',// Text scale: 'normal' | 'large' | 'xl' | 'xxl'
+  showCeBand:  false,   // Show the Ce drift tolerance band around target lines
 };
 
 const TEXT_SIZES = ['normal', 'large', 'xl', 'xxl'];
@@ -65,9 +66,9 @@ export function getSettings() {
     if (raw) {
       const p = JSON.parse(raw);
 
-      const tciFraction = (typeof p.tciFraction === 'number'
-                           && p.tciFraction >= 0.90 && p.tciFraction <= 0.99)
-        ? p.tciFraction : DEFAULTS.tciFraction;
+      const ceTolerance = (typeof p.ceTolerance === 'number'
+                           && p.ceTolerance >= 0.005 && p.ceTolerance <= 0.030)
+        ? p.ceTolerance : DEFAULTS.ceTolerance;
 
       // Legacy `ssFraction` values (0.50–0.95) fall outside this window and
       // are silently replaced with the slope-based default — the old
@@ -99,6 +100,9 @@ export function getSettings() {
       const textSize = (typeof p.textSize === 'string' && TEXT_SIZES.includes(p.textSize))
         ? p.textSize : DEFAULTS.textSize;
 
+      const showCeBand = (typeof p.showCeBand === 'boolean')
+        ? p.showCeBand : DEFAULTS.showCeBand;
+
       return {
         prepSec:           (typeof p.prepSec           === 'number'  && p.prepSec  >= 0) ? p.prepSec           : DEFAULTS.prepSec,
         prepSound:         (typeof p.prepSound         === 'boolean')                    ? p.prepSound          : DEFAULTS.prepSound,
@@ -106,7 +110,7 @@ export function getSettings() {
         alertSound:        (typeof p.alertSound        === 'boolean')                    ? p.alertSound         : DEFAULTS.alertSound,
         redoseSound:       (typeof p.redoseSound       === 'boolean')                    ? p.redoseSound        : DEFAULTS.redoseSound,
         statusWarnMinutes: (typeof p.statusWarnMinutes === 'number'  && p.statusWarnMinutes >= 0) ? p.statusWarnMinutes : DEFAULTS.statusWarnMinutes,
-        tciFraction,
+        ceTolerance,
         ssSlopeTol,
         exitBandPct,
         cpOpacity,
@@ -114,14 +118,15 @@ export function getSettings() {
         overlayOpacity,
         eventMarkerSize,
         textSize,
+        showCeBand,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, tciFraction, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize, showCeBand }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize, showCeBand })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────

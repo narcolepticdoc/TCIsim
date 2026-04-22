@@ -329,13 +329,13 @@ function boot() {
         if (controls.isCaseStarted()) {
           // During running case: show delay modal so user can pre-set the pump.
           // planTCI is deferred to when the user confirms the delay.
-          tciModal.setPending({ drugId: selectedDrug, ceTarget: canonicalValue, tciMode });
+          tciModal.setPending({ drugId: selectedDrug, ceTarget: canonicalValue, tciMode, ceTolerance: settings.getSettings().ceTolerance });
           tciModal.showDelay(canonicalValue, selectedDrug);
           return; // skip refreshChart — nothing committed yet
         } else {
           // Pre-case: plan immediately, no delay needed
           mode.setCeTarget(selectedDrug, canonicalValue);
-          model.planTCI(selectedDrug, t, canonicalValue, { tciMode, ...getQuantizeConfig(selectedDrug) });
+          model.planTCI(selectedDrug, t, canonicalValue, { tciMode, ceTolerance: settings.getSettings().ceTolerance, ...getQuantizeConfig(selectedDrug) });
           mode.set(selectedDrug, 'tci', `TCI target Ce=${canonicalValue.toFixed(1)} μg/mL`);
           advancePreStartClock(selectedDrug, 0.01);
         }
@@ -448,7 +448,9 @@ function boot() {
     getCeTargetForDrug: (drugId) => mode.getCeTarget(drugId),
     getExitCeForDrug: (drugId) => mode.getExitCe(drugId),
     getExitCeLabelForDrug: (drugId) => mode.getExitCeLabel(drugId),
-    getTciFraction: () => settings.getSettings().tciFraction,
+    // tciFraction (time-to-target band for drug panel) is now a hardcoded
+    // clinical default — the user-facing slider controls ceTolerance instead.
+    getTciFraction: () => 0.95,
     getSsSlopeTol:  () => settings.getSettings().ssSlopeTol,
     getSsExitBand:  () => settings.getSettings().exitBandPct,
     onFrame: (t) => chartBridge.onFrame(t),
