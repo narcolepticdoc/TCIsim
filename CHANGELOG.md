@@ -11,15 +11,15 @@
 
 ---
 
-## Session 27 summary — v0.5.24 → v0.5.24.22 (UI polish arc)
+## Session 27 summary — v0.5.24 → v0.5.24.23 (UI polish arc)
 
-Single long session delivering a coherent UI polish pass. 22 interim version bumps grouped into themes below; detailed per-version notes follow. See `DEVELOPMENT.md` for the session narrative.
+Single long session delivering a coherent UI polish pass. 23 interim version bumps grouped into themes below; detailed per-version notes follow. See `DEVELOPMENT.md` for the session narrative.
 
 - **Large type** (v0.5.24 → .2): four-position segmented control (Normal / Large / XL / XXL) scaling drug-panel, history, topbar, bottom-controls, and chart fonts.
 - **Drug-card layout + Emergence rename** (.3): eBIS on the drug-name row, Exit Ce countdown moved to an in-flow block, `Exit Ce` → `Emerge` / `Emergence` throughout user-facing text.
 - **History UX rework** (.4 → .7): three-button bottom bar `[ET / RT] [+ Add Event] [Edit]`, edit-mode dim/blur, grid row layout.
 - **Single-line case time** (.8): `[ CASE START 15:15 | ET 0:00:00 ]` bordered button.
-- **Setup screen tightening + Patient Demographics modal** (.9, .11 → .14): summary row on main screen; modal with inline 3×5 keypad, sex toggle, unit toggle; unit flip converts instead of clearing; first keypress on prefilled field replaces.
+- **Setup screen tightening + Patient Demographics modal** (.9, .11 → .14, .23): summary row on main screen; modal with inline 3×5 keypad, sex-first field order, Next key for numeric-field advance, unit toggle that converts instead of clears; first keypress on prefilled field replaces.
 - **Systemic chart-setting re-apply bug** (.10): moved idempotent guards inside chart setters (matching `setFontScale`), dropped stale bridge-level `last*` caches.
 - **Phone-portrait layout** (.15, .17, .18): CSS source-order fix; `fmtTick` axis formatter; bottom-bar tighten + `max(18px, env(safe-area-inset-bottom))`.
 - **Keypad unit-toggle consistency** (.16): all three keypads now convert buffer + re-arm prefilled.
