@@ -4,426 +4,54 @@
 
 ## Session History
 
-### Interim — Disable Chart.js pan during handle drag (v0.5.24.22)
+### Session 27 (2026-04-20 / 2026-04-21) — UI Polish Arc (v0.5.24 → v0.5.24.22)
 
-*Between Sessions 26 and 27. Not tracked in session numbering.*
+Long polish session driven by iPad Mini / iPad Pro / iPhone screenshots. 22 interim version bumps, all on the `claude/add-large-type-option-d5Onn` branch. See `CHANGELOG.md` for per-version detail; this block is the coherent summary.
 
-v0.5.24.21's fix (capture-phase listener on `canvas.parentElement` + `stopImmediatePropagation`) still allowed Chart.js's pan to hijack the handle drag on iPad. Observed behavior: cursor moves briefly, then pan takes over.
+**Theme 1 — Accessibility: Large type (v0.5.24 → v0.5.24.2).**
+Added a four-position segmented control in the Appearance tab: Normal / Large / XL / XXL. Scales drug-panel, history, topbar, bottom-controls, and chart font-sizes together via `body.text-{lg,xl,xxl}` classes plus a chart-side `fontScale` (1.0 / 1.15 / 1.30 / 1.45). XXL gated to `@media (min-width:1020px)` so the drug-panel has room. Chart text handled via a new `setFontScale()` setter on the chart controller that rewrites `chart.options.*.font.size` from canonical `BASE_FONTS` constants and propagates through canvas-drawing plugins (target-label, readout-panel, BIS band labels in annotations).
 
-Root cause: hammerjs's pan recognizer has an internal state machine that tracks touches across the whole gesture. Even when my capture-phase listener swallows each event, some aspect of hammer's touch tracking was surviving — likely the recognizer already armed via side channels (PointerEvents vs TouchEvents discrepancy, or a touch listener registered on `document` for drag tracking).
+**Theme 2 — Drug-card layout + Emergence rename (v0.5.24.3).**
+eBIS moved from the Ce/Cp row to a right-justified header element next to the drug name; propofol got units back on the Ce/Cp row (single trailing `μg/mL`, shared). Exit Ce countdown moved out of its absolutely-positioned top-right slot to a block element between the status row and step bar. Renamed user-facing text throughout: `Exit Ce 3.0 in 3:39` → `Emerge → 3.0 in 3:39`; button labels `Set Exit Ce` / `Change Exit Ce` → `Set Emergence` / `Change Emergence`; keypad modal + reached state match. Internal symbols (`exitCe`, `setExitLine`, `.btn-ctrl-exit`, `.exit-readout`) kept to avoid churn.
 
-Rather than fighting hammer's internals further, flip `chart.options.plugins.zoom.pan.enabled` at the source: off at `touchstart` / `mousedown` on the handle, back on at `touchend` / `touchcancel` / `mouseup`. Pan plugin checks this flag and refuses to pan while disabled, regardless of recognizer state.
+**Theme 3 — History UX rework (v0.5.24.4 → v0.5.24.7).**
+Bottom-bar went from a single `+ Add Event` button to three-button layout `[ET / RT] [+ Add Event] [Edit]`. Edit toggles `body.edit-history-mode` which dims / blurs non-history surface; rows get an amber-tint highlight + crisp 2px border and become tappable (opens event editor via existing `onEventTap`). Time-format toggle now explicit; the old tap-on-time-cell affordance is gone. Rows re-laid-out via CSS grid: `[time | type]` on line 1, `[value centered]` on line 2. Dropped the pencil icon column, the pump-bolus / IV-push duration detail, and the `fmtBolusDelivery` formatter. Selected row uses amber tint + inset 2px border (clinical feel; no halo or scale transform). Click-outside-panel exits edit mode. Dynamic drug-panel width via CSS `fit-content` + `min-width`/`max-width:35vw` clamps. Portrait tablet dynamic row sizing via ResizeObserver + matchMedia in new `js/app/portrait-layout.js`.
 
-Belt-and-suspenders kept:
-- Capture-phase listener on `canvas.parentElement` with `stopImmediatePropagation` (v0.5.24.21).
-- `touch-action: none` on the canvas (v0.5.24.20).
+**Theme 4 — Single-line Case Time display (v0.5.24.8).**
+Topbar stack `19:26:52 / start 15:15` → single bordered button `[ CASE START 15:15 | ET 0:00:00 ]`. Subtle 1px border + hover state so the click affordance reads at a glance. `.timer-wall-hint` element removed; `.elapsed-timer` is now a `<button>`. Labels muted uppercase, values crisp (ET in `--green`).
 
-The flag toggle is the actual fix; the others reduce edge cases around the toggle boundaries.
+**Theme 5 — Patient Demographics modal (v0.5.24.9 / v0.5.24.11 → v0.5.24.14).**
+Eliminates the iPadOS numbers-and-symbols keyboard for patient entry (iPadOS won't show a pure 10-key numeric pad regardless of `inputmode`). Main setup screen collapses the four inputs into a single `[Tap to edit patient demographics ✎]` summary row (dim placeholder before entry, `35y · M · 170 cm · 70 kg ✎` after). Modal `#modal-patient` owns entry via a custom 3×5 numeric keypad: four field cells (age, sex, height, weight); first empty field auto-selected; tap any other field to switch active; keypad feeds the active buffer. Sex = two toggle buttons, default none, required on confirm. Metric/Imperial toggle in the modal header routes through the shared `setUnits()` so main-screen toggle + localStorage + modal stay in lockstep. Unit toggle **converts** height/weight between systems (1 cm = 0.393701 in, 1 kg = 2.20462 lbs, 1-decimal rounded) rather than clearing. First keypress on a pre-populated field **replaces** rather than appends; tapping a different field re-arms the prefilled flag. Underlying `<input>` elements kept as `type="hidden"` so `validate()`, `getHeightCm()`, `getWeightKg()`, `updateDerived()`, `confirmPatient()`, session restore all work unchanged — the modal writes values and dispatches `input` events. New module `js/ui/patient-modal.js`.
 
-**Files changed:** `js/version.js`, `js/ui/chart/gestures.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+**Theme 6 — Chart-setting re-apply bug (v0.5.24.10).**
+Reported as "Cp-line dimming not respected on case startup". Systemic: four setters (`setCpOpacity`, `setNomogramOpacity`, `setOverlayOpacity`, `setEventMarkerSize`) were guarded by closure-level `last*` caches in `js/app/chart-bridge.js onFrame()`. On `initSimScreen()` the chart gets destroyed and recreated; fresh chart had default values (1.0 opacity etc.) but the bridge still remembered the previous case's cached values — equality check skipped the push. `setFontScale` had already been fixed correctly in v0.5.24.1 (guard inside the setter). Retrofit: moved each setter's change-guard inside the setter (`if (s.cpOpacity === clamped) return`), dropped the bridge-level caches. Bridge now calls every setter every frame unconditionally; chart recreation is self-healing because the fresh chart's defaults differ from user settings, so the first post-recreate frame takes effect. Logged as an invariant in CLAUDE.md.
 
----
+**Theme 7 — Phone-portrait layout (v0.5.24.15 / v0.5.24.17 / v0.5.24.18).**
+Three iPhone screenshots. (a) Topbar "CASE START 13:56 |" segment wasn't hiding on phones even though the phone-portrait media query had `display:none` — **CSS source-order inversion**: the canonical base rule was later in source with equal specificity and overrode the media-query rule. Relocated the canonical `.elapsed-timer` / `.ct-*` base block up before all `@media` blocks. (b) Chart axis labels rendered raw floats (`30.00000000000002`) — added `fmtTick(v)` formatter wired into `ticks.callback` on x, y, and yRate axes; snaps to 3 decimals, integer string for integers, 1-decimal otherwise. (c) Stop Pump wrapped to a second row on iPhone 15 Pro Max — tightened `.btn-ctrl` / `.mode-label` / `.sim-controls` metrics so all six fit; added `padding-bottom: max(18px, env(safe-area-inset-bottom))` so the row sits above the iPhone home-indicator curve instead of being clipped by the rounded screen corner.
 
-### Interim — Actually fix inspect-drag hijack (v0.5.24.21)
+**Theme 8 — Keypad unit-toggle consistency (v0.5.24.16).**
+Audit surfaced three modals behaving differently on unit toggle mid-entry. `keypad.js` non-bolus kept buffer literally and silently re-interpreted it as the new unit (wrong). `keypad.js` bolus ignored the buffer and reloaded saved-last. `event-editor.js` cleared the buffer. `patient-modal.js` already correct per v0.5.24.12. Standardized: all three now `parseFloat(buffer) → toCanonical(prev, task, ctx) → fromCanonical(new, task, ctx) → formatValue` and mark `prefilled = true` so the next keypress overwrites. Logged as an invariant in CLAUDE.md.
 
-*Between Sessions 26 and 27. Not tracked in session numbering.*
+**Theme 9 — Draggable inspect cursor (v0.5.24.19 → v0.5.24.22).**
+Added a draggable handle on the inspect cursor. Four iterations to get the iPad drag-hijack fixed:
 
-v0.5.24.20 tried to fix the "drag hijack after ~50px" bug by binding inspect-drag listeners on the canvas with `capture: true`, reasoning that capture-phase listeners fire before bubble-phase ones. **This is wrong when the event target IS the canvas** — at the target element, all listeners fire in registration order regardless of `useCapture`. Chart.js's hammerjs listeners were registered first (during chart creation) and ran first. `stopImmediatePropagation` in the later-registered capture-flagged listener was too late to stop hammer from initiating its pan.
+1. **v0.5.24.19** — new plugin `js/ui/chart/plugins/inspect-handle.js` draws a knob and publishes `s._inspectHandleHit` for hit-testing. Gestures.js added capture-phase touch/mouse handlers on the canvas.
+2. **v0.5.24.20** — handle visual redesigned to bottom-of-cursor pill with left/right chevrons (user feedback). Added `touch-action: none` on the canvas; upgraded `stopPropagation` to `stopImmediatePropagation`.
+3. **v0.5.24.21** — moved capture-phase listeners from the canvas to `canvas.parentElement`. The previous attempt's mistake: when the event target IS the canvas, listeners on it fire in registration order regardless of `useCapture`, so Chart.js's earlier-registered hammerjs listeners ran first. Capture-phase on an **ancestor** genuinely precedes target-phase on the descendant.
+4. **v0.5.24.22** — belt-and-suspenders wasn't enough for hammer's state machine; the drag still hijacked into pan after ~10px. Fixed by flipping `chart.options.plugins.zoom.pan.enabled = false` at touchstart/mousedown on the handle, restoring at touchend/mouseup. The pan plugin respects that flag and refuses to pan while disabled, regardless of recognizer state. Previous layers (capture-phase listener, `touch-action: none`) kept as defense-in-depth around the toggle boundaries.
 
-Correct fix: attach the inspect-drag listeners to `canvas.parentElement` (`.chart-area`) in capture phase. Capture-phase on an **ancestor** really does fire before any target-phase listeners on the descendant canvas. So we intercept the touch before hammer sees it.
+Clean interaction matrix while inspect is on: **tap empty chart body** sets cursor; **drag handle** moves cursor (live readout updates); **drag empty body** pans; **pinch** zooms; **double-tap** recenters; **Y-axis left-edge drag** scales y-axis.
 
-One-line change of `canvas.addEventListener(...)` → `(canvas.parentElement || canvas).addEventListener(...)` for the five inspect-drag handlers, plus matching removeEventListener in `detach()`.
+**New modules added this session:**
+- `js/ui/patient-modal.js` — patient entry modal with inline numeric keypad.
+- `js/app/portrait-layout.js` — dynamic `grid-template-rows` sizing for the portrait tablet layout.
+- `js/ui/chart/plugins/inspect-handle.js` — draggable knob on the inspect cursor.
 
-`touch-action: none` on the canvas from v0.5.24.20 stays — belt and suspenders.
+**Invariants added to CLAUDE.md:**
+- Chart setters are idempotent; bridge calls them unconditionally.
+- Keypad unit toggles convert the buffer through canonical; don't clear.
 
-**Files changed:** `js/version.js`, `js/ui/chart/gestures.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Inspect handle: bottom position + fix drag hijack (v0.5.24.20)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-Two issues with the v0.5.24.19 handle:
-
-1. **Visual placement + shape.** User wanted the handle at the bottom of the cursor line (not top) with clear left/right arrows. Redesigned as a horizontal 34×16 pill at `chartArea.bottom - 14`, with crisp `<` and `>` chevrons inside and a subtle halo ring for the touch-target hint. Hit region switched from 22px-radius circle to a 48×32 rectangle around the pill.
-2. **Drag hijack on iPad.** After the user started dragging the handle, iPad Safari's built-in pan-gesture recognizer picked the direction after ~50px of movement and took over, scrolling the whole page. Two root-cause fixes:
-   - **`touch-action: none` on the chart canvas.** Tells the browser "don't try to interpret any touches on this element as native scroll/pinch/zoom". Our JS listeners still fire normally — `touch-action` only blocks native gesture recognition, not event delivery. This alone resolves most hijack cases.
-   - **`stopImmediatePropagation()` in all inspect-drag handlers.** Replaces the previous `stopPropagation()`. Stops *same-element* bubble-phase listeners (Chart.js / hammerjs internal handlers) from receiving the event in addition to stopping ancestor propagation. Also added a `touchend` inspect handler that swallows the release so Chart.js doesn't synthesize a click and re-snap the cursor to the release-point coordinates.
-
-**Files changed:** `js/version.js`, `js/ui/chart/plugins/inspect-handle.js`, `js/ui/chart/gestures.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Draggable inspect cursor handle (v0.5.24.19)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-Cursor inspection used to be tap-only: to see values at a different time, the user had to tap again. Added a draggable handle on the cursor line so the user can sweep across the curve and watch the readout panel update live.
-
-**Key design choice:** handle-gated, not mode-exclusive. The handle is the only region that captures gesture events for inspect-drag. Pan, pinch-zoom, double-tap-recenter, Y-axis drag, and tap-to-set-cursor all remain intact because touches that miss the handle fall through to Chart.js's default gesture pipeline. No `pan.enabled` toggling, no mode conflicts.
-
-**Handle (`js/ui/chart/plugins/inspect-handle.js`, new):** afterDraw hook. Draws a subtle outer halo + inner knob + horizontal chevrons at `(cursorX, chartArea.top + 10)` when inspect is on and a cursor is set. Publishes `s._inspectHandleHit = { cx, cy, r: 22 }` each frame so `gestures.js` hit-tests without recomputing pixel positions. 44px hit diameter (iOS / Material minimum touch target).
-
-**Gestures (`js/ui/chart/gestures.js`):** added inspect-drag (touch + mouse) with `isOnHandle(clientX, clientY)` hit-test and `xToTime(clientX)` clamping. Bound in **capture phase** on the canvas so our listeners run before Chart.js's internal bubble-phase listeners — `preventDefault() + stopPropagation()` inside the handle region prevents Chart.js from interpreting the gesture as pan, while touches outside the handle skip our handler and pass through normally. Mouse `mousemove` / `mouseup` listeners bound on `window` (not canvas) so the drag tracks when the pointer briefly leaves the canvas — standard web drag-handle pattern.
-
-**Wiring (`js/ui/chart/index.js`):** registered the new plugin between `inspect-dots` and `readout-panel`; `attachGestures(canvas, chart, s, recenter, setInspectTime)` signature gains the last param so the gesture handlers can move the cursor.
-
-**Cleanup:** `detach()` removes all capture-phase listeners and the window-level mouse listeners.
-
-**Files changed:** `js/version.js`, `js/ui/chart/plugins/inspect-handle.js` (new), `js/ui/chart/gestures.js`, `js/ui/chart/index.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Phone bottom-bar tighten + safe-area padding (v0.5.24.17)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-iPhone 15 Pro Max portrait screenshot (430px wide) still had Stop Pump wrapping to a second row despite the v0.5.24.15 tighten pass. Two concurrent fixes:
-
-1. **Tighter metrics.** `.btn-ctrl` font 9.5 → 9px, padding 5px 6px → 5px 5px, added `min-width:0` so flex items shrink past content if needed. `.mode-label` 9.5 → 9px, padding 2px 6px → 2px 5px. `.sim-controls` gap 3 → 2px. Width budget at 430px: container pad 10 + 6 gaps × 2 + ~48 MANUAL + ~62 Target + ~72 Emergence + ~66 Rate + ~54 Bolus + ~54 Pump ≈ 378px. Fits.
-2. **Safe-area padding.** Added `padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px))` to `.sim-controls` on the phone-portrait breakpoint. The iPhone home-indicator curves the bottom of the screen; without the inset, the Stop Pump button was clipped by the rounded corner. `env(safe-area-inset-bottom)` returns the OS-reported inset (usually ~34px on iPhone with home indicator, 0 on devices without).
-
-**Files changed:** `js/version.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Consistent keypad unit-toggle conversion (v0.5.24.16)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-User audit surfaced inconsistent behavior across the app's numeric-keypad modals when toggling units mid-entry. The three surfaces behaved differently:
-
-| Modal | Before | After |
-|---|---|---|
-| `keypad.js` non-bolus (Set Target / Change Emergence / Set Rate / Set Redose Threshold) | Kept buffer literally, re-interpreted as new unit (silently wrong) | Round-trip convert via canonical, `prefilled = true` |
-| `keypad.js` bolus (Add Bolus) | Ignored current buffer, reloaded last saved bolus converted | Convert current buffer if non-empty; fall back to saved-last only on empty buffer |
-| `event-editor.js` (Edit Event) | Cleared buffer on unit change | Round-trip convert via canonical, `_prefilled = true` |
-| `patient-modal.js` (new case) | Already correct per v0.5.24.12 | (unchanged — audit pass) |
-
-Conversion uses the existing `toCanonical(v, prev, drug, task, ctx)` → `fromCanonical(canonical.value, new, drug, task, ctx)` → `formatValue(...)` pipeline from `js/util/units.js`. `ctx.weightKg` pulled from the modal's patient getter (already present in both modules).
-
-`prefilled` is set `true` after conversion so the next keypress replaces rather than appends — matches the "typing should overwrite after switching units" requirement, consistent with how `patient-modal.js` tracks its per-field prefilled flag.
-
-**Files changed:** `js/version.js`, `js/ui/keypad.js`, `js/ui/event-editor.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Phone-portrait layout fixes (v0.5.24.15)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-Three phone-portrait issues from an iPhone screenshot:
-
-1. **Topbar clipping.** Case-time button still showed the `CASE START 13:56 |` segment on iPhone portrait even though the phone-portrait media query hid `.ct-start-group`. Root cause was CSS source-order: the phone-portrait rule sat at line ~506 but the canonical base rule (`.elapsed-timer .ct-start-group { display: inline-flex }`) sat at line ~634. Equal specificity, so the later rule always won regardless of the media query. Fix: relocated the canonical `.elapsed-timer` / `.ct-*` / `.timer-popover` base block up to ~line 140 next to the other sim-topbar base rules, before any `@media` blocks. All responsive overrides now correctly win at matching specificity.
-2. **Chart axis floating-point noise.** `x.max` auto-computed by Chart.js could produce labels like `30.00000000000002`. Added a `fmtTick(v)` helper in `js/ui/chart/index.js` — snaps to 3 decimals, returns integer string for integer values and 1-decimal for non-integers. Wired into `ticks.callback` on the x, y, and yRate axes.
-3. **Phone-portrait bottom bar.** Stop Pump wrapped to a second row at 390–430px viewports. Tightened the phone-portrait `.sim-controls` / `.btn-ctrl` / `.mode-label` metrics so all six controls fit on one row on iPhone 14 / 15 Pro Max. `flex-wrap: wrap` kept as a safety fallback.
-
-**Files changed:** `js/version.js`, `index.html`, `js/ui/chart/index.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Field taps re-arm replace-on-first-keypress (v0.5.24.14)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-Follow-up to v0.5.24.13. The prefilled flag was set on `open()` and on unit conversion, but once a flag was consumed (user typed a digit), tapping another field and typing would append rather than replace — because the flag was only ever armed at modal/open time.
-
-Fixed by arming `_prefilled[field] = true` inside `_setActive(field)` when the target has existing content. Matches the user's mental model: tapping a different field with data → next keypress replaces.
-
-Also added a same-field guard at the top of `_setActive` — re-tapping the currently-active field is a no-op, so mid-typing doesn't get interrupted by an accidental re-tap.
-
-**Files changed:** `js/version.js`, `js/ui/patient-modal.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Prefilled fields replace on first keypress (v0.5.24.13)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-Parity fix with the sim's `js/ui/keypad.js` — the patient modal's three numeric fields now replace their buffer on the first keypress when pre-populated, instead of appending. Tapping Age (reads `35`) and typing `5` now yields `5`, not `355`.
-
-**Mechanism:** added a per-field `_prefilled` map. Set to `true` for any non-empty value at `open()` (carried over from hidden inputs or a prior confirm) or after a unit conversion in `onUnitsChanged()`. The first digit / decimal keypress on a prefilled field clears the buffer before appending and flips the flag to `false`. Clear / Backspace also clear the flag; a single backspace on a prefilled field blanks the whole value (matches the existing keypad's behavior for pre-populated buffers — the "backspace" there undoes the seed).
-
-**Files changed:** `js/version.js`, `js/ui/patient-modal.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Unit toggle converts instead of clearing (v0.5.24.12)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-v0.5.24.11 cleared height / weight on a Metric ↔ Imperial flip as a defensive measure against misreading `170 cm` as `170 in`. The more intuitive UX — and what the user actually wants — is to preserve the entered value in the new units. Swap "clear" for "convert".
-
-**New exports in `js/ui/setup.js`:** `_convertLength(valStr, from, to)` and `_convertWeight(valStr, from, to)`, both rounded to 1 decimal for display. No-op on same-unit or blank input.
-
-**`setUnits()` change:** replaced the `input.value = ''` clear with in-place conversion via the new helpers. Skips when `prev === next` (initial restore path).
-
-**`patient-modal.js` change:** added `_lastUnits` tracker, set on `open()` and on every `onUnitsChanged()` call (even when the modal is closed — keeps the next open's conversion accurate). `onUnitsChanged()` now converts `_values.height` / `_values.weight` between `_lastUnits` and the new unit instead of blanking them. Modal re-imports the helpers from setup.js (circular import OK — ES modules handle it).
-
-**Behaviour:**
-
-- Modal closed, user taps Imperial on main screen → hidden inputs convert; summary re-renders; `patientModal.onUnitsChanged` updates `_lastUnits` so the next open starts correct.
-- Modal open, user taps Imperial in the header → the modal's own toggle calls `setUnits('imperial')`, which converts hidden inputs **and** `patientModal.onUnitsChanged` converts the modal's buffers in place. User sees their mid-entry values in the new units.
-- Round-trip precision: 1-decimal rounding so `170 cm → 66.9 in → 169.9 cm`. Acceptable for display; on Confirm the patient object uses full-precision conversion anyway.
-
-**Files changed:** `js/version.js`, `js/ui/setup.js`, `js/ui/patient-modal.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Patient Demographics modal (v0.5.24.11)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-iPadOS won't show a pure 10-key numeric keypad for `type="text" + inputmode="numeric"` or `inputmode="decimal"`; it shows the numbers-and-symbols layout with an ABC toggle. The four patient fields (age / sex / height / weight) each triggered that keyboard on tap — visually noisy for what is purely numeric entry.
-
-Collapsed the four inputs into a single "Tap to edit patient demographics" summary on the main setup screen, plus a new full-featured Patient Demographics modal (`#modal-patient`) that owns entry via a custom in-app numeric keypad. Matches the app's existing pattern of custom numeric keypads for Set Rate / Add Bolus / Set Target in the sim.
-
-**Architecture — hidden inputs preserved:** the four original `<input>` elements stay in the DOM as `type="hidden"` so every downstream consumer (`validate()`, `getHeightCm()`, `getWeightKg()`, `updateDerived()`, `confirmPatient()`, error-row toggles, session restore) keeps working unchanged. The modal writes values and dispatches `input` / `change` events on the hidden fields; the existing reactive pipeline in `setup.js` picks those up.
-
-**Modal (`js/ui/patient-modal.js`, new):**
-- 4 field cells: age, sex (two toggle buttons), height, weight. First empty numeric field auto-selects on open; tapping any other switches the active target; keypad digits feed the active buffer.
-- Metric/Imperial toggle in the header. Uses shared `setUnits()` from `setup.js` so the main-screen toggle + localStorage + modal stay in lockstep. `setUnits()` now also calls `patientModal.onUnitsChanged()` to re-render modal labels and clear modal's height/weight buffers on a unit flip (so `170 cm` can't be misread as `170 in`). Skips the buffer clear when `prev === next` (the no-op initial restore at app load).
-- Validation with range messages per field (age 1–100, height 30–250 cm / 12–98 in, weight 0.5–300 kg / 1–660 lbs). Errors highlight the offending field and set it active.
-- Decimal key disabled when Age is active (integer-only).
-- Click-outside-overlay closes without saving.
-- 6-char max per field to guard against runaway input.
-
-**`setup.js` changes:**
-- Removed the `.input-grid` block from `index.html`; replaced with a clickable summary display. The old `<input>`/`<select>`/`.error-msg`/`.metric-preview` elements still exist as `hidden` siblings so setup.js DOM lookups don't need to change.
-- New `updateSummary()` helper renders `{age}y · {M|F} · {h} {cm|in} · {w} {kg|lbs}` into `#patient-summary-text`, or shows the placeholder when anything's missing. Called from the hidden-input `input` listeners, from `setUnits()`, from the modal's `onConfirm`, and from `reset()`.
-- `setUnits()` gained a `prev !== u` guard so the initial restore-from-localStorage call doesn't clobber input values, and now calls `updateSummary()` + `patientModal.onUnitsChanged()` to propagate unit changes through all three surfaces.
-- `patientModal.init(...)` wired from `setup.init()` with `onConfirm` / `getUnits` / `setUnits` callbacks — no changes needed in `app.js`.
-
-**Files changed:** `js/version.js`, `index.html`, `js/ui/patient-modal.js` (new), `js/ui/setup.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Fix chart-setting re-apply on new case (v0.5.24.10)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-User reported that the Cp-line dimming setting wasn't respected at case startup. Investigation confirmed a systemic bug: four chart settings (`cpOpacity`, `nomogramOpacity`, `overlayOpacity`, `eventMarkerSize`) suffered the same issue.
-
-**Root cause:** `js/app/chart-bridge.js onFrame()` had closure-level `last*` cache variables that survived chart destruction. `initSimScreen()` in `js/app.js` destroys and recreates the chart on New Case, but the bridge closure keeps its cached values. New chart → default state (e.g. `cpOpacity = 1.0`); bridge still holds `lastCpOpacity = 0.5` from the old chart; equality check fails, setter never fires on the fresh chart.
-
-**Why `setFontScale` was fine:** it already had its own idempotent guard (`if (s.fontScale === k) return`) inside the setter. Bridge called it unconditionally, and the chart-side guard handled dedup. Chart recreate → fresh `s.fontScale = 1.0`; bridge pushes `1.30`; setter sees mismatch, applies. Self-healing.
-
-**Fix:** applied the same pattern to the four other setters. Each now clamps the input, compares against chart state (`s.cpOpacity`, `s.nomogramOpacity`, `s.overlayAlpha`, `s.eventMarkerSize`), and early-returns if unchanged. Dropped the bridge-level `last*` caches for these four; `onFrame` now calls the setters unconditionally every frame. State-derived guards (`lastSsCe`, `lastPlateauRegion`, `lastEventMarkersKey`) left alone — those track computed state, not settings, and their job is to avoid work in the non-change case, not to mirror settings across chart recreates.
-
-Added `cpOpacity` field to `js/ui/chart/state.js` to back the new guard; the other three setters already had state-tracking fields, just needed the comparison added.
-
-**Files changed:** `js/version.js`, `js/ui/chart/state.js`, `js/ui/chart/index.js`, `js/app/chart-bridge.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Setup screen tightening (v0.5.24.9)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-New Case setup screen polish. Three asks from iPad screenshots:
-
-1. **Numeric keyboard on iPad always.** `type="number"` on iPadOS Safari can still pop the full alphanumeric keyboard with a numeric row on top, which is what the user was seeing. Switched age / height / weight to `type="text"` with `inputmode="numeric"` (age) and `inputmode="decimal"` (height / weight), plus matching `pattern` attributes. iPad now shows the pure numeric keypad. All validation is JS-side via `parseFloat` / `parseInt` on `.value` — nothing in the codebase uses `valueAsNumber`, so the type change is behaviorally transparent. `min / max / step` dropped (they only enforce on `type="number"`; JS-side bounds checks in `setup.js` are the source of truth).
-2. **Placeholder numbers looked like real entries.** No `::placeholder` rule existed, so the browser-default placeholder color was close to the input text color. Added `.form-row input::placeholder { color: var(--text-muted); opacity: .45 }`.
-3. **Confirm / Restore buttons falling below the visible form.** Tightened `.setup-form` padding + gap, `.input-grid` gap, input padding + font-size, and collapsed the reserved `min-height` on `.error-msg` / `.metric-preview` / `.rounding-note` so they don't eat vertical space when empty. Also trimmed `.model-info` and `.pump-settings` padding. The `@media (max-height:380px)` and `@media (min-width:1020px)` responsive selectors updated to match the new `input[type="text"]` shape.
-
-**Files changed:** `js/version.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Single-line Case Time display (v0.5.24.8)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-The topbar's case-time display was a two-line stack: `19:26:52` (ET) over a tiny muted `start 15:15`. Awkward vertically, and the whole thing being a clickable popover-trigger was invisible — the muted wall-clock hint didn't read as part of a button.
-
-Collapsed to a single bordered button: `[ CASE START 15:15 | ET 0:00:00 ]`. Two-line → one-line. Labels muted + uppercase for tone; values crisp (ET in `--green`, start in `--text-primary`). 1px subtle border on the button with a hover state (bg brightens, border darkens via `--border-focus`) so the tap affordance is obvious.
-
-- Markup: `.timer-wall-hint` element removed. `.elapsed-timer` is now a `<button>` wrapping `.ct-start-group` (Case start label + value + separator) followed by `ET` label + elapsed value. Outer `id="elapsed-timer"` preserved so `timer.js:29` click-binding still works.
-- CSS: the duplicate base `.elapsed-timer` rule at line 104 was removed; the canonical rule near the popover definition now carries all the button styling. `.timer-wall-hint` rules (base + `@media(max-height:380px)`) deleted.
-- Compact phone portrait (`orientation:portrait and max-width:500px`) hides the `Case start` segment with `.ct-start-group { display: none }`, leaving just `ET X:XX:XX`.
-- `timer.js renderDisplay()` targets `#elapsed-time-val`; `updateWallHint()` targets `#case-start-val`, drops the `start ` prefix (label is in markup now), and falls back to `--:--` when no wall-clock start is set.
-
-**Files changed:** `js/version.js`, `index.html`, `js/ui/timer.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Clinical trim on highlights + portrait modal + ET/RT toggle affordance (v0.5.24.7)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-Iterating on v0.5.24.6. The stronger highlights landed in the right direction but were too "consumer app" — halos, scale transforms, soft glows — not appropriate for a clinical device aesthetic. Pared back to crisp borders + subtle tints only. Plus two functional fixes.
-
-1. **Active drug-tile** — removed the soft `inset 0 0 60px -15px` inner halo. Kept the 6px `border-left` and the `inset 0 0 0 2px var(--drug-color)` crisp 2px frame. Reads as a device indicator.
-2. **Selected history row** — dropped `transform:scale(1.03)`, the dark-on-black ring, and the 28px amber halo. Now `background:rgba(245,158,11,.18)` + `inset 0 0 0 2px var(--amber)` + amber `border-left-color`. Still very clear which row is selected; no animation, no glow.
-3. **Portrait edit modal position** — in the portrait tablet grid layout the modal overlay was centering vertically and landing on top of the history panel in the bottom-right quadrant. Added `align-items:flex-start; padding-top:6vh` on `.modal-overlay` scoped to `@media(orientation:portrait) and (min-width:700px)` + `body.edit-history-mode`. The modal now sits in the chart half so the history tile being edited remains visible. Landscape unaffected.
-4. **ET/RT time-format button** — was just "ET" or "RT" with no affordance suggesting it toggles. Replaced with a two-state indicator: `[<active>ET</active> / RT]`. The inactive option stays visible but muted so the toggle affordance reads at a glance. `app.js` click handler toggles the `.active` class on the `.t-et` and `.t-rt` spans instead of overwriting `textContent`.
-
-**Files changed:** `js/version.js`, `index.html`, `js/app.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Stronger highlights + portrait resize fix + click-outside exit (v0.5.24.6)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-Follow-up fixes for four things iPad Pro screenshots surfaced after v0.5.24.5:
-
-1. **Active drug-tile glow wasn't visible enough.** The v0.5.24.5 version used `--drug-color-muted` (alpha 0.25) for the outline and halo — too subtle on a dark panel background. Replaced with full-alpha `--drug-color` applied via a thicker `border-left:8px` and two inset box-shadows: a hard 2px inner frame and a soft 60px inner halo. Both inset so the overflow:auto on `.drug-panel` doesn't clip them.
-2. **Selected history row `.h-row-selected` was barely visible** — amber at .22 alpha against the edit-mode dimmed backdrop didn't pop. Bumped to .45 bg alpha, 3px outline, 28px amber halo, 1.03 scale transform, and a dark `0 0 0 2px rgba(0,0,0,.6)` ring to separate it from neighbors.
-3. **No way to exit edit mode except tapping Edit.** Added a capture-phase document click listener in `history.init()`: any click outside `#panel-history` (and outside any `.modal-overlay.open`) clears the edit-mode class and the Edit button's active state. New `exitEditMode()` export also covers this path. Checks modal containment first so clicks inside the event editor (while it's open over a dimmed backdrop) don't trigger exit.
-4. **Portrait dynamic row sizing wasn't working.** Bug: `Element.scrollHeight` returns `clientHeight` when content fits without scrolling. The grid sized the panel to 50% of the screen (1fr), content was smaller, so scrollHeight = clientHeight = 50% of screen — my `min(content, 50%)` calculation always picked 50%, making the "shrink to fit" a no-op. Fix: sum the children's `getBoundingClientRect().height` + gap. Also wired a `syncPortraitLayout()` call into `showScreen()` so the measurement runs after the sim screen becomes visible (wrapped in 2× `requestAnimationFrame` to let layout settle). Cap raised slightly from 50% → 55% to allow a tiny bit more room for tall drug-card content.
-
-**Why `getBoundingClientRect().height` per child instead of `offsetHeight`:** accounts for CSS transforms (the active-tile scale/shadow don't change layout size, but we're also not using transforms on cards — both work, chose GBCR for future-proofing).
-
-**Why capture phase on the document click:** ensures we see the event before any `stopPropagation()` handler in a child. Fires once per click no matter which element receives it.
-
-**Files changed:** `js/version.js`, `index.html`, `js/ui/history.js`, `js/app.js`, `js/app/portrait-layout.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Edit mode focus + history grid + drug-tile glow (v0.5.24.5)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-Six related polish items, mostly CSS:
-
-1. **Edit-mode dim/blur** — when `body.edit-history-mode` is active, the rest of the sim (topbar, drug panel, chart, bottom controls) gets `filter:blur(2px); opacity:.45; pointer-events:none`. The modal overlay's normal backdrop is neutralized while in edit mode (`background:transparent; backdrop-filter:none`) so the history panel and selected row stay visible behind the editor.
-2. **Selected-row highlight** — new `.h-row-selected` class (amber outline + halo) applied to the tapped row. Cleared via a `MutationObserver` on the modal's `.open` class — keeps history decoupled from event-editor.
-3. **History row grid** — flattened the `.h-desc` wrapper. `.history-row` is now a 2-column / 2-row grid: `[time | type]` on line 1, `[value centered, spanning both columns]` on line 2. Pause events with no value naturally collapse to single-line.
-4. **eBIS label/value split** — `.drug-bis-header` renders `<span class="bis-label">eBIS</span> <span class="bis-value">37</span>`. Label muted + 0.72em; only the value carries the `bisColor()` color. The number-with-color is the information; the label is just context.
-5. **Active drug-tile glow** — adds `inset 0 1px 0 rgba(255,255,255,.04), 0 0 0 1px var(--drug-color-muted), 0 0 18px -2px var(--drug-color-muted)` box-shadow on `.drug-card.active`. Uses the existing per-card `--drug-color` / `--drug-color-muted` vars (yellow for propofol/ketamine, blue for fentanyl/remifentanil) so the halo color matches the card's identity.
-6. **Dynamic drug-panel width** — replaced fixed `width:280px` / `width:320px` at tablet breakpoints with `width:fit-content; min-width:Xpx; max-width:35vw`. Portrait grid template column became `minmax(280px, max-content) 1fr`. Browser sizes the panel to the widest unwrapped line in any card (typically the drug-model line at XXL), clamped to min/max. No JS — adapts automatically when text-size or content changes.
-
-**Why MutationObserver and not a callback in event-editor:** keeps the dependency arrow pointing the right way. History panel observes a known DOM id (`#modal-evt-editor.open` class change). Event-editor doesn't need to know history exists.
-
-**Why `fit-content` and not JS measurement:** browser-native intrinsic sizing handles all the edge cases (text-size change, content change, orientation change) without manual hooks. The clamps prevent runaway in either direction.
-
-**Files changed:** `js/version.js`, `index.html`, `js/ui/history.js`, `js/ui/drug-panel/index.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — History UX + layout polish (v0.5.24.4)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-Follow-up to the drug-card reshuffle — the iPad Mini screenshots revealed that the history panel was visually cluttered and used vertical space poorly, the drug panel at XXL was still clipping the Ce/Cp unit, and the portrait tablet layout was splitting vertical space 50/50 regardless of how much room the drug cards actually needed.
-
-**History refactor:**
-
-- Bottom action bar is now three buttons: `[ET]` `[+ Add Event]` `[Edit]`. The time-format toggle and the edit affordance are no longer hidden gestures.
-- Tapping `Edit` toggles `body.edit-history-mode`. While on, rows get an amber outline + pointer cursor and clicking a row calls the existing `onEventTap` hook (opens the event editor for that event — same flow the pencil icon used). The button gains an `.active` amber fill, mirroring the `.btn-ctrl-target.active-mode` pattern already used elsewhere.
-- Tapping `ET` / `RT` flips the time-format and re-renders. No longer fires when tapping the timestamp cell — the old tap-on-time handler is gone.
-- Row markup: `[time] | [type] / [value centered]`. Dropped the pencil `.h-edit-btn`, the `.h-detail` duration span ("29 sec" / "2.5 min push"), and the `fmtBolusDelivery` formatter entirely. The imports for `bolusDeliveryMinutes` and `pushDeliveryMinutes` were dropped from `js/ui/history.js`.
-- CSS: row padding 7px → 5px vertical; `.h-value` text-align:center; dead `.h-detail` selectors pruned from the text-lg/xl/xxl blocks.
-
-**Drug panel widths:** `@media (min-width:1020px)` drug-panel 250px → 280px; `@media (min-width:1200px)` 285px → 320px; portrait grid column 250px → 280px. Addresses the XXL `μg/mL` clip on the Ce/Cp row without any changes to the text-size ladder.
-
-**Portrait dynamic row sizing** — new module `js/app/portrait-layout.js` using `ResizeObserver` on the drug panel + `matchMedia('(orientation:portrait) and (min-width:700px)')` to gate the behavior to the portrait-tablet layout. Computes `min(drugPanel.scrollHeight + 4, 50% of window height)` and applies it as inline `grid-template-rows: 1fr <measured>px` on `.sim-main`. Re-synced from `applyTextSize()` in `settings-ui.js` so the layout updates immediately when the user changes Text size. Inline style is cleared when the media query doesn't match, so phones/landscape fall back to the base CSS template.
-
-**Why ResizeObserver and not a setTimeout:** browser-native change detection. Fires whenever anything affects the panel's rendered size (event added/removed, text size changed, card expanded via `.active`, drug-model detail wrap/unwrap at smaller widths).
-
-**Files changed:** `js/version.js`, `index.html`, `js/ui/history.js`, `js/app.js`, `js/app/settings-ui.js`, `js/app/portrait-layout.js` (new), `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Drug-card layout reshuffle + Exit Ce rename (v0.5.24.3)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-XXL iPad Mini screenshots revealed three problems on the propofol drug card:
-
-1. eBIS clipped in the Ce/Cp/eBIS row even after propofol deliberately dropped `μg/mL` units to make space.
-2. Exit Ce banner squeezed against the drug name at top-right (it was absolutely-positioned at top:6px/right:10px).
-3. Inserting eBIS between Ce/Cp and "At Target" would break a load-bearing visual adjacency — Cp 3.45 directly above At Target 3.5 reads as "here's the concentration, here's where it's heading," and eBIS as an unrelated PD-derived value doesn't belong wedged in there.
-
-**Layout changes:**
-
-- eBIS moves to the drug-name row as a new `.drug-bis-header` right-justified element. Container is a flex `.drug-header-row`. `:empty{display:none}` collapses on non-propofol cards and pre-case.
-- Emergence countdown moves to a new location between `.drug-status-row` and `.step-bar-area`, rendered in-flow as a red block element. `.exit-readout` loses its `position:absolute; top:6px; right:10px` rules.
-- Propofol's `.drug-conc-row` restored with a single trailing `μg/mL` unit (shared between Ce and Cp). Fentanyl/ketamine switched to the same shared-unit style for consistency.
-
-**Naming rework** — "Exit Ce" was clinically imprecise (readers had to remember it meant "time for Ce to decay to X if pump is off"). Renamed to Emerge/Emergence throughout user-facing text:
-
-| Location | Before | After |
-|---|---|---|
-| Drug-card readout | `Exit Ce 3.0 in 3:39` | `Emerge → 3.0 in 3:39` |
-| Reached state | `Exit Ce Reached` | `Emergence Reached` |
-| Button (idle / set) | `Set Exit Ce` / `Change Exit Ce` | `Set Emergence` / `Change Emergence` |
-| Keypad modal title + confirm | same as button | same as button |
-
-Verb on the readout (`Emerge →`) parallels the existing `Rate →` predictive line; noun on the button (`Emergence`) parallels `Target`. Internal symbols (`exitCe`, `setExitLine`, `.btn-ctrl-exit`, `.exit-readout`, `#<drug>-exit` id) kept to avoid a multi-file rename churn with no user-facing benefit.
-
-**Large-type bumps added for new selectors** — `.drug-bis-header` 13/15/17/19px, active variant 17/20/23px at Large/XL/XXL; `.exit-readout` 10/12/13/14.5px. Compact media queries (`max-width:900 and max-height:420` for phone-landscape, `orientation:portrait and max-width:500` for phone-portrait) hide the bis-header and let the exit-readout wrap with `white-space:normal` so it never truncates.
-
-**Dynamic keypad title** — added `else if (type === 'exitCe' && getExitCe() > 0)` branch in `js/ui/keypad.js show()` so the modal reads `Change Emergence` when an emergence value is already set, matching the pattern already in use for `ceTarget` and `intermittent`.
-
-**Files changed:** `js/version.js`, `index.html`, `js/ui/drug-panel/index.js`, `js/ui/drug-panel/exit-readout.js`, `js/ui/mode.js`, `js/ui/keypad.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Add XXL text size + fix label (v0.5.24.2)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-After 0.5.24.1 shipped, iPad Mini XL screenshots still showed unused vertical space below the KETAMINE card and the chart band labels were modestly sized relative to available area — so the ladder benefits from one more step. Also renamed the Appearance-tab label from "Text size (drug panel & history)" to just "Text size" since the scope is now global.
-
-**XXL sizing (~+45% base):** `.drug-name` 13 → 19px, `.ce-current` 22 → 32px, active `.ce-current` 27 → 39px, `.drug-approach` 10.5 → 15.5px, `.history-row` 11 → 16px, topbar `.elapsed-timer` 16 → 23px, `.btn-ctrl` 12 → 17.5px, chart fontScale 1.45. Rounded to 0.5px increments to match the existing ladder.
-
-**Screen gate:** `@media (min-width:1020px)` — only applies when the drug panel has widened to 250px+ at the existing desktop breakpoint. On phones / iPad Mini portrait the `.text-xxl` body class is still written but the CSS rules do not match, so the drug-panel text falls back to base sizes and the fixed-width Ce row does not wrap. Chart fonts still get 1.45× because the push path is pure JS — acceptable asymmetry, and consistent with how Large/XL already behave at their own gate.
-
-**Segmented control:** grew from three to four buttons. The existing `.seg-btn { flex: 1 }` rule makes them share width evenly so no extra CSS needed — at the settings modal's 780px max-width each button gets roughly 180px, with labels "Normal / Large / XL / XXL" all short enough to fit comfortably.
-
-**Files changed:** `js/version.js`, `js/ui/settings.js`, `js/app/settings-ui.js`, `js/app/chart-bridge.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Expand Large type to all sim-screen text (v0.5.24.1)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-0.5.24 shipped a Large type option scoped to drug-panel + history informational text. iPad Mini screenshots revealed three misses worth addressing immediately:
-
-1. **Big Ce readout didn't grow.** It was deliberately excluded to protect the fixed-width Ce row from wrapping — but visual inspection on iPad Mini confirmed the row has headroom. Added modest bumps: `.ce-current` 22 → 25 → 28px, `.ce-current.active` 27 → 30 → 34px.
-2. **Chart text was completely untouched.** Axis ticks (9px), legend (10px), axis titles (10px), BIS band labels (9px), target/exit pills (10px) all stayed tiny no matter what the user chose. This is the centerpiece of the screen — now scales via a new `setFontScale(scale)` controller method that rewrites `chart.options.*.font.size` from canonical `BASE_FONTS` constants and rebuilds annotations. Three canvas-drawing plugins (target-label, readout-panel, annotations' BIS labels) multiply their hardcoded `ctx.font` sizes by `s.fontScale` on each draw.
-3. **`.step-bar-countdown` truncated at XL** — "Rate → 110.0 mcg/kg/min in ..." lost the actionable countdown to ellipsis because the element had `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`. When large-type is on, those rules are overridden with `white-space:normal; text-overflow:clip; min-height:0`, letting the line wrap to two rows instead.
-
-Also bumped the topbar (app-name, patient summary, elapsed timer, New Case, gear) and bottom controls (`.btn-ctrl`, `.mode-label`) — easy wins that were visibly too small at Normal.
-
-**Text-scale ladder (map in `chart-bridge.js`):** `normal → 1.0`, `large → 1.15`, `xl → 1.30`. Propagated to the chart from `onFrame` following the existing opacity pattern, but the change-guard lives inside `chart.setFontScale` itself (early-return on `s.fontScale === k`) instead of in a bridge-level `lastFontScale`. This makes chart recreation on new case self-healing — a fresh chart starts with `fontScale = 1.0` and the next frame's setFontScale call correctly fires because the fresh state doesn't match.
-
-**Specificity gate still holds.** All new CSS sits inside the existing `@media (min-width:601px) and (min-height:421px)` wrapper, so phone-landscape (`max-width:900 and max-height:420`) and small-portrait-phone (`max-width:500`) compact layouts are unaffected.
-
-**Files changed:** `js/version.js`, `index.html`, `js/ui/chart/index.js`, `js/ui/chart/state.js`, `js/ui/chart/annotations.js`, `js/ui/chart/plugins/target-label.js`, `js/ui/chart/plugins/readout-panel.js`, `js/app/chart-bridge.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
-
----
-
-### Interim — Large type option in Appearance settings (v0.5.24)
-
-*Between Sessions 26 and 27. Not tracked in session numbering.*
-
-Accessibility/readability improvement: users on larger screens can now opt into bigger drug-panel and history text without touching the chart or the large `.ce-current` readouts. Exposed as a three-position segmented control (Normal / Large / XL) in the Appearance settings tab.
-
-**Targeted selectors:**
-
-- Drug panel: `.drug-name` (inactive + `.active` variant), `.drug-model`, `.ce-label` / `.cp-label` / `.bis-label`, `.cp-current`, `.ce-unit`, `.drug-approach`, `.drug-status`, `.drug-rate`, `.drug-bis`, `.step-bar-countdown`.
-- History: `.history-row` base, `.h-time`, `.h-type`, `.h-detail`, `.history-empty`.
-- Deliberately excluded: `.ce-current` (already 22/27px — bumping it causes the Ce row to wrap on the fixed-width card).
-
-**Size ladder:**
-
-- Large: ~+15% (e.g. `.drug-name` 13 → 15px, `.history-row` 11 → 13px).
-- XL: ~+30% (e.g. `.drug-name` 13 → 17px, `.history-row` 11 → 14.5px).
-
-**Screen-size gate:**
-
-The large-type overrides are wrapped in `@media (min-width:601px) and (min-height:421px)`. This deliberately excludes the two compact-layout breakpoints — `(max-width:900) and (max-height:420)` for phone landscape and `(orientation:portrait) and (max-width:500)` for small portrait phones. Specificity forced the gate: `body.text-lg .drug-card .drug-name` (0,0,3,1) outranks the compact-layout selector `.drug-card .drug-name` (0,0,2,0), so without the media gate it would override the compact rules even on phones where they are needed.
-
-**Layout behaviour:**
-
-Drug-panel width is fixed (210/175–285px at different breakpoints), and cards are vertical flex containers with no fixed height, sitting inside a panel that is `overflow-y:auto`. Larger text therefore grows cards taller, not wider — the chart area keeps its size and the panel just scrolls if needed. The Ce row's big readout is unchanged, so that row does not wrap; other single-line rows (`.drug-status`, `.drug-rate`) stay on one line at +30%. `.step-bar-countdown` already truncates with `text-overflow:ellipsis`.
-
-**Files changed:** `js/version.js`, `js/ui/settings.js`, `js/app/settings-ui.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+**Files changed this session:** `index.html`, `js/version.js`, `js/ui/settings.js`, `js/app/settings-ui.js`, `js/ui/history.js`, `js/ui/keypad.js`, `js/ui/event-editor.js`, `js/ui/setup.js`, `js/ui/timer.js`, `js/ui/mode.js`, `js/ui/drug-panel/index.js`, `js/ui/drug-panel/exit-readout.js`, `js/ui/chart/index.js`, `js/ui/chart/state.js`, `js/ui/chart/annotations.js`, `js/ui/chart/gestures.js`, `js/ui/chart/plugins/readout-panel.js`, `js/ui/chart/plugins/target-label.js`, `js/app/chart-bridge.js`, `js/app.js`, plus the three new modules. `CHANGELOG.md` and `DEVELOPMENT.md` for docs.
 
 ---
 
