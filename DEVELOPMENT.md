@@ -4,7 +4,10 @@
 
 ## Session History
 
-### Session 27 (2026-04-20 / 2026-04-21) — UI Polish Arc (v0.5.24 → v0.5.24.22)
+### Session 27 (2026-04-20 / 2026-04-21) — UI Polish Arc (v0.5.24 → v0.5.24.23)
+
+*Post-summary tweak (v0.5.24.23):* patient modal — sex toggle moved to the top of the field stack; added a `Next →` key to the keypad that cycles active through `age → height → weight` (disabled on weight). Data-entry flow becomes `toggle sex → type age → Next → type height → Next → type weight → Confirm` with no re-tapping of fields.
+
 
 Long polish session driven by iPad Mini / iPad Pro / iPhone screenshots. 22 interim version bumps, all on the `claude/add-large-type-option-d5Onn` branch. See `CHANGELOG.md` for per-version detail; this block is the coherent summary.
 

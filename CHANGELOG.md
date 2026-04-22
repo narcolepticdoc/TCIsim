@@ -31,6 +31,19 @@ Single long session delivering a coherent UI polish pass. 22 interim version bum
 
 ---
 
+## [0.5.24.23] — 2026-04-21
+
+Patient modal flow tuning.
+
+- **Sex toggle moved to top** (above Age). Reflects the natural order of entry: pick sex once (a toggle) before typing numeric data.
+- **Next key added to the keypad**. Bottom row is now `[⌫] [Next →]` with Next spanning two columns. Pressing Next advances the active field through `age → height → weight`; disabled when on weight (end of chain). Lets users tap-type-type-type through the whole form without re-tapping each field.
+
+Flow is now: toggle sex → type age → Next → type height → Next → type weight → Confirm.
+
+**Files changed:** `js/version.js`, `index.html`, `js/ui/patient-modal.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.24.22] — 2026-04-21
 
 Third attempt at the inspect-drag hijack. `stopImmediatePropagation` on an ancestor (v0.5.24.21) wasn't enough on iPad — hammerjs's pan recognizer state outlived my event-level intercepts, so after the user's finger crossed hammer's pan-threshold (~10px), pan activated even though my listeners had handled the earlier touchmove events.
