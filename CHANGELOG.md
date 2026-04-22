@@ -11,13 +11,28 @@
 
 ---
 
+## [0.5.26.1] — 2026-04-22
+
+Tweak the new Total-delivered readout so it's always in absolute mass units (not per-kg) and always shows mL.
+
+### Shipped
+
+- **Mass unit is drug-native, not user-preferred.** Propofol and ketamine display mg; fentanyl (and a future remifentanil) display mcg. Hardcoded `TOTAL_MASS_UNIT` map replaces the earlier `getPreferredBolusUnit` lookup — a cumulative-dose readout has no business being expressed as mcg/kg or mL. (The user's per-drug bolus-entry pref is unchanged; it still drives the keypad and the history-row value column.)
+- **mL always shown.** Concentration is known per-drug even when no infusion pump is enabled (`DRUG_DEFS[drug].concentration`), so e.g. a 50 mcg fentanyl push in intermittent-bolus mode now reads `50 mcg · 1.00 mL`.
+
+### Files changed
+
+`js/version.js`, `js/ui/history.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.26] — 2026-04-22
 
 Add a cumulative-dose readout to the history panel.
 
 ### Shipped
 
-- **Total delivered strip** at the bottom of the history panel (above the ET/RT · + Add Event · Edit action bar). Shows total mg delivered to the current elapsed time for the selected drug, formatted in the user's preferred bolus unit (mg / mcg / mcg/kg / mL per drug + pref). When the pump is enabled and the bolus unit is not already volumetric, an mL figure is appended after a separator — e.g. `Total delivered  180 mg · 18.0 mL`.
+- **Total delivered strip** at the bottom of the history panel (above the ET/RT · + Add Event · Edit action bar). Shows total dose delivered to the current elapsed time for the selected drug in the drug's native mass unit (mg for propofol/ketamine, mcg for fentanyl) plus mL — e.g. `Total delivered  180 mg · 18.0 mL`.
 - **Rate integration is bolus-aware**: background rate is suppressed while a bolus is delivering (mirrors `replay.js` semantics where bolus delivery replaces the background infusion for its duration). A bolus still in progress credits a time-proportional fraction of its dose so the readout doesn't step up discontinuously.
 - **Hidden until there's something to show.** `<div id="history-totals" hidden>` stays hidden when totals are zero or no events exist, so the bar doesn't add noise before a case starts.
 

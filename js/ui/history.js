@@ -11,7 +11,7 @@
  */
 
 import {
-  DRUG_DEFS, getPumpSettings, isPumpEnabled,
+  DRUG_DEFS, getPumpSettings,
   bolusDeliveryMinutes, pushDeliveryMinutes,
 } from '../util/constants.js';
 import { fromCanonical, getPrefKey, getDefaultUnit, formatValue }
@@ -254,26 +254,34 @@ function computeTotalsForDrug(drugId, now) {
   return { bolusMg, rateMg, totalMg: bolusMg + rateMg };
 }
 
+// Total-delivered is always shown in absolute mass units and mL —
+// per-kg or volumetric bolus prefs don't make sense for a cumulative
+// dose readout. Per-drug native mass unit:
+const TOTAL_MASS_UNIT = {
+  propofol: 'mg',
+  fentanyl: 'mcg',
+  remifentanil: 'mcg',
+  ketamine: 'mg',
+};
+
 /**
- * Format a total mg in the user's preferred bolus unit.
- * Falls back to mg if conversion fails.
+ * Format a total mg in the drug's native mass unit (mg or mcg).
  */
-function fmtTotalInUnit(mg, drugId) {
-  const unit = getPreferredBolusUnit(drugId);
-  const patient = _getPatient();
-  const ctx = { weightKg: patient?.weight || 70 };
-  try {
-    const val = fromCanonical(mg, unit, drugId, 'bolus', ctx);
-    return formatValue(val, unit) + ' ' + unit;
-  } catch (e) {
-    return mg.toFixed(1) + ' mg';
+function fmtTotalMass(mg, drugId) {
+  const unit = TOTAL_MASS_UNIT[drugId] || 'mg';
+  if (unit === 'mcg') {
+    const mcg = mg * 1000;
+    const val = mcg >= 100 ? Math.round(mcg) : mcg.toFixed(1);
+    return `${val} mcg`;
   }
+  const val = mg >= 10 ? mg.toFixed(1) : mg.toFixed(2);
+  return `${val} mg`;
 }
 
 /**
  * Render the totals strip for the selected drug. Hidden when no events
- * or total is zero. Shows mL alongside when the pump is enabled and the
- * preferred bolus unit is not already volumetric.
+ * or total is zero. Shows native mass unit + mL (concentration is known
+ * per-drug even when no infusion pump is configured).
  */
 export function renderTotals(drugId) {
   const drug = drugId || _selectedDrug;
@@ -286,17 +294,18 @@ export function renderTotals(drugId) {
     el.innerHTML = '';
     return;
   }
-  const unit = getPreferredBolusUnit(drug);
-  const unitStr = fmtTotalInUnit(totalMg, drug);
-  const parts = [`<span class="ht-value">${unitStr}</span>`];
-  if (isPumpEnabled(drug) && unit !== 'mL') {
-    const ps = getPumpSettings(drug);
-    const ml = totalMg / (ps.concentration || 10);
-    const mlStr = ml >= 10 ? ml.toFixed(1) : ml.toFixed(2);
-    parts.push(`<span class="ht-sep">·</span><span class="ht-value">${mlStr} mL</span>`);
-  }
+  const massStr = fmtTotalMass(totalMg, drug);
+  const ps = getPumpSettings(drug);
+  const ml = totalMg / (ps.concentration || 10);
+  const mlStr = ml >= 10 ? ml.toFixed(1) : ml.toFixed(2);
   el.hidden = false;
-  el.innerHTML = `<span class="ht-label">Total delivered</span><span>${parts.join('')}</span>`;
+  el.innerHTML =
+    `<span class="ht-label">Total delivered</span>` +
+    `<span>` +
+      `<span class="ht-value">${massStr}</span>` +
+      `<span class="ht-sep">·</span>` +
+      `<span class="ht-value">${mlStr} mL</span>` +
+    `</span>`;
 }
 
 // ---- Source badge ----
