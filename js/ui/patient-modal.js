@@ -76,6 +76,10 @@ export function open() {
   _syncUnitToggle();
   _applyUnitLabels();
   _render();
+  // Invalidate the re-tap guard in _setActive so the first selection on this
+  // open actually applies its .active class (otherwise the initial 'age' ===
+  // 'age' comparison short-circuits the DOM sync and the field looks dead).
+  _active = null;
   _selectFirstEmpty();
   $('pm-error').textContent = '';
   $('modal-patient').classList.add('open');

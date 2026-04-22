@@ -31,6 +31,16 @@ Single long session delivering a coherent UI polish pass. 23 interim version bum
 
 ---
 
+## [0.5.24.24] — 2026-04-22
+
+Patient modal: fix age field not showing as active on open.
+
+- On first open of the Patient Demographics modal, the Age row didn't render with its `.active` blue border, and tapping Age did nothing — users had to tap Height or Weight first, then come back. Root cause: `_active` was initialized to `'age'` at module scope, so `_selectFirstEmpty()` → `_setActive('age')` short-circuited on the `_active === field` re-tap guard before it could apply the `.active` class. Fix: reset `_active = null` inside `open()` just before `_selectFirstEmpty()` so the first selection in each modal session always runs the DOM sync. The re-tap guard itself is preserved for its intended in-session purpose (preserving `_prefilled` on re-taps).
+
+**Files changed:** `js/version.js`, `js/ui/patient-modal.js`, `CHANGELOG.md`, `DEVELOPMENT.md`, `CLAUDE.md`.
+
+---
+
 ## [0.5.24.23] — 2026-04-21
 
 Patient modal flow tuning.
