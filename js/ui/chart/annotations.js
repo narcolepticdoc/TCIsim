@@ -32,25 +32,6 @@ export function buildAnnotations(s) {
   }
 
   if (s.targetCe !== null && s.targetCe > 0) {
-    // Ce drift band — drawn first so it sits behind the target line and
-    // under the Cp/Ce curves. Visible only when setCeToleranceBand has
-    // pushed a non-null tolerance in (setting: showCeBand).
-    if (s.ceBandTolerance && s.ceBandTolerance > 0) {
-      // ~7% fill, further scaled by the overlayAlpha setting so the band
-      // dims in lock-step with the other overlays.
-      const fillA = Math.round(0x12 * (parseInt(s.overlayAlpha, 16) / 255)).toString(16).padStart(2, '0');
-      annotations.ceBand = {
-        type: 'box',
-        xScaleID: 'x',
-        yScaleID: 'y',
-        yMin: s.targetCe * (1 - s.ceBandTolerance),
-        yMax: s.targetCe * (1 + s.ceBandTolerance),
-        backgroundColor: COLORS.target + fillA,
-        borderWidth: 0,
-        drawTime: 'beforeDatasetsDraw',
-      };
-    }
-
     annotations.target = {
       type: 'line',
       yMin: s.targetCe,
@@ -114,6 +95,27 @@ export function buildAnnotations(s) {
       } : undefined,
     };
   });
+
+  // Ce drift tolerance band. Inserted AFTER the effect bands (and with
+  // default drawTime = 'afterDatasetsDraw') so it renders on top of the
+  // BIS "Deep Anesthesia" / "GA" green overlays — otherwise it's hidden
+  // beneath them. Fill is ~14%, border at ~31% opacity (both scaled by
+  // overlayAlpha) so the band stays legible through the effect overlays.
+  if (s.targetCe !== null && s.targetCe > 0 && s.ceBandTolerance && s.ceBandTolerance > 0) {
+    const alphaFactor = parseInt(s.overlayAlpha, 16) / 255;
+    const fillA   = Math.round(0x24 * alphaFactor).toString(16).padStart(2, '0');
+    const borderA = Math.round(0x50 * alphaFactor).toString(16).padStart(2, '0');
+    annotations.ceBand = {
+      type: 'box',
+      xScaleID: 'x',
+      yScaleID: 'y',
+      yMin: s.targetCe * (1 - s.ceBandTolerance),
+      yMax: s.targetCe * (1 + s.ceBandTolerance),
+      backgroundColor: COLORS.target + fillA,
+      borderColor: COLORS.target + borderA,
+      borderWidth: 1,
+    };
+  }
 
   if (s.plateauRegion) {
     const fillA = Math.round(0x1f * (parseInt(s.overlayAlpha, 16) / 255)).toString(16).padStart(2, '0');
