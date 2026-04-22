@@ -4,11 +4,13 @@
 
 ## Session History
 
-### Interim — Total-delivered readout in history panel (v0.5.26)
+### Interim — Total-delivered readout in history panel (v0.5.26 → .1)
 
 *Branch: `claude/add-drug-amount-display-rWPVg`.*
 
 User asked for a way to see total amount given per drug, in the drug's dose unit and in mL. Options considered were a footer line on the drug card or a totals row at the bottom of the history panel; the history panel won because it's already the "what happened" surface and has room without crowding the drug card.
+
+**v0.5.26.1 correction.** Initial implementation routed the mass total through `getPreferredBolusUnit` so it honoured whatever unit the user had chosen for the bolus keypad (mg / mcg / mcg/kg / mL). User feedback: a cumulative-dose readout should be unconditional — absolute mass in the drug's native unit (mg for propofol/ketamine, mcg for fentanyl), with mL always shown. Replaced the pref lookup with a hardcoded `TOTAL_MASS_UNIT` map; dropped the `isPumpEnabled` gate on the mL column because `DRUG_DEFS[drug].concentration` is known even when a pump isn't configured. Push of 50 mcg fentanyl in intermittent-bolus mode now reads `50 mcg · 1.00 mL` instead of hiding the mL.
 
 **Shipped:**
 
