@@ -10,7 +10,10 @@
  * and future (after current time, dimmed).
  */
 
-import { DRUG_DEFS } from '../util/constants.js';
+import {
+  DRUG_DEFS, getPumpSettings, isPumpEnabled,
+  bolusDeliveryMinutes, pushDeliveryMinutes,
+} from '../util/constants.js';
 import { fromCanonical, getPrefKey, getDefaultUnit, formatValue }
   from '../util/units.js';
 
@@ -200,6 +203,102 @@ function fmtBolusDose(mg, drugId) {
   }
 }
 
+// ---- Totals ----
+
+/**
+ * Walk this drug's events and sum the total mg delivered up to `now`.
+ * Rate segments are integrated (rate × duration). Bolus events add
+ * their full value if fully delivered by `now`, or a time-proportional
+ * fraction if delivery is still in progress. Background rate is
+ * suppressed while a bolus is delivering (mirrors replay semantics).
+ */
+function computeTotalsForDrug(drugId, now) {
+  if (!_model || !(now > 0)) return { bolusMg: 0, rateMg: 0, totalMg: 0 };
+  const events = _model.getEvents(drugId);
+  if (!events.length) return { bolusMg: 0, rateMg: 0, totalMg: 0 };
+
+  let bolusMg = 0;
+  let rateMg = 0;
+  let currentTime = 0;
+  let currentRate = 0;
+
+  for (const evt of events) {
+    if (evt.time > now) break;
+    if (evt.time > currentTime) {
+      rateMg += (evt.time - currentTime) * currentRate;
+      currentTime = evt.time;
+    }
+    if (evt.type === 'bolus') {
+      const duration = evt.deliveryMode === 'push'
+        ? pushDeliveryMinutes(evt.value, drugId)
+        : bolusDeliveryMinutes(evt.value, drugId);
+      const endTime = evt.time + duration;
+      if (endTime <= now) {
+        bolusMg += evt.value;
+        currentTime = endTime;
+      } else {
+        const frac = (now - evt.time) / duration;
+        bolusMg += evt.value * Math.max(0, Math.min(1, frac));
+        currentTime = now;
+        break;
+      }
+    } else if (evt.type === 'rate') {
+      currentRate = evt.value;
+    } else if (evt.type === 'pause') {
+      currentRate = 0;
+    }
+  }
+  if (currentTime < now) {
+    rateMg += (now - currentTime) * currentRate;
+  }
+  return { bolusMg, rateMg, totalMg: bolusMg + rateMg };
+}
+
+/**
+ * Format a total mg in the user's preferred bolus unit.
+ * Falls back to mg if conversion fails.
+ */
+function fmtTotalInUnit(mg, drugId) {
+  const unit = getPreferredBolusUnit(drugId);
+  const patient = _getPatient();
+  const ctx = { weightKg: patient?.weight || 70 };
+  try {
+    const val = fromCanonical(mg, unit, drugId, 'bolus', ctx);
+    return formatValue(val, unit) + ' ' + unit;
+  } catch (e) {
+    return mg.toFixed(1) + ' mg';
+  }
+}
+
+/**
+ * Render the totals strip for the selected drug. Hidden when no events
+ * or total is zero. Shows mL alongside when the pump is enabled and the
+ * preferred bolus unit is not already volumetric.
+ */
+export function renderTotals(drugId) {
+  const drug = drugId || _selectedDrug;
+  const el = $('history-totals');
+  if (!el) return;
+  const now = _getElapsedMinutes ? _getElapsedMinutes() : 0;
+  const { totalMg } = computeTotalsForDrug(drug, now);
+  if (!(totalMg > 0)) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  const unit = getPreferredBolusUnit(drug);
+  const unitStr = fmtTotalInUnit(totalMg, drug);
+  const parts = [`<span class="ht-value">${unitStr}</span>`];
+  if (isPumpEnabled(drug) && unit !== 'mL') {
+    const ps = getPumpSettings(drug);
+    const ml = totalMg / (ps.concentration || 10);
+    const mlStr = ml >= 10 ? ml.toFixed(1) : ml.toFixed(2);
+    parts.push(`<span class="ht-sep">·</span><span class="ht-value">${mlStr} mL</span>`);
+  }
+  el.hidden = false;
+  el.innerHTML = `<span class="ht-label">Total delivered</span><span>${parts.join('')}</span>`;
+}
+
 // ---- Source badge ----
 
 function sourceBadge(source) {
@@ -234,6 +333,7 @@ export function render(drugId) {
   if (events.length === 0) {
     empty.style.display = 'block';
     list.innerHTML = '';
+    renderTotals(drug);
     return;
   }
 
@@ -281,6 +381,7 @@ export function render(drugId) {
   }
 
   list.innerHTML = rows.join('');
+  renderTotals(drug);
 }
 
 /**
@@ -297,4 +398,7 @@ export function updateDimming() {
     if (isNaN(t)) continue;
     rows[i].classList.toggle('h-future', t > now);
   }
+  // Totals are time-dependent (integrate rate segments to `now`) so they
+  // need to refresh on the same 2s cadence the bridge uses for dimming.
+  renderTotals(_selectedDrug);
 }
