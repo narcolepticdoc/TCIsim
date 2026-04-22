@@ -452,7 +452,11 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   // This gives tight control when V3 equilibrates fast (~15-30 min steps early)
   // and relaxed control when the rate barely changes (~60-90 min steps late).
   {
-    const PROBE      = 15;    // min: binary search lookahead and extension increment
+    // PROBE scales with ke0: Ce needs ~2τ = 2/ke0 to meaningfully respond
+    // to a rate change. Clamped to a 10-min clinical floor (keep plans
+    // readable) and a 30-min ceiling (avoid pathological long intervals
+    // on slow drugs).
+    const PROBE      = Math.max(10, Math.min(30, 2 / engine.params.ke0));
     const MAX_DUR    = 90;    // min: maximum step duration
     const CE_TOL     = 0.015; // 1.5%: max Ce deviation before new step required
 
