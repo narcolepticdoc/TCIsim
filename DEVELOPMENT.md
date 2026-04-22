@@ -34,6 +34,20 @@ The test that shipped with the experiment (`test-tci-peak-overshoot.mjs`) only a
 
 ---
 
+### Interim — Patient modal age field not visually active on open (v0.5.24.24)
+
+Regression follow-up from the patient modal (Theme 5 of Session 27). User reported: opening the modal, the Age field is supposed to be active, but it doesn't show the active blue border, and tapping Age does nothing until you tap a different field first and come back.
+
+Root cause in `js/ui/patient-modal.js`: module-level `_active` initializes to `'age'`. `open()` calls `_selectFirstEmpty()` which (in the common path, and explicitly as a fallback) calls `_setActive('age')`. `_setActive` has an early-return `if (_active === field) return;` to make re-taps no-ops (it preserves `_prefilled` and avoids redundant DOM work). Because `_active` is already `'age'` on every open, the guard fires and the DOM work — including applying `.active` to the row — never runs. First tap on the age row hits the same guard. Only after touching a different field does `_active` change, letting a subsequent age-tap actually apply the styling.
+
+Fix: reset `_active = null` inside `open()` right before `_selectFirstEmpty()`. This invalidates the re-tap guard only at modal-open time, so the first `_setActive` call of each session always applies its DOM side effects. The guard itself is kept for its original purpose (re-tapping the already-active field during entry shouldn't re-arm `_prefilled`). Considered but rejected: removing the guard entirely (breaks `_prefilled` re-arm semantics); changing the module-level default (sticky `_active` across close/reopen reintroduces the bug).
+
+Also added a standing rule to `CLAUDE.md` (Common Workflows): when committing, open a PR by default.
+
+**Files changed:** `js/version.js`, `js/ui/patient-modal.js`, `CHANGELOG.md`, `DEVELOPMENT.md`, `CLAUDE.md`.
+
+---
+
 ### Session 27 (2026-04-20 / 2026-04-21) — UI Polish Arc (v0.5.24 → v0.5.24.23)
 
 Long polish session driven by iPad Mini / iPad Pro / iPhone screenshots. 23 interim version bumps, all on the `claude/add-large-type-option-d5Onn` branch. See `CHANGELOG.md` for per-version detail; this block is the coherent summary.
