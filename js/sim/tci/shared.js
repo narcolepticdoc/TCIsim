@@ -23,6 +23,12 @@ import { quantizeInDisplay } from '../../util/units.js';
  */
 
 export const DEFAULT_SCHEME_CONFIG = {
+  // tolerancePct: ±band around target used by the planners' BINARY decision
+  // gates — the loading-bolus threshold and the target-decrease pause cap.
+  // NOT a maintenance-phase drift tolerance. For the CET emulation planner,
+  // the continuous drift knob is cfg.ceTolerance (user-facing slider, read
+  // at emulation.js:457). See TCI-TOLERANCE-ANALYSIS.md §6 Option B vs §8
+  // for why these stay separate.
   tolerancePct: 0.05,       // ±5% of target Ce
   maxRate: 200,             // mg/min (1200 mL/h for 10 mg/mL propofol)
   maxSteps: 8,              // max rate steps (excluding bolus)

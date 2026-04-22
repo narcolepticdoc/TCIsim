@@ -39,6 +39,11 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   engine.setState(startState);
 
   const currentCe = engine.getConcentrations().Ce;
+  // upperBound: target-decrease pause cap. If the user drops target and Ce
+  // starts above this level, pause the pump until Ce decays below it. This
+  // is a BINARY gate (pause-or-not), driven by cfg.tolerancePct — distinct
+  // from the maintenance drift tolerance (CE_TOL) set later in the
+  // correction pass.
   const upperBound = ceTarget * (1 + cfg.tolerancePct);
 
   let simTime = startTime;
@@ -46,6 +51,9 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   // ---- Loading: CET bolus + pause (same as conservative) ----
   // SimTIVA always gives a bolus for any CET target increase (no threshold).
   // The bolus size is computed accounting for existing drug.
+  // needsBolus: loading-bolus gate. If Ce is already within tolerancePct of
+  // target (i.e. within ±5% by default), skip the bolus. BINARY gate, same
+  // semantic as upperBound above — not the maintenance drift band.
   const needsBolus = currentCe < ceTarget * (1 - cfg.tolerancePct);
 
   if (needsBolus) {
@@ -458,8 +466,14 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
     // on slow drugs).
     const PROBE      = Math.max(10, Math.min(30, 2 / engine.params.ke0));
     const MAX_DUR    = 90;    // min: maximum step duration
-    // CE_TOL: max Ce deviation before new step required. User-configurable
-    // via the Ce drift tolerance slider (range 0.005–0.030, default 0.015).
+    // CE_TOL: the maintenance-phase drift band — max |Ce - target|/target
+    // before this step is closed and a new one is emitted. Continuous
+    // control, NOT a binary gate (contrast with cfg.tolerancePct at line 42
+    // / line 49 which drives the loading-bolus and target-decrease gates).
+    // User-configurable via the Ce drift tolerance slider (range
+    // 0.005–0.030, default 0.015). Clamped here as a safety belt because
+    // the planner can also be invoked programmatically without going
+    // through the settings validator.
     const CE_TOL     = (typeof cfg.ceTolerance === 'number'
                         && cfg.ceTolerance >= 0.005 && cfg.ceTolerance <= 0.030)
       ? cfg.ceTolerance : 0.015;
