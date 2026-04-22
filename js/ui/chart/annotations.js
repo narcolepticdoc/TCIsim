@@ -32,14 +32,38 @@ export function buildAnnotations(s) {
   }
 
   if (s.targetCe !== null && s.targetCe > 0) {
-    annotations.target = {
-      type: 'line',
-      yMin: s.targetCe,
-      yMax: s.targetCe,
-      borderColor: COLORS.target + s.overlayAlpha,
-      borderWidth: 1.5,
-      borderDash: [6, 3],
-    };
+    if (s.ceBandTolerance && s.ceBandTolerance > 0) {
+      // Band visible — render as a pair of upper/lower target lines
+      // instead of a filled box. Lines are crisp against the BIS nomogram
+      // overlays where a 14%-alpha fill is imperceptible. The single
+      // centerline is replaced entirely; the zone between the two lines
+      // IS the target tolerance window.
+      annotations.targetUpper = {
+        type: 'line',
+        yMin: s.targetCe * (1 + s.ceBandTolerance),
+        yMax: s.targetCe * (1 + s.ceBandTolerance),
+        borderColor: COLORS.target + s.overlayAlpha,
+        borderWidth: 1.5,
+        borderDash: [6, 3],
+      };
+      annotations.targetLower = {
+        type: 'line',
+        yMin: s.targetCe * (1 - s.ceBandTolerance),
+        yMax: s.targetCe * (1 - s.ceBandTolerance),
+        borderColor: COLORS.target + s.overlayAlpha,
+        borderWidth: 1.5,
+        borderDash: [6, 3],
+      };
+    } else {
+      annotations.target = {
+        type: 'line',
+        yMin: s.targetCe,
+        yMax: s.targetCe,
+        borderColor: COLORS.target + s.overlayAlpha,
+        borderWidth: 1.5,
+        borderDash: [6, 3],
+      };
+    }
   }
 
   if (s.thresholdCe !== null && s.thresholdCe > 0) {
@@ -95,27 +119,6 @@ export function buildAnnotations(s) {
       } : undefined,
     };
   });
-
-  // Ce drift tolerance band. Inserted AFTER the effect bands (and with
-  // default drawTime = 'afterDatasetsDraw') so it renders on top of the
-  // BIS "Deep Anesthesia" / "GA" green overlays — otherwise it's hidden
-  // beneath them. Fill is ~14%, border at ~31% opacity (both scaled by
-  // overlayAlpha) so the band stays legible through the effect overlays.
-  if (s.targetCe !== null && s.targetCe > 0 && s.ceBandTolerance && s.ceBandTolerance > 0) {
-    const alphaFactor = parseInt(s.overlayAlpha, 16) / 255;
-    const fillA   = Math.round(0x24 * alphaFactor).toString(16).padStart(2, '0');
-    const borderA = Math.round(0x50 * alphaFactor).toString(16).padStart(2, '0');
-    annotations.ceBand = {
-      type: 'box',
-      xScaleID: 'x',
-      yScaleID: 'y',
-      yMin: s.targetCe * (1 - s.ceBandTolerance),
-      yMax: s.targetCe * (1 + s.ceBandTolerance),
-      backgroundColor: COLORS.target + fillA,
-      borderColor: COLORS.target + borderA,
-      borderWidth: 1,
-    };
-  }
 
   if (s.plateauRegion) {
     const fillA = Math.round(0x1f * (parseInt(s.overlayAlpha, 16) / 255)).toString(16).padStart(2, '0');
