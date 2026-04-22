@@ -458,7 +458,11 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
     // on slow drugs).
     const PROBE      = Math.max(10, Math.min(30, 2 / engine.params.ke0));
     const MAX_DUR    = 90;    // min: maximum step duration
-    const CE_TOL     = 0.015; // 1.5%: max Ce deviation before new step required
+    // CE_TOL: max Ce deviation before new step required. User-configurable
+    // via the Ce drift tolerance slider (range 0.005–0.030, default 0.015).
+    const CE_TOL     = (typeof cfg.ceTolerance === 'number'
+                        && cfg.ceTolerance >= 0.005 && cfg.ceTolerance <= 0.030)
+      ? cfg.ceTolerance : 0.015;
 
     // Start correcting from the first SimTIVA rate at or after maintTime.
     // Rate steps before maintTime (e.g. zero-rate pause during bolus delivery)

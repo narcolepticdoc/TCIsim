@@ -58,12 +58,12 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal })
 
   function commit() {
     if (!pendingTCI) return;
-    const { drugId, ceTarget, tciMode } = pendingTCI;
+    const { drugId, ceTarget, tciMode, ceTolerance } = pendingTCI;
     pendingTCI = null;
 
     const futureTime = timer.getElapsedMinutes() + tciDelaySeconds / 60;
     mode.setCeTarget(drugId, ceTarget);
-    const { scheme } = model.planTCI(drugId, futureTime, ceTarget, { tciMode, ...getQuantizeConfig(drugId) });
+    const { scheme } = model.planTCI(drugId, futureTime, ceTarget, { tciMode, ceTolerance, ...getQuantizeConfig(drugId) });
     mode.set(drugId, 'tci', `TCI target Ce=${ceTarget.toFixed(1)} μg/mL`);
     refreshChart();
 
