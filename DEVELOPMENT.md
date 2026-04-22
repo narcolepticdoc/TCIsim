@@ -4,6 +4,23 @@
 
 ## Session History
 
+### Interim — Total-delivered readout in history panel (v0.5.26)
+
+*Branch: `claude/add-drug-amount-display-rWPVg`.*
+
+User asked for a way to see total amount given per drug, in the drug's dose unit and in mL. Options considered were a footer line on the drug card or a totals row at the bottom of the history panel; the history panel won because it's already the "what happened" surface and has room without crowding the drug card.
+
+**Shipped:**
+
+- New `<div class="history-totals" id="history-totals">` between `.history-area` and `.history-actions` in `index.html`. CSS defines a bordered top strip with an uppercase `Total delivered` label on the left and the value(s) on the right — monospace, muted label colour, full-strength value colour. text-lg / text-xl / text-xxl scalings added to match the rest of the history panel.
+- `computeTotalsForDrug(drugId, now)` in `js/ui/history.js` walks the drug's event list once, integrating rate segments between events and crediting bolus doses. Background rate is suppressed during bolus delivery (mirrors `js/sim/events/replay.js` — `advanceBolus` replaces the background infusion for its computed duration). A bolus that's still being delivered at `now` contributes a time-proportional fraction of its dose, so the readout doesn't step discontinuously when a push bolus crosses the current cursor.
+- Unit formatting goes through the existing `fromCanonical` / `formatValue` helpers so the total displays in whatever bolus unit the user preferred for that drug (mg / mcg / mcg/kg / mL). If pump is enabled and the preferred unit isn't already `mL`, an mL figure is appended using `getPumpSettings(drug).concentration`.
+- Hidden (`el.hidden = true`) when `totalMg <= 0` or no events exist — keeps the bar quiet before a case starts.
+
+**Update cadence:**
+
+Hooked into both `render(drug)` (called on every model mutation + drug switch) and `updateDimming()` (called from `chart-bridge.js onFrame`, already throttled to 2 s). Totals depend on `_getElapsedMinutes()` so they need a time-driven tick; reusing the existing 2 s dimming cadence avoids adding an rAF subscription.
+
 ### Interim — TCI tolerance slider rebind, drift-band viz, ke0-aware PROBE (v0.5.25)
 
 *Between Sessions 27 and 28. Not tracked in session numbering. Branch: `claude/test-tci-tolerance-slider-bqElU`.*

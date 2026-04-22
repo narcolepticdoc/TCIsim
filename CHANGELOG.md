@@ -11,6 +11,26 @@
 
 ---
 
+## [0.5.26] — 2026-04-22
+
+Add a cumulative-dose readout to the history panel.
+
+### Shipped
+
+- **Total delivered strip** at the bottom of the history panel (above the ET/RT · + Add Event · Edit action bar). Shows total mg delivered to the current elapsed time for the selected drug, formatted in the user's preferred bolus unit (mg / mcg / mcg/kg / mL per drug + pref). When the pump is enabled and the bolus unit is not already volumetric, an mL figure is appended after a separator — e.g. `Total delivered  180 mg · 18.0 mL`.
+- **Rate integration is bolus-aware**: background rate is suppressed while a bolus is delivering (mirrors `replay.js` semantics where bolus delivery replaces the background infusion for its duration). A bolus still in progress credits a time-proportional fraction of its dose so the readout doesn't step up discontinuously.
+- **Hidden until there's something to show.** `<div id="history-totals" hidden>` stays hidden when totals are zero or no events exist, so the bar doesn't add noise before a case starts.
+
+### Update cadence
+
+Computed on every `render(drug)` call (model mutations, drug switch) and also on `updateDimming()` — which the chart bridge already throttles to every 2 s. Totals therefore track elapsed time without an extra rAF subscription.
+
+### Files changed
+
+`js/version.js`, `index.html`, `js/ui/history.js`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.25] — 2026-04-22
 
 Make the TCI tolerance slider do what its label says, add a drift-band visualization, and make the correction pass portable across drugs with different ke0.
