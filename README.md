@@ -82,7 +82,16 @@ tci-sim/
 │   │   └── simtiva-reference.js  # UDF computation, rate correction
 │   ├── ui/
 │   │   ├── setup.js              # Patient/pump configuration screen
-│   │   ├── chart.js              # Chart.js concentration plot
+│   │   ├── patient-modal.js      # Patient demographics modal + inline keypad
+│   │   ├── chart.js              # Re-export shim → chart/
+│   │   ├── chart/
+│   │   │   ├── index.js          # Chart.js wrapper — curves, overlays, setters
+│   │   │   ├── annotations.js    # Annotation rebuild (bands, lines, cursor)
+│   │   │   ├── gestures.js       # Touch/mouse: Y-drag, dbl-tap, inspect-handle drag
+│   │   │   ├── state.js          # Shared chart state object
+│   │   │   └── plugins/          # afterDraw plugins (target-label, cursor-dots,
+│   │   │                         #   inspect-dots, inspect-handle, readout-panel,
+│   │   │                         #   event-markers)
 │   │   ├── history.js            # Event history panel
 │   │   ├── event-editor.js       # Unified event editor modal
 │   │   ├── keypad.js             # Numeric keypad modal
@@ -94,11 +103,17 @@ tci-sim/
 │   │   │   ├── index.js          # rAF loop, update(), public getters
 │   │   │   ├── approach.js       # Approach line computation + rendering
 │   │   │   ├── step-bar.js       # Step bar progress + countdown
-│   │   │   ├── exit-readout.js   # Exit Ce readout
+│   │   │   ├── exit-readout.js   # Emergence countdown line
 │   │   │   └── formatters.js     # Display formatting helpers
 │   │   ├── settings.js           # Settings & event warning system
 │   │   ├── alert-sound.js        # AudioContext; playAlert(level)
 │   │   └── persist.js            # LocalStorage case save/restore
+│   ├── app/
+│   │   ├── settings-ui.js        # Settings modal wiring
+│   │   ├── tci-modal.js          # TCI delay + first-step countdown modals
+│   │   ├── session.js            # Case save / restore / new case
+│   │   ├── chart-bridge.js       # Chart refresh + per-frame settings push
+│   │   └── portrait-layout.js    # Dynamic grid-row sizing on portrait tablet
 │   └── util/
 │       ├── constants.js          # Drug config, DRUG_IDS, pump settings
 │       ├── math.js               # Matrix-exp, eigenvalue utilities

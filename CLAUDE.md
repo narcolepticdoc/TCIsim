@@ -1,6 +1,6 @@
 # TCI Sim — Claude Code Reference
 
-Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.20.2** (see `js/version.js`).
+Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.24.22** (see `js/version.js`).
 
 ## Quick Start
 
@@ -52,24 +52,30 @@ js/ui/drug-panel.js       Thin re-export shim over js/ui/drug-panel/
 js/ui/drug-panel/index.js Drug panel orchestrator — rAF loop, update(), public getters
 js/ui/drug-panel/approach.js  Approach line: cache (incl. ceAboveTarget), computeApproachData
 js/ui/drug-panel/step-bar.js  Step bar progress + next-event countdown
-js/ui/drug-panel/exit-readout.js  "Time to Exit Ce if stopped now" readout
+js/ui/drug-panel/exit-readout.js  Emergence ("Emerge → X in Y") countdown line
 js/ui/drug-panel/formatters.js   fmtCountdown, bisColor, fmtCe, fmtRateInline
-js/ui/chart.js            Chart.js wrapper — curves, cursor dots, target/threshold/SS lines, plateau region, BIS bands, opacity setters
-js/ui/settings.js         Event warnings (prep + alert) + persisted user prefs (opacity, redose, plateau bands)
+js/ui/chart.js            Thin re-export shim over js/ui/chart/
+js/ui/chart/index.js      Chart.js wrapper — curves, cursor dots, target/threshold/SS lines, plateau region, BIS bands, opacity + font-scale setters (all idempotent)
+js/ui/chart/annotations.js  Annotation rebuild — bands, target lines, plateau region, inspect cursor
+js/ui/chart/gestures.js   Canvas touch/mouse handlers — Y-axis drag, double-tap recenter, inspect-handle drag (capture-phase on parent + pan-disable while active)
+js/ui/chart/plugins/      afterDraw plugins — target-label, cursor-dots, inspect-dots, inspect-handle (draggable pill), readout-panel, event-markers
+js/ui/settings.js         Event warnings (prep + alert) + persisted user prefs (opacity, redose, plateau bands, textSize, eventMarkerSize)
 js/ui/alert-sound.js      Persistent AudioContext; unlockAudio() + playAlert('info'|'warning'|'urgent'|'redose')
 js/ui/mode.js             Per-drug mode tracking (none/tci/manual/intermittent) + button dim/bright state
-js/ui/keypad.js           Numeric keypad modal (pre-fills last-used rate per drug)
-js/ui/event-editor.js     Unified event editor modal (rate/pause options hidden when pump off)
-js/ui/setup.js            Setup screen — patient demographics, pump settings, delivery method, rounding controls
-js/ui/history.js          Event history panel (system events shown dimmed italic with ↩ prefix)
-js/ui/timer.js            Elapsed time / wall clock with Start/Elapsed popover
+js/ui/keypad.js           Numeric keypad modal (target / rate / bolus / emergence / redose); unit toggle round-trips values through canonical
+js/ui/event-editor.js     Unified event editor modal (rate/pause options hidden when pump off); unit toggle converts buffer
+js/ui/patient-modal.js    Patient Demographics modal with built-in 3×5 numeric keypad, Male/Female toggle, Metric/Imperial toggle (shared with setup.setUnits)
+js/ui/setup.js            Setup screen — clickable patient-summary row opens patient-modal; pump settings; delivery method; rounding controls; exports _convertLength / _convertWeight
+js/ui/history.js          Event history panel (grid row: time+type on line 1, value centered on line 2; edit-mode via Edit button; ET/RT toggle)
+js/ui/timer.js            Elapsed time / wall clock — single-line [Case start HH:MM | ET H:MM:SS] button with popover
 js/ui/controls.js         Start/pause case controls
 js/ui/persist.js          LocalStorage case save/restore primitives
-js/app.js                 Entry point, wires all modules (now ~542 lines after sub-module extraction)
-js/app/settings-ui.js     Settings modal DOM wiring (sliders, tabs, open/close, Appearance tab)
+js/app.js                 Entry point, wires all modules
+js/app/settings-ui.js     Settings modal DOM wiring (sliders, tabs, Appearance tab incl. textSize segmented control)
 js/app/tci-modal.js       TCI delay + first-step countdown modals
 js/app/session.js         Case save / restore / new case (incl. pumpEnabled map)
-js/app/chart-bridge.js    Chart refresh, BIS overlay, per-frame updates, opacity propagation
+js/app/chart-bridge.js    Chart refresh, BIS overlay, per-frame updates, settings propagation (calls idempotent setters unconditionally)
+js/app/portrait-layout.js Dynamic grid-row sizing for portrait tablet layout via ResizeObserver + matchMedia
 ```
 
 ## Architecture in One Paragraph
@@ -84,6 +90,8 @@ The engine stores compartment amounts as a `Float64Array[5]` and advances via ma
 - **System events must stay visible.** Rate-restore events (`source: 'system'`) are shown in history as dimmed italic rows. Do not filter them from the UI — users need to see and delete them.
 - **Quantize inside the planning loop, not after.** When `cfg.quantizeInDisplay` is set, `qBolus`/`qRate` (from `makeQuantizers`) must be applied **before** every `engine.advance()` call. Rounding the planner's output as a final pass introduces stacking error because each iteration of the maintenance loop sees the un-rounded value.
 - **DRUG_IDS is the iteration source of truth.** When adding a drug, update `DRUG_IDS` in `js/util/constants.js` — the multi-drug loops in `app.js`, `session.js`, and `chart-bridge.js` consume it. `remifentanil` is in `DRUG_DEFS` but absent from `DRUG_IDS` because it has no PK model yet.
+- **Chart setters are idempotent, bridge calls them unconditionally.** `setCpOpacity`, `setNomogramOpacity`, `setOverlayOpacity`, `setEventMarkerSize`, `setFontScale` all early-return when the incoming value matches chart state. `chart-bridge.js onFrame` reads settings every frame and pushes without a cache. This makes chart recreation (New Case) self-healing: fresh chart defaults differ from user settings, so the first post-recreate frame applies them. Do not reintroduce bridge-level `last*` caches on these setters — they cause settings to silently not re-apply on new case.
+- **Keypad unit toggles convert, they don't clear.** `keypad.js`, `event-editor.js`, and `patient-modal.js` all round-trip the current buffer through `toCanonical → fromCanonical` on unit change and re-arm `prefilled = true` so the next keypress overwrites. Do not revert to clearing the buffer on unit change.
 - **`pharmacology.js` is GPL-3.0.** Never import, bundle, or copy code from `/mnt/project/pharmacology.js`. Reference only.
 
 ## TCI Planner Quick Reference
@@ -130,6 +138,8 @@ Settings live in `js/ui/settings.js` (`getSettings()` / `setSettings()`); UI wir
 | `cpOpacity` | 1.0 | 0.1–1.0 | Cp curve alpha (Appearance tab) |
 | `nomogramOpacity` | 1.0 | 0.1–1.0 | BIS band + label alpha multiplier |
 | `overlayOpacity` | 1.0 | 0.1–1.0 | Threshold/target/SS/exit lines + plateau alpha (pill labels stay full opacity) |
+| `eventMarkerSize` | 7 | 4–16 | Future-event marker radius (px) |
+| `textSize` | `'normal'` | `normal` \| `large` \| `xl` \| `xxl` | Four-position segmented control on Appearance tab. Scales drug-panel, history, topbar, bottom-controls, and chart font-sizes. `body.text-{lg,xl,xxl}` CSS class + chart `fontScale` (1.0 / 1.15 / 1.30 / 1.45). XXL gated to ≥1020px viewports. |
 
 Other persisted keys (separate from the warnings blob):
 
@@ -140,12 +150,18 @@ Other persisted keys (separate from the warnings blob):
 
 ## UI Conventions
 
-- **Dim/bright control buttons** (`js/ui/mode.js`): Target/threshold, exit, rate, and bolus buttons use muted translucent backgrounds by default. Full color + glow ring appears only when `active-mode` is set on the button. Stop Pump uses `is-idle` (muted red) when no pump is active and `is-running` (bright red) only during TCI/manual.
-- **Threshold dialog clear option** (`js/ui/keypad.js`): mirrors exit-Ce — Clear button when value is set, pre-fill current value, title swaps to "Change Redose Threshold".
+- **Dim/bright control buttons** (`js/ui/mode.js`): Target/threshold, emergence, rate, and bolus buttons use muted translucent backgrounds by default. Full color + glow ring appears only when `active-mode` is set on the button. Stop Pump uses `is-idle` (muted red) when no pump is active and `is-running` (bright red) only during TCI/manual.
+- **Emergence naming** (user-facing, since 0.5.24.3): the "time until Ce decays to a target" concept is labelled **Emerge → / Emergence** everywhere users see it. Drug card reads `Emerge → 3.0 in 3:44`, button toggles between `Set Emergence` / `Change Emergence`, keypad modal title matches, reached state shows `Emergence Reached`. Internal symbols (`exitCe`, `setExitLine`, `getExitCeForDrug`, `.btn-ctrl-exit`, `.exit-readout`, `#<drug>-exit`) kept as-is to avoid churn.
+- **Threshold dialog clear option** (`js/ui/keypad.js`): mirrors emergence — Clear button when value is set, pre-fill current value, title swaps to "Change Redose Threshold".
 - **Rate keypad pre-fill**: opens with the last-used rate per drug for quick post-pause resume (stored in localStorage).
-- **History panel**: timestamps are tappable to toggle ET/RT; system events render dimmed italic with `↩` prefix and remain editable/deletable.
-- **Per-frame chart updates** (`js/app/chart-bridge.js onFrame`): cursor throttled 500 ms, history dimming 2 s; SS line, plateau region, and the three opacity setters (`setCpOpacity`, `setNomogramOpacity`, `setOverlayOpacity`) only push to chart on value-change to avoid Chart.js churn.
+- **Keypad prefilled → replace on first keypress**: `js/ui/keypad.js`, `js/ui/event-editor.js`, `js/ui/patient-modal.js` all flag pre-populated buffers as `prefilled`. First digit/decimal/backspace clears instead of appending. Tapping into a different field re-arms the flag.
+- **Active drug card** (`.drug-card.active`): background brightens + `border-left: 6px solid var(--drug-color)` + `inset 0 0 0 2px var(--drug-color)` crisp frame. Clinical look, no halos or transforms. eBIS value shows right-justified in the card header row (`.drug-bis-header`), label muted + small, value colored via `bisColor()`.
+- **History panel** (`js/ui/history.js`): grid row layout — `[time | type]` on line 1, `[value centered]` on line 2. Bottom bar: `[ET / RT]` time-format toggle, `+ Add Event`, `Edit`. Edit toggles `body.edit-history-mode` which dims/blurs non-history surface and highlights rows amber; tapping a row opens the event editor. Click-outside (on the dimmed area) exits edit mode. Modal backdrop is transparent while in edit mode so the selected row stays visible.
+- **Per-frame chart updates** (`js/app/chart-bridge.js onFrame`): cursor throttled 500 ms, history dimming 2 s. All settings-driven setters (`setCpOpacity`, `setNomogramOpacity`, `setOverlayOpacity`, `setEventMarkerSize`, `setFontScale`) are idempotent inside the chart — bridge calls them every frame unconditionally. Chart recreation on new case self-heals.
 - **Cursor dots**: a custom `cursorDots` Chart.js plugin draws filled Ce/Cp circles where the current-time cursor crosses each curve (binary search + linear interp on dataset points).
+- **Draggable inspect cursor** (`js/ui/chart/plugins/inspect-handle.js`): when inspect mode is on and a cursor is set, a horizontal pill with `<` `>` chevrons renders at `chartArea.bottom - 14`. `gestures.js` binds handle-drag listeners on `canvas.parentElement` in capture phase so they run before Chart.js's hammer listeners on the canvas target; during an active handle drag, `chart.options.plugins.zoom.pan.enabled = false` to prevent pan hijacking on iPad. `touch-action: none` on the canvas belt-and-suspenders.
+- **Patient entry via modal** (`js/ui/patient-modal.js`): the main setup screen shows a single clickable summary row (`[Tap to edit patient demographics ✎]` / `[35y · M · 170 cm · 70 kg ✎]`). Tapping opens a modal with four field cells, a Male/Female toggle, a Metric/Imperial toggle (shares state with `setup.setUnits`), and an in-app 3×5 numeric keypad. The four original `<input>` elements are kept as `type="hidden"` so `validate()`, `getHeightCm()`, `getWeightKg()`, `updateDerived()`, `confirmPatient()`, and session restore keep working unchanged; the modal writes values and dispatches `input` events. Unit toggle converts values via `_convertLength` / `_convertWeight` instead of clearing.
+- **Portrait tablet dynamic row sizing** (`js/app/portrait-layout.js`): on `@media (orientation:portrait) and (min-width:700px)`, `ResizeObserver` on `.drug-panel` + `matchMedia` gate set `grid-template-rows: 1fr <measured>px` on `.sim-main`. Measures via summing children `getBoundingClientRect().height` (not `scrollHeight`, which lies when content fits inside a larger container). Cap at 55% of window height so chart keeps space. No-ops outside the portrait-tablet media query.
 
 ## Running Tests
 
