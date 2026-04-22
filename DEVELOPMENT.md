@@ -4,6 +4,36 @@
 
 ## Session History
 
+### Interim — TCI tolerance slider rebind, drift-band viz, ke0-aware PROBE (v0.5.25)
+
+*Between Sessions 27 and 28. Not tracked in session numbering. Branch: `claude/test-tci-tolerance-slider-bqElU`.*
+
+Started as a diagnostic — a user suspected the "TCI target tolerance" slider wasn't changing plans. A code trace confirmed the suspicion: the `tciFraction` value was never threaded into `planTCI()`. The CET emulation planner's real drift tolerance lives in `CE_TOL` at `emulation.js:457`, controlled by nothing user-visible. From there the work broadened into three shipped changes plus a notable planner experiment that was tried and reverted.
+
+**Ship list:**
+
+1. **Slider rebind.** `#set-tci-fraction` remapped to the `ceTolerance` setting (range 5..30 step 5 = 0.5%..3.0%, default 15 = 1.5%). Label renamed "Ce drift tolerance". Reads through to `emulation.js:461` via `cfg.ceTolerance`. Drug-panel time-to-target readout (the previous sole consumer of `tciFraction`) now uses a hardcoded 0.95 clinical default. Moving the slider produces visibly different plans — at propofol target 3 for a 70 kg patient, `0.005` gives 47 maintenance steps, `0.030` gives 18.
+
+2. **Drift-band visualization.** Opt-in Appearance toggle. When on, the single dashed target line is replaced by a pair of dashed lines at `target × (1 ± ceTolerance)`. First implementation used a 14% alpha-filled box annotation — imperceptible against the BIS nomogram overlays. Switched to dual lines in `annotations.js`, which are crisp against any background because they're 1.5px strokes rather than alpha-blended fills.
+
+3. **`PROBE` scales with `ke0`.** `emulation.js:459` now computes `max(10, min(30, 2/ke0))` — two time-constants clamped to a 10-min clinical floor and a 30-min ceiling. For propofol and fentanyl (ke0 ≈ 0.147/min) this is ~13.7 min (was 15 hardcoded); for a future remifentanil model it would clamp to 10 instead of waiting 15 min on a drug that settles in under 2. Makes the planner portable across drugs with different equilibration speeds without per-drug PROBE tuning.
+
+**The experiment that didn't ship — peak-aware rate selection:**
+
+Tried to prevent the small (~1–2%) overshoots at early-maintenance step boundaries by adding a dual-constraint rate search in the correction pass: `min(endpointRate, peakRate)`, where `peakRate` was the rate keeping max Ce over `MAX_DUR = 90 min` below `target × (1 + CE_TOL)`. Shipped in `76ad049`, reverted in `60b57c2` once a user screenshot showed Ce dipping to ~3.0 from a 3.5 target in a 90 kg adult — 14% undershoot, well below the 95% "patient stays asleep" clinical floor.
+
+Root cause, documented permanently in `TCI-TOLERANCE-ANALYSIS.md §8`: during V3 filling the rate needed to *hold* Ce at target *now* is higher than long-term steady-state, because it's filling V3 while also maintaining plasma. Any rate that keeps Ce at target short-term will, after 90 min of V3 equilibration, produce a Ce above target. So the peak-bounded search was systematically stricter than endpoint, and `min(endpoint, peak)` picked a rate too low to maintain Ce now. Ce dipped.
+
+The test that shipped with the experiment (`test-tci-peak-overshoot.mjs`) only asserted `max Ce ≤ upper ceiling + ε` — undershoot satisfies an upper-bound test trivially, so it passed green while the planner was clinically worse. Replacement `test-tci-ce-tracking.mjs` asserts BOTH upper and lower bounds plus a hard 90%-of-target floor. 12 assertions; would have failed loudly on the 14% dip.
+
+**New analysis doc:** `TCI-TOLERANCE-ANALYSIS.md`, 10 sections — original disconnect, plain-English planner walkthrough (three-bucket analogy), code walkthrough of the correction pass, SimTIVA live-sim architecture notes (`simspeed`, three `setInterval` loops, `deliver_cpt` replan cadence) drawn from reading `luktinghin/simtiva` read-only, preset semantics (`cpt_threshold` / `cpt_avgfactor` per-drug table), design options (four alternatives with Option C chosen), ke0 portability fix, peak-aware experiment post-mortem, tolerance scaling across drugs with PD-vs-PK caveats, and a cross-referenced symbol table.
+
+**New invariant worth noting:** The `tolerancePct` config key and the `ceTolerance` setting both express "fraction of target" but answer different questions. `tolerancePct` drives BINARY decision gates (loading-bolus threshold at `emulation.js:49`, target-decrease pause cap at `emulation.js:42`). `ceTolerance` drives CONTINUOUS maintenance drift control at `emulation.js:461`. They must stay separate — merging them would create perverse behavior (loading boluses for no reason, or target-decrease pause resuming at the wrong point). Comments at both call sites now explicitly cross-reference to avoid confusion.
+
+**Files changed:** 13 source files + 3 tests + 3 docs. See `CHANGELOG.md` for the full list.
+
+---
+
 ### Interim — Patient modal age field not visually active on open (v0.5.24.24)
 
 Regression follow-up from the patient modal (Theme 5 of Session 27). User reported: opening the modal, the Age field is supposed to be active, but it doesn't show the active blue border, and tapping Age does nothing until you tap a different field first and come back.
