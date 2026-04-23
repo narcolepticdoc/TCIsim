@@ -442,37 +442,84 @@
 
     /* XXL type — gated to ≥1020px so it only applies when the drug panel widens to 250px+ */
     @media(min-width:1020px){
-      body.text-xxl .drug-card .drug-name{font-size:19px}
-      body.text-xxl .drug-card.active .drug-name{font-size:25px}
-      body.text-xxl .drug-card .drug-bis-header{font-size:19px}
-      body.text-xxl .drug-card.active .drug-bis-header{font-size:23px}
-      body.text-xxl .drug-card .exit-readout{font-size:14.5px}
-      body.text-xxl .drug-card .ce-current{font-size:32px}
-      body.text-xxl .drug-card.active .ce-current{font-size:39px}
+      /* ----- text-lg / text-xl overrides for ≥1020 viewports ----- */
+      /* The text-lg / text-xl rules at ≥601px were calibrated for phone-class
+         viewports. On ≥1020 (iPad / iPad Pro), the Normal baseline below
+         bumps several properties ABOVE those text-lg values, which flipped
+         the Normal < Large < XL hierarchy. These overrides restore it. */
+      body.text-lg .drug-card .drug-name{font-size:16px}
+      body.text-lg .drug-card.active .drug-name{font-size:21px}
+      body.text-lg .drug-card .drug-bis-header{font-size:16px}
+      body.text-lg .drug-card.active .drug-bis-header{font-size:19px}
+      body.text-lg .drug-card .ce-current{font-size:30px}
+      body.text-lg .drug-card.active .ce-current{font-size:36px}
+      body.text-lg .drug-card .cp-current{font-size:15px}
+      body.text-lg .drug-card .ce-label,
+      body.text-lg .drug-card .cp-label,
+      body.text-lg .drug-card .bis-label{font-size:12px}
+      body.text-lg .drug-card .drug-approach{font-size:13px}
+      body.text-lg .drug-card .drug-status{font-size:14px}
+      body.text-lg .drug-card .drug-rate{font-size:14px}
+      body.text-lg .drug-card .drug-bis{font-size:14px}
+      body.text-lg .drug-card .step-bar-countdown{font-size:12.5px}
+      body.text-lg .elapsed-timer{font-size:22px}
+      body.text-lg .btn-ctrl{font-size:15px}
+      body.text-lg .mode-label{font-size:12.5px}
+      body.text-lg .sim-topbar .app-name{font-size:14px}
+      body.text-lg .patient-summary{font-size:14px}
+
+      body.text-xl .drug-card .drug-name{font-size:18px}
+      body.text-xl .drug-card.active .drug-name{font-size:23px}
+      body.text-xl .drug-card .drug-bis-header{font-size:18px}
+      body.text-xl .drug-card.active .drug-bis-header{font-size:21px}
+      body.text-xl .drug-card .ce-current{font-size:34px}
+      body.text-xl .drug-card.active .ce-current{font-size:40px}
+      body.text-xl .drug-card .cp-current{font-size:17px}
+      body.text-xl .drug-card .ce-label,
+      body.text-xl .drug-card .cp-label,
+      body.text-xl .drug-card .bis-label{font-size:13.5px}
+      body.text-xl .drug-card .drug-approach{font-size:15px}
+      body.text-xl .drug-card .drug-status{font-size:15.5px}
+      body.text-xl .drug-card .drug-rate{font-size:15.5px}
+      body.text-xl .drug-card .drug-bis{font-size:15.5px}
+      body.text-xl .drug-card .step-bar-countdown{font-size:14.5px}
+      body.text-xl .elapsed-timer{font-size:25px}
+      body.text-xl .btn-ctrl{font-size:17px}
+      body.text-xl .mode-label{font-size:14px}
+      body.text-xl .sim-topbar .app-name{font-size:15.5px}
+      body.text-xl .patient-summary{font-size:15.5px}
+
+      body.text-xxl .drug-card .drug-name{font-size:20px}
+      body.text-xxl .drug-card.active .drug-name{font-size:26px}
+      body.text-xxl .drug-card .drug-bis-header{font-size:20px}
+      body.text-xxl .drug-card.active .drug-bis-header{font-size:24px}
+      body.text-xxl .drug-card .exit-readout{font-size:15.5px}
+      body.text-xxl .drug-card .ce-current{font-size:38px}
+      body.text-xxl .drug-card.active .ce-current{font-size:45px}
       body.text-xxl .drug-card .drug-model{font-size:13px}
       body.text-xxl .drug-card .ce-label,
       body.text-xxl .drug-card .cp-label,
-      body.text-xxl .drug-card .bis-label{font-size:14.5px}
-      body.text-xxl .drug-card .cp-current{font-size:17.5px}
+      body.text-xxl .drug-card .bis-label{font-size:15px}
+      body.text-xxl .drug-card .cp-current{font-size:19px}
       body.text-xxl .drug-card .ce-unit{font-size:13px}
-      body.text-xxl .drug-card .drug-approach{font-size:15.5px}
-      body.text-xxl .drug-card .drug-status{font-size:16px}
-      body.text-xxl .drug-card .drug-rate{font-size:16px}
-      body.text-xxl .drug-card .drug-bis{font-size:16px}
-      body.text-xxl .drug-card .step-bar-countdown{font-size:14.5px;white-space:normal;text-overflow:clip;min-height:0;line-height:1.25}
+      body.text-xxl .drug-card .drug-approach{font-size:17px}
+      body.text-xxl .drug-card .drug-status{font-size:17.5px}
+      body.text-xxl .drug-card .drug-rate{font-size:17.5px}
+      body.text-xxl .drug-card .drug-bis{font-size:17.5px}
+      body.text-xxl .drug-card .step-bar-countdown{font-size:16px;white-space:normal;text-overflow:clip;min-height:0;line-height:1.25}
       body.text-xxl .history-area .history-empty{font-size:17.5px}
       body.text-xxl .history-row{font-size:16px}
       body.text-xxl .history-row .h-time{font-size:14.5px}
       body.text-xxl .history-row .h-type{font-size:14.5px}
       body.text-xxl .history-totals{font-size:16px}
       body.text-xxl .history-totals .ht-label{font-size:14.5px}
-      body.text-xxl .sim-topbar .app-name{font-size:16px}
-      body.text-xxl .patient-summary{font-size:16px}
-      body.text-xxl .elapsed-timer{font-size:23px}
+      body.text-xxl .sim-topbar .app-name{font-size:17px}
+      body.text-xxl .patient-summary{font-size:17px}
+      body.text-xxl .elapsed-timer{font-size:28px}
       body.text-xxl .btn-new-case{font-size:14.5px}
       body.text-xxl .btn-settings{font-size:20px}
-      body.text-xxl .btn-ctrl{font-size:17.5px}
-      body.text-xxl .mode-label{font-size:14.5px}
+      body.text-xxl .btn-ctrl{font-size:19px}
+      body.text-xxl .mode-label{font-size:15.5px}
     }
 
     /* Responsive short */
@@ -635,6 +682,36 @@
       .drug-card .step-bar-countdown{font-size:12px}
       .elapsed-timer{font-size:21px}
       .btn-ctrl{font-size:14px;padding:10px 20px}
+
+      /* Keep Normal < Large < XL < XXL hierarchy at this viewport too.
+         Without these, the Normal bumps above shadow the text-lg / text-xl
+         sizes from the ≥601px block, making Large appear smaller than Normal. */
+      body.text-lg .drug-card .drug-name{font-size:17px}
+      body.text-lg .drug-card.active .drug-name{font-size:23px}
+      body.text-lg .drug-card .ce-current{font-size:34px}
+      body.text-lg .drug-card.active .ce-current{font-size:40px}
+      body.text-lg .drug-card .drug-approach{font-size:14px}
+      body.text-lg .drug-card .step-bar-countdown{font-size:14px}
+      body.text-lg .elapsed-timer{font-size:24px}
+      body.text-lg .btn-ctrl{font-size:16px}
+
+      body.text-xl .drug-card .drug-name{font-size:19px}
+      body.text-xl .drug-card.active .drug-name{font-size:25px}
+      body.text-xl .drug-card .ce-current{font-size:38px}
+      body.text-xl .drug-card.active .ce-current{font-size:45px}
+      body.text-xl .drug-card .drug-approach{font-size:15.5px}
+      body.text-xl .drug-card .step-bar-countdown{font-size:15.5px}
+      body.text-xl .elapsed-timer{font-size:27px}
+      body.text-xl .btn-ctrl{font-size:18px}
+
+      body.text-xxl .drug-card .drug-name{font-size:21px}
+      body.text-xxl .drug-card.active .drug-name{font-size:28px}
+      body.text-xxl .drug-card .ce-current{font-size:43px}
+      body.text-xxl .drug-card.active .ce-current{font-size:50px}
+      body.text-xxl .drug-card .drug-approach{font-size:17px}
+      body.text-xxl .drug-card .step-bar-countdown{font-size:17px}
+      body.text-xxl .elapsed-timer{font-size:30px}
+      body.text-xxl .btn-ctrl{font-size:20px}
     }
 
     /* ==== TABLET PORTRAIT — chart top, drugs + history bottom ==== */
