@@ -11,6 +11,24 @@
 
 ---
 
+## [0.5.26.2] — 2026-04-22
+
+Fix text-size scaling on iPad-class viewports (≥1020 / ≥1200 px) — Large and XL were rendering smaller than Normal.
+
+### The bug
+
+The `body.text-lg` / `body.text-xl` / `body.text-xxl` rules lived inside `@media(min-width:601px) and (min-height:421px)` — sized for phone-class viewports. The `@media(min-width:1020px)` and `@media(min-width:1200px)` blocks bump the Normal baseline above what the text-lg / text-xl block provides for several properties (`.drug-card .ce-current`, `.elapsed-timer`, `.drug-card.active .drug-name`, etc.). Because the text-size selectors still win by specificity, but their values were frozen at phone scale, Normal ended up visually larger than Large or XL on iPad Pro 12.9"/13". Worst offenders: `.drug-card.active .ce-current` was 30 px on Large vs 35 px on Normal at ≥1200 px.
+
+### Fix
+
+Added full `body.text-lg` / `body.text-xl` override sets inside both the `@media(min-width:1020px)` and `@media(min-width:1200px)` blocks so the Normal < Large < XL < XXL hierarchy holds at every viewport. Also bumped existing `body.text-xxl` values at ≥1020 px where XL had surpassed XXL (`.ce-current`, `.ce-current.active`, `.elapsed-timer`, `.step-bar-countdown`).
+
+### Files changed
+
+`js/version.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.26.1] — 2026-04-22
 
 Tweak the new Total-delivered readout so it's always in absolute mass units (not per-kg) and always shows mL.

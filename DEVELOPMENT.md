@@ -4,6 +4,14 @@
 
 ## Session History
 
+### Interim — Fix text-size scaling on iPad-class viewports (v0.5.26.2)
+
+User reported on a full-size iPad Pro that "Large" text was rendering smaller than "Normal". Confirmed by inspecting the CSS media-query stack: the `body.text-lg` / `body.text-xl` rules were scoped to `@media(min-width:601px) and (min-height:421px)` and calibrated for phone-class viewports. On ≥1020 and ≥1200 px, the Normal baseline inside those media queries bumped several properties above the text-lg values — while text-lg still won by specificity, its absolute values were frozen at phone scale, so Large looked smaller than Normal. Worst case: `.drug-card.active .ce-current` = 30 px on Large, 35 px on Normal at ≥1200 px.
+
+Fix adds full `body.text-lg` / `body.text-xl` override sets inside the ≥1020 and ≥1200 media blocks to restore Normal < Large < XL < XXL at every viewport. Also bumped xxl values at ≥1020 where xl had surpassed xxl (`.ce-current`, `.ce-current.active`, `.elapsed-timer`, `.step-bar-countdown`) after the text-xl bumps in the same block.
+
+Structural note: the long-term cleaner fix would be CSS custom properties — e.g. `--scale-text: 1` on `:root`, bumped by each body class, with every font-size rule using `calc(Npx * var(--scale-text))`. That refactor is deferred; the per-viewport override approach is verbose but matches the existing pattern and has no risk of regressing other sizes.
+
 ### Interim — Total-delivered readout in history panel (v0.5.26 → .1)
 
 *Branch: `claude/add-drug-amount-display-rWPVg`.*
