@@ -4,6 +4,20 @@
 
 ## Session History
 
+### Interim — Dose reconciliation v2: case-start default + ghost Ce curve (v0.5.27.1)
+
+After 0.5.27.0 shipped, the user pushed back with a sharper version of the math question: "aside from perturbing historical curves, is there any benefit to placing the bolus at a particular time as opposed to just dumping it at time 0?" The honest answer was no — the forward error after a correction at `T_insert` is `e^{A·(t − T_insert)} · B_vec`, so for any `t > now`, smaller `(t − T_insert)` strictly means bigger forward residual. The original "place at now" default is the *worst* choice for forward accuracy and the *best* for past fidelity. Concrete table for propofol with case duration 60 min: `T_insert = 0` leaves only ~6.7 % intermediate-mode residual at `now`, while `T_insert = now` leaves the full 100 %. Switched the default.
+
+User then asked for a troubleshooting affordance: copy the current Ce up to `now` to a ghost line so the corrected vs. pre-correction curves can be visually compared. Implementation snapshots `model.computeCurve(drug, 0, now, 10/60)` immediately before the addBolus call inside `_confirm()` of `js/ui/reconcile-modal.js`, then stores the result in a per-drug `reconciliationGhosts` map on the simulation model that mirrors the existing `reconciliationWindows` map. Lifecycle is tied: `getActiveReconciliationWindow` auto-clears the matching ghost when `now > endMin`, and `clearReconciliationWindows()` / `setReconciliationWindow(_, null, null)` both delete the ghost too.
+
+The chart got a new dataset (purple `#a78bfa`, dashed) appended after Cp/Ce/Rate. Setter `setGhostCurve(points)` is idempotent against a signature string (`length|firstTime|lastTime|lastCe`), since the bridge calls it every frame. The bridge in `chart-bridge.js onFrame` reads `model.getActiveReconciliationGhost(selectedDrug, t)`, applies the same `yScale` it applies to the live Ce dataset, and pushes — `null` when no window is active or no drug match. Drug switches naturally clear the ghost because the new drug's ghost slot is whatever it is (usually empty), so `setGhostCurve(null)` fires.
+
+Persistence: `getAllReconciliationGhosts()` and the matching restore branch in `session.js`. Each ghost is a few hundred `{time, Ce}` points; for a 60-min case at 10-sec sampling that's 360 points × ~30 bytes JSON ≈ 11 KB per drug. Three drugs = 33 KB. Well under any localStorage limit.
+
+Helper text in the modal updated to "defaults to case start (most accurate forward curve). Drag forward to a guess of when the drift happened if you'd rather preserve historical fidelity." So the user understands the trade-off they're choosing among.
+
+**Files changed:** `js/version.js`, `js/util/constants.js` (added `COLORS.ghost`), `js/sim/simulation.js`, `js/ui/chart/{state,index}.js`, `js/app/chart-bridge.js`, `js/ui/reconcile-modal.js`, `js/app/session.js`, `index.html`, `CHANGELOG.md`.
+
 ### Interim — Dose reconciliation feature (v0.5.27.0)
 
 *Branch: `claude/propofol-convergence-analysis-RKIV8`.*

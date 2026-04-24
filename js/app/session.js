@@ -85,6 +85,7 @@ export function createSession({
       exitCeTargets,
       pumpEnabled,
       reconciliationWindows: model.getAllReconciliationWindows ? model.getAllReconciliationWindows() : {},
+      reconciliationGhosts: model.getAllReconciliationGhosts ? model.getAllReconciliationGhosts() : {},
       annotations: getAnnotations(),
       primaryDrug: getSelectedDrug(),
     });
@@ -190,6 +191,13 @@ export function createSession({
         for (const [drugId, w] of Object.entries(saved.reconciliationWindows)) {
           if (w && typeof w.insertMin === 'number' && typeof w.endMin === 'number') {
             model.setReconciliationWindow(drugId, w.insertMin, w.endMin);
+          }
+        }
+      }
+      if (saved.reconciliationGhosts && model.setReconciliationGhost) {
+        for (const [drugId, g] of Object.entries(saved.reconciliationGhosts)) {
+          if (g && Array.isArray(g.points) && g.points.length > 0) {
+            model.setReconciliationGhost(drugId, { capturedAt: g.capturedAt, points: g.points });
           }
         }
       }

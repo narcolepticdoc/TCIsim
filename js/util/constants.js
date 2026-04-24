@@ -274,6 +274,7 @@ export const COLORS = {
   rate: '#8b5cf6',
   target: '#f97316',
   dose: '#06b6d4',
+  ghost: '#a78bfa',  // Light purple — pre-correction Ce snapshot during reconciliation
 };
 
 /** Legacy unit conversion helpers (kept for backward compatibility) */

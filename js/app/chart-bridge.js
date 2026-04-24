@@ -272,6 +272,24 @@ export function createChartBridge({
         }
       }
 
+      // Ghost Ce curve — purple dashed snapshot of what the simulation Ce
+      // looked like immediately BEFORE the most recent reconciliation
+      // correction was applied. Only show for the currently selected drug;
+      // drug switches naturally clear it because the other drug's ghost
+      // never gets pushed. Y-scaled to match the live Ce dataset.
+      if (model && chart.setGhostCurve) {
+        const ghost = model.getActiveReconciliationGhost(selectedDrug, t);
+        const { yScale: ys } = getConfig(selectedDrug);
+        if (ghost && ghost.points && ghost.points.length > 0) {
+          const scaled = ys === 1
+            ? ghost.points
+            : ghost.points.map(p => ({ time: p.time, Ce: p.Ce * ys }));
+          chart.setGhostCurve(scaled);
+        } else {
+          chart.setGhostCurve(null);
+        }
+      }
+
       // Future-event markers — only when the overlay is enabled.
       // Gated to TCI mode (manual mode rarely has pre-scheduled future events).
       if (chart.eventAnnotationsEnabled) {

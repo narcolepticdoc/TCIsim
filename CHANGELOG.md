@@ -11,6 +11,28 @@
 
 ---
 
+## [0.5.27.1] — 2026-04-24
+
+Two refinements to the dose-reconciliation feature shipped in 0.5.27.0, both prompted by a closer math check.
+
+### Default insert time → case start (was: now)
+
+Forward-curve accuracy is what users actually care about, and it's strictly maximized when `T_insert = 0`. The forward error after a correction at `T_insert` decays as `exp(A·(t − T_insert))`, so pushing `T_insert` further into the past gives the perturbation more time to redistribute before the cursor reaches it. With the case-start default and the standard propofol patient, by `now = 60 min` the intermediate-mode error is already down to ~6.7 % (vs. 100 % when correcting at `now`).
+
+The cost is full retrospective curve perturbation — the historical Ce trace shifts to reflect the correction. Users who care about historical fidelity (e.g. for retrospective BIS analysis) can drag the picker forward.
+
+### Ghost Ce curve
+
+Added a purple dashed line that captures the simulation's Ce up to the moment of reconciliation, drawn alongside the corrected curve. Lets the user compare what the sim was about to predict against what the corrected sim now predicts — a troubleshooting / sanity-check aid.
+
+The ghost runs from `t = 0` to `t = capturedAt` (the `now` when reconciliation was applied). Beyond `capturedAt` the corrected (live) curve takes over. Lifecycle is tied to the reconciliation window: when the window auto-clears (case time passes `endMin`), the ghost clears with it. Persisted across session save/restore.
+
+### Files changed
+
+`js/version.js`, `js/util/constants.js` (`COLORS.ghost`), `js/sim/simulation.js` (`setReconciliationGhost` / `getActiveReconciliationGhost` / `getAllReconciliationGhosts`), `js/ui/chart/{state,index}.js` (ghost dataset + idempotent `setGhostCurve`), `js/app/chart-bridge.js`, `js/ui/reconcile-modal.js`, `js/app/session.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.27.0] — 2026-04-24
 
 **Dose reconciliation.** A new feature for the common case where a busy anesthetist loses track of pump rate changes or manual boluses during a case. The simulation's running total drifts from what was actually given; without a way to recover, users had to start over. With this feature they can enter the real total dose delivered (pump display + any non-pump boluses) and the sim inserts a single correction bolus that restores AUC. The PK system is linear time-invariant, so any two event histories with the same cumulative dose converge to the same state after a few intermediate half-lives.

@@ -107,7 +107,14 @@ export function open(drugId) {
   }
 
   _actualBuf = '';
-  _defaultInsertMin = Math.max(0, _timer.getElapsedMinutes());
+  // Default to case start (T_insert = 0): mathematically optimal for forward
+  // accuracy. The forward error after a correction at T_insert decays as
+  // e^{A·(t − T_insert)}, so the larger the gap between T_insert and t, the
+  // smaller the residual. Placing at 0 maximizes the decay time available
+  // before `now`, leaving the forward curve nearly correct from the cursor on.
+  // The cost is a fully retrospective curve perturbation; users who want
+  // narrative fidelity can drag the picker forward.
+  _defaultInsertMin = 0;
   _timeUnit = 'case';
   _setInsertTime(_defaultInsertMin);
   _renderDrugPicker(active);
@@ -443,9 +450,22 @@ function _confirm() {
   try {
     const sign = _deltaMg > 0 ? '+' : '-';
     const annot = `Dose reconciliation ${sign}${fmtTotalMass(Math.abs(_deltaMg), _drugId)}`;
+    // Snapshot the pre-correction Ce so the chart can render a ghost
+    // curve for visual comparison. Sample at the same step the chart
+    // uses (10/60 = 1/6 min). Do this BEFORE addBolus mutates state.
+    let ghostPoints = null;
+    if (_model.computeCurve && now > 0) {
+      try {
+        const raw = _model.computeCurve(_drugId, 0, now, 10 / 60);
+        ghostPoints = raw.map(p => ({ time: p.time, Ce: p.Ce }));
+      } catch (e) { /* non-fatal — proceed without ghost */ }
+    }
     _model.addBolus(_drugId, insertMin, _deltaMg, annot, { deliveryMode: 'push', source: 'manual' });
     if (_model.setReconciliationWindow) {
       _model.setReconciliationWindow(_drugId, insertMin, endMin);
+    }
+    if (_model.setReconciliationGhost && ghostPoints) {
+      _model.setReconciliationGhost(_drugId, { capturedAt: now, points: ghostPoints });
     }
     _addAnnotation(`Reconciled ${_drugId}: ${annot} @ ET ${Math.round(insertMin)}m`);
     _refreshChart();
