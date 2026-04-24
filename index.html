@@ -317,12 +317,13 @@
     body.edit-history-mode .sim-controls{filter:blur(2px);opacity:.45;pointer-events:none;transition:filter .2s,opacity .2s}
     /* Edit mode — strip the modal backdrop's dark/blur so the history panel stays visible behind the editor */
     body.edit-history-mode .modal-overlay{background:transparent;backdrop-filter:none}
-    /* Totals strip — cumulative dose delivered to now, per drug */
-    .history-totals{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:6px 12px;border-top:1px solid var(--border-subtle);font-family:var(--font-mono);font-size:11px;color:var(--text-secondary)}
+    /* Totals strip — cumulative dose delivered to now, per drug.
+       Values stack vertically (mass over volume), right-aligned under
+       the label. Each value is nowrap so the unit stays with the number. */
+    .history-totals{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 12px;border-top:1px solid var(--border-subtle);font-family:var(--font-mono);font-size:11px;color:var(--text-secondary)}
     .history-totals .ht-label{color:var(--text-muted);font-size:10px;text-transform:uppercase;letter-spacing:.04em}
-    /* Keep number + unit together when the strip wraps on narrow panels. */
-    .history-totals .ht-value{color:var(--text-primary);font-weight:600;white-space:nowrap}
-    .history-totals .ht-sep{color:var(--border);margin:0 4px}
+    .history-totals .ht-values{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+    .history-totals .ht-value{color:var(--text-primary);font-weight:600;white-space:nowrap;line-height:1.25}
     /* History bottom action bar */
     .history-actions{display:flex;gap:6px;padding:6px 12px}
     .history-actions .evt-action-btn{text-align:center;font-size:12px;padding:8px 10px}
