@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.26.3] — 2026-04-24
+
+Fix wrapping on the Total delivered strip: the number and its unit were breaking onto separate lines on narrow panels (observed on an iPad Pro running the portrait-tablet layout where the history column is tight). Added `white-space: nowrap` to `.ht-value` so `465.5 mg` and `46.6 mL` each stay atomic. Separator and label can still wrap between tokens.
+
+### Files changed
+
+`js/version.js`, `index.html`, `CHANGELOG.md`.
+
+---
+
 ## [0.5.26.2] — 2026-04-22
 
 Fix text-size scaling on iPad-class viewports (≥1020 / ≥1200 px) — Large and XL were rendering smaller than Normal.
