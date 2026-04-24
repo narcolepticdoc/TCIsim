@@ -162,6 +162,19 @@
     .drug-card:hover{background:var(--bg-hover)}
     .drug-card.active{background:var(--bg-input);border-left:6px solid var(--drug-color,var(--blue));box-shadow:inset 0 0 0 2px var(--drug-color,var(--blue))}
     .drug-card.disabled{opacity:.3;cursor:default;pointer-events:none}
+    /* Dose-reconciliation state: amber pulse along the left edge tells the user
+       this drug's chart is still converging after a retrospective correction
+       bolus — values shown should not be trusted until the region clears. */
+    .drug-card.reconciling{animation:drug-card-reconcile-pulse 1.8s ease-in-out infinite}
+    .drug-card.reconciling.active{animation:drug-card-reconcile-pulse-active 1.8s ease-in-out infinite}
+    @keyframes drug-card-reconcile-pulse{
+      0%,100%{box-shadow:inset 3px 0 0 rgba(245,158,11,.55)}
+      50%{box-shadow:inset 3px 0 0 rgba(245,158,11,.95)}
+    }
+    @keyframes drug-card-reconcile-pulse-active{
+      0%,100%{box-shadow:inset 0 0 0 2px var(--drug-color,var(--blue)),inset 6px 0 0 rgba(245,158,11,.55)}
+      50%{box-shadow:inset 0 0 0 2px var(--drug-color,var(--blue)),inset 6px 0 0 rgba(245,158,11,.95)}
+    }
     /* Drug-type color strips — yellow for hypnotics, blue for narcotics */
     #drug-propofol    {--drug-color:#eab308;--drug-color-muted:rgba(234,179,8,.25)}
     #drug-ketamine    {--drug-color:#eab308;--drug-color-muted:rgba(234,179,8,.25)}
@@ -333,6 +346,8 @@
     .history-actions .h-action-time .t-sep{color:var(--border);margin:0 3px}
     .history-actions .h-action-edit{flex:0 0 auto;min-width:60px}
     .history-actions .h-action-edit.active{background:var(--amber);color:#000;border-color:var(--amber);box-shadow:0 0 0 1px var(--amber)}
+    .history-actions .h-action-reconcile{flex:0 0 auto;min-width:84px;font-size:11px}
+    .history-actions .h-action-reconcile:hover{color:var(--amber);border-color:var(--amber)}
     .h-badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;margin-right:5px;vertical-align:middle}
     .h-badge-tci{background:var(--amber);color:#000}
 
@@ -787,6 +802,36 @@
 
     .modal-actions-box{max-width:320px}
 
+    /* Reconcile dose modal */
+    .modal-reconcile{max-width:440px}
+    .rm-section{margin-bottom:12px}
+    .rm-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em}
+    .rm-helper{font-size:10.5px;color:var(--text-muted);margin-top:4px;line-height:1.35}
+    .rm-kv{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:6px 0;border-bottom:1px dashed var(--border-subtle)}
+    .rm-kv:last-child{border-bottom:none}
+    .rm-kv-input .rm-label{align-self:center}
+    .rm-actual-input{display:flex;align-items:baseline;gap:4px}
+    .rm-value{font-family:var(--font-mono);font-size:15px;color:var(--text-primary);font-weight:600}
+    .rm-value-input{min-width:70px;text-align:right;padding:4px 8px;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);background:var(--bg-input)}
+    .rm-value-input.empty{color:var(--text-muted);font-weight:400}
+    .rm-value-unit{font-size:11px;color:var(--text-muted)}
+    .rm-kv-delta{padding-top:8px}
+    .rm-value-delta{font-size:16px}
+    .rm-value-delta.positive{color:#7c3aed}
+    .rm-value-delta.negative{color:var(--amber)}
+    .rm-value-delta.zero{color:var(--text-muted);font-weight:400}
+    .rm-inline-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .rm-inline-row .rm-label{flex:0 0 auto}
+    .rm-drug-row{display:flex;gap:6px;margin-top:6px}
+    .rm-drug-btn{flex:1;padding:8px 10px;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-secondary);font-family:var(--font-display);font-size:12px;font-weight:600;cursor:pointer;text-transform:uppercase;letter-spacing:.04em}
+    .rm-drug-btn.active{background:var(--bg-card);color:var(--text-primary);border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber)}
+    .rm-keypad{margin:0 auto 10px;max-width:260px}
+    .rm-keypad .ee-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+    .rm-keypad .key{padding:10px 0;font-size:16px}
+    .rm-summary{font-size:11.5px;color:var(--text-secondary);line-height:1.45;margin:8px 0;padding:8px 10px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border-subtle);min-height:18px}
+    .rm-summary:empty{display:none}
+    .rm-error{font-size:11px;color:var(--red);min-height:14px;margin-bottom:6px;text-align:center}
+
     /* TCI delay option pills */
     .tci-delay-options{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:12px 0}
     .tci-delay-opt{padding:8px 18px;border-radius:99px;border:1px solid var(--border-subtle);background:var(--bg-input);color:var(--text-secondary);font-size:15px;cursor:pointer;transition:all .15s}
@@ -1148,6 +1193,7 @@
           <div class="history-actions">
             <button class="evt-action-btn h-action-time" id="btn-history-time" title="Toggle time display"><span class="t-et active">ET</span><span class="t-sep">/</span><span class="t-rt">RT</span></button>
             <button class="evt-action-btn h-action-add" id="btn-add-event">+ Add Event</button>
+            <button class="evt-action-btn h-action-reconcile" id="btn-reconcile" title="Reconcile simulated total with actual pump delivery">Reconcile</button>
             <button class="evt-action-btn h-action-edit" id="btn-history-edit">Edit</button>
           </div>
         </div>
@@ -1332,6 +1378,65 @@
         <button class="modal-btn-cancel" id="ee-cancel">Cancel</button>
         <button id="ee-push-btn" class="modal-btn-confirm-push" style="display:none">IV Push</button>
         <button id="ee-confirm" class="modal-btn-confirm-bolus">Pump Bolus</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========== RECONCILE DOSE =========== -->
+  <div class="modal-overlay" id="modal-reconcile">
+    <div class="modal-box modal-reconcile">
+      <h3>Reconcile Dose</h3>
+      <p class="modal-subtitle">Match the simulation's running total to what the pump and any manual boluses have actually delivered.</p>
+
+      <div class="rm-section rm-drug-picker" id="rm-drug-picker" style="display:none">
+        <span class="rm-label">Drug</span>
+        <div class="rm-drug-row" id="rm-drug-row"></div>
+      </div>
+
+      <div class="rm-section">
+        <div class="rm-kv"><span class="rm-label">Simulated total</span><span class="rm-value" id="rm-sim-total">—</span></div>
+        <div class="rm-kv rm-kv-input">
+          <span class="rm-label">Actual total delivered</span>
+          <div class="rm-actual-input">
+            <span class="rm-value rm-value-input" id="rm-actual-display">—</span>
+            <span class="rm-value-unit" id="rm-actual-unit">mg</span>
+          </div>
+        </div>
+        <div class="rm-helper">pump display + any non-pump boluses</div>
+        <div class="rm-kv rm-kv-delta"><span class="rm-label">Correction bolus</span><span class="rm-value rm-value-delta" id="rm-delta">—</span></div>
+      </div>
+
+      <div class="rm-section">
+        <div class="rm-inline-row">
+          <span class="rm-label">Insert correction at</span>
+          <select class="ee-select" id="rm-hours"></select>
+          <span class="ee-time-sep">:</span>
+          <select class="ee-select" id="rm-minutes"></select>
+          <div class="tp-unit-toggle tp-unit-toggle-sm" id="rm-time-unit">
+            <button class="tp-unit active" data-unit="case">ET</button>
+            <button class="tp-unit" data-unit="real">RT</button>
+          </div>
+          <span class="tp-conversion" id="rm-time-conversion"></span>
+        </div>
+        <div class="rm-helper">best guess of when the missed change happened — default: now</div>
+      </div>
+
+      <!-- Keypad for entering actual total -->
+      <div class="rm-keypad">
+        <div class="ee-grid">
+          <div class="ee-grid-spacer"></div><div class="key rm-key" data-key="7">7</div><div class="key rm-key" data-key="8">8</div><div class="key rm-key" data-key="9">9</div>
+          <div class="ee-grid-spacer"></div><div class="key rm-key" data-key="4">4</div><div class="key rm-key" data-key="5">5</div><div class="key rm-key" data-key="6">6</div>
+          <div class="key rm-key ee-fn" data-key="clear">C</div><div class="key rm-key" data-key="1">1</div><div class="key rm-key" data-key="2">2</div><div class="key rm-key" data-key="3">3</div>
+          <div class="key rm-key ee-fn" data-key="back">⌫</div><div class="key rm-key ee-key-wide2" data-key="0">0</div><div class="key rm-key" data-key=".">.</div>
+        </div>
+      </div>
+
+      <div class="rm-summary" id="rm-summary"></div>
+      <div class="rm-error" id="rm-error"></div>
+
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="rm-cancel">Cancel</button>
+        <button class="modal-btn-confirm-bolus" id="rm-confirm">Confirm</button>
       </div>
     </div>
   </div>

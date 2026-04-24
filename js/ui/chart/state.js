@@ -16,6 +16,7 @@ export function createState(cfg) {
     ceBandTolerance: null,
     effectBands: [],
     plateauRegion: null,
+    reconciliationRegion: null,
     steadyStateCe: null,
     exitCe: null,
     viewMin: 0,

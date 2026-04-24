@@ -84,6 +84,7 @@ export function createSession({
       intermittentThresholds,
       exitCeTargets,
       pumpEnabled,
+      reconciliationWindows: model.getAllReconciliationWindows ? model.getAllReconciliationWindows() : {},
       annotations: getAnnotations(),
       primaryDrug: getSelectedDrug(),
     });
@@ -185,6 +186,13 @@ export function createSession({
       }
       // Refresh UI after thresholds are restored so combined states display correctly
       mode.refreshUI(getSelectedDrug());
+      if (saved.reconciliationWindows && model.setReconciliationWindow) {
+        for (const [drugId, w] of Object.entries(saved.reconciliationWindows)) {
+          if (w && typeof w.insertMin === 'number' && typeof w.endMin === 'number') {
+            model.setReconciliationWindow(drugId, w.insertMin, w.endMin);
+          }
+        }
+      }
       if (saved.exitCeTargets) {
         for (const [drugId, ce] of Object.entries(saved.exitCeTargets)) {
           if (ce > 0) {

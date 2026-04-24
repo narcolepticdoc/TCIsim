@@ -357,6 +357,24 @@ export function createChart(canvas, config = {}) {
     chart.update('none');
   }
 
+  /**
+   * Show/hide the dose-reconciliation untrustworthy region.
+   * Pass `{ xMin, xMax }` to show, or null to clear. Idempotent — safe to
+   * call every frame from the bridge (CLAUDE.md invariant).
+   */
+  function setReconciliationRegion(region) {
+    const cur = s.reconciliationRegion;
+    if (!region) {
+      if (!cur) return;
+      s.reconciliationRegion = null;
+    } else {
+      if (cur && cur.xMin === region.xMin && cur.xMax === region.xMax) return;
+      s.reconciliationRegion = { xMin: region.xMin, xMax: region.xMax };
+    }
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
   function setSteadyStateLine(ce) {
     s.steadyStateCe = ce;
     chart.options.plugins.annotation.annotations = buildAnnotations(s);
@@ -568,6 +586,7 @@ export function createChart(canvas, config = {}) {
     setCeToleranceBand,
     setThresholdLine,
     setPlateauRegion,
+    setReconciliationRegion,
     setSteadyStateLine,
     setExitLine,
     setViewRange,

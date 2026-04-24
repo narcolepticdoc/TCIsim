@@ -258,6 +258,20 @@ export function createChartBridge({
         chart.setPlateauRegion(null);
       }
 
+      // Reconciliation region — amber band spanning [insertMin, endMin] on
+      // the time axis, marking an interval whose Cp/Ce values should not be
+      // trusted while the model rebalances from a retrospective correction.
+      // Reads from simulation state directly; setter is idempotent so we
+      // call unconditionally every frame (self-healing on chart recreation).
+      if (model && chart.setReconciliationRegion) {
+        const rw = model.getActiveReconciliationWindow(selectedDrug, t);
+        if (rw) {
+          chart.setReconciliationRegion({ xMin: rw.insertMin, xMax: rw.endMin });
+        } else {
+          chart.setReconciliationRegion(null);
+        }
+      }
+
       // Future-event markers — only when the overlay is enabled.
       // Gated to TCI mode (manual mode rarely has pre-scheduled future events).
       if (chart.eventAnnotationsEnabled) {

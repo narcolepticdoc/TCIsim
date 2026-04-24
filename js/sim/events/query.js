@@ -7,6 +7,66 @@
  * used as the starting point for TCI planning.
  */
 
+import { bolusDeliveryMinutes, pushDeliveryMinutes } from '../../util/constants.js';
+
+/**
+ * Walk a drug's events and sum the total mg delivered up to `now`.
+ * Rate segments are integrated (rate × duration). Bolus events add
+ * their full value if fully delivered by `now`, or a time-proportional
+ * fraction if delivery is still in progress. Background rate is
+ * suppressed while a bolus is delivering (mirrors replay semantics).
+ *
+ * Pure function — takes a pre-filtered events array for the drug.
+ * The drug-scoped breakdown is the single source of truth for the
+ * history panel "Total delivered" row and the reconciliation modal.
+ *
+ * @param {Array} events - events already filtered to a single drug, sorted by time
+ * @param {string} drugId
+ * @param {number} now - minutes since case start
+ * @returns {{ bolusMg: number, rateMg: number, totalMg: number }}
+ */
+export function getCumulativeDose(events, drugId, now) {
+  if (!events || !events.length || !(now > 0)) {
+    return { bolusMg: 0, rateMg: 0, totalMg: 0 };
+  }
+
+  let bolusMg = 0;
+  let rateMg = 0;
+  let currentTime = 0;
+  let currentRate = 0;
+
+  for (const evt of events) {
+    if (evt.time > now) break;
+    if (evt.time > currentTime) {
+      rateMg += (evt.time - currentTime) * currentRate;
+      currentTime = evt.time;
+    }
+    if (evt.type === 'bolus') {
+      const duration = evt.deliveryMode === 'push'
+        ? pushDeliveryMinutes(evt.value, drugId)
+        : bolusDeliveryMinutes(evt.value, drugId);
+      const endTime = evt.time + duration;
+      if (endTime <= now) {
+        bolusMg += evt.value;
+        currentTime = endTime;
+      } else {
+        const frac = (now - evt.time) / duration;
+        bolusMg += evt.value * Math.max(0, Math.min(1, frac));
+        currentTime = now;
+        break;
+      }
+    } else if (evt.type === 'rate') {
+      currentRate = evt.value;
+    } else if (evt.type === 'pause') {
+      currentRate = 0;
+    }
+  }
+  if (currentTime < now) {
+    rateMg += (now - currentTime) * currentRate;
+  }
+  return { bolusMg, rateMg, totalMg: bolusMg + rateMg };
+}
+
 export function createQuery(
   state,
   { getBolusDelivery, advanceBolus },

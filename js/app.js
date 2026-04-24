@@ -18,6 +18,7 @@ import * as mode from './ui/mode.js';
 import * as drugPanel from './ui/drug-panel.js';
 import * as history from './ui/history.js';
 import * as eventEditor from './ui/event-editor.js';
+import * as reconcileModal from './ui/reconcile-modal.js';
 import { createChart } from './ui/chart.js';
 import { bolusDeliveryMinutes, APP_VERSION, DRUG_IDS, isPumpEnabled } from './util/constants.js';
 import { getQuantizeConfig } from './util/units.js';
@@ -482,6 +483,11 @@ function boot() {
     });
   }
 
+  const btnReconcile = $('btn-reconcile');
+  if (btnReconcile) {
+    btnReconcile.addEventListener('click', () => reconcileModal.open(selectedDrug));
+  }
+
   initPortraitLayout();
 
   eventEditor.init({
@@ -491,6 +497,13 @@ function boot() {
     controls,
     refreshChart,
     getPatient: () => model ? model.getPatient() : { weight: 70 },
+  });
+
+  reconcileModal.init({
+    model,
+    timer,
+    refreshChart,
+    addAnnotation,
   });
 
   // Initialize warnings

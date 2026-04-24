@@ -137,5 +137,26 @@ export function buildAnnotations(s) {
     };
   }
 
+  if (s.reconciliationRegion) {
+    // Amber full-height band marking an interval whose concentration values
+    // should not be trusted — the model is rebalancing after a retrospective
+    // correction bolus. Lighter fill than plateau so the curves underneath
+    // stay legible, and a dashed border to read as a "caution" band instead
+    // of a target.
+    const fillA = Math.round(0x18 * (parseInt(s.overlayAlpha, 16) / 255)).toString(16).padStart(2, '0');
+    annotations.reconciliation = {
+      type: 'box',
+      xScaleID: 'x',
+      yScaleID: 'y',
+      xMin: s.reconciliationRegion.xMin,
+      xMax: s.reconciliationRegion.xMax,
+      backgroundColor: '#f59e0b' + fillA,
+      borderColor: '#f59e0b' + s.overlayAlpha,
+      borderWidth: 1,
+      borderDash: [6, 4],
+      drawTime: 'afterDatasetsDraw',
+    };
+  }
+
   return annotations;
 }

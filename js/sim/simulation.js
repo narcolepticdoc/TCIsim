@@ -61,6 +61,11 @@ export function createModel(config = {}) {
   let pdModels = {};               // { drugId: pdModel | null }
   let patient = { age: 35, weight: 70, height: 170, male: true, opioid: false };
   let params = null;               // PK-PD params for primary drug
+  // Active dose-reconciliation windows keyed by drugId. Each entry:
+  //   { insertMin, endMin } — the interval on the chart that should be
+  //   marked as untrustworthy while the model reconverges after a
+  //   retrospective correction bolus. See js/ui/reconcile-modal.js.
+  const reconciliationWindows = {};
 
   // Registry of the PK model currently active for each drug.
   // When model-choice is added later, swap the entries here (and the
@@ -308,6 +313,7 @@ export function createModel(config = {}) {
   function reset() {
     eventList.clearAll();
     pdModels = {};
+    clearReconciliationWindows();
     init();
   }
 
@@ -465,6 +471,53 @@ export function createModel(config = {}) {
     return result;
   }
 
+  // ---- Dose reconciliation windows ----
+
+  /**
+   * Mark a per-drug reconciliation window. `insertMin` is when the
+   * correction bolus was placed (may be in the past); `endMin` is the
+   * time after which the chart can be trusted again. Pass null to clear.
+   */
+  function setReconciliationWindow(drugId, insertMin, endMin) {
+    if (insertMin == null || endMin == null) {
+      delete reconciliationWindows[drugId];
+      return;
+    }
+    reconciliationWindows[drugId] = { insertMin, endMin };
+  }
+
+  /**
+   * Return the currently-active reconciliation window for a drug, auto-
+   * clearing any window whose endMin has already passed. `now` is required
+   * so the simulation stays clock-free.
+   */
+  function getActiveReconciliationWindow(drugId, now) {
+    const w = reconciliationWindows[drugId];
+    if (!w) return null;
+    if (now != null && now > w.endMin) {
+      delete reconciliationWindows[drugId];
+      return null;
+    }
+    return { ...w };
+  }
+
+  /**
+   * Snapshot all active reconciliation windows — used by session save.
+   */
+  function getAllReconciliationWindows() {
+    const out = {};
+    for (const [k, v] of Object.entries(reconciliationWindows)) {
+      out[k] = { ...v };
+    }
+    return out;
+  }
+
+  function clearReconciliationWindows() {
+    for (const k of Object.keys(reconciliationWindows)) {
+      delete reconciliationWindows[k];
+    }
+  }
+
   // ---- Multi-drug ----
 
   /**
@@ -490,6 +543,10 @@ export function createModel(config = {}) {
     getConcentrationsAt, computeCurve, predictBIS,
     getRateAtTime, getEvents, getPDModel, getModelName,
     getEventList, predictTrough, predictDecayTo, predictSteadyState, predictPlateau,
+
+    // Dose reconciliation
+    setReconciliationWindow, getActiveReconciliationWindow,
+    getAllReconciliationWindows, clearReconciliationWindows,
 
     // Multi-drug
     registerDrug,

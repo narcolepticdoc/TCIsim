@@ -243,6 +243,18 @@ function update() {
         }
       }
       if (cardEl.dataset.status !== status) cardEl.dataset.status = status;
+
+      // Dose-reconciliation indicator — amber pulse while an active
+      // reconciliation window covers `t`. Auto-clears inside the
+      // simulation getter once the window end has passed.
+      let reconciling = false;
+      if (caseStarted) {
+        try {
+          const rw = ctx.model.getActiveReconciliationWindow(dId, t);
+          if (rw) reconciling = true;
+        } catch (e) {}
+      }
+      cardEl.classList.toggle('reconciling', reconciling);
     }
   }
 
