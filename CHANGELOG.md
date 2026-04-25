@@ -11,6 +11,18 @@
 
 ---
 
+## [0.5.28.3] — 2026-04-25
+
+Reconcile modal polish — entry-field highlight, volume entry mode, scenario-language rewording.
+
+- **Active entry field is highlighted.** The "Actual total delivered" field now has an amber border, soft glow, and a blinking caret when empty. Reads as a focused input rather than a passive readout.
+- **Dose / Volume toggle.** Pump-enabled drugs (propofol always; fentanyl/ketamine when pump is on) get a small "Enter as: [Dose] [Volume]" segmented control above the input. Volume mode lets users enter what the (simulated) pump display reads in mL — internally converted via the drug's pump concentration. Dose mode keeps the existing mg/mcg flow. The "Simulated total" line updates to match the active mode so comparisons stay unit-consistent. Switching modes converts the buffer through canonical mg (e.g., `247 mg` → `24.7 mL`).
+- **Info popup language reworded.** The original copy ("when you've lost track during a busy case") read like real clinical use. Reframed to scenario/training language throughout, plus an explicit one-liner: "This is a teaching tool — it is not part of the dosing record for a real patient." Modal subtitle and helper text updated to match.
+
+No engine change. Volume math: `mg = mL × concentration_mg_per_mL`, where concentration comes from `getPumpSettings`. If a drug doesn't have a pump (e.g., fentanyl with pump disabled), the toggle is hidden and the modal stays in dose mode.
+
+---
+
 ## [0.5.28.2] — 2026-04-25
 
 Reconcile default flipped back to **single bolus**. The clinical reality is that the common failure mode is a missed sharp event (stopcock push, manual bolus that didn't get logged), not sustained rate drift. Sustained drift requires either repeated logging failures or a pump-vs-display calibration mismatch — both rarer than a missed push.

@@ -18,7 +18,7 @@
  * when" decision tree.
  */
 
-import { DRUG_DEFS, DRUG_IDS } from '../util/constants.js';
+import { DRUG_DEFS, DRUG_IDS, getPumpSettings, isPumpEnabled } from '../util/constants.js';
 import { getCumulativeDose } from '../sim/events/query.js';
 import { getConvergenceWindow } from '../pk/eigenvalues.js';
 import { fmtTotalMass } from './history.js';
@@ -38,7 +38,8 @@ let _simTotalMg = 0;       // simulated total in canonical mg
 let _deltaMg = 0;          // actual_mg - simulated_mg
 let _timeUnit = 'case';    // 'case' | 'real'
 let _defaultInsertMin = 0; // default insert time (sim-now at open)
-let _mode = 'spread';      // 'spread' | 'single'
+let _mode = 'single';      // 'spread' | 'single' (set from open())
+let _inputMode = 'dose';   // 'dose' | 'volume' (set from open() based on pump availability)
 // 5-minute forward band shown after a spread correction. Spread-mode error
 // is theoretically zero past NOW; the stub is purely a visual cue that the
 // correction happened.
@@ -62,6 +63,52 @@ function nativeToMg(val, drugId) {
   return nativeUnit(drugId) === 'mcg' ? val / 1000 : val;
 }
 
+// ---- Display-unit helpers (dose vs. volume) ----
+
+// Volume mode is offered only when the drug has a pump enabled. Pump
+// concentration is stored canonically in mg/mL.
+function _volumeAvailable(drugId) {
+  if (!drugId) return false;
+  try {
+    if (!isPumpEnabled(drugId)) return false;
+    const ps = getPumpSettings(drugId);
+    return !!(ps && ps.concentration > 0);
+  } catch (e) { return false; }
+}
+
+function _displayUnit() {
+  if (_inputMode === 'volume') return 'mL';
+  return nativeUnit(_drugId);
+}
+
+// canonical mg → display value (mg, mcg, or mL)
+function _mgToDisplay(mg) {
+  if (_inputMode === 'volume') {
+    const ps = getPumpSettings(_drugId);
+    return ps.concentration > 0 ? mg / ps.concentration : 0;
+  }
+  return mgToNative(mg, _drugId);
+}
+
+// display value (mg, mcg, or mL) → canonical mg
+function _displayToMg(val) {
+  if (_inputMode === 'volume') {
+    const ps = getPumpSettings(_drugId);
+    return val * (ps.concentration || 0);
+  }
+  return nativeToMg(val, _drugId);
+}
+
+// Format a positive canonical mg amount in the current display unit.
+function _fmtDisplay(mg) {
+  if (_inputMode === 'volume') {
+    const ml = _mgToDisplay(mg);
+    const dec = ml >= 100 ? 0 : (ml >= 10 ? 1 : 2);
+    return `${ml.toFixed(dec)} mL`;
+  }
+  return fmtTotalMass(mg, _drugId);
+}
+
 // ---- Init ----
 
 /**
@@ -83,6 +130,7 @@ export function init(opts = {}) {
   _wireTimePicker();
   _wireDrugPicker();
   _wireModeToggle();
+  _wireInputModeToggle();
   _wireInfoPopup();
   _wireActions();
 }
@@ -109,11 +157,15 @@ export function open(drugId) {
   }
 
   _actualBuf = '';
-  _mode = 'single';  // Single-bolus default — the common clinical failure is a
+  _mode = 'single';  // Single-bolus default — the common scenario failure is a
                      // missed sharp event (stopcock push, etc.), which has a
                      // simpler mental model and no forward-rebuild caveat.
                      // Spread mode is the right tool for sustained rate drift,
                      // but that's the rarer case.
+  // Default input unit: dose. Volume mode is offered for pump-enabled drugs
+  // since pumps display infused volume (mL); easier than mental-mathing it
+  // back to mg.
+  _inputMode = 'dose';
   // Single-bolus default time = case start. Fast forward convergence and
   // ≤1.5 % Ce error at NOW for any sharp event older than 90 min.
   _defaultInsertMin = 0;
@@ -155,7 +207,7 @@ function _computeSimTotal() {
 function _computeDelta() {
   const actualDisp = parseFloat(_actualBuf);
   if (!isFinite(actualDisp)) { _deltaMg = 0; return; }
-  const actualMg = nativeToMg(actualDisp, _drugId);
+  const actualMg = _displayToMg(actualDisp);
   _deltaMg = actualMg - _simTotalMg;
 }
 
@@ -189,6 +241,11 @@ function _wireDrugPicker() {
     if (!id || id === _drugId) return;
     _drugId = id;
     _actualBuf = '';
+    // If the new drug doesn't support volume entry, drop back to dose mode
+    // so the unit label and toggle stay in sync.
+    if (_inputMode === 'volume' && !_volumeAvailable(_drugId)) {
+      _inputMode = 'dose';
+    }
     _computeSimTotal();
     row.querySelectorAll('.rm-drug-btn').forEach(b => b.classList.toggle('active', b.dataset.drug === id));
     _render();
@@ -219,6 +276,36 @@ function _syncModeUI() {
   // Show the time-picker row only for single-bolus mode.
   const tpRow = document.querySelector('.rm-time-row');
   if (tpRow) tpRow.style.display = (_mode === 'single') ? '' : 'none';
+}
+
+// ---- Input-mode toggle (dose vs volume) ----
+
+function _wireInputModeToggle() {
+  document.querySelectorAll('.rm-input-mode-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.inputMode;
+      if (m !== 'dose' && m !== 'volume') return;
+      if (m === _inputMode) return;
+      // If switching to volume but no pump/concentration is available, ignore.
+      if (m === 'volume' && !_volumeAvailable(_drugId)) return;
+      // Convert the current buffer through canonical mg so the displayed
+      // number matches the new unit. (e.g. "247" mg → "24.7" mL.)
+      const buf = parseFloat(_actualBuf);
+      if (isFinite(buf)) {
+        const canonicalMg = _displayToMg(buf);
+        _inputMode = m;
+        const newDisp = _mgToDisplay(canonicalMg);
+        // Use a sensible decimal count for the new unit
+        const dec = _inputMode === 'volume'
+          ? (newDisp >= 100 ? 0 : (newDisp >= 10 ? 1 : 2))
+          : (Math.abs(newDisp - Math.round(newDisp)) < 1e-6 ? 0 : 2);
+        _actualBuf = newDisp.toFixed(dec).replace(/\.?0+$/, '');
+      } else {
+        _inputMode = m;
+      }
+      _render();
+    });
+  });
 }
 
 // ---- Info popup ----
@@ -371,9 +458,18 @@ function _updateTimeConversion() {
 // ---- Rendering ----
 
 function _render() {
-  // Simulated total (display unit)
+  // Input-mode toggle visibility (only for pump-enabled drugs)
+  const inputToggle = document.querySelector('.rm-input-mode-toggle');
+  if (inputToggle) {
+    inputToggle.style.display = _volumeAvailable(_drugId) ? '' : 'none';
+  }
+  document.querySelectorAll('.rm-input-mode-opt').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.inputMode === _inputMode);
+  });
+
+  // Simulated total in current display unit
   const simEl = $('rm-sim-total');
-  if (simEl) simEl.textContent = _simTotalMg > 0 ? fmtTotalMass(_simTotalMg, _drugId) : `0 ${nativeUnit(_drugId)}`;
+  if (simEl) simEl.textContent = _simTotalMg > 0 ? _fmtDisplay(_simTotalMg) : `0 ${_displayUnit()}`;
 
   // Actual input
   const actEl = $('rm-actual-display');
@@ -387,7 +483,7 @@ function _render() {
     }
   }
   const unitEl = $('rm-actual-unit');
-  if (unitEl) unitEl.textContent = nativeUnit(_drugId);
+  if (unitEl) unitEl.textContent = _displayUnit();
 
   // Delta
   _computeDelta();
@@ -401,7 +497,7 @@ function _render() {
       dEl.className = 'rm-value rm-value-delta zero';
     } else {
       const sign = _deltaMg > 0 ? '+' : '−'; // en dash for negative
-      const mag  = fmtTotalMass(Math.abs(_deltaMg), _drugId);
+      const mag  = _fmtDisplay(Math.abs(_deltaMg));
       dEl.textContent = `${sign} ${mag}`;
       dEl.className = 'rm-value rm-value-delta ' + (_deltaMg > 0 ? 'positive' : 'negative');
     }
