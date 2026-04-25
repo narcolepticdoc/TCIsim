@@ -4,6 +4,17 @@
 
 ## Session History
 
+### Interim — Reconcile modal: tone down (v0.5.28.4)
+
+User feedback on v0.5.28.3: too much copy ("laying it on a bit thick") and too fancy on the entry field ("just make it look like every other input box in the app"). Both fair — the previous round was leaning marketing.
+
+Changes:
+- Entry field: dropped the amber border, glow, blinking caret, color-flip on the unit label, and the `rm-actual-input-active` wrapper class. Now uses `bg-deep` background + subtle border + mono font, matching the existing `.keypad-display` pattern.
+- Info popup: shortened all five sections. "What this is for" went from two paragraphs to one declarative sentence. Removed the "teaching tool" disclaimer paragraph (was clutter, not load-bearing). "Why it works", "The two modes", "Reconciling band", "Ghost line" all tightened to facts only.
+- Modal subtitle and "actual total" helper line shortened for the same reason.
+
+No engine change.
+
 ### Interim — Reconcile modal polish: highlight, volume mode, scenario language (v0.5.28.3)
 
 Same session. Three small fixes piling up after the user previewed v0.5.28.2 on a real-looking case in the screenshot:
