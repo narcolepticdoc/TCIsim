@@ -4,4 +4,4 @@
  * To cut a new release, update VERSION here only.
  * constants.js re-exports it as APP_VERSION for any module that needs it.
  */
-export const VERSION = '0.5.28.0';
+export const VERSION = '0.5.28.2';

@@ -4,6 +4,32 @@
 
 ## Session History
 
+### Interim — Reconcile default flipped to single-bolus (v0.5.28.2)
+
+Same session. After v0.5.28.1 added the forward-rebuild caveat to spread mode, the user pushed back on the default choice itself: "A missed dose is an easier fix than a systemic pump error and one that requires less explanation and troubleshooting." That argument holds up under scrutiny:
+
+- The clinically common failure is a missed sharp event — a stopcock push during airway management, a manual bolus that wasn't logged. Sustained rate drift requires either repeated logging failures (the user bumped the pump rate three times and forgot to update the sim each time) or a hardware-level calibration mismatch (rare).
+- Single-bolus is mentally simpler: "I forgot to push that — add it where I think it happened." Spread requires the user to reason about whether the underlying mismatch is still active (it usually is), and to follow up with a Change Rate to keep the drift from rebuilding.
+- Single-bolus is fully self-contained. Spread has the forward-rebuild gotcha that v0.5.28.1 just had to add a paragraph to explain.
+
+So flipped the default back to single-bolus and reordered the segmented control accordingly (single first, spread second). Updated the info popup so single-bolus is the first paragraph and labelled "(default)". Spread retains its full explanation including the forward-rebuild caveat — kept in the toolbox for the user who recognizes a sustained rate mismatch.
+
+The earlier v0.5.28.0 reasoning ("sustained errors are the dominant failure mode, so default to the strategy that fixes them exactly") was wrong on the empirical claim — it was extrapolating from the math being clean rather than from how cases actually go off the rails. Spread is still mathematically the better tool for sustained errors; it just isn't the common case.
+
+**Files changed:** `js/version.js`, `js/ui/reconcile-modal.js` (one-line `_mode` default), `index.html` (button order, default-active class, time-picker default-visible, info-popup paragraph order/copy), `CHANGELOG.md`, `DEVELOPMENT.md`. No engine change.
+
+### Interim — Reconcile spread-mode forward-rebuild disclosure (v0.5.28.1)
+
+Same session as v0.5.28.0. The user, after seeing the result on a real case (3:30:15 ET, 150 mcg/kg/min infusion, ghost line clearly diverging from the new Ce above NOW), pointed out that the spread reconciliation only fixes the past. The restore event at t=NOW puts the rate back to the un-augmented baseline, so forward of NOW the sim runs at whatever set rate the user had configured before. If the underlying mismatch is still active (e.g., the pump has been running 1 mg/min faster than the sim's set rate, and is still doing so), the drift will rebuild at the same per-minute rate.
+
+Two options considered:
+1. **Documentation only**: surface the caveat in the modal summary and the info popup, with guidance to use Change Rate after confirming.
+2. **Behavior change**: add an "extend correction forward" checkbox that omits the restore event, so the augmented rate continues indefinitely.
+
+Going with #1 for v0.5.28.1. The honest answer is "the sim doesn't know whether the underlying mismatch is still happening" — only the user does. Surfacing the caveat puts the responsibility for forward correction in the right place. Option #2 is straightforward to add later if real-world feedback shows it's worth the extra UI complexity. The expected workflow becomes: reconcile (spread) → notice the new Ce trajectory → adjust the set rate to match what the pump is actually doing.
+
+**Files changed:** `js/version.js`, `js/ui/reconcile-modal.js` (summary text), `index.html` (info popup paragraph), `CHANGELOG.md`, `DEVELOPMENT.md`. No engine change.
+
 ### Interim — Reconcile v3: spread-across-case mode + info popup (v0.5.28.0)
 
 Same session as v0.5.27.x. The user, after experimenting with the single-bolus reconciliation, observed empirically that "the Ce curve is relatively resilient as long as the total dose is correct." That prompted a closer look at the math, which surfaced two corrections to my earlier claims and one new design opportunity:

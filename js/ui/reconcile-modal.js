@@ -109,9 +109,11 @@ export function open(drugId) {
   }
 
   _actualBuf = '';
-  _mode = 'spread';  // Spread default — best for sustained errors, which are
-                     // the most common failure mode. User can switch to single
-                     // bolus if they remember a specific missed event.
+  _mode = 'single';  // Single-bolus default — the common clinical failure is a
+                     // missed sharp event (stopcock push, etc.), which has a
+                     // simpler mental model and no forward-rebuild caveat.
+                     // Spread mode is the right tool for sustained rate drift,
+                     // but that's the rarer case.
   // Single-bolus default time = case start. Fast forward convergence and
   // ≤1.5 % Ce error at NOW for any sharp event older than 90 min.
   _defaultInsertMin = 0;
@@ -441,11 +443,15 @@ function _renderSummary() {
   if (_mode === 'spread') {
     const ratePerMin = _deltaMg / Math.max(now, 1e-6);
     const rateStr = (Math.abs(ratePerMin) >= 0.01 ? ratePerMin.toFixed(3) : ratePerMin.toExponential(2));
+    const direction = _deltaMg > 0 ? 'higher' : 'lower';
     el.textContent =
       `A ${sign}${mag} correction will be spread evenly across the case ` +
       `(${rateStr} mg/min for ${fmtMin(now)}). ` +
       `Reconstructs sustained rate errors exactly — no convergence wait. ` +
-      `Past curves will shift to reflect the corrected dose history.`;
+      `Past curves will shift to reflect the corrected dose history. ` +
+      `Note: forward of NOW the sim returns to the un-augmented rate. ` +
+      `If the actual pump is still running ${direction} than the sim, ` +
+      `the drift will rebuild — adjust your set rate to match reality.`;
     return;
   }
 

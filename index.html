@@ -1443,16 +1443,16 @@
 
       <div class="rm-section">
         <div class="rm-mode-row">
-          <button class="rm-mode-opt active" data-mode="spread" type="button">
-            <span class="rm-mode-title">Spread across case</span>
-            <span class="rm-mode-sub">best for sustained drift</span>
-          </button>
-          <button class="rm-mode-opt" data-mode="single" type="button">
+          <button class="rm-mode-opt active" data-mode="single" type="button">
             <span class="rm-mode-title">Single bolus</span>
             <span class="rm-mode-sub">best for a known missed event</span>
           </button>
+          <button class="rm-mode-opt" data-mode="spread" type="button">
+            <span class="rm-mode-title">Spread across case</span>
+            <span class="rm-mode-sub">best for sustained drift</span>
+          </button>
         </div>
-        <div class="rm-inline-row rm-time-row" style="display:none">
+        <div class="rm-inline-row rm-time-row">
           <span class="rm-label">Insert at</span>
           <select class="ee-select" id="rm-hours"></select>
           <span class="ee-time-sep">:</span>
@@ -1500,8 +1500,9 @@
         <p>The PK model is linear time-invariant. Two event histories with the same cumulative input produce the same compartment state once redistribution settles — typically 30–60 min for propofol. The effect-site (Ce) is filtered through the ke0 first-order lag, which smooths the transient on its way from blood to brain, so Ce is far more resilient than Cp to the exact timing of corrections.</p>
 
         <h4>The two modes</h4>
-        <p><strong>Spread across case</strong> (default). Adds the missing dose evenly across the entire case as a small constant rate offset. <em>Best when you've been off-rate the whole time</em> — if the pump has been running 1 mg/min faster than the sim thought, this reconstructs truth exactly. No transient, no convergence wait. Past curves shift slightly to reflect the corrected dose history.</p>
-        <p><strong>Single bolus</strong>. Adds the missing dose as one correction at a chosen time. <em>Best when you remember a specific missed event</em>. Drag the picker to the time you think it happened for an exact match. If you're unsure, "case start" is a safe fallback (within ~1.5 % Ce error at NOW for events older than 90 min).</p>
+        <p><strong>Single bolus</strong> (default). Adds the missing dose as one correction at a chosen time. <em>Best when you remember a specific missed event</em> — a stopcock push during airway management, a manual bolus that wasn't logged. Drag the picker to the time you think it happened for an exact reconstruction. If you're unsure, "case start" is a safe fallback (within ~1.5 % Ce error at NOW for any sharp event older than 90 min). Self-contained: nothing to follow up on after confirming.</p>
+        <p><strong>Spread across case</strong>. Adds the missing dose evenly across the entire case as a small constant rate offset. <em>Best when you've been off-rate the whole time</em> — if the pump has been running at a different rate than the sim's set rate, this reconstructs truth exactly across the past. No transient, no convergence wait. Past curves shift slightly to reflect the corrected dose history.</p>
+        <p><strong>Forward of NOW the sim returns to the un-augmented rate.</strong> Spread mode only fixes the past — it does not assume the underlying mismatch is still active. If the pump is still delivering at a different rate than the sim's set rate, the drift will rebuild going forward at the same per-minute rate. After confirming a spread reconciliation, use Change Rate to bring the sim's set rate into agreement with what the pump is actually doing.</p>
 
         <h4>When it's worth correcting</h4>
         <p><strong>Sustained rate error</strong>: Ce % error equals dose % error, regardless of case duration. Doesn't decay.</p>
