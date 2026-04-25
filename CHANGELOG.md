@@ -11,6 +11,17 @@
 
 ---
 
+## [0.5.28.5] — 2026-04-25
+
+Consistent blue active-input border across all numeric entry fields. The patient modal already used `border: 1px var(--blue)` + `inset 0 0 0 1px var(--blue)` for the active field; applied the same treatment to the two other standalone numeric displays:
+
+- `.keypad-display` — used by the main keypad modal (target/rate/bolus/emergence/redose) and the event-editor modal. Always the only input in its modal, so always blue when the modal is open.
+- `.rm-value-input` — reconcile modal's actual-total field. Same logic.
+
+Patient-modal `.pm-field.active` already had this and is unchanged. No other standalone number inputs found in the audit (`<input>`s elsewhere are hidden, checkbox, time-picker, or range sliders).
+
+---
+
 ## [0.5.28.4] — 2026-04-25
 
 Reconcile modal: tone down. Stripped the fancy entry-field styling — it now matches the standard `.keypad-display` look used everywhere else in the app (subtle border, deep background, no glow, no caret animation). Tightened the info popup copy across all five sections; removed the disclaimer paragraph and the explanatory padding.

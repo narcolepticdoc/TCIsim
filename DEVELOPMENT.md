@@ -4,6 +4,19 @@
 
 ## Session History
 
+### Interim — Consistent blue active-input border (v0.5.28.5)
+
+User asked for the reconcile entry field to match the patient-screen blue active style, then asked to audit the rest of the app for the same treatment.
+
+The patient modal already uses `.pm-field.active{border-color:var(--blue);box-shadow:inset 0 0 0 1px var(--blue)}` to mark which cell is currently being typed into. The audit turned up two other standalone numeric displays:
+
+1. `.keypad-display` — the main keypad modal (target/rate/bolus/emergence/redose) and the event-editor modal both use this. Each modal has only one input, so it's always the active field when the modal is open. Applied the blue treatment unconditionally.
+2. `.rm-value-input` — reconcile modal's actual-total field. Same single-input situation, same fix.
+
+The other `<input>` elements in the page audit are hidden inputs backing the patient `.pm-field` cells, checkboxes, native time pickers, and range sliders — none need the active-text-input border.
+
+**Files changed:** `js/version.js`, `index.html` (two CSS rules), `CHANGELOG.md`, `DEVELOPMENT.md`. No engine change.
+
 ### Interim — Reconcile modal: tone down (v0.5.28.4)
 
 User feedback on v0.5.28.3: too much copy ("laying it on a bit thick") and too fancy on the entry field ("just make it look like every other input box in the app"). Both fair — the previous round was leaning marketing.
