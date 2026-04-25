@@ -257,9 +257,8 @@ export function renderTotals(drugId) {
   el.hidden = false;
   el.innerHTML =
     `<span class="ht-label">Total delivered</span>` +
-    `<span>` +
+    `<span class="ht-values">` +
       `<span class="ht-value">${massStr}</span>` +
-      `<span class="ht-sep">·</span>` +
       `<span class="ht-value">${mlStr} mL</span>` +
     `</span>`;
 }

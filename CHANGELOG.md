@@ -71,6 +71,26 @@ Placing the bolus at a user-chosen past time keeps most of the transient in hist
 
 ---
 
+## [0.5.26.4] — 2026-04-24
+
+Always stack the Total delivered values vertically (mass over volume) instead of relying on browser wrapping. On an iPad Pro the strip had enough horizontal room to keep `554.5 mg · 55.4 mL` on one line while the `TOTAL DELIVERED` label wrapped onto two — asymmetric and harder to scan. Switched the value container to a two-row flex column, right-aligned, which makes the strip read symmetrically regardless of viewport width. Dropped the `·` separator (no longer meaningful once the values are stacked).
+
+### Files changed
+
+`js/version.js`, `index.html`, `js/ui/history.js`, `CHANGELOG.md`.
+
+---
+
+## [0.5.26.3] — 2026-04-24
+
+Fix wrapping on the Total delivered strip: the number and its unit were breaking onto separate lines on narrow panels (observed on an iPad Pro running the portrait-tablet layout where the history column is tight). Added `white-space: nowrap` to `.ht-value` so `465.5 mg` and `46.6 mL` each stay atomic. Separator and label can still wrap between tokens.
+
+### Files changed
+
+`js/version.js`, `index.html`, `CHANGELOG.md`.
+
+---
+
 ## [0.5.26.2] — 2026-04-22
 
 Fix text-size scaling on iPad-class viewports (≥1020 / ≥1200 px) — Large and XL were rendering smaller than Normal.
