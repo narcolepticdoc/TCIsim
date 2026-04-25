@@ -814,9 +814,31 @@
     .rm-kv-input .rm-label{align-self:center}
     .rm-actual-input{display:flex;align-items:baseline;gap:4px}
     .rm-value{font-family:var(--font-mono);font-size:15px;color:var(--text-primary);font-weight:600}
-    .rm-value-input{min-width:70px;text-align:right;padding:4px 8px;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);background:var(--bg-input)}
+    .rm-value-input{min-width:90px;text-align:right;padding:6px 10px;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);background:var(--bg-input)}
     .rm-value-input.empty{color:var(--text-muted);font-weight:400}
     .rm-value-unit{font-size:11px;color:var(--text-muted)}
+    /* Active entry-field highlight: amber border + soft glow + blinking caret */
+    .rm-actual-input-active .rm-value-input{
+      border-color:var(--amber);
+      box-shadow:0 0 0 1px var(--amber), 0 0 6px rgba(245,158,11,.35);
+      background:rgba(245,158,11,.06);
+      color:var(--amber);
+      position:relative
+    }
+    .rm-actual-input-active .rm-value-input.empty::after{
+      content:'';display:inline-block;width:1px;height:14px;background:var(--amber);
+      margin-left:4px;vertical-align:middle;animation:rm-caret-blink 1s steps(2) infinite
+    }
+    @keyframes rm-caret-blink{50%{opacity:0}}
+    .rm-actual-input-active .rm-value-unit{color:var(--amber);font-weight:500}
+    /* Dose / Volume toggle */
+    .rm-input-mode-toggle{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px}
+    .rm-input-mode-label{margin:0}
+    .rm-input-mode-row{display:flex;gap:0;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);overflow:hidden}
+    .rm-input-mode-opt{padding:4px 12px;background:var(--bg-input);border:none;color:var(--text-secondary);font-family:var(--font-display);font-size:11px;font-weight:500;cursor:pointer;transition:all .12s;text-transform:uppercase;letter-spacing:.04em}
+    .rm-input-mode-opt:hover{background:var(--bg-hover)}
+    .rm-input-mode-opt.active{background:var(--amber);color:#1a1a1a}
+    .rm-input-mode-opt + .rm-input-mode-opt{border-left:1px solid var(--border-subtle)}
     .rm-kv-delta{padding-top:8px}
     .rm-value-delta{font-size:16px}
     .rm-value-delta.positive{color:#7c3aed}
@@ -1421,7 +1443,7 @@
         <h3>Reconcile Dose</h3>
         <button class="rm-info-btn" id="rm-info-open" title="What is this?" type="button">ⓘ</button>
       </div>
-      <p class="modal-subtitle">Match the simulation's running total to what the pump and any manual boluses have actually delivered.</p>
+      <p class="modal-subtitle">Bring the simulation's running total back in line with the dose your scenario intended to deliver.</p>
 
       <div class="rm-section rm-drug-picker" id="rm-drug-picker" style="display:none">
         <span class="rm-label">Drug</span>
@@ -1429,15 +1451,22 @@
       </div>
 
       <div class="rm-section">
+        <div class="rm-input-mode-toggle" style="display:none">
+          <span class="rm-label rm-input-mode-label">Enter as</span>
+          <div class="rm-input-mode-row">
+            <button class="rm-input-mode-opt active" data-input-mode="dose" type="button">Dose</button>
+            <button class="rm-input-mode-opt" data-input-mode="volume" type="button">Volume</button>
+          </div>
+        </div>
         <div class="rm-kv"><span class="rm-label">Simulated total</span><span class="rm-value" id="rm-sim-total">—</span></div>
         <div class="rm-kv rm-kv-input">
           <span class="rm-label">Actual total delivered</span>
-          <div class="rm-actual-input">
+          <div class="rm-actual-input rm-actual-input-active">
             <span class="rm-value rm-value-input" id="rm-actual-display">—</span>
             <span class="rm-value-unit" id="rm-actual-unit">mg</span>
           </div>
         </div>
-        <div class="rm-helper">pump display + any non-pump boluses</div>
+        <div class="rm-helper">running total intended by the scenario (sim pump display + any extra boluses)</div>
         <div class="rm-kv rm-kv-delta"><span class="rm-label">Correction</span><span class="rm-value rm-value-delta" id="rm-delta">—</span></div>
       </div>
 
@@ -1494,15 +1523,16 @@
       </div>
       <div class="rm-info-body">
         <h4>What this is for</h4>
-        <p>When you've lost track of pump rate changes or manual boluses during a busy case, the simulation's running total drifts from what the pump actually delivered. This dialog brings the sim back into sync so you can keep using it instead of starting over.</p>
+        <p>If you've stepped away from a long simulation, taken over from another trainee, or just lost track of which rate changes and boluses you've already entered, the running total in the sim can drift from the dose the scenario actually called for. This dialog brings the simulation's compartment state back in line with a known intended total, so the rest of the scenario stays useful for learning.</p>
+        <p>This is a teaching tool — it is not part of the dosing record for a real patient.</p>
 
         <h4>Why it works</h4>
         <p>The PK model is linear time-invariant. Two event histories with the same cumulative input produce the same compartment state once redistribution settles — typically 30–60 min for propofol. The effect-site (Ce) is filtered through the ke0 first-order lag, which smooths the transient on its way from blood to brain, so Ce is far more resilient than Cp to the exact timing of corrections.</p>
 
         <h4>The two modes</h4>
-        <p><strong>Single bolus</strong> (default). Adds the missing dose as one correction at a chosen time. <em>Best when you remember a specific missed event</em> — a stopcock push during airway management, a manual bolus that wasn't logged. Drag the picker to the time you think it happened for an exact reconstruction. If you're unsure, "case start" is a safe fallback (within ~1.5 % Ce error at NOW for any sharp event older than 90 min). Self-contained: nothing to follow up on after confirming.</p>
-        <p><strong>Spread across case</strong>. Adds the missing dose evenly across the entire case as a small constant rate offset. <em>Best when you've been off-rate the whole time</em> — if the pump has been running at a different rate than the sim's set rate, this reconstructs truth exactly across the past. No transient, no convergence wait. Past curves shift slightly to reflect the corrected dose history.</p>
-        <p><strong>Forward of NOW the sim returns to the un-augmented rate.</strong> Spread mode only fixes the past — it does not assume the underlying mismatch is still active. If the pump is still delivering at a different rate than the sim's set rate, the drift will rebuild going forward at the same per-minute rate. After confirming a spread reconciliation, use Change Rate to bring the sim's set rate into agreement with what the pump is actually doing.</p>
+        <p><strong>Single bolus</strong> (default). Adds the missing dose as one correction at a chosen time. <em>Best when you can name a specific missed event</em> — a manual bolus the scenario called for that you didn't enter, or one you forgot you'd already entered. Drag the picker to the intended time for an exact reconstruction. If you're not sure when, "case start" is a safe fallback (within ~1.5 % Ce error at NOW for any sharp event older than 90 min). Self-contained: nothing to follow up on after confirming.</p>
+        <p><strong>Spread across case</strong>. Adds the missing dose evenly across the entire scenario as a small constant rate offset. <em>Best when you've been off-rate the whole time</em> — if the simulated pump has been running at a different rate than the scenario intended, this reconstructs the intended trajectory exactly across the past. No transient, no convergence wait. Past curves shift slightly to reflect the corrected dose history.</p>
+        <p><strong>Forward of NOW the sim returns to the un-augmented rate.</strong> Spread mode only fixes the past — it does not assume the underlying rate mismatch is still active. If you keep the same set rate, the drift will rebuild forward at the same per-minute rate. After confirming a spread reconciliation, use Change Rate to bring the sim's set rate into agreement with the rate the scenario calls for.</p>
 
         <h4>When it's worth correcting</h4>
         <p><strong>Sustained rate error</strong>: Ce % error equals dose % error, regardless of case duration. Doesn't decay.</p>

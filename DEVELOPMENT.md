@@ -4,6 +4,20 @@
 
 ## Session History
 
+### Interim — Reconcile modal polish: highlight, volume mode, scenario language (v0.5.28.3)
+
+Same session. Three small fixes piling up after the user previewed v0.5.28.2 on a real-looking case in the screenshot:
+
+1. **Entry-field highlight.** The "Actual total delivered" cell looked like a passive readout — same flat border as the "Simulated total" row above it. Made it visually obvious that this is where the user types: amber border, soft amber glow (`box-shadow: 0 0 6px rgba(245,158,11,.35)`), amber text color, and a blinking caret pseudo-element when the buffer is empty (`::after { animation: rm-caret-blink 1s steps(2) infinite }`). The unit label flips to amber too. Width bumped from 70 → 90 px and padding from 4 → 6 px so the field feels like a real input, not a number stamp.
+
+2. **Dose / Volume toggle.** Pumps display infused volume (mL); making the user mental-math `750 mL/hr × 10 mg/mL × duration → mg` is friction. New segmented control above the input: `[Dose] [Volume]`. Visible only when the selected drug has a pump enabled (`isPumpEnabled` && `concentration > 0`). Switching modes converts the buffer through canonical mg so the displayed number stays equivalent (`247 mg → 24.7 mL` with 10 mg/mL propofol). The "Simulated total" line updates to the same unit so the comparison stays apples-to-apples. The drug-picker change handler falls back to dose mode if the newly selected drug doesn't have a pump.
+
+   Implementation: added `_inputMode: 'dose' | 'volume'` state, plus `_displayUnit()`, `_mgToDisplay()`, `_displayToMg()`, `_fmtDisplay()` helpers that read from `getPumpSettings(drugId).concentration` (canonical mg/mL across all drugs — propofol 10, fentanyl 0.05, ketamine 0.05). All canonical-mass math (`_computeDelta`, the confirm path's `_deltaMg`) is unchanged — only the display layer is parameterized.
+
+3. **Scenario-language rewording.** The original info-popup copy and modal subtitle read like real clinical use ("during a busy case", "the pump actually delivered"). Reframed throughout: "if you've stepped away from a long simulation… the dose the scenario actually called for", "the simulated pump", "the rate the scenario calls for". Added an explicit disclaimer paragraph: "This is a teaching tool — it is not part of the dosing record for a real patient." The single-bolus example changed from "stopcock push during airway management" (sounds operative) to "a manual bolus the scenario called for that you didn't enter, or one you forgot you'd already entered" (sounds trainee-track).
+
+**Files changed:** `js/version.js`, `js/ui/reconcile-modal.js` (input-mode state, helpers, drug-picker fallback, render integration), `index.html` (toggle markup, highlighted-input CSS + caret animation, info-popup rewording), `CHANGELOG.md`, `DEVELOPMENT.md`. No engine change.
+
 ### Interim — Reconcile default flipped to single-bolus (v0.5.28.2)
 
 Same session. After v0.5.28.1 added the forward-rebuild caveat to spread mode, the user pushed back on the default choice itself: "A missed dose is an easier fix than a systemic pump error and one that requires less explanation and troubleshooting." That argument holds up under scrutiny:
