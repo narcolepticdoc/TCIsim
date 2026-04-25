@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.28.4] — 2026-04-25
+
+Reconcile modal: tone down. Stripped the fancy entry-field styling — it now matches the standard `.keypad-display` look used everywhere else in the app (subtle border, deep background, no glow, no caret animation). Tightened the info popup copy across all five sections; removed the disclaimer paragraph and the explanatory padding.
+
+---
+
 ## [0.5.28.3] — 2026-04-25
 
 Reconcile modal polish — entry-field highlight, volume entry mode, scenario-language rewording.
