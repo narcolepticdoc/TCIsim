@@ -204,7 +204,14 @@ export function createChart(canvas, config = {}) {
         legend: {
           display: true,
           position: 'top',
-          labels: { color: '#9ca3af', font: { size: 10 }, boxWidth: 12, padding: 8 },
+          labels: {
+            color: '#9ca3af', font: { size: 10 }, boxWidth: 12, padding: 8,
+            // Hide the ghost dataset from the legend — it only appears
+            // during a reconciliation, and the purple dashed line is
+            // self-explanatory next to the live Ce. A persistent legend
+            // entry that's unused most of the time just adds clutter.
+            filter: (item) => !/pre-reconcile/i.test(item.text || ''),
+          },
         },
         tooltip: {
           enabled: false,

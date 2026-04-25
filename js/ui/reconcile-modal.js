@@ -1,26 +1,21 @@
 /**
  * reconcile-modal.js — Catch-up dose reconciliation modal.
  *
- * Lets the user bring the simulation back into agreement with reality
- * when they've lost track of pump rate changes or manual boluses during
- * a busy case. The comparison is total case dose (simulation) vs. the
- * pump's cumulative display (plus any non-pump boluses given) — not a
- * windowed gap, since the user typically doesn't know when the drift
- * started.
+ * Two strategies for bringing the sim back into agreement with reality:
  *
- * On confirm, we insert a single correction bolus at a user-specified
- * past time (default = now). The PK system is linear time-invariant:
- * the final state after a few intermediate half-lives depends only on
- * the cumulative dose delivered, not on when within the case it was
- * delivered. Placing the correction in the past lets the sim redistribute
- * most of the correction before the cursor, shrinking the visible
- * forward transient.
+ *   Spread across case (default) — adds the missing dose as a constant
+ *     rate offset across [0, NOW]. Reconstructs sustained rate-logging
+ *     errors exactly (zero Ce error at every horizon). Approximate for
+ *     sharp one-off missed events but converges within ~1 % by NOW+120.
  *
- * The chart marks `[T_insert, T_insert + window]` as an amber-hashed
- * untrustworthy region; window is `3 × t½_intermediate`, computed
- * per-patient from the 3-compartment eigenvalues in js/pk/eigenvalues.js.
- * The drug card pulses amber while the window is active. Both clear
- * automatically once case time passes the window end.
+ *   Single bolus — inserts one correction at a user-chosen past time.
+ *     Exact reconstruction when the user knows the actual event time.
+ *     Case-start default is ≤1.5 % off for any sharp event older than
+ *     90 min.
+ *
+ * See js/sim/simulation.js::applyRateAugmentation for the spread primitive
+ * and the empirical findings in CHANGELOG 0.5.28.0 for the "which mode
+ * when" decision tree.
  */
 
 import { DRUG_DEFS, DRUG_IDS } from '../util/constants.js';
@@ -43,6 +38,11 @@ let _simTotalMg = 0;       // simulated total in canonical mg
 let _deltaMg = 0;          // actual_mg - simulated_mg
 let _timeUnit = 'case';    // 'case' | 'real'
 let _defaultInsertMin = 0; // default insert time (sim-now at open)
+let _mode = 'spread';      // 'spread' | 'single'
+// 5-minute forward band shown after a spread correction. Spread-mode error
+// is theoretically zero past NOW; the stub is purely a visual cue that the
+// correction happened.
+const SPREAD_FORWARD_TAIL_MIN = 5;
 
 // Total-delivered is always shown in the drug's native mass unit.
 // Matches the mapping in js/ui/history.js fmtTotalMass.
@@ -82,6 +82,8 @@ export function init(opts = {}) {
   _wireKeypad();
   _wireTimePicker();
   _wireDrugPicker();
+  _wireModeToggle();
+  _wireInfoPopup();
   _wireActions();
 }
 
@@ -107,16 +109,15 @@ export function open(drugId) {
   }
 
   _actualBuf = '';
-  // Default to case start (T_insert = 0): mathematically optimal for forward
-  // accuracy. The forward error after a correction at T_insert decays as
-  // e^{A·(t − T_insert)}, so the larger the gap between T_insert and t, the
-  // smaller the residual. Placing at 0 maximizes the decay time available
-  // before `now`, leaving the forward curve nearly correct from the cursor on.
-  // The cost is a fully retrospective curve perturbation; users who want
-  // narrative fidelity can drag the picker forward.
+  _mode = 'spread';  // Spread default — best for sustained errors, which are
+                     // the most common failure mode. User can switch to single
+                     // bolus if they remember a specific missed event.
+  // Single-bolus default time = case start. Fast forward convergence and
+  // ≤1.5 % Ce error at NOW for any sharp event older than 90 min.
   _defaultInsertMin = 0;
   _timeUnit = 'case';
   _setInsertTime(_defaultInsertMin);
+  _syncModeUI();
   _renderDrugPicker(active);
   _computeSimTotal();
   _render();
@@ -189,6 +190,50 @@ function _wireDrugPicker() {
     _computeSimTotal();
     row.querySelectorAll('.rm-drug-btn').forEach(b => b.classList.toggle('active', b.dataset.drug === id));
     _render();
+  });
+}
+
+// ---- Keypad ----
+
+// ---- Mode toggle (spread vs single bolus) ----
+
+function _wireModeToggle() {
+  document.querySelectorAll('.rm-mode-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.mode;
+      if (m !== 'spread' && m !== 'single') return;
+      if (m === _mode) return;
+      _mode = m;
+      _syncModeUI();
+      _render();
+    });
+  });
+}
+
+function _syncModeUI() {
+  document.querySelectorAll('.rm-mode-opt').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === _mode);
+  });
+  // Show the time-picker row only for single-bolus mode.
+  const tpRow = document.querySelector('.rm-time-row');
+  if (tpRow) tpRow.style.display = (_mode === 'single') ? '' : 'none';
+}
+
+// ---- Info popup ----
+
+function _wireInfoPopup() {
+  const openBtn = $('rm-info-open');
+  if (openBtn) openBtn.addEventListener('click', () => {
+    const overlay = $('modal-reconcile-info');
+    if (overlay) overlay.classList.add('open');
+  });
+  const closeBtn = $('rm-info-close');
+  if (closeBtn) closeBtn.addEventListener('click', () => {
+    $('modal-reconcile-info')?.classList.remove('open');
+  });
+  const overlay = $('modal-reconcile-info');
+  if (overlay) overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.classList.remove('open');
   });
 }
 
@@ -384,10 +429,7 @@ function _renderSummary() {
     el.textContent = 'No correction needed — totals match.';
     return;
   }
-  const caseMin = _currentCaseMinutes();
   const now = _timer.getElapsedMinutes();
-  const patient = _model.getPatient ? _model.getPatient() : { weight: 70, height: 170, age: 40, male: true };
-  const windowMin = getConvergenceWindow(_drugId, patient);
   const fmtMin = (m) => {
     const h = Math.floor(m / 60);
     const r = Math.round(m % 60);
@@ -395,6 +437,22 @@ function _renderSummary() {
   };
   const sign = _deltaMg > 0 ? '+' : '−';
   const mag = fmtTotalMass(Math.abs(_deltaMg), _drugId);
+
+  if (_mode === 'spread') {
+    const ratePerMin = _deltaMg / Math.max(now, 1e-6);
+    const rateStr = (Math.abs(ratePerMin) >= 0.01 ? ratePerMin.toFixed(3) : ratePerMin.toExponential(2));
+    el.textContent =
+      `A ${sign}${mag} correction will be spread evenly across the case ` +
+      `(${rateStr} mg/min for ${fmtMin(now)}). ` +
+      `Reconstructs sustained rate errors exactly — no convergence wait. ` +
+      `Past curves will shift to reflect the corrected dose history.`;
+    return;
+  }
+
+  // single-bolus mode
+  const caseMin = _currentCaseMinutes();
+  const patient = _model.getPatient ? _model.getPatient() : { weight: 70, height: 170, age: 40, male: true };
+  const windowMin = getConvergenceWindow(_drugId, patient);
   const isPast = caseMin < now - 0.1;
   const isFuture = caseMin > now + 0.1;
   let whenText;
@@ -405,12 +463,13 @@ function _renderSummary() {
   const endRel = endMin > now
     ? `through ET ${fmtMin(endMin)} (${fmtMin(endMin - now)} from now)`
     : 'ending in the past (already converged by now)';
-  let caution = '';
-  if (_deltaMg < 0) {
-    caution = ' Expect a brief Cp dip at the insert point; the region will relax back.';
-  }
+  const caution = (_deltaMg < 0)
+    ? ' Expect a brief Cp dip at the insert point; the region will relax back.'
+    : '';
   el.textContent =
-    `A ${sign}${mag} correction will be added ${whenText}. Chart marked reconciling ${endRel}. Convergence window ~${Math.round(windowMin)} min (3 × intermediate t½).${caution}`;
+    `A ${sign}${mag} correction will be added ${whenText}. ` +
+    `Chart marked reconciling ${endRel}. ` +
+    `Convergence window ~${Math.round(windowMin)} min (3 × intermediate t½).${caution}`;
 }
 
 // ---- Confirm ----
@@ -439,35 +498,59 @@ function _confirm() {
     return;
   }
   const now = _timer.getElapsedMinutes();
-  let insertMin = _currentCaseMinutes();
-  // Clamp to [0, now]. User can't reconcile forward in time.
-  insertMin = Math.max(0, Math.min(now, insertMin));
+  if (!(now > 0)) {
+    if (err) err.textContent = 'Case has not started yet.';
+    return;
+  }
 
   const patient = _model.getPatient ? _model.getPatient() : null;
-  const windowMin = patient ? getConvergenceWindow(_drugId, patient) : 45;
-  const endMin = insertMin + windowMin;
 
   try {
     const sign = _deltaMg > 0 ? '+' : '-';
-    const annot = `Dose reconciliation ${sign}${fmtTotalMass(Math.abs(_deltaMg), _drugId)}`;
-    // Snapshot the pre-correction Ce so the chart can render a ghost
-    // curve for visual comparison. Sample at the same step the chart
-    // uses (10/60 = 1/6 min). Do this BEFORE addBolus mutates state.
+    const magStr = fmtTotalMass(Math.abs(_deltaMg), _drugId);
+
+    // Snapshot the pre-correction Ce so the chart can render a ghost curve
+    // for visual comparison. Done in BOTH modes, BEFORE the mutation, so
+    // the ghost reflects the un-corrected state.
     let ghostPoints = null;
-    if (_model.computeCurve && now > 0) {
+    if (_model.computeCurve) {
       try {
         const raw = _model.computeCurve(_drugId, 0, now, 10 / 60);
         ghostPoints = raw.map(p => ({ time: p.time, Ce: p.Ce }));
-      } catch (e) { /* non-fatal — proceed without ghost */ }
+      } catch (e) { /* non-fatal */ }
     }
-    _model.addBolus(_drugId, insertMin, _deltaMg, annot, { deliveryMode: 'push', source: 'manual' });
+
+    let windowStart, windowEnd, annotMsg;
+
+    if (_mode === 'spread') {
+      // Distribute the correction evenly across [0, NOW] as a constant
+      // rate offset. Reconstructs sustained errors exactly. The chart
+      // shows the entire case as the reconciling region with a small
+      // forward stub (5 min) for visual feedback.
+      const ratePerMin = _deltaMg / now;
+      _model.applyRateAugmentation(_drugId, 0, now, ratePerMin);
+      windowStart = 0;
+      windowEnd = now + SPREAD_FORWARD_TAIL_MIN;
+      annotMsg = `Reconciliation ${sign}${magStr} spread across case (${ratePerMin.toFixed(3)} mg/min × ${now.toFixed(0)} min)`;
+    } else {
+      // Single-bolus path
+      let insertMin = _currentCaseMinutes();
+      insertMin = Math.max(0, Math.min(now, insertMin));
+      const winMin = patient ? getConvergenceWindow(_drugId, patient) : 45;
+      _model.addBolus(_drugId, insertMin, _deltaMg, `Dose reconciliation ${sign}${magStr}`,
+        { deliveryMode: 'push', source: 'manual' });
+      windowStart = insertMin;
+      windowEnd = insertMin + winMin;
+      annotMsg = `Reconciliation ${sign}${magStr} as bolus @ ET ${Math.round(insertMin)}m`;
+    }
+
     if (_model.setReconciliationWindow) {
-      _model.setReconciliationWindow(_drugId, insertMin, endMin);
+      _model.setReconciliationWindow(_drugId, windowStart, windowEnd);
     }
     if (_model.setReconciliationGhost && ghostPoints) {
       _model.setReconciliationGhost(_drugId, { capturedAt: now, points: ghostPoints });
     }
-    _addAnnotation(`Reconciled ${_drugId}: ${annot} @ ET ${Math.round(insertMin)}m`);
+    _addAnnotation(`Reconciled ${_drugId}: ${annotMsg}`);
     _refreshChart();
     close();
   } catch (e) {

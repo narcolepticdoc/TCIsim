@@ -11,6 +11,43 @@
 
 ---
 
+## [0.5.28.0] — 2026-04-25
+
+Reconcile dose v2 — second strategy plus an info popup that explains both. Driven by simulations through the engine that turned up a much better approach for the most common error mode.
+
+### What changed
+
+- **New default strategy: "Spread across case".** Adds the missing dose evenly across `[0, NOW]` as a small constant rate offset. For a sustained rate-logging error (the common "I lost track" failure mode) this reconstructs the truth **exactly** — 0.000 % Ce error at every horizon, no convergence wait. The "single bolus at case start" strategy that v0.5.27.1 shipped left 7–17 % Ce residual at NOW for the same scenario.
+- **"Single bolus" remains as an alternate.** Best when the user remembers a specific missed event — drag the time picker to when it happened for an exact reconstruction. Case-start fallback is ≤1.5 % Ce error at NOW for any sharp event older than 90 min.
+- **Mode toggle in the modal**: a two-button segmented control. Spread is selected by default; flipping to single-bolus reveals the time picker.
+- **Info popup (ⓘ button in the header)**: explains the math (LTI, ke0 filtering), the two modes, when to pick which, and concrete "is it worth correcting?" thresholds for both sustained and bolus errors.
+- **Spread-mode chart annotation**: amber band over `[0, NOW + 5 min]`. The past portion signals "re-baselined"; the small forward stub gives visible feedback. Spread is mathematically exact at NOW, so no long convergence window is shown.
+- **Ghost line dropped from the chart legend.** The purple dashed line only appears during a reconciliation and is self-explanatory next to the live Ce. A persistent legend entry that was unused most of the time just added clutter.
+
+### Math sketch
+
+A sustained `+1 mg/min` deficit over the case is exactly cancelled by adding a sustained `+1 mg/min` to the historical rate events. The `applyRateAugmentation(drug, t0, t1, deltaPerMin)` helper in `js/sim/simulation.js` does this by:
+1. Capturing the active rate at `t0` and `t1` before any mutation.
+2. Bumping every existing rate event in `(t0, t1)` by `deltaPerMin` via `editEvent`.
+3. Inserting an augmented rate event at `t0` (or bumping an existing one).
+4. Inserting a "restore" rate event at `t1` set to the un-augmented baseline.
+
+Pause events are not modified — augmenting during an explicit pump pause would deliver drug while the pump was off. Cases with pauses accept tiny inaccuracy in v1.
+
+Validated end-to-end: a synthetic 180-min case with truth at 5 mg/min and sim at 4 mg/min, reconciled via spread, produces 0.000 % Cp/Ce error at t=30, 60, 90, 120, 180 min. Single-bolus at the same scenario leaves 7–17 % Ce residual depending on `T_insert`.
+
+### Threshold guidance (info popup tables)
+
+**Sustained error**: Ce % error at NOW = cumulative dose % error, regardless of case duration. < 5 % is probably not worth fixing; > 10 % is worth fixing.
+
+**Missed bolus** decays fast. A 50 mg bolus is 81 % Ce off at 5 min after, 17 % off at 30 min, 6 % off at 60 min, < 2 % off after 2 hours.
+
+### Files changed
+
+`js/version.js`, `js/sim/simulation.js` (new `applyRateAugmentation`), `js/ui/reconcile-modal.js` (mode toggle + branched confirm), `js/ui/chart/index.js` (legend filter for ghost dataset), `index.html` (new mode segmented control, info-button in header, full info-popup markup + CSS), `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.27.1] — 2026-04-24
 
 Two refinements to the dose-reconciliation feature shipped in 0.5.27.0, both prompted by a closer math check.

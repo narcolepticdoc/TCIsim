@@ -292,6 +292,82 @@ export function createModel(config = {}) {
   }
 
   /**
+   * Add a constant rate offset of `deltaPerMin` mg/min across `[t0, t1]`
+   * for the drug. Used by the reconcile modal's "spread across case" mode
+   * to reconstruct a sustained rate-logging error exactly — a sustained
+   * deficit is exactly cancelled by a sustained correction.
+   *
+   * How it works:
+   *   1. Capture the active rate at t0 and t1 BEFORE any mutation.
+   *   2. Bump every rate event strictly inside (t0, t1) by `deltaPerMin`.
+   *   3. If a rate event already exists at exactly t0, bump it. Otherwise
+   *      insert a new rate event at t0 = (originalRateAtT0 + deltaPerMin).
+   *   4. If no event exists at t1, insert a restore event setting rate back
+   *      to the un-augmented value. If an event already exists at t1, trust
+   *      it (user's forward plan takes precedence).
+   *
+   * Pause events are not modified — augmenting during an explicit pump
+   * pause would deliver drug while the pump was off. Minor inaccuracy in
+   * cases with pauses is accepted in v1.
+   *
+   * @param {string} drugId
+   * @param {number} t0
+   * @param {number} t1
+   * @param {number} deltaPerMin - rate offset to apply (can be negative)
+   * @returns {Object[]} the inserted endpoint events ({start?, restore?})
+   */
+  function applyRateAugmentation(drugId, t0, t1, deltaPerMin) {
+    if (!(t1 > t0) || !Number.isFinite(deltaPerMin) || deltaPerMin === 0) {
+      return { start: null, restore: null };
+    }
+
+    // Capture baselines BEFORE any mutation
+    const originalRateAtT0 = eventList.getRateAtTime(drugId, t0);
+    const originalRateAtT1 = eventList.getRateAtTime(drugId, t1);
+
+    // Bump rate events strictly inside the interval. Skip pauses.
+    const all = eventList.getByDrug(drugId);
+    const toBump = all.filter(e =>
+      e.type === 'rate' && e.time > t0 + 1e-9 && e.time < t1 - 1e-9,
+    );
+    for (const evt of toBump) {
+      eventList.editEvent(evt.id, { value: evt.value + deltaPerMin });
+    }
+
+    // Start event at t0
+    let startEvt = null;
+    const existingAtT0 = all.filter(e =>
+      e.type === 'rate' && Math.abs(e.time - t0) < 0.001,
+    );
+    if (existingAtT0.length > 0) {
+      for (const evt of existingAtT0) {
+        eventList.editEvent(evt.id, { value: evt.value + deltaPerMin });
+      }
+    } else {
+      startEvt = eventList.addRate(
+        drugId, t0, originalRateAtT0 + deltaPerMin,
+        `Reconcile: +${deltaPerMin.toFixed(3)} mg/min across case`,
+        { source: 'reconcile' },
+      );
+    }
+
+    // Restore event at t1 (only if nothing is already scheduled there)
+    let restoreEvt = null;
+    const existingAtT1 = eventList.getByDrug(drugId).filter(e =>
+      e.type === 'rate' && Math.abs(e.time - t1) < 0.001,
+    );
+    if (existingAtT1.length === 0) {
+      restoreEvt = eventList.addRate(
+        drugId, t1, originalRateAtT1,
+        'Reconcile: restore baseline',
+        { source: 'reconcile' },
+      );
+    }
+
+    return { start: startEvt, restore: restoreEvt };
+  }
+
+  /**
    * Delete a single event.
    */
   function deleteEvent(id) {
@@ -588,6 +664,7 @@ export function createModel(config = {}) {
     addRate, addBolus, addPause, planTCI,
     editEvent, deleteEvent, deleteEventAndAfter,
     clearAfter, reset, refreshDrugConfig,
+    applyRateAugmentation,
 
     // Queries
     getConcentrationsAt, computeCurve, predictBIS,
