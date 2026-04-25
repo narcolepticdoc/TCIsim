@@ -11,6 +11,17 @@
 
 ---
 
+## [0.5.28.1] — 2026-04-25
+
+Reconcile spread-mode disclosure tweak. The spread reconciliation only fixes the past — it inserts an augmented rate across `[0, NOW]` and a baseline-restore at NOW. Forward of NOW the sim runs at the un-augmented set rate, so if the underlying rate mismatch is still active (pump still running faster than the sim's set rate), the drift rebuilds at the same per-minute rate. Surfaced this in two places:
+
+- **Modal summary** (spread mode): explicit note that forward of NOW the sim returns to the un-augmented rate, and that the user should adjust the set rate to match reality.
+- **Info popup** ("The two modes" → spread): full paragraph explaining the same point with guidance to use Change Rate after confirming.
+
+No engine or behavior change — this is purely a clarification fix. Behavior change (e.g., "extend correction forward" checkbox that omits the restore) deferred to a later version pending real-world feedback.
+
+---
+
 ## [0.5.28.0] — 2026-04-25
 
 Reconcile dose v2 — second strategy plus an info popup that explains both. Driven by simulations through the engine that turned up a much better approach for the most common error mode.

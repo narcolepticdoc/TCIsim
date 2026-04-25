@@ -441,11 +441,15 @@ function _renderSummary() {
   if (_mode === 'spread') {
     const ratePerMin = _deltaMg / Math.max(now, 1e-6);
     const rateStr = (Math.abs(ratePerMin) >= 0.01 ? ratePerMin.toFixed(3) : ratePerMin.toExponential(2));
+    const direction = _deltaMg > 0 ? 'higher' : 'lower';
     el.textContent =
       `A ${sign}${mag} correction will be spread evenly across the case ` +
       `(${rateStr} mg/min for ${fmtMin(now)}). ` +
       `Reconstructs sustained rate errors exactly — no convergence wait. ` +
-      `Past curves will shift to reflect the corrected dose history.`;
+      `Past curves will shift to reflect the corrected dose history. ` +
+      `Note: forward of NOW the sim returns to the un-augmented rate. ` +
+      `If the actual pump is still running ${direction} than the sim, ` +
+      `the drift will rebuild — adjust your set rate to match reality.`;
     return;
   }
 

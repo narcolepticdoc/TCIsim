@@ -4,6 +4,18 @@
 
 ## Session History
 
+### Interim — Reconcile spread-mode forward-rebuild disclosure (v0.5.28.1)
+
+Same session as v0.5.28.0. The user, after seeing the result on a real case (3:30:15 ET, 150 mcg/kg/min infusion, ghost line clearly diverging from the new Ce above NOW), pointed out that the spread reconciliation only fixes the past. The restore event at t=NOW puts the rate back to the un-augmented baseline, so forward of NOW the sim runs at whatever set rate the user had configured before. If the underlying mismatch is still active (e.g., the pump has been running 1 mg/min faster than the sim's set rate, and is still doing so), the drift will rebuild at the same per-minute rate.
+
+Two options considered:
+1. **Documentation only**: surface the caveat in the modal summary and the info popup, with guidance to use Change Rate after confirming.
+2. **Behavior change**: add an "extend correction forward" checkbox that omits the restore event, so the augmented rate continues indefinitely.
+
+Going with #1 for v0.5.28.1. The honest answer is "the sim doesn't know whether the underlying mismatch is still happening" — only the user does. Surfacing the caveat puts the responsibility for forward correction in the right place. Option #2 is straightforward to add later if real-world feedback shows it's worth the extra UI complexity. The expected workflow becomes: reconcile (spread) → notice the new Ce trajectory → adjust the set rate to match what the pump is actually doing.
+
+**Files changed:** `js/version.js`, `js/ui/reconcile-modal.js` (summary text), `index.html` (info popup paragraph), `CHANGELOG.md`, `DEVELOPMENT.md`. No engine change.
+
 ### Interim — Reconcile v3: spread-across-case mode + info popup (v0.5.28.0)
 
 Same session as v0.5.27.x. The user, after experimenting with the single-bolus reconciliation, observed empirically that "the Ce curve is relatively resilient as long as the total dose is correct." That prompted a closer look at the math, which surfaced two corrections to my earlier claims and one new design opportunity:
