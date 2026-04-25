@@ -109,9 +109,11 @@ export function open(drugId) {
   }
 
   _actualBuf = '';
-  _mode = 'spread';  // Spread default — best for sustained errors, which are
-                     // the most common failure mode. User can switch to single
-                     // bolus if they remember a specific missed event.
+  _mode = 'single';  // Single-bolus default — the common clinical failure is a
+                     // missed sharp event (stopcock push, etc.), which has a
+                     // simpler mental model and no forward-rebuild caveat.
+                     // Spread mode is the right tool for sustained rate drift,
+                     // but that's the rarer case.
   // Single-bolus default time = case start. Fast forward convergence and
   // ≤1.5 % Ce error at NOW for any sharp event older than 90 min.
   _defaultInsertMin = 0;

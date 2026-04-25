@@ -11,6 +11,19 @@
 
 ---
 
+## [0.5.28.2] — 2026-04-25
+
+Reconcile default flipped back to **single bolus**. The clinical reality is that the common failure mode is a missed sharp event (stopcock push, manual bolus that didn't get logged), not sustained rate drift. Sustained drift requires either repeated logging failures or a pump-vs-display calibration mismatch — both rarer than a missed push.
+
+Single-bolus is also the simpler tool: self-contained, no forward-rebuild caveat, no "now also adjust your set rate" follow-up. Spread mode stays available as the right tool for the user who knows they have a sustained rate mismatch.
+
+- Mode segmented control: "Single bolus" is now the first/active button on open. Time picker visible by default.
+- Info popup ("The two modes" section): single-bolus paragraph is first and labelled (default). Spread paragraph follows with the forward-rebuild caveat.
+
+No engine change, no behavior change for either mode in isolation — just defaults and ordering.
+
+---
+
 ## [0.5.28.1] — 2026-04-25
 
 Reconcile spread-mode disclosure tweak. The spread reconciliation only fixes the past — it inserts an augmented rate across `[0, NOW]` and a baseline-restore at NOW. Forward of NOW the sim runs at the un-augmented set rate, so if the underlying rate mismatch is still active (pump still running faster than the sim's set rate), the drift rebuilds at the same per-minute rate. Surfaced this in two places:
