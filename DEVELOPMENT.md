@@ -4,6 +4,47 @@
 
 ## Session History
 
+### Interim — Reconcile v3: spread-across-case mode + info popup (v0.5.28.0)
+
+Same session as v0.5.27.x. The user, after experimenting with the single-bolus reconciliation, observed empirically that "the Ce curve is relatively resilient as long as the total dose is correct." That prompted a closer look at the math, which surfaced two corrections to my earlier claims and one new design opportunity:
+
+1. **Earlier claim "T_insert = 0 is mathematically optimal for forward accuracy"** was true for sharp events at induction, false for sustained errors. For a sustained rate mismatch, no single-bolus T_insert reconstructs truth at NOW exactly; the optimum is somewhere in the middle of the case (centroid of the missed-dose distribution, shifted later by ke0 lag). Tabled the actual numbers for a 180-min case at 4 vs 5 mg/min with a +180 mg correction:
+
+   ```
+   T_insert    Ce error at NOW
+   0 min       -16.79 %
+   60 min      -15.95 %
+   90 min      -14.68 %
+   120 min     -10.54 %
+   150 min      +7.22 %  ← single-bolus sweet spot
+   180 min     -18.31 %
+   ```
+
+   None of these are exact. So the single-bolus approach is fundamentally an approximation for sustained errors.
+
+2. **Spreading the correction across the case is exact** for sustained errors. A `+1 mg/min` rate offset over `[0, 180]` adds exactly `+180 mg` to the cumulative dose AND replicates the truth's instantaneous-input waveform. Engine confirms 0.000 % Cp/Ce error at every horizon:
+
+   ```
+   Inserted events: { restore: { t: 180, rate: 4, src: 'reconcile' } }
+   t=30  truth Ce=1.4640  sim Ce=1.4640  ΔCe=0.000%
+   t=60  truth Ce=1.7372  sim Ce=1.7372  ΔCe=0.000%
+   t=180 truth Ce=2.0571  sim Ce=2.0571  ΔCe=0.000%
+   ```
+
+3. **Sharp events handled by spread** are ~10 % Ce off at NOW (smearing a 100 mg bolus across 3 hours produces a ramp instead of an impulse) but converge to <1 % within 2 hours — acceptable degradation when the user picks the wrong mode. Sharp events handled by single-bolus at the actual event time → exact reconstruction; at any earlier time → ≤1.5 % Ce off (the earlier-bolus case has had more time to redistribute and looks like it was always there).
+
+So the right tool depends on what the user thinks happened. v0.5.28 ships the mode toggle plus an info popup that explains the trade-off and surfaces concrete "worth correcting?" thresholds derived from the simulation runs.
+
+**Spread-mode primitive: `applyRateAugmentation(drugId, t0, t1, deltaPerMin)`** on the simulation facade. Captures active rate at the endpoints before any mutation, then walks every rate event strictly inside the interval and bumps each by `deltaPerMin` via `editEvent`. Inserts an augmented start at `t0` (or bumps an existing one) and a baseline-restore at `t1`. Pause events are skipped — augmenting during a real pump pause would deliver drug while the pump was off. Tiny inaccuracy in cases with pauses is accepted; revisit in v2 if it matters.
+
+**Why spread is the new default.** Sustained errors (rate changes that lasted) are the dominant failure mode. Single missed boluses are usually noticed at the moment ("did I push that?") or remembered. So the strategy that reconstructs sustained errors *exactly* and degrades gracefully on sharp ones beats the strategy that's mediocre on the common case and exact only on the uncommon one. Two clicks to switch to single-bolus mode if the user does remember a specific event.
+
+**Info popup contents.** New `#modal-reconcile-info` overlay with five sections: what this is for, why it works (LTI + ke0 lag), the two modes, when it's worth correcting (with the threshold tables — sustained errors are 1:1 dose %→Ce %, bolus errors fade fast), and what the band/ghost line mean. Triggered by an `ⓘ` button in the reconcile-modal header. Wider modal-box (`max-width: 560px`) with scrollable body for small viewports.
+
+**Ghost-line legend filter.** The purple dashed line is only present during a reconciliation. A persistent legend entry "Ce (pre-reconcile)" was reading as confusing clutter when it was unused, so added a `legend.labels.filter` that drops any dataset whose label contains "pre-reconcile". The line itself still draws when present.
+
+**Files changed:** `js/version.js`, `js/sim/simulation.js` (`applyRateAugmentation`), `js/ui/reconcile-modal.js` (mode state + segmented control + branched confirm + info-popup wiring), `js/ui/chart/index.js` (legend filter), `index.html` (mode UI, info-popup markup + CSS), `CHANGELOG.md`.
+
 ### Interim — Dose reconciliation v2: case-start default + ghost Ce curve (v0.5.27.1)
 
 After 0.5.27.0 shipped, the user pushed back with a sharper version of the math question: "aside from perturbing historical curves, is there any benefit to placing the bolus at a particular time as opposed to just dumping it at time 0?" The honest answer was no — the forward error after a correction at `T_insert` is `e^{A·(t − T_insert)} · B_vec`, so for any `t > now`, smaller `(t − T_insert)` strictly means bigger forward residual. The original "place at now" default is the *worst* choice for forward accuracy and the *best* for past fidelity. Concrete table for propofol with case duration 60 min: `T_insert = 0` leaves only ~6.7 % intermediate-mode residual at `now`, while `T_insert = now` leaves the full 100 %. Switched the default.

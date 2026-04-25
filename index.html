@@ -833,6 +833,36 @@
     .rm-summary{font-size:11.5px;color:var(--text-secondary);line-height:1.45;margin:8px 0;padding:8px 10px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border-subtle);min-height:18px}
     .rm-summary:empty{display:none}
     .rm-error{font-size:11px;color:var(--red);min-height:14px;margin-bottom:6px;text-align:center}
+    /* Modal header with info button */
+    .rm-header{display:flex;align-items:center;justify-content:center;gap:8px;position:relative}
+    .rm-header h3{margin-bottom:6px}
+    .rm-info-btn{position:absolute;right:0;top:-2px;background:transparent;border:1px solid var(--border-subtle);border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text-muted);cursor:pointer;line-height:1;padding:0}
+    .rm-info-btn:hover{color:var(--amber);border-color:var(--amber)}
+    /* Mode segmented control */
+    .rm-mode-row{display:flex;gap:6px;margin-bottom:8px}
+    .rm-mode-opt{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-secondary);font-family:var(--font-display);cursor:pointer;text-align:left;transition:all .12s}
+    .rm-mode-opt:hover{background:var(--bg-hover)}
+    .rm-mode-opt.active{background:var(--bg-card);border-color:var(--amber);color:var(--text-primary);box-shadow:inset 0 0 0 1px var(--amber)}
+    .rm-mode-opt .rm-mode-title{font-size:12px;font-weight:600}
+    .rm-mode-opt .rm-mode-sub{font-size:10px;color:var(--text-muted);font-weight:400}
+    .rm-mode-opt.active .rm-mode-sub{color:var(--text-secondary)}
+    /* Reconcile info popup */
+    .modal-reconcile-info{max-width:560px;max-height:84vh;display:flex;flex-direction:column}
+    .rm-info-header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border-subtle);padding-bottom:8px;margin-bottom:10px}
+    .rm-info-header h3{margin:0}
+    .rm-info-close{background:transparent;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;line-height:1;padding:0 6px}
+    .rm-info-close:hover{color:var(--text-primary)}
+    .rm-info-body{overflow-y:auto;font-size:12px;color:var(--text-secondary);line-height:1.5;padding-right:4px}
+    .rm-info-body h4{font-size:12px;font-weight:600;color:var(--text-primary);margin:12px 0 4px;text-transform:uppercase;letter-spacing:.04em}
+    .rm-info-body h4:first-child{margin-top:0}
+    .rm-info-body p{margin:0 0 6px;line-height:1.5}
+    .rm-info-body p strong{color:var(--text-primary)}
+    .rm-info-body p em{color:var(--amber);font-style:normal;font-weight:500}
+    .rm-info-table{width:100%;border-collapse:collapse;margin:6px 0 8px;font-size:11px;font-family:var(--font-mono)}
+    .rm-info-table th,.rm-info-table td{padding:4px 8px;text-align:left;border-bottom:1px solid var(--border-subtle)}
+    .rm-info-table th{color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;font-size:10px}
+    .rm-info-table td{color:var(--text-secondary)}
+    .rm-info-table td:first-child{color:var(--text-primary);font-weight:500}
 
     /* TCI delay option pills */
     .tci-delay-options{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:12px 0}
@@ -1387,7 +1417,10 @@
   <!-- =========== RECONCILE DOSE =========== -->
   <div class="modal-overlay" id="modal-reconcile">
     <div class="modal-box modal-reconcile">
-      <h3>Reconcile Dose</h3>
+      <div class="rm-header">
+        <h3>Reconcile Dose</h3>
+        <button class="rm-info-btn" id="rm-info-open" title="What is this?" type="button">ⓘ</button>
+      </div>
       <p class="modal-subtitle">Match the simulation's running total to what the pump and any manual boluses have actually delivered.</p>
 
       <div class="rm-section rm-drug-picker" id="rm-drug-picker" style="display:none">
@@ -1405,12 +1438,22 @@
           </div>
         </div>
         <div class="rm-helper">pump display + any non-pump boluses</div>
-        <div class="rm-kv rm-kv-delta"><span class="rm-label">Correction bolus</span><span class="rm-value rm-value-delta" id="rm-delta">—</span></div>
+        <div class="rm-kv rm-kv-delta"><span class="rm-label">Correction</span><span class="rm-value rm-value-delta" id="rm-delta">—</span></div>
       </div>
 
       <div class="rm-section">
-        <div class="rm-inline-row">
-          <span class="rm-label">Insert correction at</span>
+        <div class="rm-mode-row">
+          <button class="rm-mode-opt active" data-mode="spread" type="button">
+            <span class="rm-mode-title">Spread across case</span>
+            <span class="rm-mode-sub">best for sustained drift</span>
+          </button>
+          <button class="rm-mode-opt" data-mode="single" type="button">
+            <span class="rm-mode-title">Single bolus</span>
+            <span class="rm-mode-sub">best for a known missed event</span>
+          </button>
+        </div>
+        <div class="rm-inline-row rm-time-row" style="display:none">
+          <span class="rm-label">Insert at</span>
           <select class="ee-select" id="rm-hours"></select>
           <span class="ee-time-sep">:</span>
           <select class="ee-select" id="rm-minutes"></select>
@@ -1420,7 +1463,6 @@
           </div>
           <span class="tp-conversion" id="rm-time-conversion"></span>
         </div>
-        <div class="rm-helper">defaults to case start (most accurate forward curve). Drag forward to a guess of when the drift happened if you'd rather preserve historical fidelity.</div>
       </div>
 
       <!-- Keypad for entering actual total -->
@@ -1439,6 +1481,57 @@
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="rm-cancel">Cancel</button>
         <button class="modal-btn-confirm-bolus" id="rm-confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========== RECONCILE INFO POPUP =========== -->
+  <div class="modal-overlay" id="modal-reconcile-info">
+    <div class="modal-box modal-reconcile-info">
+      <div class="rm-info-header">
+        <h3>About Dose Reconciliation</h3>
+        <button class="rm-info-close" id="rm-info-close" type="button" title="Close">×</button>
+      </div>
+      <div class="rm-info-body">
+        <h4>What this is for</h4>
+        <p>When you've lost track of pump rate changes or manual boluses during a busy case, the simulation's running total drifts from what the pump actually delivered. This dialog brings the sim back into sync so you can keep using it instead of starting over.</p>
+
+        <h4>Why it works</h4>
+        <p>The PK model is linear time-invariant. Two event histories with the same cumulative input produce the same compartment state once redistribution settles — typically 30–60 min for propofol. The effect-site (Ce) is filtered through the ke0 first-order lag, which smooths the transient on its way from blood to brain, so Ce is far more resilient than Cp to the exact timing of corrections.</p>
+
+        <h4>The two modes</h4>
+        <p><strong>Spread across case</strong> (default). Adds the missing dose evenly across the entire case as a small constant rate offset. <em>Best when you've been off-rate the whole time</em> — if the pump has been running 1 mg/min faster than the sim thought, this reconstructs truth exactly. No transient, no convergence wait. Past curves shift slightly to reflect the corrected dose history.</p>
+        <p><strong>Single bolus</strong>. Adds the missing dose as one correction at a chosen time. <em>Best when you remember a specific missed event</em>. Drag the picker to the time you think it happened for an exact match. If you're unsure, "case start" is a safe fallback (within ~1.5 % Ce error at NOW for events older than 90 min).</p>
+
+        <h4>When it's worth correcting</h4>
+        <p><strong>Sustained rate error</strong>: Ce % error equals dose % error, regardless of case duration. Doesn't decay.</p>
+        <table class="rm-info-table">
+          <thead><tr><th>Cumulative dose error</th><th>Ce error at NOW</th></tr></thead>
+          <tbody>
+            <tr><td>&lt; 5 %</td><td>&lt; 5 % — probably not worth fixing</td></tr>
+            <tr><td>5–10 %</td><td>5–10 % — judgment call</td></tr>
+            <tr><td>&gt; 10 %</td><td>&gt; 10 % — worth fixing</td></tr>
+          </tbody>
+        </table>
+        <p><strong>Missed bolus</strong>: error fades fast. Even substantial misses become small Ce errors after about an hour.</p>
+        <table class="rm-info-table">
+          <thead><tr><th>Bolus as % of total dose</th><th>30 min ago</th><th>60 min ago</th><th>120 min ago</th></tr></thead>
+          <tbody>
+            <tr><td>5 %</td><td>7 %</td><td>2 %</td><td>1 %</td></tr>
+            <tr><td>10 %</td><td>13 %</td><td>5 %</td><td>2 %</td></tr>
+            <tr><td>20 %</td><td>25 %</td><td>11 %</td><td>5 %</td></tr>
+            <tr><td>50 %</td><td>58 %</td><td>32 %</td><td>17 %</td></tr>
+          </tbody>
+        </table>
+
+        <h4>The reconciling band</h4>
+        <p>The chart marks the affected interval with an amber-hashed band. Spread mode shades the entire case (re-baselined) with a small forward stub. Single-bolus mode shades [insert time, insert time + window] where window is 3 × intermediate t½ (~46 min for propofol). The drug card pulses amber while the band is active. Both clear automatically when the case time passes the band's end.</p>
+
+        <h4>The purple ghost line</h4>
+        <p>Right after you confirm, a purple dashed line appears showing what the sim's Ce was about to predict <em>before</em> the correction. Compare it to the new (blue) curve to verify the correction did what you expected. The ghost clears when the band clears.</p>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="rm-info-close-btn" onclick="document.getElementById('modal-reconcile-info').classList.remove('open')">Close</button>
       </div>
     </div>
   </div>
