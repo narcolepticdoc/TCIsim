@@ -11,6 +11,66 @@
 
 ---
 
+## [0.5.27.1] — 2026-04-24
+
+Two refinements to the dose-reconciliation feature shipped in 0.5.27.0, both prompted by a closer math check.
+
+### Default insert time → case start (was: now)
+
+Forward-curve accuracy is what users actually care about, and it's strictly maximized when `T_insert = 0`. The forward error after a correction at `T_insert` decays as `exp(A·(t − T_insert))`, so pushing `T_insert` further into the past gives the perturbation more time to redistribute before the cursor reaches it. With the case-start default and the standard propofol patient, by `now = 60 min` the intermediate-mode error is already down to ~6.7 % (vs. 100 % when correcting at `now`).
+
+The cost is full retrospective curve perturbation — the historical Ce trace shifts to reflect the correction. Users who care about historical fidelity (e.g. for retrospective BIS analysis) can drag the picker forward.
+
+### Ghost Ce curve
+
+Added a purple dashed line that captures the simulation's Ce up to the moment of reconciliation, drawn alongside the corrected curve. Lets the user compare what the sim was about to predict against what the corrected sim now predicts — a troubleshooting / sanity-check aid.
+
+The ghost runs from `t = 0` to `t = capturedAt` (the `now` when reconciliation was applied). Beyond `capturedAt` the corrected (live) curve takes over. Lifecycle is tied to the reconciliation window: when the window auto-clears (case time passes `endMin`), the ghost clears with it. Persisted across session save/restore.
+
+### Files changed
+
+`js/version.js`, `js/util/constants.js` (`COLORS.ghost`), `js/sim/simulation.js` (`setReconciliationGhost` / `getActiveReconciliationGhost` / `getAllReconciliationGhosts`), `js/ui/chart/{state,index}.js` (ghost dataset + idempotent `setGhostCurve`), `js/app/chart-bridge.js`, `js/ui/reconcile-modal.js`, `js/app/session.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
+## [0.5.27.0] — 2026-04-24
+
+**Dose reconciliation.** A new feature for the common case where a busy anesthetist loses track of pump rate changes or manual boluses during a case. The simulation's running total drifts from what was actually given; without a way to recover, users had to start over. With this feature they can enter the real total dose delivered (pump display + any non-pump boluses) and the sim inserts a single correction bolus that restores AUC. The PK system is linear time-invariant, so any two event histories with the same cumulative dose converge to the same state after a few intermediate half-lives.
+
+### Shipped
+
+- **New "Reconcile" button** in the history panel bottom bar, alongside `+ Add Event` and `Edit`.
+- **Reconcile modal** (`js/ui/reconcile-modal.js`) shows the drug's simulated total vs. an "Actual total delivered" input. Live-computes the correction bolus (sign-aware — negative deltas are allowed). Lets the user pick where to insert the correction (defaults to `now`, but accepts any past time in either ET or RT). Multi-drug picker when multiple drugs have events.
+- **Per-patient convergence window** from the PK A-matrix eigenvalues (`js/pk/eigenvalues.js`). Window = 3 × t½_intermediate, clamped to [15, 120] min. Computes to ~46 min for propofol, ~52 min for fentanyl, ~15 min for ketamine on a standard patient.
+- **Chart "reconciling" region** — amber-hashed band spanning `[T_insert, T_insert + window]` on the time axis. Straddles the cursor when `T_insert` is recent; sits entirely in the past when `T_insert` is far back (model has already converged). Idempotent setter on the chart; bridge pushes every frame so the state is self-healing on chart recreation (CLAUDE.md invariant).
+- **Drug card amber pulse** (`.reconciling` class) while the window covers `t`. Auto-clears once case time passes `endMin`.
+- **Session persistence** for active reconciliation windows in case save/restore.
+- **New test suite** (`tests/test-reconcile.js`, 8 tests) covers the extracted `getCumulativeDose`, negative-bolus replay behaviour (net-zero input → Cp decays to zero over 2 h), and the intermediate-eigenvalue half-life math. 493 tests total, all passing.
+
+### Math sketch
+
+The correction bolus restores mass-conservation. At the moment of reconciliation:
+
+```
+simulated total mg  =  ∫₀ⁿᵒʷ (bolus + infusion) as-simulated
+actual total mg     =  pump cumulative display + manual push doses
+delta_mg            =  actual − simulated         (may be negative)
+```
+
+We insert a single bolus of `delta_mg` at `T_insert`. Because the 3-compartment model is LTI, any two event histories with the same cumulative input converge to the same state exponentially fast. The dominant non-decayed error after 3 × t½_intermediate is ~12.5 % — small enough that the forward curve is clinically usable by `T_insert + window`. Eigenvalues come from the cubic characteristic polynomial of the A matrix built from `k10/k12/k13/k21/k31`, solved via the same closed-form route SimTIVA uses (per-minute conversion in our implementation; see `js/pk/eigenvalues.js`).
+
+Placing the bolus at a user-chosen past time keeps most of the transient in history. The math converges regardless of where `T_insert` sits inside the case; what changes is how much of the "correction spike" is already water under the bridge by `now`.
+
+### Files added
+
+`js/ui/reconcile-modal.js`, `js/pk/eigenvalues.js`, `tests/test-reconcile.js`.
+
+### Files changed
+
+`js/version.js`, `js/sim/events/query.js` (`getCumulativeDose` extracted from history.js), `js/ui/history.js`, `js/sim/simulation.js` (`setReconciliationWindow` / `getActiveReconciliationWindow` / `getAllReconciliationWindows`), `js/ui/chart/{state,annotations,index}.js` (`setReconciliationRegion`), `js/app/chart-bridge.js`, `js/ui/drug-panel/index.js`, `js/app/session.js`, `js/app.js`, `index.html`, `CHANGELOG.md`, `DEVELOPMENT.md`.
+
+---
+
 ## [0.5.26.4] — 2026-04-24
 
 Always stack the Total delivered values vertically (mass over volume) instead of relying on browser wrapping. On an iPad Pro the strip had enough horizontal room to keep `554.5 mg · 55.4 mL` on one line while the `TOTAL DELIVERED` label wrapped onto two — asymmetric and harder to scan. Switched the value container to a two-row flex column, right-aligned, which makes the strip read symmetrically regardless of viewport width. Dropped the `·` separator (no longer meaningful once the values are stacked).

@@ -258,6 +258,38 @@ export function createChartBridge({
         chart.setPlateauRegion(null);
       }
 
+      // Reconciliation region — amber band spanning [insertMin, endMin] on
+      // the time axis, marking an interval whose Cp/Ce values should not be
+      // trusted while the model rebalances from a retrospective correction.
+      // Reads from simulation state directly; setter is idempotent so we
+      // call unconditionally every frame (self-healing on chart recreation).
+      if (model && chart.setReconciliationRegion) {
+        const rw = model.getActiveReconciliationWindow(selectedDrug, t);
+        if (rw) {
+          chart.setReconciliationRegion({ xMin: rw.insertMin, xMax: rw.endMin });
+        } else {
+          chart.setReconciliationRegion(null);
+        }
+      }
+
+      // Ghost Ce curve — purple dashed snapshot of what the simulation Ce
+      // looked like immediately BEFORE the most recent reconciliation
+      // correction was applied. Only show for the currently selected drug;
+      // drug switches naturally clear it because the other drug's ghost
+      // never gets pushed. Y-scaled to match the live Ce dataset.
+      if (model && chart.setGhostCurve) {
+        const ghost = model.getActiveReconciliationGhost(selectedDrug, t);
+        const { yScale: ys } = getConfig(selectedDrug);
+        if (ghost && ghost.points && ghost.points.length > 0) {
+          const scaled = ys === 1
+            ? ghost.points
+            : ghost.points.map(p => ({ time: p.time, Ce: p.Ce * ys }));
+          chart.setGhostCurve(scaled);
+        } else {
+          chart.setGhostCurve(null);
+        }
+      }
+
       // Future-event markers — only when the overlay is enabled.
       // Gated to TCI mode (manual mode rarely has pre-scheduled future events).
       if (chart.eventAnnotationsEnabled) {

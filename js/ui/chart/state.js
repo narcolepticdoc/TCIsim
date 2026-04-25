@@ -16,6 +16,11 @@ export function createState(cfg) {
     ceBandTolerance: null,
     effectBands: [],
     plateauRegion: null,
+    reconciliationRegion: null,
+    // Signature string of the last ghost-curve payload pushed to the chart.
+    // Used by setGhostCurve to short-circuit when nothing has changed,
+    // since the bridge calls it every frame.
+    ghostCurveSig: '',
     steadyStateCe: null,
     exitCe: null,
     viewMin: 0,

@@ -116,6 +116,26 @@ export function createChart(canvas, config = {}) {
     });
   }
 
+  // Ghost Ce dataset — purple dashed line showing the pre-correction Ce
+  // up to the moment of reconciliation. Empty by default; the bridge
+  // pushes data only while a reconciliation window is active for the
+  // currently-selected drug. Hidden via legend toggle isn't desired —
+  // we control visibility by clearing/setting `data`.
+  const ghostDsIdx = datasets.length;
+  datasets.push({
+    label: 'Ce (pre-reconcile)',
+    data: [],
+    borderColor: COLORS.ghost,
+    backgroundColor: COLORS.ghost + '00',
+    borderWidth: 1.5,
+    borderDash: [5, 4],
+    pointRadius: 0,
+    tension: 0.1,
+    fill: false,
+    spanGaps: false,
+    order: 0, // draw on top of the live Ce so the comparison is legible
+  });
+
   // Create chart instance
   const chart = new Chart(canvas, {
     type: 'line',
@@ -303,6 +323,10 @@ export function createChart(canvas, config = {}) {
 
     s.rateValues = curveData.map(p => p.rate);
 
+    // Ghost Ce dataset is managed independently via setGhostCurve.
+    // Re-applying live data here (e.g. on every refresh) must not
+    // touch the ghost slot, which is what the index above guarantees.
+
     if (s.yMaxManual === null && curveData.length > 0) {
       const maxCp = Math.max(...curveData.map(p => p.Cp));
       const maxCe = Math.max(...curveData.map(p => p.Ce));
@@ -353,6 +377,44 @@ export function createChart(canvas, config = {}) {
 
   function setPlateauRegion(region) {
     s.plateauRegion = region;
+    chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
+  /**
+   * Update the pre-correction Ce ghost-curve dataset.
+   * Pass `points: [{ time, Ce }, ...]` (already y-scaled to the chart's
+   * units), or null to clear. Idempotent — bridge calls every frame
+   * (CLAUDE.md invariant). Comparison is by signature so we don't
+   * rebuild the dataset every tick.
+   */
+  function setGhostCurve(points) {
+    const sig = points && points.length > 0
+      ? `${points.length}|${points[0].time}|${points[points.length - 1].time}|${points[points.length - 1].Ce.toFixed(4)}`
+      : '';
+    if (sig === s.ghostCurveSig) return;
+    s.ghostCurveSig = sig;
+    const ds = datasets[ghostDsIdx];
+    ds.data = (points && points.length > 0)
+      ? points.map(p => ({ x: p.time, y: p.Ce }))
+      : [];
+    chart.update('none');
+  }
+
+  /**
+   * Show/hide the dose-reconciliation untrustworthy region.
+   * Pass `{ xMin, xMax }` to show, or null to clear. Idempotent — safe to
+   * call every frame from the bridge (CLAUDE.md invariant).
+   */
+  function setReconciliationRegion(region) {
+    const cur = s.reconciliationRegion;
+    if (!region) {
+      if (!cur) return;
+      s.reconciliationRegion = null;
+    } else {
+      if (cur && cur.xMin === region.xMin && cur.xMax === region.xMax) return;
+      s.reconciliationRegion = { xMin: region.xMin, xMax: region.xMax };
+    }
     chart.options.plugins.annotation.annotations = buildAnnotations(s);
     chart.update('none');
   }
@@ -568,6 +630,8 @@ export function createChart(canvas, config = {}) {
     setCeToleranceBand,
     setThresholdLine,
     setPlateauRegion,
+    setReconciliationRegion,
+    setGhostCurve,
     setSteadyStateLine,
     setExitLine,
     setViewRange,

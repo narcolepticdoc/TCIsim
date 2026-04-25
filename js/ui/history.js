@@ -12,10 +12,10 @@
 
 import {
   DRUG_DEFS, getPumpSettings,
-  bolusDeliveryMinutes, pushDeliveryMinutes,
 } from '../util/constants.js';
 import { fromCanonical, getPrefKey, getDefaultUnit, formatValue }
   from '../util/units.js';
+import { getCumulativeDose } from '../sim/events/query.js';
 
 const $ = id => document.getElementById(id);
 
@@ -205,53 +205,9 @@ function fmtBolusDose(mg, drugId) {
 
 // ---- Totals ----
 
-/**
- * Walk this drug's events and sum the total mg delivered up to `now`.
- * Rate segments are integrated (rate × duration). Bolus events add
- * their full value if fully delivered by `now`, or a time-proportional
- * fraction if delivery is still in progress. Background rate is
- * suppressed while a bolus is delivering (mirrors replay semantics).
- */
 function computeTotalsForDrug(drugId, now) {
-  if (!_model || !(now > 0)) return { bolusMg: 0, rateMg: 0, totalMg: 0 };
-  const events = _model.getEvents(drugId);
-  if (!events.length) return { bolusMg: 0, rateMg: 0, totalMg: 0 };
-
-  let bolusMg = 0;
-  let rateMg = 0;
-  let currentTime = 0;
-  let currentRate = 0;
-
-  for (const evt of events) {
-    if (evt.time > now) break;
-    if (evt.time > currentTime) {
-      rateMg += (evt.time - currentTime) * currentRate;
-      currentTime = evt.time;
-    }
-    if (evt.type === 'bolus') {
-      const duration = evt.deliveryMode === 'push'
-        ? pushDeliveryMinutes(evt.value, drugId)
-        : bolusDeliveryMinutes(evt.value, drugId);
-      const endTime = evt.time + duration;
-      if (endTime <= now) {
-        bolusMg += evt.value;
-        currentTime = endTime;
-      } else {
-        const frac = (now - evt.time) / duration;
-        bolusMg += evt.value * Math.max(0, Math.min(1, frac));
-        currentTime = now;
-        break;
-      }
-    } else if (evt.type === 'rate') {
-      currentRate = evt.value;
-    } else if (evt.type === 'pause') {
-      currentRate = 0;
-    }
-  }
-  if (currentTime < now) {
-    rateMg += (now - currentTime) * currentRate;
-  }
-  return { bolusMg, rateMg, totalMg: bolusMg + rateMg };
+  if (!_model) return { bolusMg: 0, rateMg: 0, totalMg: 0 };
+  return getCumulativeDose(_model.getEvents(drugId), drugId, now);
 }
 
 // Total-delivered is always shown in absolute mass units and mL —
@@ -267,7 +223,7 @@ const TOTAL_MASS_UNIT = {
 /**
  * Format a total mg in the drug's native mass unit (mg or mcg).
  */
-function fmtTotalMass(mg, drugId) {
+export function fmtTotalMass(mg, drugId) {
   const unit = TOTAL_MASS_UNIT[drugId] || 'mg';
   if (unit === 'mcg') {
     const mcg = mg * 1000;

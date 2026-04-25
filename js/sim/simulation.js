@@ -61,6 +61,16 @@ export function createModel(config = {}) {
   let pdModels = {};               // { drugId: pdModel | null }
   let patient = { age: 35, weight: 70, height: 170, male: true, opioid: false };
   let params = null;               // PK-PD params for primary drug
+  // Active dose-reconciliation windows keyed by drugId. Each entry:
+  //   { insertMin, endMin } — the interval on the chart that should be
+  //   marked as untrustworthy while the model reconverges after a
+  //   retrospective correction bolus. See js/ui/reconcile-modal.js.
+  const reconciliationWindows = {};
+  // Pre-correction Ce snapshots, drawn on the chart as a ghost curve so
+  // the user can compare the corrected curve against the original.
+  // Keyed by drugId. Each entry: { capturedAt, points: [{time, Ce}, ...] }.
+  // Cleared together with the matching reconciliationWindow.
+  const reconciliationGhosts = {};
 
   // Registry of the PK model currently active for each drug.
   // When model-choice is added later, swap the entries here (and the
@@ -308,6 +318,7 @@ export function createModel(config = {}) {
   function reset() {
     eventList.clearAll();
     pdModels = {};
+    clearReconciliationWindows();
     init();
   }
 
@@ -465,6 +476,98 @@ export function createModel(config = {}) {
     return result;
   }
 
+  // ---- Dose reconciliation windows ----
+
+  /**
+   * Mark a per-drug reconciliation window. `insertMin` is when the
+   * correction bolus was placed (may be in the past); `endMin` is the
+   * time after which the chart can be trusted again. Pass null to clear.
+   */
+  function setReconciliationWindow(drugId, insertMin, endMin) {
+    if (insertMin == null || endMin == null) {
+      delete reconciliationWindows[drugId];
+      delete reconciliationGhosts[drugId];
+      return;
+    }
+    reconciliationWindows[drugId] = { insertMin, endMin };
+  }
+
+  /**
+   * Return the currently-active reconciliation window for a drug, auto-
+   * clearing any window whose endMin has already passed. `now` is required
+   * so the simulation stays clock-free. The matching ghost curve is
+   * cleared at the same time so the chart can drop the comparison line
+   * once the region clears.
+   */
+  function getActiveReconciliationWindow(drugId, now) {
+    const w = reconciliationWindows[drugId];
+    if (!w) return null;
+    if (now != null && now > w.endMin) {
+      delete reconciliationWindows[drugId];
+      delete reconciliationGhosts[drugId];
+      return null;
+    }
+    return { ...w };
+  }
+
+  /**
+   * Snapshot all active reconciliation windows — used by session save.
+   */
+  function getAllReconciliationWindows() {
+    const out = {};
+    for (const [k, v] of Object.entries(reconciliationWindows)) {
+      out[k] = { ...v };
+    }
+    return out;
+  }
+
+  function clearReconciliationWindows() {
+    for (const k of Object.keys(reconciliationWindows)) {
+      delete reconciliationWindows[k];
+    }
+    for (const k of Object.keys(reconciliationGhosts)) {
+      delete reconciliationGhosts[k];
+    }
+  }
+
+  /**
+   * Store a pre-correction Ce snapshot for the drug. `points` is the array
+   * returned by computeCurve sampled from 0 to `capturedAt` — captured
+   * BEFORE addBolus is called so it reflects the simulation state the user
+   * is correcting away from. The chart shows it as a ghost curve up to
+   * `capturedAt` so the corrected vs. original can be compared. Pass null
+   * to clear.
+   */
+  function setReconciliationGhost(drugId, ghost) {
+    if (!ghost) {
+      delete reconciliationGhosts[drugId];
+      return;
+    }
+    reconciliationGhosts[drugId] = {
+      capturedAt: ghost.capturedAt,
+      points: ghost.points,
+    };
+  }
+
+  /**
+   * Return the active ghost curve for a drug, or null when no
+   * reconciliation window is active. Tied to the reconciliation
+   * window's lifecycle — once the window auto-clears (now > endMin)
+   * the ghost is dropped too.
+   */
+  function getActiveReconciliationGhost(drugId, now) {
+    if (!getActiveReconciliationWindow(drugId, now)) return null;
+    return reconciliationGhosts[drugId] || null;
+  }
+
+  function getAllReconciliationGhosts() {
+    const out = {};
+    for (const [k, v] of Object.entries(reconciliationGhosts)) {
+      out[k] = { capturedAt: v.capturedAt, points: v.points.slice() };
+    }
+    return out;
+  }
+
   // ---- Multi-drug ----
 
   /**
@@ -490,6 +593,12 @@ export function createModel(config = {}) {
     getConcentrationsAt, computeCurve, predictBIS,
     getRateAtTime, getEvents, getPDModel, getModelName,
     getEventList, predictTrough, predictDecayTo, predictSteadyState, predictPlateau,
+
+    // Dose reconciliation
+    setReconciliationWindow, getActiveReconciliationWindow,
+    getAllReconciliationWindows, clearReconciliationWindows,
+    setReconciliationGhost, getActiveReconciliationGhost,
+    getAllReconciliationGhosts,
 
     // Multi-drug
     registerDrug,
