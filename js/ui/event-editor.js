@@ -89,11 +89,31 @@ export function init(opts) {
   $('btn-add-event')?.addEventListener('click', () => openAdd());
 
   // TCI warning
-  $('tci-warn-cancel')?.addEventListener('click', () => closeModal('modal-tci-warn'));
+  $('tci-warn-cancel')?.addEventListener('click', () => {
+    // Always clear the pending action on cancel — otherwise a stale lambda
+    // from a previous open could fire when the modal is reopened by another
+    // caller (reconcile-modal also reuses this dialog).
+    _pendingRuleAction = null;
+    closeModal('modal-tci-warn');
+  });
   $('tci-warn-confirm')?.addEventListener('click', confirmTciWarn);
 }
 
 export function setDrug(drugId) { _selectedDrug = drugId; }
+
+/**
+ * Open the shared TCI warning modal with `text`. The provided
+ * `onConfirm` callback runs only if the user clicks Continue; if they
+ * click Cancel, nothing happens.
+ *
+ * Exposed so other modules (currently reconcile-modal.js) can route
+ * through the same warning dialog instead of duplicating UI.
+ */
+export function showTciWarning(text, onConfirm) {
+  _pendingRuleAction = onConfirm || null;
+  $('tci-warn-text').textContent = text;
+  openModal('modal-tci-warn');
+}
 
 // ---- Open for editing ----
 
@@ -523,38 +543,30 @@ function applyWithRules(eventTime, action) {
   }
 
   if (isRunning && eventTime < now) {
-    _pendingRuleAction = () => {
+    showTciWarning('Editing a past event will cancel TCI control and clear all future events.', () => {
       action();
       _model.clearAfter(drug, now);
       _mode.set(drug, 'manual', 'Dropped to manual — past event edited');
       close();
       _refreshChart();
-    };
-    showTciWarning('Editing a past event will cancel TCI control and clear all future events.');
+    });
   } else if (!isRunning && eventTime < tciStart) {
-    _pendingRuleAction = () => {
+    showTciWarning('The TCI plan will be recalculated to account for this change.', () => {
       action();
       for (const e of allTci) { try { _model.deleteEvent(e.id); } catch (x) {} }
       if (ceTarget > 0) _model.planTCI(drug, tciStart, ceTarget, getQuantizeConfig(drug));
       close();
       _refreshChart();
-    };
-    showTciWarning('The TCI plan will be recalculated to account for this change.');
+    });
   } else {
-    _pendingRuleAction = () => {
+    showTciWarning('This will cancel TCI control and clear all events from this point forward.', () => {
       action();
       _model.clearAfter(drug, eventTime);
       _mode.set(drug, 'manual', 'Dropped to manual — event in TCI space');
       close();
       _refreshChart();
-    };
-    showTciWarning('This will cancel TCI control and clear all events from this point forward.');
+    });
   }
-}
-
-function showTciWarning(text) {
-  $('tci-warn-text').textContent = text;
-  openModal('modal-tci-warn');
 }
 
 function confirmTciWarn() {

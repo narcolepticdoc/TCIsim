@@ -4,6 +4,27 @@
 
 ## Session History
 
+### Reconcile modal honors active TCI plans (v0.5.29.0)
+
+Closing the loop on the reconcile feature: the modal previously bypassed the TCI-conflict rule engine entirely, silently mutating history while letting future TCI events fire on schedule. Result: Ce overshoots or undershoots the target the plan was designed to hit.
+
+The Phase 1 trace of the codebase clarified two things:
+
+- **History add and edit already do the right thing.** Both routes go through `applyWithRules()` in `js/ui/event-editor.js:507-553`, which has a four-branch rule engine (silent / past-edit-during-TCI / pre-case / future-TCI-edit). The user's question "should we mirror this for editing?" was already satisfied by current code; only reconcile was missing the parallel.
+- **Auto-replan is the wrong move.** Replanning generates immediate bolus prompts and rate-change actions — kicking off a clinical sequence right after the user finished a maintenance task is the failure mode they explicitly flagged. The conservative move (clear future plan, drop to manual, let the user re-engage on their own beat) is consistent with the existing add/edit pathway.
+
+**Implementation.** Two pieces:
+
+1. `event-editor.js`: exported `showTciWarning(text, onConfirm)` so other modules can route through the same `#modal-tci-warn` dialog. Refactored the three internal callers in `applyWithRules` to pass their action as the second arg instead of stashing it in module-scoped `_pendingRuleAction` first. Added `_pendingRuleAction = null` on cancel so a stale lambda from one caller can't fire when a different caller (e.g., reconcile) reopens the dialog later.
+
+2. `reconcile-modal.js`: `_confirm()` now scans `getEvents(drug)` for `source === 'tci' && time >= now`. If any exist, routes through `showTciWarning` with copy taken verbatim from `applyWithRules`'s third branch ("This will cancel TCI control and clear all future events from this point forward."). The onConfirm lambda calls `model.clearAfter(drug, now)`, then `setMode(drug, 'manual', 'Dropped to manual — dose reconciled')`, then `_doReconcile(now)`. With no future TCI events, mutation runs directly. Mutation logic extracted into `_doReconcile(now)` so both branches share it; `now` is captured up-front so a slow user clicking through the warning doesn't shift the case-clock baseline.
+
+**Why no shared helper.** The reconcile case is a single condition (any future TCI event?), versus event-editor's four branches. Inlining is cleaner than extracting a generic rule engine; if a third mutation path needs the same logic later, refactor at that point. Reusing `showTciWarning` (UI) without extracting `applyWithRules` (logic) gives consistency where it matters and keeps the call site readable.
+
+**Cached-target preservation deferred.** Phase 1 also surfaced that `mode.set(drug, 'manual', ...)` clears `ceTargets[drug]` (`mode.js:61`), so after the rule fires the user has to retype the target on Set Target. A `lastCeTargets` cache that survives mode changes would make re-engagement one tap. Punted for a separate small UX change — not blocking the conflict-handling fix.
+
+**Files changed:** `js/version.js`, `js/ui/event-editor.js` (export + cancel-clears + caller refactor), `js/ui/reconcile-modal.js` (TCI-conflict check, _doReconcile extraction, imports), `CHANGELOG.md`, `DEVELOPMENT.md`. No engine change.
+
 ### Interim — Consistent blue active-input border (v0.5.28.5)
 
 User asked for the reconcile entry field to match the patient-screen blue active style, then asked to audit the rest of the app for the same treatment.
