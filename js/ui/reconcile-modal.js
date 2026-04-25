@@ -22,6 +22,8 @@ import { DRUG_DEFS, DRUG_IDS, getPumpSettings, isPumpEnabled } from '../util/con
 import { getCumulativeDose } from '../sim/events/query.js';
 import { getConvergenceWindow } from '../pk/eigenvalues.js';
 import { fmtTotalMass } from './history.js';
+import { showTciWarning } from './event-editor.js';
+import { set as setMode } from './mode.js';
 
 const $ = id => document.getElementById(id);
 
@@ -605,8 +607,38 @@ function _confirm() {
     return;
   }
 
-  const patient = _model.getPatient ? _model.getPatient() : null;
+  // TCI conflict check — mirrors event-editor.js applyWithRules. If the
+  // drug has any future TCI events, the reconcile mutation invalidates
+  // the plan: future events were scheduled assuming a different
+  // compartment state. Clear them and drop to manual so the user
+  // re-engages TCI on their own beat. No auto-replan — that would kick
+  // off bolus / rate-change prompts immediately, which is the wrong
+  // moment.
+  const futureTci = _model.getEvents(_drugId).filter(e =>
+    e.source === 'tci' && e.time >= now,
+  );
+  if (futureTci.length > 0) {
+    showTciWarning(
+      'This will cancel TCI control and clear all future events from this point forward.',
+      () => {
+        _model.clearAfter(_drugId, now);
+        setMode(_drugId, 'manual', 'Dropped to manual — dose reconciled');
+        _doReconcile(now);
+      },
+    );
+    return;
+  }
 
+  _doReconcile(now);
+}
+
+// Apply the reconcile mutation. Called either directly (no TCI conflict)
+// or from the warning's onConfirm (after the future plan has been
+// cleared). `now` is captured up-front so a slow user clicking through
+// the warning doesn't shift the case-clock baseline.
+function _doReconcile(now) {
+  const err = $('rm-error');
+  const patient = _model.getPatient ? _model.getPatient() : null;
   try {
     const sign = _deltaMg > 0 ? '+' : '-';
     const magStr = fmtTotalMass(Math.abs(_deltaMg), _drugId);
@@ -625,17 +657,12 @@ function _confirm() {
     let windowStart, windowEnd, annotMsg;
 
     if (_mode === 'spread') {
-      // Distribute the correction evenly across [0, NOW] as a constant
-      // rate offset. Reconstructs sustained errors exactly. The chart
-      // shows the entire case as the reconciling region with a small
-      // forward stub (5 min) for visual feedback.
       const ratePerMin = _deltaMg / now;
       _model.applyRateAugmentation(_drugId, 0, now, ratePerMin);
       windowStart = 0;
       windowEnd = now + SPREAD_FORWARD_TAIL_MIN;
       annotMsg = `Reconciliation ${sign}${magStr} spread across case (${ratePerMin.toFixed(3)} mg/min × ${now.toFixed(0)} min)`;
     } else {
-      // Single-bolus path
       let insertMin = _currentCaseMinutes();
       insertMin = Math.max(0, Math.min(now, insertMin));
       const winMin = patient ? getConvergenceWindow(_drugId, patient) : 45;

@@ -11,6 +11,24 @@
 
 ---
 
+## [0.5.29.0] — 2026-04-25
+
+Reconcile modal now respects active TCI plans, mirroring the existing add/edit pathway.
+
+Before: confirming a reconciliation while a TCI plan was running silently mutated history without touching the future plan, leaving the planned events to fire on schedule against an invalidated compartment state — Ce overshoot or undershoot the target the plan was designed to hit.
+
+Now: if the selected drug has any future TCI events at confirm time, the reconcile modal opens the same `#modal-tci-warn` dialog that add and edit use ("This will cancel TCI control and clear all future events from this point forward."). On Continue: future events are cleared, mode drops to manual, the reconcile mutation lands. On Cancel: nothing changes — event list and plan untouched, user can adjust or cancel.
+
+No auto-replan. The user re-engages TCI on their own beat via Set Target.
+
+Implementation:
+- `js/ui/event-editor.js` — `showTciWarning(text, onConfirm)` is now exported. Internal callers (the three branches of `applyWithRules`) pass their action as the second arg instead of stashing it in module-scoped `_pendingRuleAction`. Cancel handler also clears the pending action so a stale lambda from one caller can't fire when a different caller reopens the dialog.
+- `js/ui/reconcile-modal.js` — `_confirm()` checks `getEvents(drug)` for future `source: 'tci'` events. With any present, routes through `showTciWarning` whose onConfirm runs `clearAfter(drug, NOW)`, drops the drug to manual via `mode.set`, then runs the reconcile mutation. With none, mutation runs directly (matches the silent branch in `applyWithRules`). Mutation logic factored into `_doReconcile(now)` so both branches share it.
+
+Verification: 493 tests still passing. Behavior of add and edit unchanged (same warning copy, same `clearAfter` + mode drop).
+
+---
+
 ## [0.5.28.5] — 2026-04-25
 
 Consistent blue active-input border across all numeric entry fields. The patient modal already used `border: 1px var(--blue)` + `inset 0 0 0 1px var(--blue)` for the active field; applied the same treatment to the two other standalone numeric displays:
