@@ -68,6 +68,19 @@ export function fmtCe(ceMcgMl, drugId, dp = 2) {
   return ceMcgMl.toFixed(dp);
 }
 
+/**
+ * Format Ce/Cp for the prominent drug-card readout. Returns HTML with
+ * the hundredths digit wrapped in `.ce-frac` so it can render smaller
+ * via CSS. Always two decimals, regardless of drug — the unit (mcg/mL
+ * vs ng/mL) is selected per drug, but the visual precision is uniform.
+ */
+export function fmtCeHTML(ceMcgMl, drugId) {
+  const allowed = getAllowedUnits(drugId, 'ceTarget');
+  const v = (allowed && allowed[0] === 'ng/mL') ? ceMcgMl * 1000 : ceMcgMl;
+  const fixed = v.toFixed(2);
+  return `${fixed.slice(0, -1)}<span class="ce-frac">${fixed.slice(-1)}</span>`;
+}
+
 /** Format rate for inline display next to status label. Returns '' if no rate. */
 export function fmtRateInline(ctx, drugId, rate) {
   if (!rate || rate <= 0) return '';

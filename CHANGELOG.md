@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.29.2] — 2026-04-25
+
+Drug-card Ce/Cp readout: hundredths digit now renders smaller (`X.X` at full size, trailing digit at 0.65em with light opacity). Format is uniform across all drugs — propofol was already two decimals, fentanyl and ketamine were one. Both now show two with the same visual treatment, so the readouts line up across drug cards.
+
+- New `fmtCeHTML(value, drugId)` in `js/ui/drug-panel/formatters.js` returns the major+minor split with the trailing digit wrapped in `.ce-frac`. Always two decimals, drug-specific unit (mcg/mL vs ng/mL ×1000) preserved.
+- `js/ui/drug-panel/index.js` switches the prominent Ce/Cp display from `textContent` to `innerHTML` and uses the new helper. Other Ce displays (approach line, chart pills, target labels) unchanged.
+- Initial markup in `index.html` updated for all three drug cards so the static state matches the live update.
+
+---
+
 ## [0.5.29.1] — 2026-04-25
 
 History panel: moved the Reconcile button out of the bottom action row and behind edit mode. The action row was getting crowded with four buttons, and reconcile is naturally tied to the totals shown just above it. Renamed to "Reconcile Totals" so the button reads with the totals it acts on.

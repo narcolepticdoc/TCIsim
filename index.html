@@ -191,6 +191,7 @@
     .drug-card .drug-conc-row{display:flex;align-items:baseline;gap:3px;margin-top:2px}
     .drug-card .ce-label{font-size:10px;color:var(--text-muted)}
     .drug-card .ce-current{font-family:var(--font-mono);font-size:22px;font-weight:600;color:var(--cyan);line-height:1}
+    .drug-card .ce-current .ce-frac,.drug-card .cp-current .ce-frac{font-size:.65em;opacity:.75;font-weight:inherit}
     .drug-card .cp-sep{font-size:10px;color:var(--border);margin:0 1px}
     .drug-card .cp-label{font-size:10px;color:var(--text-muted)}
     .drug-card .cp-current{font-family:var(--font-mono);font-size:12px;color:#ef4444}
@@ -1146,10 +1147,10 @@
           <div class="drug-model" id="propofol-model-label"></div>
           <div class="drug-conc-row">
             <span class="ce-label">Ce</span>
-            <span class="ce-current" id="propofol-ce">0.00</span>
+            <span class="ce-current" id="propofol-ce">0.0<span class="ce-frac">0</span></span>
             <span class="cp-sep">|</span>
             <span class="cp-label">Cp</span>
-            <span class="cp-current" id="propofol-cp">0.00</span>
+            <span class="cp-current" id="propofol-cp">0.0<span class="ce-frac">0</span></span>
             <span class="ce-unit">&mu;g/mL</span>
           </div>
           <div class="drug-approach" id="propofol-approach"></div>
@@ -1170,10 +1171,10 @@
           <div class="drug-model" id="fentanyl-model-label"></div>
           <div class="drug-conc-row">
             <span class="ce-label">Ce</span>
-            <span class="ce-current" id="fentanyl-ce">0.0</span>
+            <span class="ce-current" id="fentanyl-ce">0.0<span class="ce-frac">0</span></span>
             <span class="cp-sep">|</span>
             <span class="cp-label">Cp</span>
-            <span class="cp-current" id="fentanyl-cp">0.0</span>
+            <span class="cp-current" id="fentanyl-cp">0.0<span class="ce-frac">0</span></span>
             <span class="ce-unit" id="fentanyl-ce-unit">ng/mL</span>
           </div>
           <div class="drug-approach" id="fentanyl-approach"></div>
@@ -1194,10 +1195,10 @@
           <div class="drug-model" id="ketamine-model-label"></div>
           <div class="drug-conc-row">
             <span class="ce-label">Ce</span>
-            <span class="ce-current" id="ketamine-ce">0.0</span>
+            <span class="ce-current" id="ketamine-ce">0.0<span class="ce-frac">0</span></span>
             <span class="cp-sep">|</span>
             <span class="cp-label">Cp</span>
-            <span class="cp-current" id="ketamine-cp">0.0</span>
+            <span class="cp-current" id="ketamine-cp">0.0<span class="ce-frac">0</span></span>
             <span class="ce-unit" id="ketamine-ce-unit">ng/mL</span>
           </div>
           <div class="drug-approach" id="ketamine-approach"></div>
