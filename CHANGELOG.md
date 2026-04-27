@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.29.1] — 2026-04-25
+
+History panel: moved the Reconcile button out of the bottom action row and behind edit mode. The action row was getting crowded with four buttons, and reconcile is naturally tied to the totals shown just above it. Renamed to "Reconcile Totals" so the button reads with the totals it acts on.
+
+- New `.history-reconcile-row` between `.history-totals` and `.history-actions`. Hidden by default; revealed by `body.edit-history-mode .history-reconcile-row{display:block}`. Full-width button inside.
+- Action row now holds three buttons (ET/RT, +Add Event, Edit) instead of four.
+- Click handler unchanged — still `#btn-reconcile`.
+
+---
+
 ## [0.5.29.0] — 2026-04-25
 
 Reconcile modal now respects active TCI plans, mirroring the existing add/edit pathway.
