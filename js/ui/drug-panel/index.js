@@ -16,7 +16,7 @@
 
 import * as settings from '../settings.js';
 import { isPumpEnabled } from '../../util/constants.js';
-import { fmtCe, fmtRateInline, bisColor, isInBolusPhase, fmtCountdown,
+import { fmtCe, fmtCeHTML, fmtRateInline, bisColor, isInBolusPhase, fmtCountdown,
          TCI_FRACTION_DEFAULT, SS_SLOPE_DEFAULT, EXIT_BAND_DEFAULT } from './formatters.js';
 import { setCurveData, updateApproachLine, _getApproachCache,
          getPlateauRegion, getSteadyStateCe, invalidateAll,
@@ -109,8 +109,8 @@ function update() {
     // ── Ce / Cp ──────────────────────────────────────────────────
     const ceEl = ctx.$(dId + '-ce');
     const cpEl = ctx.$(dId + '-cp');
-    if (ceEl) ceEl.textContent = fmtCe(Ce, dId);
-    if (cpEl) cpEl.textContent = fmtCe(Cp, dId);
+    if (ceEl) ceEl.innerHTML = fmtCeHTML(Ce, dId);
+    if (cpEl) cpEl.innerHTML = fmtCeHTML(Cp, dId);
 
     // ── Approach line ─────────────────────────────────────────────
     if (caseStarted) {
