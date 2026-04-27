@@ -29,6 +29,8 @@ let getExitCe = null;          // () => current Exit Ce for selected drug
 let getIntermittentThreshold = null; // () => current redose threshold for selected drug
 let isPumpEnabled = null;      // () => bool — is an infusion pump enabled for the selected drug?
 let prefilled = false;         // true when buffer is pre-populated, clears on first keypress
+let currentRoundOverride = null; // bool when ceTarget modal exposes the round-in-display
+                                 // override checkbox; null otherwise (= use global setting).
 
 const TITLES = {
   ceTarget: 'Set Ce Target',
@@ -100,6 +102,11 @@ export function init(opts = {}) {
     close();
     if (onConfirm) onConfirm(currentType, 0, '', 'clear');
   });
+
+  const roundCb = $('keypad-round-in-display');
+  if (roundCb) roundCb.addEventListener('change', () => {
+    currentRoundOverride = roundCb.checked;
+  });
 }
 
 /**
@@ -162,6 +169,23 @@ export function show(type) {
     (type === 'exitCe' && getExitCe() > 0) ||
     (type === 'intermittent' && getIntermittentThreshold() > 0)
       ? '' : 'none';
+
+  // Per-target rounding override: only relevant for ceTarget (TCI plan).
+  // Defaults to the global config value each time the modal opens; toggles
+  // are one-shot (not persisted) and apply only to the plan being confirmed.
+  const roundRow = $('keypad-round-row');
+  const roundCb  = $('keypad-round-in-display');
+  if (type === 'ceTarget' && roundRow && roundCb) {
+    let globalRound = false;
+    try { globalRound = localStorage.getItem('tci-pref-quantizeInDisplay') === 'true'; }
+    catch (e) {}
+    roundCb.checked = globalRound;
+    currentRoundOverride = globalRound;
+    roundRow.style.display = '';
+  } else {
+    if (roundRow) roundRow.style.display = 'none';
+    currentRoundOverride = null;
+  }
 
   // Pre-fill if changing existing target
   if (type === 'ceTarget' && getMode() === 'tci' && getCeTarget() > 0) {
@@ -368,11 +392,15 @@ function confirm(deliveryMode) {
     const oneShot = oneShotConfirm;
     oneShotConfirm = null;
 
+    const extras = {
+      roundOverride: currentType === 'ceTarget' ? currentRoundOverride : null,
+    };
+
     close();
     if (oneShot) {
-      oneShot(currentType, canonical.value, displayText, deliveryMode);
+      oneShot(currentType, canonical.value, displayText, deliveryMode, extras);
     } else if (onConfirm) {
-      onConfirm(currentType, canonical.value, displayText, deliveryMode);
+      onConfirm(currentType, canonical.value, displayText, deliveryMode, extras);
     }
   } catch (e) {
     console.error('[TCI Sim] Keypad confirm error:', e);

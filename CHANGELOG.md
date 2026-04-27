@@ -11,6 +11,20 @@
 
 ---
 
+## [0.5.29.3] — 2026-04-27
+
+Set Target keypad now exposes a one-shot rounding override. The setup screen's "Round TCI plan in display units" flag is unreachable once a case is running, so a clinician who wanted a more exact (or more rounded) plan mid-case had no way to flip it. The keypad modal now mirrors that checkbox in the Ce-target view; toggling it affects only the plan being confirmed and is not persisted — the modal re-opens at the global config value every time.
+
+- `index.html` — new `#keypad-round-row` + `#keypad-round-in-display` inside `#modal-keypad`, hidden by default. Small CSS rule to center-align it above `.modal-actions`.
+- `js/ui/keypad.js` — module-scope `currentRoundOverride`, initialised from `localStorage['tci-pref-quantizeInDisplay']` whenever the keypad opens in `'ceTarget'` mode and revealed only for that type. `confirm()` packs `{ roundOverride }` into a new `extras` argument passed to `onConfirm`/oneShotConfirm. Non-ceTarget types pass `null`.
+- `js/util/units.js` — `getQuantizeConfig(drugId, enabledOverride)` now accepts an explicit boolean second arg. Backwards-compatible: omitting it preserves the old localStorage read.
+- `js/app.js` — `onConfirm` signature gains `extras`; the `'ceTarget'` branch builds `quantConfig` from `getQuantizeConfig(drug, override)` and passes it to `planTCI` (pre-case) or stashes it on `tciModal.setPending` (running-case).
+- `js/app/tci-modal.js` — `commit()` reads `quantConfig` off `pendingTCI` and threads it into `planTCI`; falls back to `getQuantizeConfig(drugId)` if absent.
+
+`event-editor.js`-driven replan still uses the global setting only — the override is scoped to the explicit Set Target flow.
+
+---
+
 ## [0.5.29.2] — 2026-04-25
 
 Drug-card Ce/Cp readout: hundredths digit now renders smaller (`X.X` at full size, trailing digit at 0.65em with light opacity). Format is uniform across all drugs — propofol was already two decimals, fentanyl and ketamine were one. Both now show two with the same visual treatment, so the readouts line up across drug cards.

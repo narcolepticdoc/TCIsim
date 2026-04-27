@@ -4,6 +4,28 @@
 
 ## Session History
 
+### Per-target rounding override in Set Target modal (v0.5.29.3)
+
+The setup screen has a "Round TCI plan in display units" checkbox (persisted under `tci-pref-quantizeInDisplay`) that snaps every TCI plan call to the user's selected display-unit grid. Once a case is started, the setup screen is no longer reachable, so a clinician who wanted a more exact (or more rounded) plan mid-case had no way to flip it.
+
+Solution: mirror the same checkbox inside the Set Target keypad modal, with **one-shot semantics** chosen by the user — toggling in the modal affects only the plan being confirmed; nothing is persisted; the modal re-opens at the global config value every time. This keeps the global config the single source of truth while giving in-the-moment override capability.
+
+**Implementation.** Five touch-points, all small:
+
+1. `index.html` — added `#keypad-round-row` + `#keypad-round-in-display` inside `#modal-keypad`, hidden by default. Small inline CSS (`.keypad-round-row`) so the row sits centered above `.modal-actions` with muted text.
+
+2. `js/ui/keypad.js` — module-scope `currentRoundOverride` (boolean when the row is exposed, null otherwise). `show(type)` reveals the row only for `'ceTarget'` and seeds the checkbox + `currentRoundOverride` from `localStorage['tci-pref-quantizeInDisplay']`. A `change` listener on the checkbox keeps `currentRoundOverride` in sync. `confirm()` packs `{ roundOverride }` into a new `extras` argument passed as the 5th param of `onConfirm`/oneShotConfirm. Non-ceTarget types always pass `null`.
+
+3. `js/util/units.js` — `getQuantizeConfig(drugId, enabledOverride)` now accepts an explicit boolean second arg. Omitting it preserves the previous localStorage read; passing a boolean bypasses storage and uses that value to gate the per-drug display-unit lookup. Backwards-compatible.
+
+4. `js/app.js` — the keypad `onConfirm` signature gains `extras`. The `'ceTarget'` branch reads `extras?.roundOverride` and builds `quantConfig` via `getQuantizeConfig(drug, override)`; that config is passed straight to `planTCI` (pre-case) or stashed on `tciModal.setPending({ ..., quantConfig })` (running-case).
+
+5. `js/app/tci-modal.js` — `commit()` destructures `quantConfig` off `pendingTCI` and uses it; falls back to `getQuantizeConfig(drugId)` for safety if a future caller omits the field.
+
+**Out of scope.** `js/ui/event-editor.js:557` (event-editor-driven replan) still uses the global setting only — the user's request was specifically the Set Target flow.
+
+---
+
 ### Reconcile modal honors active TCI plans (v0.5.29.0)
 
 Closing the loop on the reconcile feature: the modal previously bypassed the TCI-conflict rule engine entirely, silently mutating history while letting future TCI events fire on schedule. Result: Ce overshoots or undershoots the target the plan was designed to hit.
