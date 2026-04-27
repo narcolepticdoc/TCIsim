@@ -348,8 +348,10 @@
     .history-actions .h-action-time .t-sep{color:var(--border);margin:0 3px}
     .history-actions .h-action-edit{flex:0 0 auto;min-width:60px}
     .history-actions .h-action-edit.active{background:var(--amber);color:#000;border-color:var(--amber);box-shadow:0 0 0 1px var(--amber)}
-    .history-actions .h-action-reconcile{flex:0 0 auto;min-width:84px;font-size:11px}
-    .history-actions .h-action-reconcile:hover{color:var(--amber);border-color:var(--amber)}
+    .history-reconcile-row{display:none;padding:6px 12px;border-top:1px solid var(--border-subtle)}
+    .history-reconcile-row .h-action-reconcile{width:100%;font-size:12px;padding:8px 12px}
+    .history-reconcile-row .h-action-reconcile:hover{color:var(--amber);border-color:var(--amber)}
+    body.edit-history-mode .history-reconcile-row{display:block}
     .h-badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;margin-right:5px;vertical-align:middle}
     .h-badge-tci{background:var(--amber);color:#000}
 
@@ -1230,10 +1232,12 @@
         <div class="content-view" id="panel-history">
           <div class="history-area"><div class="history-empty" id="history-empty">No events yet.</div><div class="history-list" id="history-list"></div></div>
           <div class="history-totals" id="history-totals" hidden></div>
+          <div class="history-reconcile-row" id="history-reconcile-row">
+            <button class="evt-action-btn h-action-reconcile" id="btn-reconcile" title="Reconcile simulated total with actual delivered total">Reconcile Totals</button>
+          </div>
           <div class="history-actions">
             <button class="evt-action-btn h-action-time" id="btn-history-time" title="Toggle time display"><span class="t-et active">ET</span><span class="t-sep">/</span><span class="t-rt">RT</span></button>
             <button class="evt-action-btn h-action-add" id="btn-add-event">+ Add Event</button>
-            <button class="evt-action-btn h-action-reconcile" id="btn-reconcile" title="Reconcile simulated total with actual pump delivery">Reconcile</button>
             <button class="evt-action-btn h-action-edit" id="btn-history-edit">Edit</button>
           </div>
         </div>
