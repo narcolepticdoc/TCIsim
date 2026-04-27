@@ -58,12 +58,16 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal })
 
   function commit() {
     if (!pendingTCI) return;
-    const { drugId, ceTarget, tciMode, ceTolerance } = pendingTCI;
+    const { drugId, ceTarget, tciMode, ceTolerance, quantConfig } = pendingTCI;
     pendingTCI = null;
 
     const futureTime = timer.getElapsedMinutes() + tciDelaySeconds / 60;
     mode.setCeTarget(drugId, ceTarget);
-    const { scheme } = model.planTCI(drugId, futureTime, ceTarget, { tciMode, ceTolerance, ...getQuantizeConfig(drugId) });
+    // Prefer the per-plan rounding choice captured by the keypad modal; fall
+    // back to the global config when the caller didn't supply one (older
+    // entry points that haven't been updated yet).
+    const qc = quantConfig || getQuantizeConfig(drugId);
+    const { scheme } = model.planTCI(drugId, futureTime, ceTarget, { tciMode, ceTolerance, ...qc });
     mode.set(drugId, 'tci', `TCI target Ce=${ceTarget.toFixed(1)} μg/mL`);
     refreshChart();
 

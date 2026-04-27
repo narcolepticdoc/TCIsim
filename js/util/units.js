@@ -140,13 +140,23 @@ export function quantizeInDisplay(canonicalValue, displayUnit, drugId, task, ctx
  * localStorage. Falls back to defaults when no preference is stored or
  * the stored unit is no longer in the allowed list.
  *
+ * Pass an explicit boolean as `enabledOverride` to bypass the localStorage
+ * read — used by the Set Target modal so a per-plan override can flip the
+ * rounding flag without touching the persisted global setting.
+ *
  * @param {string} drugId
+ * @param {boolean} [enabledOverride] - if a boolean, overrides the global flag
  * @returns {Object} { quantizeInDisplay, bolusDisplayUnit?, rateDisplayUnit? }
  */
-export function getQuantizeConfig(drugId) {
-  let enabled = false;
-  try { enabled = localStorage.getItem('tci-pref-quantizeInDisplay') === 'true'; }
-  catch (e) { /* ignore */ }
+export function getQuantizeConfig(drugId, enabledOverride) {
+  let enabled;
+  if (typeof enabledOverride === 'boolean') {
+    enabled = enabledOverride;
+  } else {
+    enabled = false;
+    try { enabled = localStorage.getItem('tci-pref-quantizeInDisplay') === 'true'; }
+    catch (e) { /* ignore */ }
+  }
   if (!enabled) return { quantizeInDisplay: false };
 
   const bolusKey = getPrefKey(drugId, 'bolus');

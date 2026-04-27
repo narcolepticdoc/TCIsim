@@ -788,6 +788,10 @@
     .key:active{background:var(--blue-dim);transform:scale(.95)}
     .key-wide{grid-column:span 2}
 
+    .keypad-round-row{display:flex;justify-content:center;margin-bottom:10px}
+    .keypad-round-row label{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--text-secondary);cursor:pointer;user-select:none;-webkit-user-select:none}
+    .keypad-round-row input[type=checkbox]{cursor:pointer}
+
     .modal-actions{display:flex;gap:10px;justify-content:center}
     .modal-actions button{padding:9px 22px;border:none;border-radius:var(--radius-sm);font-family:var(--font-display);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
     .modal-btn-cancel{background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border-subtle)}
@@ -1338,6 +1342,12 @@
             <div class="key ee-fn">⌫</div><div class="key ee-key-wide2">0</div><div class="key">.</div>
           </div>
         </div>
+      </div>
+      <div class="keypad-round-row" id="keypad-round-row" style="display:none">
+        <label>
+          <input type="checkbox" id="keypad-round-in-display">
+          Round to display-unit grid
+        </label>
       </div>
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="keypad-cancel-btn">Cancel</button>
