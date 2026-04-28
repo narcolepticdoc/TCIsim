@@ -11,6 +11,18 @@
 
 ---
 
+## [0.5.29.5] — 2026-04-28
+
+Smart decimal formatting for user-set Ce values (target, redose threshold, emergence). They were displayed as `x.x`, which silently rounded a typed-in `1.55` up to `1.6`. They now show two decimals when the hundredths digit is non-zero (`1.55`) and one decimal otherwise (`3.0`). Computed values like steady-state Ce keep their existing precision; live Ce/Cp readouts (`fmtCeHTML`) are unchanged.
+
+- `js/ui/drug-panel/formatters.js` — new `smartDecimal(value, fallbackDp = 1)` and `fmtCeSmart(ceMcgMl, drugId)` helpers; `fmtCeSmart` mirrors `fmtCe`'s ng/mL-for-fentanyl conversion before routing through `smartDecimal`.
+- `js/ui/drug-panel/approach.js` — Target / At Target / decay countdown / "Below Redose Threshold" / Emergence labels now use `smartDecimal` (raw mcg/mL) or `fmtCeSmart` (unit-aware).
+- `js/ui/drug-panel/index.js` — step-bar redose label uses `fmtCeSmart`.
+- `js/ui/drug-panel/exit-readout.js` — `Emerge → X in Y` numeric portion routed through `smartDecimal` instead of `parseFloat(...).toFixed(1)`.
+- `js/ui/chart/plugins/target-label.js` — chart right-edge target / threshold / exit pill labels use `smartDecimal`. Steady-state pill stays at `toFixed(2)` (computed value, not user-set).
+
+---
+
 ## [0.5.29.4] — 2026-04-27
 
 Set Target rounding override now shows the same explanation note as the setup screen — e.g. `Plan rounds to: bolus → nearest 10 mcg/kg, rate → nearest 5 mcg/kg/min`. Off-state shows the canonical-units hint. Live-updates when the checkbox is toggled.

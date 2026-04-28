@@ -3,6 +3,7 @@
  */
 
 import { COLORS } from '../../../util/constants.js';
+import { smartDecimal } from '../../drug-panel/formatters.js';
 
 export function createTargetLabelPlugin(s) {
   return {
@@ -40,13 +41,13 @@ export function createTargetLabelPlugin(s) {
 
       const ctx = ch.ctx;
       if (s.targetCe !== null && s.targetCe > 0)
-        drawPillLabel(ctx, s.targetCe, s.targetCe.toFixed(1), COLORS.target);
+        drawPillLabel(ctx, s.targetCe, smartDecimal(s.targetCe), COLORS.target);
       if (s.thresholdCe !== null && s.thresholdCe > 0)
-        drawPillLabel(ctx, s.thresholdCe, s.thresholdCe.toFixed(1), '#f59e0b');
+        drawPillLabel(ctx, s.thresholdCe, smartDecimal(s.thresholdCe), '#f59e0b');
       if (s.steadyStateCe !== null && s.steadyStateCe > 0)
         drawPillLabel(ctx, s.steadyStateCe, s.steadyStateCe.toFixed(2), 'rgba(34, 197, 94, 0.9)');
       if (s.exitCe !== null && s.exitCe > 0)
-        drawPillLabel(ctx, s.exitCe, s.exitCe.toFixed(1), '#ef4444');
+        drawPillLabel(ctx, s.exitCe, smartDecimal(s.exitCe), '#ef4444');
     },
   };
 }

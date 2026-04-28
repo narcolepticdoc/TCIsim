@@ -9,7 +9,7 @@
  * the only consumer that writes it.
  */
 
-import { fmtCountdown, fmtCe, EMERGENCE_CE } from './formatters.js';
+import { fmtCountdown, fmtCe, fmtCeSmart, smartDecimal, EMERGENCE_CE } from './formatters.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Shared curve store — set by app.js after every refreshChart()
@@ -92,13 +92,13 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
   if (threshold > 0 && ceTarget > 0) {
     let redose = null;
     if (Ce <= ceTarget) {
-      const ceStr = `<span class="appr-val">${fmtCe(ceTarget, drugId, 1)}</span>`;
+      const ceStr = `<span class="appr-val">${fmtCeSmart(ceTarget, drugId)}</span>`;
       redose = { staticText: `<span class="appr-below">Below Redose Threshold ${ceStr}</span>` };
     } else {
       try {
         const result = ctx.model.predictTrough(drugId, t, ceTarget);
         if (result && result.time !== null && result.time > t) {
-          const ceStr = `<span class="appr-val">${fmtCe(ceTarget, drugId, 1)}</span>`;
+          const ceStr = `<span class="appr-val">${fmtCeSmart(ceTarget, drugId)}</span>`;
           redose = { prefix: `Redose Threshold ${ceStr} in `, arrivalMin: result.time };
         }
       } catch (e) {}
@@ -126,7 +126,7 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
       if (result && result.time !== null && result.time > t) {
         const label = (ctx.getExitCeForDrug && ctx.getExitCeForDrug(drugId) > 0) ? 'Exit' : 'Emergence';
         return { ...noData,
-          prefix: `${label} <span class="appr-val">${emergenceCe.toFixed(1)}</span> in `,
+          prefix: `${label} <span class="appr-val">${smartDecimal(emergenceCe)}</span> in `,
           arrivalMin: result.time,
         };
       }
@@ -140,17 +140,17 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
     const relDev = Math.abs(Ce - ceTarget) / ceTarget;
     if (relDev <= (1 - tciFraction)) {
       return { ...noData,
-        staticText: `At Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
+        staticText: `At Target <span class="appr-val">${smartDecimal(ceTarget)}</span>` };
     }
     const dt = _estimateTimeToTarget(curve, t, Ce, ceTarget, tciFraction);
     if (dt !== null && dt > 0) {
       return { ...noData,
-        prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
+        prefix: `Target → <span class="appr-val">${smartDecimal(ceTarget)}</span> in `,
         arrivalMin: t + dt,
       };
     }
     return { ...noData,
-      staticText: `Target <span class="appr-val">${ceTarget.toFixed(1)}</span>` };
+      staticText: `Target <span class="appr-val">${smartDecimal(ceTarget)}</span>` };
   }
 
   // Manual infusion — two independent analyses: SS + plateau
@@ -214,7 +214,7 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
     const dt = _estimateTimeToTarget(curve, t, Ce, ceTarget, tciFraction);
     if (dt !== null && dt > 0) {
       return { ...noData,
-        prefix: `Target → <span class="appr-val">${ceTarget.toFixed(1)}</span> in `,
+        prefix: `Target → <span class="appr-val">${smartDecimal(ceTarget)}</span> in `,
         arrivalMin: t + dt,
       };
     }

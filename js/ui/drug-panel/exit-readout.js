@@ -5,7 +5,7 @@
  * is configured. Throttled to one model.predictDecayTo call every 3 s.
  */
 
-import { fmtCountdown } from './formatters.js';
+import { fmtCountdown, smartDecimal } from './formatters.js';
 
 const _exitReadoutCache = {};   // { drugId: { lastUpdate, html } }
 
@@ -40,7 +40,7 @@ export function updateExitReadout(ctx, drugId, t, Ce, caseStarted) {
   if (result && result.time !== null && result.time > t) {
     const rem = result.time - t;
     const lbl = ctx.getExitCeLabelForDrug ? ctx.getExitCeLabelForDrug(drugId) : '';
-    const numPart = lbl ? parseFloat(lbl.split(' ')[0]).toFixed(1) : '';
+    const numPart = lbl ? smartDecimal(parseFloat(lbl.split(' ')[0])) : '';
     const ceSpan = numPart ? ` <span style="color:var(--cyan)">${numPart}</span>` : '';
     html = `Emerge &rarr;${ceSpan} in <span class="appr-time">${fmtCountdown(rem)}</span>`;
   }

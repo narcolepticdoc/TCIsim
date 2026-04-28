@@ -4,6 +4,38 @@
 
 ## Session History
 
+### Smart decimal formatting for Ce set points (v0.5.29.5) — Interim
+
+User-set Ce values — TCI target, redose threshold, emergence Ce — were displayed with `toFixed(1)` in the drug-card approach line, the chart's right-edge pill labels, and the exit-readout. A clinician who deliberately typed `1.55` for an emergence threshold saw it presented back as `1.6`, which silently rounds away the precision they entered.
+
+Fix: show two decimals when the hundredths digit is non-zero, and one decimal otherwise. So `3.0` stays `3.0`, `3.05` displays as `3.05`, and `3.097` rounds to `3.10` then strips the trailing zero to `3.1`. Live Ce/Cp readouts (`fmtCeHTML`) already display two decimals always and are unchanged. Computed values like the steady-state pill stay at fixed `toFixed(2)` since those aren't user-set.
+
+**Implementation.** Single helper plus a unit-aware variant in `js/ui/drug-panel/formatters.js`:
+
+```js
+export function smartDecimal(value, fallbackDp = 1) {
+  if (!isFinite(value)) return String(value);
+  const t2 = value.toFixed(2);
+  return t2.endsWith('0') ? value.toFixed(fallbackDp) : t2;
+}
+
+export function fmtCeSmart(ceMcgMl, drugId) {
+  const allowed = getAllowedUnits(drugId, 'ceTarget');
+  const v = (allowed && allowed[0] === 'ng/mL') ? ceMcgMl * 1000 : ceMcgMl;
+  return smartDecimal(v);
+}
+```
+
+Call sites:
+- `approach.js` — `fmtCe(ceTarget, drugId, 1)` → `fmtCeSmart(ceTarget, drugId)` for "Below Redose Threshold X" and the redose countdown; raw `ceTarget.toFixed(1)` / `emergenceCe.toFixed(1)` → `smartDecimal(...)` for Target and Emergence labels.
+- `drug-panel/index.js` — step-bar redose label uses `fmtCeSmart`.
+- `exit-readout.js` — `parseFloat(lbl.split(' ')[0]).toFixed(1)` → `smartDecimal(parseFloat(...))`.
+- `chart/plugins/target-label.js` — target / threshold / exit pill labels use `smartDecimal`. Steady-state pill stays at `toFixed(2)`.
+
+`fmtCe` itself is left as-is so `fmtCeHTML` and other paths that want fixed-precision Ce keep working.
+
+---
+
 ### Per-target rounding override in Set Target modal (v0.5.29.3)
 
 The setup screen has a "Round TCI plan in display units" checkbox (persisted under `tci-pref-quantizeInDisplay`) that snaps every TCI plan call to the user's selected display-unit grid. Once a case is started, the setup screen is no longer reachable, so a clinician who wanted a more exact (or more rounded) plan mid-case had no way to flip it.

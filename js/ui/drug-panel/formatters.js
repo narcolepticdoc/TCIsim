@@ -69,6 +69,27 @@ export function fmtCe(ceMcgMl, drugId, dp = 2) {
 }
 
 /**
+ * Smart decimal formatter for user-set Ce set points (target / redose threshold /
+ * emergence). Shows two decimals when the hundredths digit is non-zero, otherwise
+ * one decimal. Examples: 3.0 → "3.0", 3.05 → "3.05", 3.097 → "3.1".
+ */
+export function smartDecimal(value, fallbackDp = 1) {
+  if (!isFinite(value)) return String(value);
+  const t2 = value.toFixed(2);
+  return t2.endsWith('0') ? value.toFixed(fallbackDp) : t2;
+}
+
+/**
+ * Smart Ce formatter — mirrors fmtCe's ng/mL handling but routes through
+ * smartDecimal so user-set values like 1.55 ng/mL aren't rounded to 1.6.
+ */
+export function fmtCeSmart(ceMcgMl, drugId) {
+  const allowed = getAllowedUnits(drugId, 'ceTarget');
+  const v = (allowed && allowed[0] === 'ng/mL') ? ceMcgMl * 1000 : ceMcgMl;
+  return smartDecimal(v);
+}
+
+/**
  * Format Ce/Cp for the prominent drug-card readout. Returns HTML with
  * the hundredths digit wrapped in `.ce-frac` so it can render smaller
  * via CSS. Always two decimals, regardless of drug — the unit (mcg/mL
