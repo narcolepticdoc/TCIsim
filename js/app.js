@@ -29,6 +29,7 @@ import { createTciModal } from './app/tci-modal.js';
 import { createSession } from './app/session.js';
 import { initPortraitLayout, syncPortraitLayout } from './app/portrait-layout.js';
 import { createChartBridge } from './app/chart-bridge.js';
+import { initCompartmentViz } from './ui/compartment-viz.js';
 
 const $ = id => document.getElementById(id);
 
@@ -46,6 +47,7 @@ let annotations = []; // mode transitions, editorial actions
 let tciModal = null;
 let session = null;
 let chartBridge = null;
+let compartmentViz = null;
 
 // ---- Screen Navigation ----
 
@@ -205,6 +207,13 @@ function boot() {
 
   // Convenience alias — many call sites in boot() use refreshChart()
   const refreshChart = () => chartBridge.refresh();
+
+  // Compartment-flow visualization (self-contained; ripout-able).
+  compartmentViz = initCompartmentViz({
+    getModel: () => model,
+    getSelectedDrug: () => selectedDrug,
+    getInspectTime: () => (chart && 'inspectTime' in chart) ? chart.inspectTime : null,
+  });
 
   // Create TCI modal controller
   tciModal = createTciModal({ model, timer, mode, refreshChart, closeModal });
@@ -457,7 +466,7 @@ function boot() {
     getTciFraction: () => 0.95,
     getSsSlopeTol:  () => settings.getSettings().ssSlopeTol,
     getSsExitBand:  () => settings.getSettings().exitBandPct,
-    onFrame: (t) => chartBridge.onFrame(t),
+    onFrame: (t) => { chartBridge.onFrame(t); compartmentViz.onFrame(t); },
   });
 
   history.init({
@@ -524,6 +533,12 @@ function boot() {
   if (btnNewCase) btnNewCase.addEventListener('click', () => {
     $('modal-new-case').classList.add('open');
   });
+
+  // Wire compartment-viz open/close
+  const btnCompartments = $('btn-compartments');
+  if (btnCompartments) btnCompartments.addEventListener('click', () => compartmentViz.open());
+  const btnCompartmentClose = $('btn-compartment-close');
+  if (btnCompartmentClose) btnCompartmentClose.addEventListener('click', () => compartmentViz.close());
 
   // Wire chart controls
   const btnChartReset = $('btn-chart-reset');

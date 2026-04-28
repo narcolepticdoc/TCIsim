@@ -4,6 +4,30 @@
 
 ## Session History
 
+### Compartment-flow visualization (v0.5.30) — Interim
+
+User asked for a self-contained module that visualizes the underlying PK compartments with concentrations and directional drug flow, with one explicit constraint: it must be **as separate as possible from the rest of the sim** so it can be ripped out without complicating anything else. Goal is intuition-building for trainees — see V1 fill from a bolus, watch V2/V3 rise as drug redistributes, see flow reverse as the gradient flips.
+
+Approach. A single new file `js/ui/compartment-viz.js` exports `initCompartmentViz({ getModel, getSelectedDrug, getInspectTime })` and returns `{ open, close, onFrame, destroy }`. It owns its own SVG inside a modal overlay (`#modal-compartment-viz`), built once on init from a static layout of four boxes (Effect site / V1 / V2 / V3) + an Eliminated sink, with five flow arrows (`Pump→V1`, `V1→elim`, `V1↔V2`, `V1↔V3`, `V1→Ce`). Each frame the module reads `Cp/Ce/C2/C3/rate` from the public `model.getConcentrationsAt(drug, t)` API and computes flows from the macro-rate constants:
+
+| Arrow | Formula |
+|---|---|
+| Pump → V1 | `rate` (mg/min) |
+| V1 → elim | `CL · Cp` |
+| V1 ↔ V2 | `Q2 · (Cp − C2)` |
+| V1 ↔ V3 | `Q3 · (Cp − C3)` |
+| V1 → Ce | `ke0 · (Cp − Ce)` (indicator only — Ce is virtual) |
+
+Per-drug PK params come straight from the publicly-exported PK calc functions (`calcEleveldParams`, `calcFentanylParams`, `calcKetamineParams`) so `simulation.js` is untouched. Params are cached and only recomputed when the active drug or the patient demographics change.
+
+Arrow rendering. Each arrow is an SVG `<line>` with a marker-end arrowhead and a midpoint `<text>` flow label. For bidirectional arrows (V1↔V2, V1↔V3, V1↔Ce) the `(x1,y1)` and `(x2,y2)` swap when the signed flow goes negative, so the arrow physically reverses. Stroke-width is `clamp(0.4, 8, log10(1+norm·9)·4 + 0.6)` against a per-drug scale derived from CL; opacity is `clamp(0.18, 1, 0.25 + norm·0.85)`. Elimination uses muted gray; the V1↔Ce arrow is dashed since no mass actually moves.
+
+Inspect-cursor link. The user explicitly asked for the viz to scrub along with the chart's inspect cursor. The module's `getInspectTime` callback returns `chart.inspectTime` (a new one-line getter on `js/ui/chart/index.js` — sole touchpoint outside the new file/`app.js`/`index.html`). When the cursor is active, the viz reads compartment state at the cursor time; otherwise it uses live elapsed time. The header line displays `Live t = …` or `Scrubbed t = …` accordingly.
+
+Wire-up. Four edits to `js/app.js`: import line, module-scope `compartmentViz` declaration, init call in `boot()` after `chartBridge` is created, and chaining into the existing `drugPanel.init({ onFrame })` callback so the viz piggy-backs on the master rAF loop without owning one of its own. Two button handlers (`btn-compartments` open / `btn-compartment-close` close) round it out. Closed-state cost: a single boolean check.
+
+Ripout path. Delete `js/ui/compartment-viz.js`; revert the four edits in `js/app.js`; remove the `#btn-compartments` topbar button, the `#modal-compartment-viz` block, and the `/* ==== COMPARTMENT VIZ (self-contained) ==== */` CSS group from `index.html`. The `chart.inspectTime` getter on `js/ui/chart/index.js` can stay (harmless) or be reverted. No PK files, no event/sim files, no settings keys, no localStorage.
+
 ### Smart decimal formatting for Ce set points (v0.5.29.5) — Interim
 
 User-set Ce values — TCI target, redose threshold, emergence Ce — were displayed with `toFixed(1)` in the drug-card approach line, the chart's right-edge pill labels, and the exit-readout. A clinician who deliberately typed `1.55` for an emergence threshold saw it presented back as `1.6`, which silently rounds away the precision they entered.

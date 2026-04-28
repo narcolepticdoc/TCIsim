@@ -11,6 +11,17 @@
 
 ---
 
+## [0.5.30] — 2026-04-28
+
+New self-contained Compartment Flow visualization. A topbar button (next to Settings) opens a modal showing the four PK compartments — effect site, V1 (central), V2 (fast peripheral), V3 (slow peripheral) — with per-compartment volumes, current concentrations, current amounts (in mg/μg), and inter-compartment mass-flow arrows whose stroke width and direction reflect instantaneous mg/min flow. When the chart's inspect cursor is active the visualization scrubs along with it; otherwise it tracks live elapsed time. Designed to be ripout-able: one new module, one modal block, one CSS group, four edits to `app.js`, and one getter line on the chart.
+
+- `js/ui/compartment-viz.js` — new module exporting `initCompartmentViz({ getModel, getSelectedDrug, getInspectTime })`. Builds the SVG once on init; per-frame work is `O(arrows)` attribute writes. Reads PK params via the public `calc{Eleveld,Fentanyl,Ketamine}Params` exports so `simulation.js` is untouched. Flow math: `Pump→V1 = rate`, `V1→elim = CL·Cp`, `V1↔V2 = Q2·(Cp−C2)`, `V1↔V3 = Q3·(Cp−C3)`, `V1→Ce = ke0·(Cp−Ce)` (indicator only — Ce is virtual).
+- `index.html` — new `#btn-compartments` topbar button (⊟ glyph) and `#modal-compartment-viz` overlay; ~25 lines of co-located CSS in the existing `<style>` block under `/* ==== COMPARTMENT VIZ (self-contained) ==== */`.
+- `js/app.js` — single import, `initCompartmentViz` call after `chartBridge` creation, `compartmentViz.onFrame(t)` chained into the existing `drugPanel.init({ onFrame })` callback, and two button handlers.
+- `js/ui/chart/index.js` — added `get inspectTime() { return s.inspectTime; }` next to the existing `inspectEnabled` getter so the viz can poll the cursor time without coupling to chart internals.
+
+---
+
 ## [0.5.29.5] — 2026-04-28
 
 Smart decimal formatting for user-set Ce values (target, redose threshold, emergence). They were displayed as `x.x`, which silently rounded a typed-in `1.55` up to `1.6`. They now show two decimals when the hundredths digit is non-zero (`1.55`) and one decimal otherwise (`3.0`). Computed values like steady-state Ce keep their existing precision; live Ce/Cp readouts (`fmtCeHTML`) are unchanged.

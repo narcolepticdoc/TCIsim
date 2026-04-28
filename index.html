@@ -935,6 +935,35 @@
     .setup-form>*:nth-child(2){animation-delay:.08s}
     .setup-form>*:nth-child(3){animation-delay:.12s}
     .setup-form>*:nth-child(4){animation-delay:.16s}
+
+    /* ==== COMPARTMENT VIZ (self-contained) ==== */
+    .compartment-viz-box{max-width:760px;width:96%;padding:16px;--cv-drug-color:#0099ff}
+    .cv-header{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+    .cv-header h3{margin:0;flex:1;text-align:left;font-size:14px}
+    .cv-time{font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
+    .cv-subtitle{font-size:11px;color:var(--text-muted);margin:0 0 10px 0;text-align:left;line-height:1.35}
+    #cv-svg{display:block;width:100%;height:auto;max-height:65vh;background:var(--bg-deep);border:1px solid var(--border-subtle);border-radius:var(--radius-sm)}
+    #cv-svg .cv-rect{fill:rgba(255,255,255,.04);stroke:var(--cv-drug-color);stroke-width:1.5}
+    #cv-svg .cv-rect-virtual{stroke-dasharray:3 3;fill:rgba(255,255,255,.02)}
+    #cv-svg .cv-rect-sink{stroke:var(--text-muted);stroke-dasharray:5 4;fill:rgba(255,255,255,.02)}
+    #cv-svg .cv-box-title{fill:var(--text-primary);font-family:var(--font-display);font-size:12px;font-weight:600}
+    #cv-svg .cv-box-vol{fill:var(--text-muted);font-family:var(--font-mono);font-size:10px}
+    #cv-svg .cv-box-conc{fill:var(--cv-drug-color);font-family:var(--font-mono);font-size:13px;font-weight:600}
+    #cv-svg .cv-box-amt{fill:var(--text-secondary);font-family:var(--font-mono);font-size:10.5px}
+    #cv-svg .cv-line{stroke:var(--cv-drug-color);fill:none;stroke-linecap:round}
+    #cv-svg .cv-line-dashed{stroke-dasharray:5 4}
+    #cv-svg .cv-arrow-elim .cv-line{stroke:var(--text-muted)}
+    #cv-svg .cv-flow-label{fill:var(--text-secondary);font-family:var(--font-mono);font-size:10.5px}
+    #cv-svg .cv-arrowhead{fill:var(--cv-drug-color)}
+    #cv-svg .cv-ah-elim{fill:var(--text-muted)}
+    @media (max-width:640px){
+      .compartment-viz-box{padding:10px}
+      .cv-header h3{font-size:13px}
+      #cv-svg .cv-box-title{font-size:11px}
+      #cv-svg .cv-box-conc{font-size:12px}
+      #cv-svg .cv-box-amt{font-size:9.5px}
+      #cv-svg .cv-flow-label{font-size:9.5px}
+    }
   </style>
 </head>
 <body>
@@ -1139,6 +1168,7 @@
           </div>
         </div>
       </div>
+      <button class="btn-settings" id="btn-compartments" title="Compartments" aria-label="Compartment visualization">&#9707;</button>
       <button class="btn-settings" id="btn-settings" title="Settings">&#9881;</button>
       <button class="btn-new-case" id="btn-new-case">New Case</button>
     </div>
@@ -1738,6 +1768,19 @@
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="btn-settings-close">Done</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Compartment-flow visualization (self-contained; safe to remove) -->
+  <div class="modal-overlay" id="modal-compartment-viz">
+    <div class="modal-box compartment-viz-box">
+      <div class="cv-header">
+        <h3 id="cv-drug-title">Compartment Flow</h3>
+        <span class="cv-time" id="cv-time-label"></span>
+        <button class="modal-btn-cancel" id="btn-compartment-close">Close</button>
+      </div>
+      <p class="cv-subtitle">Live compartment concentrations and drug-flow direction. Tap the chart to scrub the cursor — the visualization follows.</p>
+      <svg id="cv-svg" viewBox="0 0 600 420" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
   </div>
 

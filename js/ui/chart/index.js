@@ -659,6 +659,7 @@ export function createChart(canvas, config = {}) {
     setFontScale,
     destroy,
     get inspectEnabled() { return s.inspectEnabled; },
+    get inspectTime() { return s.inspectTime; },
     get eventAnnotationsEnabled() { return s.eventAnnotationsEnabled; },
     get chart() { return chart; },
   };
