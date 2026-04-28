@@ -11,6 +11,28 @@
 
 ---
 
+## [0.5.30.1] — 2026-04-28
+
+Compartment-flow visualization moved out of a modal and into a dedicated retrospective Analysis screen. Modal-overlay pointer events were blocking chart access, which defeated the inspect-cursor link. The analysis screen is a full screen (`#analysis-screen`) with the chart on the left/top and the compartment SVG on the right/bottom (responsive); navigation is via a ⊟ button on the sim topbar and a "← Back to Sim" button on the analysis screen.
+
+- Chart canvas is **teleported** between screens. `enterAnalysisScreen()` moves the existing `.chart-area` DOM node from `#panel-chart` into `#analysis-chart-host` and calls `chart.chart.resize()`; `exitAnalysisScreen()` returns it to its original parent. This reuses the live chart instance — inspect cursor, zoom, dataset, plugins, gestures all carry over without duplicate state.
+- `js/ui/compartment-viz.js` — replaced the modal `open()` / `close()` API with `setActive(bool)`. `onFrame` early-returns when not active. SVG and header DOM moved out of the modal into the analysis-screen markup; the module's element lookups (`#cv-svg`, `#cv-drug-title`, `#cv-time-label`) are unchanged.
+- `index.html` — removed `#modal-compartment-viz` block; replaced the `COMPARTMENT VIZ` CSS group with `ANALYSIS SCREEN` styles; added `#analysis-screen` with topbar + two-pane content; renamed the topbar button from `#btn-compartments` to `#btn-analyze`.
+- `js/app.js` — replaced modal open/close handlers with `enterAnalysisScreen` / `exitAnalysisScreen` helpers; added `chartAreaHomeParent` cache so the chart returns to its original parent when leaving the analysis screen. Sim timer keeps running in the background — the analysis view is non-destructive.
+
+---
+
+## [0.5.30] — 2026-04-28
+
+New self-contained Compartment Flow visualization. A topbar button (next to Settings) opens a modal showing the four PK compartments — effect site, V1 (central), V2 (fast peripheral), V3 (slow peripheral) — with per-compartment volumes, current concentrations, current amounts (in mg/μg), and inter-compartment mass-flow arrows whose stroke width and direction reflect instantaneous mg/min flow. When the chart's inspect cursor is active the visualization scrubs along with it; otherwise it tracks live elapsed time. Designed to be ripout-able: one new module, one modal block, one CSS group, four edits to `app.js`, and one getter line on the chart.
+
+- `js/ui/compartment-viz.js` — new module exporting `initCompartmentViz({ getModel, getSelectedDrug, getInspectTime })`. Builds the SVG once on init; per-frame work is `O(arrows)` attribute writes. Reads PK params via the public `calc{Eleveld,Fentanyl,Ketamine}Params` exports so `simulation.js` is untouched. Flow math: `Pump→V1 = rate`, `V1→elim = CL·Cp`, `V1↔V2 = Q2·(Cp−C2)`, `V1↔V3 = Q3·(Cp−C3)`, `V1→Ce = ke0·(Cp−Ce)` (indicator only — Ce is virtual).
+- `index.html` — new `#btn-compartments` topbar button (⊟ glyph) and `#modal-compartment-viz` overlay; ~25 lines of co-located CSS in the existing `<style>` block under `/* ==== COMPARTMENT VIZ (self-contained) ==== */`.
+- `js/app.js` — single import, `initCompartmentViz` call after `chartBridge` creation, `compartmentViz.onFrame(t)` chained into the existing `drugPanel.init({ onFrame })` callback, and two button handlers.
+- `js/ui/chart/index.js` — added `get inspectTime() { return s.inspectTime; }` next to the existing `inspectEnabled` getter so the viz can poll the cursor time without coupling to chart internals.
+
+---
+
 ## [0.5.29.5] — 2026-04-28
 
 Smart decimal formatting for user-set Ce values (target, redose threshold, emergence). They were displayed as `x.x`, which silently rounded a typed-in `1.55` up to `1.6`. They now show two decimals when the hundredths digit is non-zero (`1.55`) and one decimal otherwise (`3.0`). Computed values like steady-state Ce keep their existing precision; live Ce/Cp readouts (`fmtCeHTML`) are unchanged.

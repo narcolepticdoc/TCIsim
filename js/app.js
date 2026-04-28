@@ -29,6 +29,7 @@ import { createTciModal } from './app/tci-modal.js';
 import { createSession } from './app/session.js';
 import { initPortraitLayout, syncPortraitLayout } from './app/portrait-layout.js';
 import { createChartBridge } from './app/chart-bridge.js';
+import { initCompartmentViz } from './ui/compartment-viz.js';
 
 const $ = id => document.getElementById(id);
 
@@ -46,6 +47,7 @@ let annotations = []; // mode transitions, editorial actions
 let tciModal = null;
 let session = null;
 let chartBridge = null;
+let compartmentViz = null;
 
 // ---- Screen Navigation ----
 
@@ -57,6 +59,34 @@ function showScreen(id) {
   if (id === 'sim-screen') {
     requestAnimationFrame(() => requestAnimationFrame(syncPortraitLayout));
   }
+}
+
+// ---- Analysis (retrospective) screen ----
+// Teleports the .chart-area DOM node between sim-screen and analysis-screen
+// so the chart instance (and its inspect cursor) is shared across both.
+let chartAreaHomeParent = null;
+
+function teleportChart(targetHost) {
+  const chartArea = document.querySelector('.chart-area');
+  if (!chartArea || !targetHost) return;
+  if (!chartAreaHomeParent) chartAreaHomeParent = chartArea.parentElement;
+  targetHost.appendChild(chartArea);
+  if (chart && chart.chart) {
+    requestAnimationFrame(() => { try { chart.chart.resize(); } catch (_) {} });
+  }
+}
+
+function enterAnalysisScreen() {
+  if (!model) return;
+  teleportChart($('analysis-chart-host'));
+  if (compartmentViz) compartmentViz.setActive(true);
+  showScreen('analysis-screen');
+}
+
+function exitAnalysisScreen() {
+  if (compartmentViz) compartmentViz.setActive(false);
+  if (chartAreaHomeParent) teleportChart(chartAreaHomeParent);
+  showScreen('sim-screen');
 }
 
 // ---- Sim Screen Initialization ----
@@ -205,6 +235,13 @@ function boot() {
 
   // Convenience alias — many call sites in boot() use refreshChart()
   const refreshChart = () => chartBridge.refresh();
+
+  // Compartment-flow visualization (self-contained; ripout-able).
+  compartmentViz = initCompartmentViz({
+    getModel: () => model,
+    getSelectedDrug: () => selectedDrug,
+    getInspectTime: () => (chart && 'inspectTime' in chart) ? chart.inspectTime : null,
+  });
 
   // Create TCI modal controller
   tciModal = createTciModal({ model, timer, mode, refreshChart, closeModal });
@@ -457,7 +494,7 @@ function boot() {
     getTciFraction: () => 0.95,
     getSsSlopeTol:  () => settings.getSettings().ssSlopeTol,
     getSsExitBand:  () => settings.getSettings().exitBandPct,
-    onFrame: (t) => chartBridge.onFrame(t),
+    onFrame: (t) => { chartBridge.onFrame(t); compartmentViz.onFrame(t); },
   });
 
   history.init({
@@ -524,6 +561,11 @@ function boot() {
   if (btnNewCase) btnNewCase.addEventListener('click', () => {
     $('modal-new-case').classList.add('open');
   });
+
+  // Wire retrospective Analysis screen (teleports the chart canvas
+  // into a side-by-side layout with the compartment visualization).
+  $('btn-analyze')?.addEventListener('click', () => enterAnalysisScreen());
+  $('btn-analysis-back')?.addEventListener('click', () => exitAnalysisScreen());
 
   // Wire chart controls
   const btnChartReset = $('btn-chart-reset');

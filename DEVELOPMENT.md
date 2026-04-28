@@ -4,6 +4,44 @@
 
 ## Session History
 
+### Compartment-flow viz: modal → retrospective Analysis screen (v0.5.30.1) — Interim
+
+The first cut of the compartment visualization (v0.5.30) was a modal overlay opened from a topbar button. User flagged that the modal blocked the chart underneath, which defeated the whole point — they couldn't move the chart's inspect cursor while the visualization was open, so the "scrub the chart, watch the compartments scrub with it" interaction was unreachable. We considered a few fixes (non-modal floating panel with click-through, side drawer, swap-with-history-tab); user chose: just give it its own retrospective Analysis page with the chart on the left and the visualization on the right.
+
+Approach. New `#analysis-screen` (a peer of `#setup-screen` and `#sim-screen`). Topbar with "← Back to Sim", title, and time readout — no bottom controls, since this is read-only retrospective analysis. The content area is a two-pane flex layout: chart-host on the left, viz-host on the right (landscape ≥900 px) or stacked (chart on top, viz below) on narrow / portrait viewports.
+
+Chart canvas is **teleported** rather than duplicated. On `enterAnalysisScreen`, `document.querySelector('.chart-area')` is appended to `#analysis-chart-host`; `chartAreaHomeParent` caches the original parent so `exitAnalysisScreen` puts it back. After each move we call `chart.chart.resize()` inside a `requestAnimationFrame` to let the new container's bounding box settle. Chart.js doesn't care about the canvas's parent — it holds a direct canvas reference and re-measures via the parent on resize, so all chart state survives the move: the inspect cursor, zoom, datasets, plugins, gesture handlers attached to the parent. This was the cheapest possible reuse.
+
+Compartment-viz module. Replaced `open()` / `close()` (which toggled `.modal-overlay.open`) with a single `setActive(bool)` method; `onFrame` early-returns when `!isActive`. The SVG (`#cv-svg`), title (`#cv-drug-title`), and time readout (`#cv-time-label`) DOM moved out of the modal block into the analysis-screen markup, but kept the same IDs so the module's element lookups didn't change.
+
+Sim timer keeps running in the background while you're on the analysis screen — the cursor's "Live t" keeps ticking. The inspect cursor (when set) scrubs independently of that. This was a deliberate choice: pausing on enter would lose state if the user just wanted to peek; the user agreed.
+
+Removed: `#modal-compartment-viz` block from `index.html`, the `COMPARTMENT VIZ` CSS group, the modal open/close button handlers in `app.js`. Renamed `#btn-compartments` (modal opener) to `#btn-analyze` (screen navigator). Net diff of v0.5.30.1 over v0.5.30: ~80 lines added (the analysis screen markup + CSS), ~30 lines removed (modal scaffolding), and the viz module shrunk slightly.
+
+### Compartment-flow visualization (v0.5.30) — Interim
+
+User asked for a self-contained module that visualizes the underlying PK compartments with concentrations and directional drug flow, with one explicit constraint: it must be **as separate as possible from the rest of the sim** so it can be ripped out without complicating anything else. Goal is intuition-building for trainees — see V1 fill from a bolus, watch V2/V3 rise as drug redistributes, see flow reverse as the gradient flips.
+
+Approach. A single new file `js/ui/compartment-viz.js` exports `initCompartmentViz({ getModel, getSelectedDrug, getInspectTime })` and returns `{ open, close, onFrame, destroy }`. It owns its own SVG inside a modal overlay (`#modal-compartment-viz`), built once on init from a static layout of four boxes (Effect site / V1 / V2 / V3) + an Eliminated sink, with five flow arrows (`Pump→V1`, `V1→elim`, `V1↔V2`, `V1↔V3`, `V1→Ce`). Each frame the module reads `Cp/Ce/C2/C3/rate` from the public `model.getConcentrationsAt(drug, t)` API and computes flows from the macro-rate constants:
+
+| Arrow | Formula |
+|---|---|
+| Pump → V1 | `rate` (mg/min) |
+| V1 → elim | `CL · Cp` |
+| V1 ↔ V2 | `Q2 · (Cp − C2)` |
+| V1 ↔ V3 | `Q3 · (Cp − C3)` |
+| V1 → Ce | `ke0 · (Cp − Ce)` (indicator only — Ce is virtual) |
+
+Per-drug PK params come straight from the publicly-exported PK calc functions (`calcEleveldParams`, `calcFentanylParams`, `calcKetamineParams`) so `simulation.js` is untouched. Params are cached and only recomputed when the active drug or the patient demographics change.
+
+Arrow rendering. Each arrow is an SVG `<line>` with a marker-end arrowhead and a midpoint `<text>` flow label. For bidirectional arrows (V1↔V2, V1↔V3, V1↔Ce) the `(x1,y1)` and `(x2,y2)` swap when the signed flow goes negative, so the arrow physically reverses. Stroke-width is `clamp(0.4, 8, log10(1+norm·9)·4 + 0.6)` against a per-drug scale derived from CL; opacity is `clamp(0.18, 1, 0.25 + norm·0.85)`. Elimination uses muted gray; the V1↔Ce arrow is dashed since no mass actually moves.
+
+Inspect-cursor link. The user explicitly asked for the viz to scrub along with the chart's inspect cursor. The module's `getInspectTime` callback returns `chart.inspectTime` (a new one-line getter on `js/ui/chart/index.js` — sole touchpoint outside the new file/`app.js`/`index.html`). When the cursor is active, the viz reads compartment state at the cursor time; otherwise it uses live elapsed time. The header line displays `Live t = …` or `Scrubbed t = …` accordingly.
+
+Wire-up. Four edits to `js/app.js`: import line, module-scope `compartmentViz` declaration, init call in `boot()` after `chartBridge` is created, and chaining into the existing `drugPanel.init({ onFrame })` callback so the viz piggy-backs on the master rAF loop without owning one of its own. Two button handlers (`btn-compartments` open / `btn-compartment-close` close) round it out. Closed-state cost: a single boolean check.
+
+Ripout path. Delete `js/ui/compartment-viz.js`; revert the four edits in `js/app.js`; remove the `#btn-compartments` topbar button, the `#modal-compartment-viz` block, and the `/* ==== COMPARTMENT VIZ (self-contained) ==== */` CSS group from `index.html`. The `chart.inspectTime` getter on `js/ui/chart/index.js` can stay (harmless) or be reverted. No PK files, no event/sim files, no settings keys, no localStorage.
+
 ### Smart decimal formatting for Ce set points (v0.5.29.5) — Interim
 
 User-set Ce values — TCI target, redose threshold, emergence Ce — were displayed with `toFixed(1)` in the drug-card approach line, the chart's right-edge pill labels, and the exit-readout. A clinician who deliberately typed `1.55` for an emergence threshold saw it presented back as `1.6`, which silently rounds away the precision they entered.
