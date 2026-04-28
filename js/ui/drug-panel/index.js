@@ -16,7 +16,7 @@
 
 import * as settings from '../settings.js';
 import { isPumpEnabled } from '../../util/constants.js';
-import { fmtCe, fmtCeHTML, fmtRateInline, bisColor, isInBolusPhase, fmtCountdown,
+import { fmtCe, fmtCeHTML, fmtCeSmart, fmtRateInline, bisColor, isInBolusPhase, fmtCountdown,
          TCI_FRACTION_DEFAULT, SS_SLOPE_DEFAULT, EXIT_BAND_DEFAULT } from './formatters.js';
 import { setCurveData, updateApproachLine, _getApproachCache,
          getPlateauRegion, getSteadyStateCe, invalidateAll,
@@ -189,7 +189,7 @@ function update() {
           barEl?.parentElement?.classList.remove('step-bar-below');
           if (barEl) barEl.style.width = _intermittentBarPct(ctx, dId, t, cache.arrivalMin) + '%';
           if (cntEl) {
-            const ceStr = fmtCe(ceTarget, dId, 1);
+            const ceStr = fmtCeSmart(ceTarget, dId);
             const newHtml = rem > 0
               ? `Redose Threshold <span class="appr-val">${ceStr}</span> in <span class="appr-time">${fmtCountdown(rem)}</span>` : '';
             if (cntEl.innerHTML !== newHtml) cntEl.innerHTML = newHtml;
