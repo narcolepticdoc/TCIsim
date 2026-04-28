@@ -11,6 +11,14 @@
 
 ---
 
+## [0.5.30.2] — 2026-04-28
+
+Compartment-flow visualization legibility tweak: flow numbers no longer fade with magnitude and arrow stroke-widths vary across a much tighter range. Previously the label opacity was tied to flow magnitude (`min 0.18`), so small but informative flows printed in nearly invisible text; arrows ranged from `0.4 px` (essentially a hairline) up to `8 px` (chunky), which obscured the box structure.
+
+- `js/ui/compartment-viz.js` — `updateArrow()`: removed the per-arrow `opacity` attribute on the flow-rate `<text>` label; line `stroke-opacity` is now a constant `1`. Stroke-width range tightened from `0.4–8 px` (log-scaled) to `1.6–4.2 px` (linear in `min(1, |flow|/flowScale)`). Direction-by-sign behavior unchanged.
+
+---
+
 ## [0.5.30.1] — 2026-04-28
 
 Compartment-flow visualization moved out of a modal and into a dedicated retrospective Analysis screen. Modal-overlay pointer events were blocking chart access, which defeated the inspect-cursor link. The analysis screen is a full screen (`#analysis-screen`) with the chart on the left/top and the compartment SVG on the right/bottom (responsive); navigation is via a ⊟ button on the sim topbar and a "← Back to Sim" button on the analysis screen.

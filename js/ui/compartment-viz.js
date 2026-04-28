@@ -219,15 +219,14 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
       const tmp = from; from = to; to = tmp;
     }
     const mag = Math.abs(signedRate);
-    const norm = mag / flowScale;
-    const sw = Math.max(0.4, Math.min(8, Math.log10(1 + norm * 9) * 4 + 0.6));
-    const op = Math.max(0.18, Math.min(1, 0.25 + norm * 0.85));
+    const norm = Math.min(1, mag / flowScale);
+    const sw = 1.6 + norm * 2.6;
     a.line.setAttribute('x1', from.x);
     a.line.setAttribute('y1', from.y);
     a.line.setAttribute('x2', to.x);
     a.line.setAttribute('y2', to.y);
     a.line.setAttribute('stroke-width', sw.toFixed(2));
-    a.line.setAttribute('stroke-opacity', op.toFixed(2));
+    a.line.setAttribute('stroke-opacity', '1');
     a.line.setAttribute('marker-end',
       'url(#' + (id === 'elim' ? 'ah-elim' : (id === 'v1ce' ? 'ah-ce' : 'ah-default')) + ')');
     const mx = (from.x + to.x) / 2;
@@ -235,7 +234,6 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     a.label.setAttribute('x', mx);
     a.label.setAttribute('y', my);
     a.label.textContent = fmtFlow(signedRate) + ' mg/min';
-    a.label.setAttribute('opacity', op.toFixed(2));
   }
 
   function onFrame(tLive) {
