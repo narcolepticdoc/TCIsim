@@ -9,7 +9,7 @@
  * The keypad never touches the model directly.
  */
 
-import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue }
+import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, getRoundingNoteText }
   from '../util/units.js';
 import { DRUG_DEFS } from '../util/constants.js';
 
@@ -106,7 +106,16 @@ export function init(opts = {}) {
   const roundCb = $('keypad-round-in-display');
   if (roundCb) roundCb.addEventListener('change', () => {
     currentRoundOverride = roundCb.checked;
+    updateRoundNote();
   });
+}
+
+function updateRoundNote() {
+  const note = $('keypad-round-note');
+  if (!note) return;
+  const enabled = !!currentRoundOverride;
+  note.textContent = getRoundingNoteText(currentDrug, enabled);
+  note.classList.toggle('active', enabled);
 }
 
 /**
@@ -182,6 +191,7 @@ export function show(type) {
     roundCb.checked = globalRound;
     currentRoundOverride = globalRound;
     roundRow.style.display = '';
+    updateRoundNote();
   } else {
     if (roundRow) roundRow.style.display = 'none';
     currentRoundOverride = null;

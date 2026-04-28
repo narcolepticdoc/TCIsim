@@ -178,6 +178,38 @@ export function getQuantizeConfig(drugId, enabledOverride) {
 }
 
 /**
+ * Format the rounding-note line shown next to the "Round in display units"
+ * checkbox. Mirrors the setup-screen note so the keypad modal and setup
+ * screen describe the same grid using the same wording.
+ *
+ * @param {string} drugId
+ * @param {boolean} enabled - the live checkbox state
+ * @param {Object} [opts]
+ * @param {string} [opts.bolusUnit] - override the resolved bolus display unit
+ * @param {string} [opts.rateUnit]  - override the resolved rate display unit
+ * @returns {string}
+ */
+export function getRoundingNoteText(drugId, enabled, opts = {}) {
+  if (!enabled) {
+    return 'Planner rounds in engine-canonical units (mg / mg/min). ' +
+      'Enable rounding to align with your selected display units.';
+  }
+  const cfg = getQuantizeConfig(drugId, true);
+  const bolusUnit = opts.bolusUnit || cfg.bolusDisplayUnit || getDefaultUnit(drugId, 'bolus');
+  const rateUnit  = opts.rateUnit  || cfg.rateDisplayUnit  || getDefaultUnit(drugId, 'rate');
+  const bolusStep = getQuantStep(drugId, 'bolus', bolusUnit);
+  const rateStep  = getQuantStep(drugId, 'rate',  rateUnit);
+  const fmt = (s) => Number.isInteger(s) ? String(s) : String(parseFloat(s.toFixed(4)));
+  const bolusPart = bolusStep != null
+    ? `bolus → nearest ${fmt(bolusStep)} ${bolusUnit}`
+    : `bolus → ${bolusUnit} (no rounding)`;
+  const ratePart = rateStep != null
+    ? `rate → nearest ${fmt(rateStep)} ${rateUnit}`
+    : `rate → ${rateUnit} (no rounding)`;
+  return `Plan rounds to: ${bolusPart}, ${ratePart}`;
+}
+
+/**
  * Format a value with appropriate decimal places for its unit.
  * 
  * @param {number} value

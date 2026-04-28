@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.29.4] — 2026-04-27
+
+Set Target rounding override now shows the same explanation note as the setup screen — e.g. `Plan rounds to: bolus → nearest 10 mcg/kg, rate → nearest 5 mcg/kg/min`. Off-state shows the canonical-units hint. Live-updates when the checkbox is toggled.
+
+- `js/util/units.js` — new `getRoundingNoteText(drugId, enabled, opts)` formats the note text. Resolves display units via `getQuantizeConfig(drugId, true)` so it reads the same source as the planner.
+- `index.html` — `#keypad-round-note` (uses existing `.rounding-note` class) inside `#keypad-round-row`. Row switched to a column flex so label sits above the note.
+- `js/ui/keypad.js` — `updateRoundNote()` helper called when the modal opens in `'ceTarget'` mode and on every checkbox `change`.
+
+---
+
 ## [0.5.29.3] — 2026-04-27
 
 Set Target keypad now exposes a one-shot rounding override. The setup screen's "Round TCI plan in display units" flag is unreachable once a case is running, so a clinician who wanted a more exact (or more rounded) plan mid-case had no way to flip it. The keypad modal now mirrors that checkbox in the Ce-target view; toggling it affects only the plan being confirmed and is not persisted — the modal re-opens at the global config value every time.
