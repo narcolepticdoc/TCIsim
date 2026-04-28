@@ -936,13 +936,22 @@
     .setup-form>*:nth-child(3){animation-delay:.12s}
     .setup-form>*:nth-child(4){animation-delay:.16s}
 
-    /* ==== COMPARTMENT VIZ (self-contained) ==== */
-    .compartment-viz-box{max-width:760px;width:96%;padding:16px;--cv-drug-color:#0099ff}
-    .cv-header{display:flex;align-items:center;gap:12px;margin-bottom:6px}
-    .cv-header h3{margin:0;flex:1;text-align:left;font-size:14px}
-    .cv-time{font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
-    .cv-subtitle{font-size:11px;color:var(--text-muted);margin:0 0 10px 0;text-align:left;line-height:1.35}
-    #cv-svg{display:block;width:100%;height:auto;max-height:65vh;background:var(--bg-deep);border:1px solid var(--border-subtle);border-radius:var(--radius-sm)}
+    /* ==== ANALYSIS SCREEN (self-contained) ==== */
+    #analysis-screen{flex-direction:column;--cv-drug-color:#0099ff}
+    .analysis-topbar{display:flex;align-items:center;gap:12px;padding:6px 12px;background:var(--bg-card);border-bottom:1px solid var(--border-subtle);flex-shrink:0}
+    .analysis-topbar h2{margin:0;font-family:var(--font-display);font-size:13px;font-weight:600;color:var(--text-primary);letter-spacing:.04em;text-transform:uppercase}
+    .analysis-topbar .analysis-spacer{flex:1}
+    .analysis-time-readout{font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
+    .btn-analysis-back{background:none;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-secondary);font-family:var(--font-mono);font-size:11px;padding:4px 10px;cursor:pointer;transition:all .15s}
+    .btn-analysis-back:hover{color:var(--text-primary);border-color:var(--blue);background:rgba(59,130,246,.08)}
+    .analysis-content{flex:1;display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden}
+    .analysis-chart-host{flex:1 1 0;min-height:0;min-width:0;display:flex;position:relative}
+    .analysis-chart-host>.chart-area{flex:1;min-height:0;min-width:0}
+    .analysis-viz-host{flex:0 0 auto;display:flex;flex-direction:column;background:var(--bg-deep);border-top:1px solid var(--border-subtle);padding:8px 10px;min-height:0}
+    .analysis-viz-host .cv-header{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+    .analysis-viz-host .cv-header h3{margin:0;font-size:12px;font-weight:600;color:var(--text-primary)}
+    .analysis-viz-host .cv-time{font-family:var(--font-mono);font-size:10.5px;color:var(--text-muted)}
+    #cv-svg{display:block;width:100%;height:100%;max-height:42vh;flex:1;min-height:0}
     #cv-svg .cv-rect{fill:rgba(255,255,255,.04);stroke:var(--cv-drug-color);stroke-width:1.5}
     #cv-svg .cv-rect-virtual{stroke-dasharray:3 3;fill:rgba(255,255,255,.02)}
     #cv-svg .cv-rect-sink{stroke:var(--text-muted);stroke-dasharray:5 4;fill:rgba(255,255,255,.02)}
@@ -956,9 +965,16 @@
     #cv-svg .cv-flow-label{fill:var(--text-secondary);font-family:var(--font-mono);font-size:10.5px}
     #cv-svg .cv-arrowhead{fill:var(--cv-drug-color)}
     #cv-svg .cv-ah-elim{fill:var(--text-muted)}
+    /* Wide viewports: chart + viz side-by-side */
+    @media (min-width:900px) and (orientation:landscape){
+      .analysis-content{flex-direction:row}
+      .analysis-chart-host{flex:1.6 1 0}
+      .analysis-viz-host{flex:1 1 0;border-top:none;border-left:1px solid var(--border-subtle);max-width:520px}
+      #cv-svg{max-height:none}
+    }
     @media (max-width:640px){
-      .compartment-viz-box{padding:10px}
-      .cv-header h3{font-size:13px}
+      .analysis-topbar h2{font-size:11px}
+      .analysis-time-readout{font-size:10px}
       #cv-svg .cv-box-title{font-size:11px}
       #cv-svg .cv-box-conc{font-size:12px}
       #cv-svg .cv-box-amt{font-size:9.5px}
@@ -1168,7 +1184,7 @@
           </div>
         </div>
       </div>
-      <button class="btn-settings" id="btn-compartments" title="Compartments" aria-label="Compartment visualization">&#9707;</button>
+      <button class="btn-settings" id="btn-analyze" title="Open retrospective analysis view" aria-label="Retrospective analysis">&#9707;</button>
       <button class="btn-settings" id="btn-settings" title="Settings">&#9881;</button>
       <button class="btn-new-case" id="btn-new-case">New Case</button>
     </div>
@@ -1288,6 +1304,27 @@
       <button class="btn-ctrl btn-ctrl-rate" id="btn-rate">Set Rate</button>
       <button class="btn-ctrl btn-ctrl-bolus" id="btn-bolus">Add Bolus</button>
       <button class="btn-ctrl btn-ctrl-pause is-stopped" id="btn-pause">Start</button>
+    </div>
+  </div>
+
+  <!-- =========== ANALYSIS SCREEN (retrospective view; chart + compartments) =========== -->
+  <div id="analysis-screen" class="screen">
+    <div class="analysis-topbar">
+      <button class="btn-analysis-back" id="btn-analysis-back" type="button">&larr; Back to Sim</button>
+      <h2>Retrospective Analysis</h2>
+      <div class="analysis-spacer"></div>
+      <span class="analysis-time-readout" id="cv-time-label"></span>
+    </div>
+    <div class="analysis-content">
+      <div class="analysis-chart-host" id="analysis-chart-host">
+        <!-- .chart-area DOM node is teleported here on entry, returned on exit -->
+      </div>
+      <div class="analysis-viz-host">
+        <div class="cv-header">
+          <h3 id="cv-drug-title">Compartment Flow</h3>
+        </div>
+        <svg id="cv-svg" viewBox="0 0 600 420" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
     </div>
   </div>
 
@@ -1768,19 +1805,6 @@
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="btn-settings-close">Done</button>
       </div>
-    </div>
-  </div>
-
-  <!-- Compartment-flow visualization (self-contained; safe to remove) -->
-  <div class="modal-overlay" id="modal-compartment-viz">
-    <div class="modal-box compartment-viz-box">
-      <div class="cv-header">
-        <h3 id="cv-drug-title">Compartment Flow</h3>
-        <span class="cv-time" id="cv-time-label"></span>
-        <button class="modal-btn-cancel" id="btn-compartment-close">Close</button>
-      </div>
-      <p class="cv-subtitle">Live compartment concentrations and drug-flow direction. Tap the chart to scrub the cursor — the visualization follows.</p>
-      <svg id="cv-svg" viewBox="0 0 600 420" preserveAspectRatio="xMidYMid meet"></svg>
     </div>
   </div>
 

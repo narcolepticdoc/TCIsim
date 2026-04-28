@@ -4,6 +4,20 @@
 
 ## Session History
 
+### Compartment-flow viz: modal → retrospective Analysis screen (v0.5.30.1) — Interim
+
+The first cut of the compartment visualization (v0.5.30) was a modal overlay opened from a topbar button. User flagged that the modal blocked the chart underneath, which defeated the whole point — they couldn't move the chart's inspect cursor while the visualization was open, so the "scrub the chart, watch the compartments scrub with it" interaction was unreachable. We considered a few fixes (non-modal floating panel with click-through, side drawer, swap-with-history-tab); user chose: just give it its own retrospective Analysis page with the chart on the left and the visualization on the right.
+
+Approach. New `#analysis-screen` (a peer of `#setup-screen` and `#sim-screen`). Topbar with "← Back to Sim", title, and time readout — no bottom controls, since this is read-only retrospective analysis. The content area is a two-pane flex layout: chart-host on the left, viz-host on the right (landscape ≥900 px) or stacked (chart on top, viz below) on narrow / portrait viewports.
+
+Chart canvas is **teleported** rather than duplicated. On `enterAnalysisScreen`, `document.querySelector('.chart-area')` is appended to `#analysis-chart-host`; `chartAreaHomeParent` caches the original parent so `exitAnalysisScreen` puts it back. After each move we call `chart.chart.resize()` inside a `requestAnimationFrame` to let the new container's bounding box settle. Chart.js doesn't care about the canvas's parent — it holds a direct canvas reference and re-measures via the parent on resize, so all chart state survives the move: the inspect cursor, zoom, datasets, plugins, gesture handlers attached to the parent. This was the cheapest possible reuse.
+
+Compartment-viz module. Replaced `open()` / `close()` (which toggled `.modal-overlay.open`) with a single `setActive(bool)` method; `onFrame` early-returns when `!isActive`. The SVG (`#cv-svg`), title (`#cv-drug-title`), and time readout (`#cv-time-label`) DOM moved out of the modal block into the analysis-screen markup, but kept the same IDs so the module's element lookups didn't change.
+
+Sim timer keeps running in the background while you're on the analysis screen — the cursor's "Live t" keeps ticking. The inspect cursor (when set) scrubs independently of that. This was a deliberate choice: pausing on enter would lose state if the user just wanted to peek; the user agreed.
+
+Removed: `#modal-compartment-viz` block from `index.html`, the `COMPARTMENT VIZ` CSS group, the modal open/close button handlers in `app.js`. Renamed `#btn-compartments` (modal opener) to `#btn-analyze` (screen navigator). Net diff of v0.5.30.1 over v0.5.30: ~80 lines added (the analysis screen markup + CSS), ~30 lines removed (modal scaffolding), and the viz module shrunk slightly.
+
 ### Compartment-flow visualization (v0.5.30) — Interim
 
 User asked for a self-contained module that visualizes the underlying PK compartments with concentrations and directional drug flow, with one explicit constraint: it must be **as separate as possible from the rest of the sim** so it can be ripped out without complicating anything else. Goal is intuition-building for trainees — see V1 fill from a bolus, watch V2/V3 rise as drug redistributes, see flow reverse as the gradient flips.

@@ -4,12 +4,14 @@
  * Renders the four PK compartments (effect-site, V1 central, V2 fast,
  * V3 slow) as boxes with directional flow arrows whose width and
  * direction reflect the instantaneous mass flow (mg/min) between
- * compartments. Linked to the chart's inspect cursor when active —
- * scrubbing the chart scrubs the compartment view.
+ * compartments. Activated by the retrospective Analysis screen, which
+ * also teleports the chart canvas alongside it so the user can scrub
+ * the chart's inspect cursor and watch the compartments scrub in
+ * lockstep.
  *
  * Designed to be ripped out cleanly:
  *   - One import + one init call in js/app.js
- *   - One modal block + one button + ~25 lines of CSS in index.html
+ *   - One screen block + one CSS group in index.html
  *   - One getter on js/ui/chart/index.js (chart.inspectTime)
  *   - Reads simulation state through the public model API only
  */
@@ -81,16 +83,15 @@ function fmtAmount(mg) {
 }
 
 export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }) {
-  const overlay = document.getElementById('modal-compartment-viz');
   const svg = document.getElementById('cv-svg');
-  if (!overlay || !svg) {
-    return { open() {}, close() {}, onFrame() {}, destroy() {} };
+  if (!svg) {
+    return { setActive() {}, onFrame() {}, destroy() {} };
   }
 
   const titleEl = document.getElementById('cv-drug-title');
   const timeEl  = document.getElementById('cv-time-label');
 
-  let isOpen = false;
+  let isActive = false;
   let lastDrugId = null;
   let lastPatientKey = null;
   let cachedParams = null;
@@ -238,7 +239,7 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
   }
 
   function onFrame(tLive) {
-    if (!isOpen) return;
+    if (!isActive) return;
     const model = getModel && getModel();
     const drug  = getSelectedDrug && getSelectedDrug();
     if (!model || !drug) return;
@@ -300,24 +301,14 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     }
   }
 
-  function open() {
-    isOpen = true;
-    overlay.classList.add('open');
-    lastDrugId = null;
+  function setActive(active) {
+    isActive = !!active;
+    if (isActive) lastDrugId = null;
   }
-
-  function close() {
-    isOpen = false;
-    overlay.classList.remove('open');
-  }
-
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) close();
-  });
 
   function destroy() {
-    close();
+    isActive = false;
   }
 
-  return { open, close, onFrame, destroy };
+  return { setActive, onFrame, destroy };
 }

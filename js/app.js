@@ -61,6 +61,34 @@ function showScreen(id) {
   }
 }
 
+// ---- Analysis (retrospective) screen ----
+// Teleports the .chart-area DOM node between sim-screen and analysis-screen
+// so the chart instance (and its inspect cursor) is shared across both.
+let chartAreaHomeParent = null;
+
+function teleportChart(targetHost) {
+  const chartArea = document.querySelector('.chart-area');
+  if (!chartArea || !targetHost) return;
+  if (!chartAreaHomeParent) chartAreaHomeParent = chartArea.parentElement;
+  targetHost.appendChild(chartArea);
+  if (chart && chart.chart) {
+    requestAnimationFrame(() => { try { chart.chart.resize(); } catch (_) {} });
+  }
+}
+
+function enterAnalysisScreen() {
+  if (!model) return;
+  teleportChart($('analysis-chart-host'));
+  if (compartmentViz) compartmentViz.setActive(true);
+  showScreen('analysis-screen');
+}
+
+function exitAnalysisScreen() {
+  if (compartmentViz) compartmentViz.setActive(false);
+  if (chartAreaHomeParent) teleportChart(chartAreaHomeParent);
+  showScreen('sim-screen');
+}
+
 // ---- Sim Screen Initialization ----
 
 function initSimScreen(patient) {
@@ -534,11 +562,10 @@ function boot() {
     $('modal-new-case').classList.add('open');
   });
 
-  // Wire compartment-viz open/close
-  const btnCompartments = $('btn-compartments');
-  if (btnCompartments) btnCompartments.addEventListener('click', () => compartmentViz.open());
-  const btnCompartmentClose = $('btn-compartment-close');
-  if (btnCompartmentClose) btnCompartmentClose.addEventListener('click', () => compartmentViz.close());
+  // Wire retrospective Analysis screen (teleports the chart canvas
+  // into a side-by-side layout with the compartment visualization).
+  $('btn-analyze')?.addEventListener('click', () => enterAnalysisScreen());
+  $('btn-analysis-back')?.addEventListener('click', () => exitAnalysisScreen());
 
   // Wire chart controls
   const btnChartReset = $('btn-chart-reset');
