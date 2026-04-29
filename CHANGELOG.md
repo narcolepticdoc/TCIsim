@@ -11,6 +11,15 @@
 
 ---
 
+## [0.5.30.3] — 2026-04-28
+
+Compartment-viz: pin arrow stroke-width to a constant `2.5 px`, and make the analysis-screen time label diagnostic. Variable thickness was dropping below ~1 device px on small screens at low flow magnitudes (especially when scrubbing into early case time before concentrations have built up), making arrows look like they were "missing" while live mode — almost always with non-trivial flow — looked fine.
+
+- `js/ui/compartment-viz.js` — `updateArrow()`: stroke-width is a flat `2.5`. Magnitude is now conveyed solely by the numeric label (`X mg/min`); arrowhead direction still flips with the sign for bidirectional flows. Removed the now-unused `flowScale` variable and the `Math.max(0.5, params.CL * 5)` initialization in `applyDrugStyling`.
+- Time label on the analysis topbar reformatted to `live H:MM:SS · scrub H:MM:SS · showing live|scrubbed` so it's obvious at a glance whether the viz is following the chart's inspect cursor.
+
+---
+
 ## [0.5.30.2] — 2026-04-28
 
 Compartment-flow visualization legibility tweak: flow numbers no longer fade with magnitude and arrow stroke-widths vary across a much tighter range. Previously the label opacity was tied to flow magnitude (`min 0.18`), so small but informative flows printed in nearly invisible text; arrows ranged from `0.4 px` (essentially a hairline) up to `8 px` (chunky), which obscured the box structure.
