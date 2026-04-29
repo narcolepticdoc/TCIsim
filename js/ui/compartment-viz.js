@@ -106,33 +106,25 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     svg.setAttribute('viewBox', `0 0 ${VIEW_W} ${VIEW_H}`);
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
-    const defs = svgEl('defs');
-    for (const id of ['ah-default', 'ah-elim', 'ah-ce']) {
-      const marker = svgEl('marker', {
-        id, viewBox: '0 0 10 10', refX: '9', refY: '5',
-        markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse',
-      });
-      const poly = svgEl('polygon', { points: '0,0 10,5 0,10' });
-      poly.setAttribute('class', 'cv-arrowhead cv-ah-' + id.replace('ah-', ''));
-      marker.appendChild(poly);
-      defs.appendChild(marker);
-    }
-    svg.appendChild(defs);
-
     for (const arr of ARROWS) {
       const g = svgEl('g', { class: 'cv-arrow cv-arrow-' + arr.id });
       const line = svgEl('line', {
         x1: 0, y1: 0, x2: 0, y2: 0,
         class: 'cv-line' + (arr.dashed ? ' cv-line-dashed' : ''),
       });
+      const head = svgEl('polygon', {
+        points: '0,0 0,0 0,0',
+        class: 'cv-head cv-head-' + arr.id,
+      });
       const label = svgEl('text', {
         x: 0, y: 0, class: 'cv-flow-label',
         'text-anchor': 'middle', 'dominant-baseline': 'middle',
       });
       g.appendChild(line);
+      g.appendChild(head);
       g.appendChild(label);
       svg.appendChild(g);
-      arrowNodes[arr.id] = { g, line, label, def: arr };
+      arrowNodes[arr.id] = { g, line, head, label, def: arr };
     }
 
     for (const key in BOXES) {
@@ -222,8 +214,25 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     a.line.setAttribute('y2', to.y);
     a.line.setAttribute('stroke-width', '2.5');
     a.line.setAttribute('stroke-opacity', '1');
-    a.line.setAttribute('marker-end',
-      'url(#' + (id === 'elim' ? 'ah-elim' : (id === 'v1ce' ? 'ah-ce' : 'ah-default')) + ')');
+
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const HEAD_LEN = 11;
+    const HEAD_WID = 8;
+    const tipX  = to.x;
+    const tipY  = to.y;
+    const baseX = tipX - ux * HEAD_LEN;
+    const baseY = tipY - uy * HEAD_LEN;
+    const px = -uy * HEAD_WID / 2;
+    const py =  ux * HEAD_WID / 2;
+    a.head.setAttribute('points',
+      `${tipX.toFixed(1)},${tipY.toFixed(1)} ` +
+      `${(baseX + px).toFixed(1)},${(baseY + py).toFixed(1)} ` +
+      `${(baseX - px).toFixed(1)},${(baseY - py).toFixed(1)}`);
+
     const mx = (from.x + to.x) / 2;
     const my = (from.y + to.y) / 2 - 8;
     a.label.setAttribute('x', mx);

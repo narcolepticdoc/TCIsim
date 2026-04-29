@@ -11,6 +11,15 @@
 
 ---
 
+## [0.5.30.4] — 2026-04-28
+
+Compartment-viz arrowheads were missing in scrubbed mode but rendering correctly in live mode. Cause: `<marker>` elements referenced via `marker-end` are notoriously flaky on iOS WebKit — particularly when the SVG was hidden via `display:none` during init (the analysis screen starts hidden) and when the line endpoints reverse direction (which happens for bidirectional flows whenever `Cp < C2`/`C3`/`Ce`, common during decay). Live mode happens to avoid most of these states.
+
+- `js/ui/compartment-viz.js` — replaced `<defs>` + `<marker>` arrowheads with inline `<polygon>` elements drawn directly per-frame. `updateArrow()` computes the arrowhead vertices from the line's endpoint and unit direction vector (`HEAD_LEN = 11`, `HEAD_WID = 8`). Arrowhead color follows the line color via the same drug-color CSS variable. No more marker indirection — what's drawn is what's rendered.
+- `index.html` — replaced `.cv-arrowhead` / `.cv-ah-elim` rules with `.cv-head` / `.cv-head-elim` to style the inline polygons.
+
+---
+
 ## [0.5.30.3] — 2026-04-28
 
 Compartment-viz: pin arrow stroke-width to a constant `2.5 px`, and make the analysis-screen time label diagnostic. Variable thickness was dropping below ~1 device px on small screens at low flow magnitudes (especially when scrubbing into early case time before concentrations have built up), making arrows look like they were "missing" while live mode — almost always with non-trivial flow — looked fine.
