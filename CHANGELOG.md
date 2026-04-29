@@ -11,6 +11,15 @@
 
 ---
 
+## [0.5.30.5] — 2026-04-28
+
+Compartment-viz readability bump: SVG text sizes increased across the board so the visualization is comfortable at arm's length.
+
+- `index.html` — desktop sizes: `cv-box-title 12 → 16`, `cv-box-vol 10 → 12`, `cv-box-conc 13 → 19`, `cv-box-amt 10.5 → 14`, `cv-flow-label 10.5 → 14`. Mobile (≤640 px) sizes raised analogously: `title 11 → 14`, `vol added at 11`, `conc 12 → 17`, `amt 9.5 → 12.5`, `flow 9.5 → 12.5`. Analysis topbar: `h2 13 → 14`, drug title `12 → 14`, time readout `11 → 12`, back button `11 → 12`. Bumped `#cv-svg max-height 42vh → 48vh` so the SVG has more room when stacked under the chart on portrait viewports.
+- All bumps fit within the existing box dimensions and arrow anchor positions — no layout changes needed.
+
+---
+
 ## [0.5.30.4] — 2026-04-28
 
 Compartment-viz arrowheads were missing in scrubbed mode but rendering correctly in live mode. Cause: `<marker>` elements referenced via `marker-end` are notoriously flaky on iOS WebKit — particularly when the SVG was hidden via `display:none` during init (the analysis screen starts hidden) and when the line endpoints reverse direction (which happens for bidirectional flows whenever `Cp < C2`/`C3`/`Ce`, common during decay). Live mode happens to avoid most of these states.
