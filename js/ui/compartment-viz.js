@@ -95,7 +95,6 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
   let lastDrugId = null;
   let lastPatientKey = null;
   let cachedParams = null;
-  let flowScale = 1;
 
   const boxNodes = {};
   const arrowNodes = {};
@@ -203,7 +202,6 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     boxNodes.v3.volText.textContent = `V = ${params.V3.toFixed(1)} L`;
     boxNodes.ce.volText.textContent = `ke0 = ${params.ke0.toFixed(3)} /min`;
     boxNodes.elim.volText.textContent = `CL = ${params.CL.toFixed(2)} L/min`;
-    flowScale = Math.max(0.5, params.CL * 5);
   }
 
   function updateArrow(id, signedRate) {
@@ -218,14 +216,11 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     if (arr.bidir && flowing) {
       const tmp = from; from = to; to = tmp;
     }
-    const mag = Math.abs(signedRate);
-    const norm = Math.min(1, mag / flowScale);
-    const sw = 1.6 + norm * 2.6;
     a.line.setAttribute('x1', from.x);
     a.line.setAttribute('y1', from.y);
     a.line.setAttribute('x2', to.x);
     a.line.setAttribute('y2', to.y);
-    a.line.setAttribute('stroke-width', sw.toFixed(2));
+    a.line.setAttribute('stroke-width', '2.5');
     a.line.setAttribute('stroke-opacity', '1');
     a.line.setAttribute('marker-end',
       'url(#' + (id === 'elim' ? 'ah-elim' : (id === 'v1ce' ? 'ah-ce' : 'ah-default')) + ')');
@@ -288,14 +283,18 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     updateArrow('v1ce', fCe);
 
     if (timeEl) {
-      const mins = Math.max(0, t);
-      const hh = Math.floor(mins / 60);
-      const mm = Math.floor(mins % 60);
-      const ss = Math.floor((mins * 60) % 60);
-      const stamp = (hh > 0 ? hh + ':' + String(mm).padStart(2, '0') : mm)
-                  + ':' + String(ss).padStart(2, '0');
-      const label = (inspect != null) ? `Scrubbed t = ${stamp}` : `Live t = ${stamp}`;
-      timeEl.textContent = label;
+      const stamp = (m) => {
+        const mins = Math.max(0, m);
+        const hh = Math.floor(mins / 60);
+        const mm = Math.floor(mins % 60);
+        const ss = Math.floor((mins * 60) % 60);
+        return (hh > 0 ? hh + ':' + String(mm).padStart(2, '0') : mm)
+             + ':' + String(ss).padStart(2, '0');
+      };
+      const liveStamp    = stamp(tLive);
+      const scrubStamp   = (inspect != null && isFinite(inspect)) ? stamp(inspect) : '—';
+      const showingLabel = (inspect != null && isFinite(inspect)) ? 'scrubbed' : 'live';
+      timeEl.textContent = `live ${liveStamp} · scrub ${scrubStamp} · showing ${showingLabel}`;
     }
   }
 
