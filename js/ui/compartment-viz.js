@@ -27,16 +27,9 @@ const PARAM_CALC = {
   ketamine: calcKetamineParams,
 };
 
-const VIEW_W = 600;
-const VIEW_H = 420;
-
-const BOXES = {
-  ce:   { x: 30,  y: 30,  w: 140, h: 80,  label: 'Effect site' },
-  v1:   { x: 230, y: 160, w: 140, h: 100, label: 'V1 (central)' },
-  v2:   { x: 430, y: 60,  w: 140, h: 90,  label: 'V2 (fast)' },
-  v3:   { x: 230, y: 320, w: 140, h: 80,  label: 'V3 (slow)' },
-  elim: { x: 430, y: 320, w: 140, h: 60,  label: 'Eliminated' },
-};
+// Drugs whose concentrations chart in ng/mL rather than μg/mL.
+// Mirrors yScale=1000 entries in CHART_DRUG_CONFIG (chart-bridge.js).
+const NG_DRUGS = new Set(['fentanyl', 'ketamine']);
 
 const ARROWS = [
   { id: 'in',     a: 'pump', b: 'v1',   bidir: false, dashed: false },
@@ -46,12 +39,46 @@ const ARROWS = [
   { id: 'v1ce',   a: 'v1',   b: 'ce',   bidir: true,  dashed: true  },
 ];
 
-const ANCHORS = {
-  pump_to_v1:  { from: { x: 175, y: 210 }, to: { x: 230, y: 210 } },
-  v1_to_elim:  { from: { x: 370, y: 240 }, to: { x: 430, y: 350 } },
-  v1_to_v2:    { from: { x: 370, y: 175 }, to: { x: 430, y: 130 } },
-  v1_to_v3:    { from: { x: 300, y: 260 }, to: { x: 300, y: 320 } },
-  v1_to_ce:    { from: { x: 240, y: 160 }, to: { x: 170, y: 90  } },
+// Two layouts — picked at runtime based on host element aspect ratio.
+// "wide" suits portrait viewports (panel below the chart, wide+short).
+// "tall" suits landscape viewports (panel right of the chart, narrow+tall).
+const LAYOUTS = {
+  wide: {
+    viewBox: '0 0 700 420',
+    pumpLabel: { x: 100, y: 215 },
+    boxes: {
+      ce:   { x: 30,  y: 30,  w: 160, h: 100, label: 'Effect site' },
+      v1:   { x: 280, y: 160, w: 160, h: 110, label: 'V1 (central)' },
+      v2:   { x: 510, y: 60,  w: 160, h: 110, label: 'V2 (fast)' },
+      v3:   { x: 280, y: 310, w: 160, h: 100, label: 'V3 (slow)' },
+      elim: { x: 510, y: 310, w: 160, h: 80,  label: 'Eliminated' },
+    },
+    anchors: {
+      pump_to_v1: { from: { x: 200, y: 215 }, to: { x: 280, y: 215 } },
+      v1_to_elim: { from: { x: 440, y: 250 }, to: { x: 510, y: 350 } },
+      v1_to_v2:   { from: { x: 440, y: 175 }, to: { x: 510, y: 130 } },
+      v1_to_v3:   { from: { x: 360, y: 270 }, to: { x: 360, y: 310 } },
+      v1_to_ce:   { from: { x: 295, y: 160 }, to: { x: 190, y: 100 } },
+    },
+  },
+  tall: {
+    viewBox: '0 0 500 700',
+    pumpLabel: { x: 60, y: 360 },
+    boxes: {
+      ce:   { x: 30,  y: 40,  w: 180, h: 110, label: 'Effect site' },
+      v2:   { x: 290, y: 40,  w: 180, h: 130, label: 'V2 (fast)' },
+      v1:   { x: 145, y: 290, w: 210, h: 160, label: 'V1 (central)' },
+      v3:   { x: 30,  y: 540, w: 200, h: 130, label: 'V3 (slow)' },
+      elim: { x: 290, y: 540, w: 180, h: 130, label: 'Eliminated' },
+    },
+    anchors: {
+      pump_to_v1: { from: { x: 90,  y: 370 }, to: { x: 145, y: 370 } },
+      v1_to_elim: { from: { x: 355, y: 420 }, to: { x: 380, y: 540 } },
+      v1_to_v2:   { from: { x: 320, y: 290 }, to: { x: 380, y: 170 } },
+      v1_to_v3:   { from: { x: 200, y: 450 }, to: { x: 200, y: 540 } },
+      v1_to_ce:   { from: { x: 165, y: 290 }, to: { x: 140, y: 150 } },
+    },
+  },
 };
 
 function svgEl(tag, attrs) {
@@ -71,7 +98,7 @@ function fmtFlow(mgPerMin) {
 
 function fmtConc(c, drugId) {
   if (!isFinite(c)) return '—';
-  if (drugId === 'fentanyl') return (c * 1000).toFixed(2) + ' ng/mL';
+  if (NG_DRUGS.has(drugId)) return (c * 1000).toFixed(2) + ' ng/mL';
   return c.toFixed(2) + ' μg/mL';
 }
 
@@ -95,15 +122,38 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
   let lastDrugId = null;
   let lastPatientKey = null;
   let cachedParams = null;
+  let activeLayoutName = null;
+  let layout = LAYOUTS.wide;
 
   const boxNodes = {};
   const arrowNodes = {};
 
-  buildSvg();
+  pickLayout();
+  observeHostResize();
+
+  function pickLayout() {
+    const host = svg.parentElement;
+    const r = host ? host.getBoundingClientRect() : { width: 1, height: 1 };
+    const aspect = (r.width || 1) / (r.height || 1);
+    const want = aspect < 1 ? 'tall' : 'wide';
+    if (want !== activeLayoutName) {
+      activeLayoutName = want;
+      layout = LAYOUTS[want];
+      buildSvg();
+      lastDrugId = null;
+    }
+  }
+
+  function observeHostResize() {
+    const host = svg.parentElement;
+    if (!host || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => pickLayout());
+    ro.observe(host);
+  }
 
   function buildSvg() {
     while (svg.firstChild) svg.removeChild(svg.firstChild);
-    svg.setAttribute('viewBox', `0 0 ${VIEW_W} ${VIEW_H}`);
+    svg.setAttribute('viewBox', layout.viewBox);
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
     for (const arr of ARROWS) {
@@ -127,8 +177,8 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
       arrowNodes[arr.id] = { g, line, head, label, def: arr };
     }
 
-    for (const key in BOXES) {
-      const b = BOXES[key];
+    for (const key in layout.boxes) {
+      const b = layout.boxes[key];
       const g = svgEl('g', { class: 'cv-box cv-box-' + key });
       const rect = svgEl('rect', {
         x: b.x, y: b.y, width: b.w, height: b.h, rx: 8, ry: 8,
@@ -136,20 +186,20 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
                         + (key === 'elim' ? ' cv-rect-sink' : ''),
       });
       const title = svgEl('text', {
-        x: b.x + b.w / 2, y: b.y + 18,
+        x: b.x + b.w / 2, y: b.y + 22,
         class: 'cv-box-title', 'text-anchor': 'middle',
       });
       title.textContent = b.label;
       const volText = svgEl('text', {
-        x: b.x + b.w / 2, y: b.y + 36,
+        x: b.x + b.w / 2, y: b.y + 42,
         class: 'cv-box-vol', 'text-anchor': 'middle',
       });
       const concText = svgEl('text', {
-        x: b.x + b.w / 2, y: b.y + b.h - 22,
+        x: b.x + b.w / 2, y: b.y + b.h - 28,
         class: 'cv-box-conc', 'text-anchor': 'middle',
       });
       const amtText = svgEl('text', {
-        x: b.x + b.w / 2, y: b.y + b.h - 7,
+        x: b.x + b.w / 2, y: b.y + b.h - 10,
         class: 'cv-box-amt', 'text-anchor': 'middle',
       });
       g.appendChild(rect);
@@ -162,7 +212,8 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     }
 
     const pumpLabel = svgEl('text', {
-      x: 100, y: 215, class: 'cv-box-title', 'text-anchor': 'middle',
+      x: layout.pumpLabel.x, y: layout.pumpLabel.y,
+      class: 'cv-box-title', 'text-anchor': 'middle',
     });
     pumpLabel.textContent = 'Infusion';
     svg.appendChild(pumpLabel);
@@ -201,7 +252,7 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     if (!a) return;
     const arr = a.def;
     const anchorKey = arr.a + '_to_' + arr.b;
-    const anchor = ANCHORS[anchorKey];
+    const anchor = layout.anchors[anchorKey];
     if (!anchor) return;
     let { from, to } = anchor;
     const flowing = signedRate < 0;
@@ -309,7 +360,10 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
 
   function setActive(active) {
     isActive = !!active;
-    if (isActive) lastDrugId = null;
+    if (isActive) {
+      pickLayout();
+      lastDrugId = null;
+    }
   }
 
   function destroy() {

@@ -11,6 +11,18 @@
 
 ---
 
+## [0.5.30.6] — 2026-04-28
+
+Compartment-viz: ng/mL units for ketamine, and orientation-aware SVG layout to fix the iPad landscape letterboxing.
+
+- `js/ui/compartment-viz.js` — `fmtConc()` now converts ketamine concentrations to ng/mL (previously only fentanyl). Mirrors `CHART_DRUG_CONFIG` in `chart-bridge.js`, where both drugs use `yScale: 1000` + `yLabel: 'ng/mL'`. Drugs needing this conversion are kept in a `NG_DRUGS` set so adding another is a one-liner.
+- Replaced the single `BOXES` / `ANCHORS` constants with a `LAYOUTS = { wide, tall }` object. `wide` (viewBox `700 × 420`) is used when the viz host is wider than tall — portrait viewports, where the panel sits below the chart. `tall` (viewBox `500 × 700`) is used when the host is taller than wide — landscape viewports, where the panel sits to the right of the chart. In landscape, the old wide viewBox was letterboxing into ~33 % of the available height; the new tall layout fills it properly.
+- `pickLayout()` reads the viz host's bounding rect and switches layouts when needed; `buildSvg()` runs again to lay everything out from scratch. A `ResizeObserver` on the host re-picks on orientation changes; `setActive(true)` also re-picks on entry to the analysis screen so the very first render uses the correct layout.
+- Tall layout topology: Effect site top-left, V2 top-right, V1 mid-center, V3 bottom-left, Eliminated bottom-right — same connectivity as the wide layout, just rearranged onto a vertical canvas.
+- Box text positions slightly nudged (`title 18 → 22`, `vol 36 → 42`, `conc h-22 → h-28`, `amt h-7 → h-10`) to give the bumped fonts (v0.5.30.5) breathing room.
+
+---
+
 ## [0.5.30.5] — 2026-04-28
 
 Compartment-viz readability bump: SVG text sizes increased across the board so the visualization is comfortable at arm's length.
