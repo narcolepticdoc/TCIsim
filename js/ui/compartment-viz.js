@@ -42,11 +42,9 @@ const ARROWS = [
 // Two layouts — picked at runtime based on host element aspect ratio.
 // "wide" suits portrait viewports (panel below the chart, wide+short).
 // "tall" suits landscape viewports (panel right of the chart, narrow+tall).
-// pumpLabel has anchor='end' so it sits to the LEFT of arrow start.
 const LAYOUTS = {
   wide: {
     viewBox: '0 0 820 440',
-    pumpLabel: { x: 215, y: 200, anchor: 'end' },
     boxes: {
       ce:   { x: 30,  y: 30,  w: 220, h: 110, label: 'Effect site' },
       v1:   { x: 310, y: 165, w: 220, h: 120, label: 'V1 (central)' },
@@ -64,7 +62,6 @@ const LAYOUTS = {
   },
   tall: {
     viewBox: '0 0 540 720',
-    pumpLabel: { x: 95, y: 360, anchor: 'end' },
     boxes: {
       ce:   { x: 30,  y: 40,  w: 220, h: 120, label: 'Effect site' },
       v2:   { x: 290, y: 40,  w: 220, h: 140, label: 'V2 (fast)' },
@@ -224,13 +221,6 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
       boxNodes[key] = { g, rect, title, volText, concText, amtText };
     }
 
-    const pumpLabel = svgEl('text', {
-      x: layout.pumpLabel.x, y: layout.pumpLabel.y,
-      class: 'cv-box-title',
-      'text-anchor': layout.pumpLabel.anchor || 'middle',
-    });
-    pumpLabel.textContent = 'Infusion';
-    svg.appendChild(pumpLabel);
   }
 
   function ensureParams(drugId, model) {
@@ -303,7 +293,7 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     let nx = -uy;
     let ny = ux;
     if (ny > 0) { nx = -nx; ny = -ny; }
-    const offset = 16;
+    const offset = 20;
     const mx = (from.x + to.x) / 2;
     const my = (from.y + to.y) / 2;
     a.label.setAttribute('x', mx + nx * offset);

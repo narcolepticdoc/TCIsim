@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.30.8] — 2026-04-28
+
+Compartment-viz: occlude arrow lines under flow labels with a halo, and drop the separate "Infusion" word that was crowding the pump-arrow flow label.
+
+- `index.html` — `.cv-flow-label` now uses `paint-order: stroke fill` with a `5 px` stroke matching `var(--bg-deep)` (4 px on the mobile breakpoint). The stroke renders first, fill on top — creating a halo that occludes the arrow line passing under each label. This sidesteps the "label sits next to but bounding-box still crosses the line" problem entirely.
+- `js/ui/compartment-viz.js` — removed the dedicated "Infusion" text element from both layouts. The pump arrow's tail enters the diagram from outside the canvas, which already conveys "drug coming in"; the flow rate at the arrow midpoint is the only label needed there. Saves a layout dimension and removes a chronic source of label collisions.
+- Perpendicular offset of flow labels bumped from 16 → 20 viewBox units for additional clearance.
+
+---
+
 ## [0.5.30.7] — 2026-04-28
 
 Compartment-viz: per-drug units for flows and amounts, wider boxes to stop concentration text overflowing, and flow labels offset perpendicular to the arrow so they no longer collide with arrow strokes or the "Infusion" label.

@@ -962,7 +962,7 @@
     #cv-svg .cv-line{stroke:var(--cv-drug-color);fill:none;stroke-linecap:round}
     #cv-svg .cv-line-dashed{stroke-dasharray:5 4}
     #cv-svg .cv-arrow-elim .cv-line{stroke:var(--text-muted)}
-    #cv-svg .cv-flow-label{fill:var(--text-secondary);font-family:var(--font-mono);font-size:14px}
+    #cv-svg .cv-flow-label{fill:var(--text-secondary);font-family:var(--font-mono);font-size:14px;paint-order:stroke fill;stroke:var(--bg-deep);stroke-width:5px;stroke-linejoin:round}
     #cv-svg .cv-head{fill:var(--cv-drug-color);stroke:none}
     #cv-svg .cv-head-elim{fill:var(--text-muted)}
     /* Wide viewports: chart + viz side-by-side */
@@ -979,7 +979,7 @@
       #cv-svg .cv-box-vol{font-size:11px}
       #cv-svg .cv-box-conc{font-size:17px}
       #cv-svg .cv-box-amt{font-size:12.5px}
-      #cv-svg .cv-flow-label{font-size:12.5px}
+      #cv-svg .cv-flow-label{font-size:12.5px;stroke-width:4px}
     }
   </style>
 </head>
