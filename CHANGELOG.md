@@ -11,6 +11,17 @@
 
 ---
 
+## [0.5.30.7] — 2026-04-28
+
+Compartment-viz: per-drug units for flows and amounts, wider boxes to stop concentration text overflowing, and flow labels offset perpendicular to the arrow so they no longer collide with arrow strokes or the "Infusion" label.
+
+- `js/ui/compartment-viz.js` — `fmtFlow(rate, drugId)` now expresses fentanyl/ketamine flows in `μg/min` (auto-promotes to `mg/min` only above 1000 μg/min, e.g. mid-bolus on ketamine); propofol stays `mg/min`. `fmtAmount(mg, drugId)` for fentanyl/ketamine: always `μg` below 1000 μg, then `mg`; propofol unchanged. Both formatters now take a `drugId` argument; all call sites updated.
+- Box widths bumped: wide layout `160 → 220` (viewBox `700 → 820`); tall layout `180/200/210 → 220/220/280` (viewBox `500 → 540`). Concentration text like `Cp = 0.05 ng/mL` was overflowing the 160-unit boxes at the bumped 19 px font; the new widths give it ~30 viewBox units of margin even at the longest formatting.
+- Flow-rate label placement: previously a fixed 8 px above the arrow midpoint, which overlapped horizontal arrow strokes and the "Infusion" topbar word. Now offset 16 viewBox-units along the line's perpendicular, with the perpendicular sign flipped so labels always land "above" the line in screen coords.
+- "Infusion" word now uses `text-anchor="end"` and is positioned to the LEFT of the pump arrow's start (instead of horizontally centered at a hardcoded x), so it never crosses into the flow label's territory.
+
+---
+
 ## [0.5.30.6] — 2026-04-28
 
 Compartment-viz: ng/mL units for ketamine, and orientation-aware SVG layout to fix the iPad landscape letterboxing.

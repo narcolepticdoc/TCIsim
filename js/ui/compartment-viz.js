@@ -42,41 +42,42 @@ const ARROWS = [
 // Two layouts — picked at runtime based on host element aspect ratio.
 // "wide" suits portrait viewports (panel below the chart, wide+short).
 // "tall" suits landscape viewports (panel right of the chart, narrow+tall).
+// pumpLabel has anchor='end' so it sits to the LEFT of arrow start.
 const LAYOUTS = {
   wide: {
-    viewBox: '0 0 700 420',
-    pumpLabel: { x: 100, y: 215 },
+    viewBox: '0 0 820 440',
+    pumpLabel: { x: 215, y: 200, anchor: 'end' },
     boxes: {
-      ce:   { x: 30,  y: 30,  w: 160, h: 100, label: 'Effect site' },
-      v1:   { x: 280, y: 160, w: 160, h: 110, label: 'V1 (central)' },
-      v2:   { x: 510, y: 60,  w: 160, h: 110, label: 'V2 (fast)' },
-      v3:   { x: 280, y: 310, w: 160, h: 100, label: 'V3 (slow)' },
-      elim: { x: 510, y: 310, w: 160, h: 80,  label: 'Eliminated' },
+      ce:   { x: 30,  y: 30,  w: 220, h: 110, label: 'Effect site' },
+      v1:   { x: 310, y: 165, w: 220, h: 120, label: 'V1 (central)' },
+      v2:   { x: 590, y: 60,  w: 220, h: 120, label: 'V2 (fast)' },
+      v3:   { x: 310, y: 320, w: 220, h: 110, label: 'V3 (slow)' },
+      elim: { x: 590, y: 320, w: 220, h: 90,  label: 'Eliminated' },
     },
     anchors: {
-      pump_to_v1: { from: { x: 200, y: 215 }, to: { x: 280, y: 215 } },
-      v1_to_elim: { from: { x: 440, y: 250 }, to: { x: 510, y: 350 } },
-      v1_to_v2:   { from: { x: 440, y: 175 }, to: { x: 510, y: 130 } },
-      v1_to_v3:   { from: { x: 360, y: 270 }, to: { x: 360, y: 310 } },
-      v1_to_ce:   { from: { x: 295, y: 160 }, to: { x: 190, y: 100 } },
+      pump_to_v1: { from: { x: 230, y: 225 }, to: { x: 310, y: 225 } },
+      v1_to_elim: { from: { x: 530, y: 260 }, to: { x: 590, y: 365 } },
+      v1_to_v2:   { from: { x: 530, y: 180 }, to: { x: 590, y: 130 } },
+      v1_to_v3:   { from: { x: 420, y: 285 }, to: { x: 420, y: 320 } },
+      v1_to_ce:   { from: { x: 320, y: 165 }, to: { x: 250, y: 105 } },
     },
   },
   tall: {
-    viewBox: '0 0 500 700',
-    pumpLabel: { x: 60, y: 360 },
+    viewBox: '0 0 540 720',
+    pumpLabel: { x: 95, y: 360, anchor: 'end' },
     boxes: {
-      ce:   { x: 30,  y: 40,  w: 180, h: 110, label: 'Effect site' },
-      v2:   { x: 290, y: 40,  w: 180, h: 130, label: 'V2 (fast)' },
-      v1:   { x: 145, y: 290, w: 210, h: 160, label: 'V1 (central)' },
-      v3:   { x: 30,  y: 540, w: 200, h: 130, label: 'V3 (slow)' },
-      elim: { x: 290, y: 540, w: 180, h: 130, label: 'Eliminated' },
+      ce:   { x: 30,  y: 40,  w: 220, h: 120, label: 'Effect site' },
+      v2:   { x: 290, y: 40,  w: 220, h: 140, label: 'V2 (fast)' },
+      v1:   { x: 130, y: 290, w: 280, h: 160, label: 'V1 (central)' },
+      v3:   { x: 30,  y: 550, w: 230, h: 140, label: 'V3 (slow)' },
+      elim: { x: 300, y: 550, w: 210, h: 140, label: 'Eliminated' },
     },
     anchors: {
-      pump_to_v1: { from: { x: 90,  y: 370 }, to: { x: 145, y: 370 } },
-      v1_to_elim: { from: { x: 355, y: 420 }, to: { x: 380, y: 540 } },
-      v1_to_v2:   { from: { x: 320, y: 290 }, to: { x: 380, y: 170 } },
-      v1_to_v3:   { from: { x: 200, y: 450 }, to: { x: 200, y: 540 } },
-      v1_to_ce:   { from: { x: 165, y: 290 }, to: { x: 140, y: 150 } },
+      pump_to_v1: { from: { x: 105, y: 370 }, to: { x: 130, y: 370 } },
+      v1_to_elim: { from: { x: 410, y: 420 }, to: { x: 405, y: 550 } },
+      v1_to_v2:   { from: { x: 380, y: 290 }, to: { x: 400, y: 180 } },
+      v1_to_v3:   { from: { x: 200, y: 450 }, to: { x: 200, y: 550 } },
+      v1_to_ce:   { from: { x: 160, y: 290 }, to: { x: 140, y: 160 } },
     },
   },
 };
@@ -87,13 +88,19 @@ function svgEl(tag, attrs) {
   return el;
 }
 
-function fmtFlow(mgPerMin) {
+function fmtFlow(mgPerMin, drugId) {
+  const ng = NG_DRUGS.has(drugId);
   const v = Math.abs(mgPerMin);
-  if (v < 0.0001) return '0';
-  if (v < 0.01)   return v.toFixed(4);
-  if (v < 1)      return v.toFixed(3);
-  if (v < 10)     return v.toFixed(2);
-  return v.toFixed(1);
+  const x = ng ? v * 1000 : v;
+  const unit = ng ? ' μg/min' : ' mg/min';
+  if (x < 0.0001) return '0' + unit;
+  if (x < 0.01)   return x.toFixed(4) + unit;
+  if (x < 1)      return x.toFixed(3) + unit;
+  if (x < 10)     return x.toFixed(2) + unit;
+  if (x < 1000)   return x.toFixed(1) + unit;
+  // Switch to mg/min for very large flows in ng-drugs (e.g. ketamine bolus delivery)
+  if (ng) return v.toFixed(1) + ' mg/min';
+  return x.toFixed(0) + unit;
 }
 
 function fmtConc(c, drugId) {
@@ -102,8 +109,14 @@ function fmtConc(c, drugId) {
   return c.toFixed(2) + ' μg/mL';
 }
 
-function fmtAmount(mg) {
+function fmtAmount(mg, drugId) {
   if (!isFinite(mg)) return '—';
+  const ng = NG_DRUGS.has(drugId);
+  if (ng) {
+    const ug = mg * 1000;
+    if (ug < 1000) return ug.toFixed(1) + ' μg';
+    return mg.toFixed(2) + ' mg';
+  }
   if (mg < 1) return (mg * 1000).toFixed(1) + ' μg';
   if (mg < 10) return mg.toFixed(2) + ' mg';
   return mg.toFixed(1) + ' mg';
@@ -213,7 +226,8 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
 
     const pumpLabel = svgEl('text', {
       x: layout.pumpLabel.x, y: layout.pumpLabel.y,
-      class: 'cv-box-title', 'text-anchor': 'middle',
+      class: 'cv-box-title',
+      'text-anchor': layout.pumpLabel.anchor || 'middle',
     });
     pumpLabel.textContent = 'Infusion';
     svg.appendChild(pumpLabel);
@@ -247,7 +261,7 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     boxNodes.elim.volText.textContent = `CL = ${params.CL.toFixed(2)} L/min`;
   }
 
-  function updateArrow(id, signedRate) {
+  function updateArrow(id, signedRate, drugId) {
     const a = arrowNodes[id];
     if (!a) return;
     const arr = a.def;
@@ -284,11 +298,17 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
       `${(baseX + px).toFixed(1)},${(baseY + py).toFixed(1)} ` +
       `${(baseX - px).toFixed(1)},${(baseY - py).toFixed(1)}`);
 
+    // Push label off the line along the perpendicular, biased "up" (smaller
+    // y in SVG screen coords) so labels never sit on top of the stroke.
+    let nx = -uy;
+    let ny = ux;
+    if (ny > 0) { nx = -nx; ny = -ny; }
+    const offset = 16;
     const mx = (from.x + to.x) / 2;
-    const my = (from.y + to.y) / 2 - 8;
-    a.label.setAttribute('x', mx);
-    a.label.setAttribute('y', my);
-    a.label.textContent = fmtFlow(signedRate) + ' mg/min';
+    const my = (from.y + to.y) / 2;
+    a.label.setAttribute('x', mx + nx * offset);
+    a.label.setAttribute('y', my + ny * offset);
+    a.label.textContent = fmtFlow(signedRate, drugId);
   }
 
   function onFrame(tLive) {
@@ -320,11 +340,11 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     const A3 = C3 * params.V3;
 
     boxNodes.v1.concText.textContent = `Cp = ${fmtConc(Cp, drug)}`;
-    boxNodes.v1.amtText.textContent  = fmtAmount(A1);
+    boxNodes.v1.amtText.textContent  = fmtAmount(A1, drug);
     boxNodes.v2.concText.textContent = `C₂ = ${fmtConc(C2, drug)}`;
-    boxNodes.v2.amtText.textContent  = fmtAmount(A2);
+    boxNodes.v2.amtText.textContent  = fmtAmount(A2, drug);
     boxNodes.v3.concText.textContent = `C₃ = ${fmtConc(C3, drug)}`;
-    boxNodes.v3.amtText.textContent  = fmtAmount(A3);
+    boxNodes.v3.amtText.textContent  = fmtAmount(A3, drug);
     boxNodes.ce.concText.textContent = `Ce = ${fmtConc(Ce, drug)}`;
     boxNodes.ce.amtText.textContent  = '';
     boxNodes.elim.concText.textContent = '';
@@ -336,11 +356,11 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     const f13   = params.Q3 * (Cp - C3);
     const fCe   = params.ke0 * (Cp - Ce);
 
-    updateArrow('in',   fIn);
-    updateArrow('elim', fElim);
-    updateArrow('v1v2', f12);
-    updateArrow('v1v3', f13);
-    updateArrow('v1ce', fCe);
+    updateArrow('in',   fIn,   drug);
+    updateArrow('elim', fElim, drug);
+    updateArrow('v1v2', f12,   drug);
+    updateArrow('v1v3', f13,   drug);
+    updateArrow('v1ce', fCe,   drug);
 
     if (timeEl) {
       const stamp = (m) => {
