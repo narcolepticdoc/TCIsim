@@ -44,7 +44,9 @@
     .setup-brand h1{font-family:var(--font-mono);font-weight:500;font-size:24px;letter-spacing:3px;text-transform:uppercase}
     .setup-brand h1 span{color:var(--blue)}
     .setup-brand .subtitle{font-size:11px;color:var(--text-muted);letter-spacing:.4px;text-align:center}
-    .setup-brand .version-tag{font-family:var(--font-mono);font-size:13px;color:var(--text-secondary);letter-spacing:.5px}
+    .setup-brand .version-tag{font-family:var(--font-mono);font-size:13px;color:var(--text-secondary);letter-spacing:.5px;cursor:pointer;user-select:none;transition:color .15s,text-shadow .15s}
+    .setup-brand .version-tag:hover{color:var(--text-primary);text-shadow:0 0 6px rgba(96,165,250,.35)}
+    .setup-brand .version-tag:active{opacity:.7}
     .setup-brand .status-tag{font-family:var(--font-mono);font-size:10px;letter-spacing:.2px;color:var(--text-muted);display:flex;align-items:flex-start;gap:6px;line-height:1.45;text-align:left}
     .setup-brand .status-tag:empty{display:none}
     .setup-brand .status-tag .dot{width:7px;height:7px;border-radius:50%;background:var(--text-muted);flex-shrink:0;margin-top:4px}
@@ -1013,7 +1015,7 @@
 
   <!-- =========== SETUP SCREEN =========== -->
   <div id="setup-screen" class="screen active">
-    <div class="setup-brand"><h1>TCI <span>Sim</span></h1><div class="subtitle">Target-Controlled Infusion Simulator</div><div id="app-version-tag" class="version-tag"></div><div id="app-status-tag" class="status-tag"></div><div class="disclaimer"><strong>Not for clinical use</strong>Teaching &amp; simulation only.<br>Not a medical device.</div></div>
+    <div class="setup-brand"><h1>TCI <span>Sim</span></h1><div class="subtitle">Target-Controlled Infusion Simulator</div><div id="app-version-tag" class="version-tag" title="Click to check for updates" role="button" tabindex="0"></div><div id="app-status-tag" class="status-tag"></div><div class="disclaimer"><strong>Not for clinical use</strong>Teaching &amp; simulation only.<br>Not a medical device.</div></div>
     <div class="setup-form">
       <div class="setup-toprow"><span class="card-title">Patient Demographics</span><div class="unit-toggle"><button id="btn-metric" class="active">Metric</button><button id="btn-imperial">Imperial</button></div></div>
       <div class="patient-summary-display" id="patient-summary-display" tabindex="0" role="button" aria-label="Edit patient demographics">

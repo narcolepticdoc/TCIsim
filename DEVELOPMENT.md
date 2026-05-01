@@ -4,6 +4,23 @@
 
 ## Session History
 
+### Click the version tag to check for updates (v0.5.31.6) — Interim
+
+User asked for a manual update check, triggered by clicking the version number. The natural target — the version tag is already where the user looks when they want to know what they're running, and we now have a status line directly under it that's the perfect place to surface check results.
+
+UI. `.setup-brand .version-tag` gets `cursor: pointer`, a hover state that lifts the color from `text-secondary` to `text-primary` plus a subtle blue text-shadow (so it's clearly interactive without being loud), and a 70 %-opacity active flash. The element gains `title`, `role="button"`, and `tabindex="0"` for accessibility — keyboard users can tab to it and press Enter/Space.
+
+Logic. New `manualCheck()` in `js/app/sw-register.js`. Reuses the existing `checkServerVersion()` machinery — the only change there was making it return a boolean (`true` = update detected) and absorbing fetch errors with a `try/catch` around the `fetch()` call so manual checks can react to the offline case (returns false → fall back to the offline steady-state status, which already says "Offline. Cached version last updated …"). Manual check semantics:
+1. Bail if a check is already in flight (single-flight `manualCheckInFlight` flag).
+2. Bail if no registration yet, or not on the setup screen.
+3. Paint `Checking for updates…` immediately (cyan pulsing dot — same `updating` class).
+4. Await `checkServerVersion()`.
+5. If it returned true, the function already painted "Update available (vX)…" and triggered `registration.update()`; the SW lifecycle takes over from there. If false, paint the steady-state status (which is the just-updated message, "No new version available…", or "Offline. …" depending on state).
+
+Wiring. `attachVersionTagHandler()` is called once from `init()` after the early `refreshConnectivityStatus()` call. Listens for `click` and `keydown` (Enter / Space, with `preventDefault()` so Space doesn't scroll). The handler doesn't await `manualCheck()` because we don't care about the resolution at the call site — the status updates communicate the outcome.
+
+Versions bumped in lockstep `0.5.31.5 → 0.5.31.6`.
+
 ### Make "New update installed" message sticky for the session (v0.5.31.5) — Interim
 
 User flagged: after an update boot, the status reverted to "No new version available." after 6 s. They want "✓ New update installed." to remain.
