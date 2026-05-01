@@ -11,6 +11,15 @@
 
 ---
 
+## [0.5.31.7] — 2026-05-01
+
+Fix: when the pump is stopped on a drug card with a configured emergence Ce, two emergence countdowns rendered simultaneously — `Exit 2.0 in 7:51` (live) above the status row and `Emerge → 2.0 in 7:54` (3 s throttle) below it. The two predictions used different APIs (`predictTrough` vs `predictDecayTo`) and different update cadences, so the displayed times drifted apart. The `Exit` label was also stale per the post-0.5.24.3 naming convention ("Emerge → / Emergence" everywhere users see it).
+
+- `js/ui/drug-panel/approach.js` — the "Pump stopped — emergence countdown" block now early-returns when the user has configured an exit Ce (`ctx.getExitCeForDrug(drugId) > 0`). The exit-readout module owns that readout exclusively. The fallback path (no user-set emergence) keeps using the default `EMERGENCE_CE` (1.5) and now hardcodes the label to `Emergence` instead of branching on the now-unreachable `Exit` case.
+- `js/version.js` + `sw.js` — bumped `0.5.31.6 → 0.5.31.7` in lockstep.
+
+---
+
 ## [0.5.31.6] — 2026-05-01
 
 Click the version number to manually check for updates.
