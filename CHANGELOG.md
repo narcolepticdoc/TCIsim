@@ -11,6 +11,18 @@
 
 ---
 
+## [0.5.31] — 2026-05-01
+
+Offline support via a service worker, plus an automatic reload when the server's version is newer than the running tab's.
+
+- New `sw.js` at the repo root. Cache-first fetch handler, version-keyed cache (`tcisim-v<APP_VERSION>`). On install, precaches `index.html`, `manifest.json`, every JS module under `js/`, the four jsdelivr CDN scripts (Chart.js + annotation + zoom + hammer), and the Google Fonts CSS. Per-URL fetch with try/catch instead of `addAll`, so a flaky CDN can't take down offline support for the rest of the app. Activate handler deletes any cache whose name doesn't match the current `CACHE_NAME`. Network-first for `js/version.js` so the client-side version poller always sees fresh server bytes when online; cache-first for everything else, with opportunistic caching on miss (catches `fonts.gstatic.com` woff2 fetches the cached Google Fonts CSS triggers at runtime). Navigation fetch failures fall back to cached `index.html`. Responds to `'SKIP_WAITING'` and `'GET_VERSION'` messages.
+- New `js/app/sw-register.js`. Registers the worker on `load`. On `updatefound` → installed → if there's an existing controller, posts `SKIP_WAITING` to the new worker; on `controllerchange`, calls `location.reload()` once. Polls `js/version.js` (network-only via `cache: 'no-store'`) every 60 s and on `visibilitychange→visible`, parses the `VERSION` constant with a regex, and if it differs from the running `APP_VERSION` calls `registration.update()` to drag the SW lifecycle along — which then triggers the same reload path.
+- `js/app.js` — added `import './app/sw-register.js';` alongside the existing `js/app/*` imports.
+- `js/version.js` — bumped `0.5.30.11 → 0.5.31`. **The `VERSION` constant in `sw.js` must be kept in lockstep with this on every release.**
+- `CLAUDE.md` — "Adding a feature" workflow now mentions the lockstep `sw.js` bump.
+
+---
+
 ## [0.5.30.11] — 2026-04-30
 
 Compartment-viz: real backing rect behind every flow label, plus per-arrow label-position overrides. The `paint-order: stroke fill` halo from v0.5.30.8 only painted around individual glyphs, so arrow lines still showed through the gaps between letters; with bumped fonts the label bbox was also wider than 2× the perpendicular offset, meaning lines crossed into the label rectangle on vertical arrows.
