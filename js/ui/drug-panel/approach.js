@@ -379,3 +379,7 @@ export function invalidateAll() {
 
 /** Expose the approach cache getter so step-bar can read arrivalMin. */
 export { _getApproachCache };
+
+/** Current curve version — incremented on every setCurveData call. Other
+ *  drug-panel modules use this as a model-mutation invalidation signal. */
+export function getCurveVersion() { return _curveVersion; }
