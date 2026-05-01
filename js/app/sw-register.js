@@ -61,6 +61,7 @@ async function init() {
   refreshConnectivityStatus();
   window.addEventListener('online', refreshConnectivityStatus);
   window.addEventListener('offline', refreshConnectivityStatus);
+  attachVersionTagHandler();
 
   registration = await navigator.serviceWorker.register('sw.js');
 
@@ -136,18 +137,43 @@ function triggerReload() {
 }
 
 async function checkServerVersion() {
-  if (!registration) return;
-  if (!isOnSetupScreen()) return;
+  if (!registration) return false;
+  if (!isOnSetupScreen()) return false;
 
-  const res = await fetch(`js/version.js?_=${Date.now()}`, { cache: 'no-store' });
-  if (!res.ok) return;
+  let res;
+  try {
+    res = await fetch(`js/version.js?_=${Date.now()}`, { cache: 'no-store' });
+  } catch (_) {
+    return false;
+  }
+  if (!res.ok) return false;
   const text = await res.text();
   const match = text.match(VERSION_RE);
-  if (!match) return;
+  if (!match) return false;
   const serverVersion = match[1];
   if (serverVersion !== APP_VERSION) {
     setStatus('updating', `Update available (v${serverVersion})…`);
     try { await registration.update(); } catch (_) {}
+    return true;
+  }
+  return false;
+}
+
+let manualCheckInFlight = false;
+
+async function manualCheck() {
+  if (manualCheckInFlight) return;
+  if (!registration || !isOnSetupScreen()) return;
+  manualCheckInFlight = true;
+  setStatus('updating', 'Checking for updates…');
+  try {
+    const found = await checkServerVersion();
+    // checkServerVersion already paints "Update available (vX)…" when it
+    // finds something, and the SW lifecycle takes over from there. For
+    // the no-update path, fall back to the steady-state status.
+    if (!found) refreshConnectivityStatus();
+  } finally {
+    manualCheckInFlight = false;
   }
 }
 
@@ -215,6 +241,18 @@ function consumeJustUpdatedFlag() {
   if (flag !== '1') return false;
   try { sessionStorage.removeItem(SS_JUST_UPDATED); } catch (_) {}
   return true;
+}
+
+function attachVersionTagHandler() {
+  const tag = document.getElementById('app-version-tag');
+  if (!tag) return;
+  tag.addEventListener('click', () => { manualCheck(); });
+  tag.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      manualCheck();
+    }
+  });
 }
 
 function setStatus(kind, label) {

@@ -11,6 +11,19 @@
 
 ---
 
+## [0.5.31.6] — 2026-05-01
+
+Click the version number to manually check for updates.
+
+- `index.html` — `.setup-brand .version-tag` gets `cursor: pointer`, `user-select: none`, a hover state (lifts `color` to `--text-primary` with a subtle blue text-shadow), and an active state at 70% opacity. The element gains `title="Click to check for updates"`, `role="button"`, and `tabindex="0"` for keyboard reachability.
+- `js/app/sw-register.js`
+  - New `manualCheck()` function. Guards on `manualCheckInFlight`, `registration` set, and `isOnSetupScreen()` (redundant — the version tag is only visible there — but kept as belt and suspenders). Paints `Checking for updates…` immediately, awaits `checkServerVersion()`, and reverts to the steady-state status if no update was found. If one is found, `checkServerVersion` already paints `Update available (vX)…` and the SW lifecycle takes over.
+  - `checkServerVersion()` now returns a boolean (`true` = update detected) and absorbs fetch errors internally with a `try/catch` around the network call, so the manual-check path can branch on the result and the offline case naturally returns `false` → revert to the offline steady state.
+  - `attachVersionTagHandler()` wires `click` + `keydown` (Enter / Space) on `#app-version-tag` from `init()`.
+- `js/version.js` + `sw.js` — bumped `0.5.31.5 → 0.5.31.6` in lockstep.
+
+---
+
 ## [0.5.31.5] — 2026-05-01
 
 Make the post-update "✓ New update installed." status message sticky for the whole session instead of reverting to "No new version available." after 6 seconds.
