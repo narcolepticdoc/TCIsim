@@ -4,6 +4,18 @@
 
 ## Session History
 
+### Make "New update installed" message sticky for the session (v0.5.31.5) — Interim
+
+User flagged: after an update boot, the status reverted to "No new version available." after 6 s. They want "✓ New update installed." to remain.
+
+Root cause was the `showJustUpdatedToastIfPending()` helper from v0.5.31.1, which painted the post-update message and then `setTimeout(refreshConnectivityStatus, 6000)`'d back to the connectivity steady state. That made sense as a transient toast, but the user is treating "just updated" as a first-class status — they want to know when they sit down at a tablet whether the version they're looking at was just installed.
+
+Fix: capture the just-updated state once at boot and let `refreshConnectivityStatus()` branch on it forever. New `consumeJustUpdatedFlag()` reads + clears the `tcisim:justUpdated` sessionStorage flag and returns a boolean; that boolean is stored in a module-level `justUpdated` const. `refreshConnectivityStatus()` now checks `justUpdated` first — when true it paints `✓ New update installed. Last update <ts>.` regardless of online/offline; otherwise it falls through to the existing connectivity branch.
+
+Lifetime is exactly one boot. The sessionStorage flag is cleared on first read, so a subsequent reload (without an accompanying update) starts a fresh session where `justUpdated` is false and the message reverts to "No new version available. Last update <ts>." This is the right scope: the user knows there's a new version on this session because they're seeing the badge, and they don't need to be reminded forever.
+
+Online/offline still flips between the two non-update messages but doesn't touch the just-updated branch — which is fine because going offline post-update doesn't suddenly invalidate "we just installed an update" as the most relevant fact to surface. Versions bumped in lockstep `0.5.31.4 → 0.5.31.5`.
+
 ### Status line shows install timestamp + prose phrasing (v0.5.31.4) — Interim
 
 User asked for the status notice under the version to spell out when the cached version was installed: "New Update Installed" right after an update, "No new version available. Last update <date time>." while online on cached, and "Offline. Cached version last updated <date time>." while offline.

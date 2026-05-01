@@ -11,6 +11,19 @@
 
 ---
 
+## [0.5.31.5] — 2026-05-01
+
+Make the post-update "✓ New update installed." status message sticky for the whole session instead of reverting to "No new version available." after 6 seconds.
+
+- `js/app/sw-register.js`
+  - Replaced the `setTimeout`-based `showJustUpdatedToastIfPending` with a one-shot `consumeJustUpdatedFlag()` that reads + clears the `tcisim:justUpdated` sessionStorage flag and returns a boolean. The boolean is captured in a module-level `justUpdated` const at boot.
+  - `refreshConnectivityStatus()` now branches on `justUpdated` first: when set, it shows `✓ New update installed. Last update <ts>.` regardless of connectivity. The connectivity-based steady states (`No new version available. …` / `Offline. Cached version last updated …`) only apply when `justUpdated` is false.
+  - Net effect: after an update reload, the "New update installed" message persists for the rest of the session — through screen transitions, going offline/online, opening cases, etc. — until the user reloads the page without an accompanying update, at which point the sessionStorage flag is gone and the message reverts to the connectivity steady state.
+  - Dropped the now-unused `UPDATED_TOAST_MS` constant.
+- `js/version.js` + `sw.js` — bumped `0.5.31.4 → 0.5.31.5` in lockstep.
+
+---
+
 ## [0.5.31.4] — 2026-05-01
 
 Show when the cached version was last installed in the SW status line, and use prose phrasing instead of one-word states.

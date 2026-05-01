@@ -14,14 +14,17 @@
  *
  * Status display: writes a status line into #app-status-tag (sits under
  * #app-version-tag in the setup-screen brand panel). Steady states show
- * connectivity + the timestamp of the currently-cached version:
- *   • online  → "No new version available. Last update <ts>."
- *   • offline → "Offline. Cached version last updated <ts>."
- * Transient states ("Update available…", "Updating to latest…",
- * "✓ New update installed.") wrap around the SW update flow. The install
- * timestamp is persisted in localStorage and re-stamped whenever the
- * stored version no longer matches the running APP_VERSION (which is
- * exactly when an update has just been applied).
+ * the timestamp of the currently-cached version:
+ *   • just-updated → "✓ New update installed. Last update <ts>."
+ *                    (sticky for the whole session — survives
+ *                     online/offline transitions)
+ *   • online       → "No new version available. Last update <ts>."
+ *   • offline      → "Offline. Cached version last updated <ts>."
+ * Transient states ("Update available (vX)…", "Updating to latest…",
+ * "↻ Update queued · applies at next case start.") wrap around the SW
+ * update flow. The install timestamp is persisted in localStorage and
+ * re-stamped whenever the stored version no longer matches the running
+ * APP_VERSION (which is exactly when an update has just been applied).
  */
 
 import { APP_VERSION } from '../util/constants.js';
@@ -32,10 +35,10 @@ const STATUS_EL_ID = 'app-status-tag';
 const SS_JUST_UPDATED = 'tcisim:justUpdated';
 const LS_INSTALLED_VERSION = 'tcisim:installedVersion';
 const LS_INSTALLED_AT = 'tcisim:installedAt';
-const UPDATED_TOAST_MS = 6000;
 
 const supportsServiceWorker = 'serviceWorker' in navigator;
 const installedAt = stampInstallTimeIfNeeded();
+const justUpdated = consumeJustUpdatedFlag();
 let updateTriggered = false;
 let pendingReload = false;
 let reloading = false;
@@ -55,7 +58,6 @@ if (supportsServiceWorker) {
 }
 
 async function init() {
-  showJustUpdatedToastIfPending();
   refreshConnectivityStatus();
   window.addEventListener('online', refreshConnectivityStatus);
   window.addEventListener('offline', refreshConnectivityStatus);
@@ -188,8 +190,15 @@ function formatTimestamp(date) {
 }
 
 function refreshConnectivityStatus() {
-  const online = navigator.onLine !== false;
   const ts = formatTimestamp(installedAt);
+  // The just-updated state is sticky for the whole session — once an update
+  // has been applied, "✓ New update installed." stays the active message
+  // (regardless of connectivity) until the user reloads without an update.
+  if (justUpdated) {
+    setStatus('updated', `✓ New update installed. Last update ${ts}.`);
+    return;
+  }
+  const online = navigator.onLine !== false;
   if (online) {
     setStatus('online', `No new version available. Last update ${ts}.`);
   } else {
@@ -197,13 +206,15 @@ function refreshConnectivityStatus() {
   }
 }
 
-function showJustUpdatedToastIfPending() {
+// Read and clear the sessionStorage flag set just before the post-update
+// reload. Returns true once per just-updated boot; subsequent reads are
+// false (sessionStorage entry is removed on first read).
+function consumeJustUpdatedFlag() {
   let flag = null;
   try { flag = sessionStorage.getItem(SS_JUST_UPDATED); } catch (_) {}
-  if (flag !== '1') return;
+  if (flag !== '1') return false;
   try { sessionStorage.removeItem(SS_JUST_UPDATED); } catch (_) {}
-  setStatus('updated', '✓ New update installed.');
-  setTimeout(refreshConnectivityStatus, UPDATED_TOAST_MS);
+  return true;
 }
 
 function setStatus(kind, label) {
