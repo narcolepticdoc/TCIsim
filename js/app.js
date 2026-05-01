@@ -321,21 +321,26 @@ function boot() {
     onPumpPause() {
       if (!isPumpEnabled(selectedDrug)) return; // no pump to pause
       const t = timer.getElapsedMinutes();
-      // Guard: don't pause if already manually paused (rate=0 in non-TCI mode)
-      // Allow the button to fire in TCI mode even when rate=0 (TCI-scheduled pause),
-      // so the user can clear all future TCI events and stop the pump.
+      // Probe current rate and any events queued in the future. During a
+      // case replay (current time set into the past) the user may sit on a
+      // momentary rate=0 gap with rate-resume / bolus events scheduled
+      // ahead — Stop Pump must still fire there to cancel them.
+      let conc = null;
+      let hasFuture = false;
       try {
-        const conc = model.getConcentrationsAt(selectedDrug, t);
-        if (conc.rate === 0 && mode.get(selectedDrug) !== 'tci') return;
+        conc = model.getConcentrationsAt(selectedDrug, t);
+        hasFuture = model.getEvents(selectedDrug).some(e => e.time > t + 0.0001);
       } catch (e) {}
+      const m = mode.get(selectedDrug);
+      // No-op only when pump is genuinely idle: rate=0, not TCI, and nothing queued ahead.
+      if (conc && conc.rate === 0 && m !== 'tci' && !hasFuture) return;
 
       model.addPause(selectedDrug, t, 'Pump stopped');
       addAnnotation('Pump stopped');
-      // Stop drops out of current mode and clears future events
-      if (mode.get(selectedDrug) === 'tci') {
-        model.clearAfter(selectedDrug, t);
-      }
-      if (mode.get(selectedDrug) !== 'none') {
+      // Stop drops out of current mode and clears all future events,
+      // regardless of mode — the user is asking to halt forward delivery.
+      model.clearAfter(selectedDrug, t);
+      if (m !== 'none') {
         mode.set(selectedDrug, 'none', 'Pump stopped');
       }
       refreshChart();
