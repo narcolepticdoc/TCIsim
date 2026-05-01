@@ -56,9 +56,15 @@ const LAYOUTS = {
       elim: { x: 590, y: 320, w: 220, h: 90,  label: 'Eliminated' },
     },
     anchors: {
-      pump_to_v1: { from: { x: 230, y: 225 }, to: { x: 310, y: 225 } },
+      pump_to_v1: {
+        from: { x: 230, y: 225 }, to: { x: 310, y: 225 },
+        label: { x: 305, y: 205, anchor: 'end' },
+      },
       v1_to_elim: { from: { x: 530, y: 260 }, to: { x: 590, y: 365 } },
-      v1_to_v2:   { from: { x: 530, y: 180 }, to: { x: 590, y: 130 } },
+      v1_to_v2: {
+        from: { x: 530, y: 180 }, to: { x: 590, y: 130 },
+        label: { x: 540, y: 155, anchor: 'end' },
+      },
       v1_to_v3:   { from: { x: 420, y: 285 }, to: { x: 420, y: 320 } },
       v1_to_ce:   { from: { x: 320, y: 165 }, to: { x: 250, y: 105 } },
     },
@@ -74,7 +80,10 @@ const LAYOUTS = {
       elim: { x: 260, y: 740, w: 220, h: 180, label: 'Eliminated' },
     },
     anchors: {
-      pump_to_v1: { from: { x: 70,  y: 480 }, to: { x: 110, y: 480 } },
+      pump_to_v1: {
+        from: { x: 70,  y: 480 }, to: { x: 110, y: 480 },
+        label: { x: 105, y: 460, anchor: 'end' },
+      },
       v1_to_elim: { from: { x: 380, y: 580 }, to: { x: 380, y: 740 } },
       v1_to_v2:   { from: { x: 350, y: 380 }, to: { x: 380, y: 210 } },
       v1_to_v3:   { from: { x: 200, y: 580 }, to: { x: 200, y: 740 } },
@@ -141,6 +150,8 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
 
   const boxNodes = {};
   const arrowNodes = {};
+  let infusionEl = null;
+  let infusionBgEl = null;
 
   pickLayout();
   observeHostResize();
@@ -180,15 +191,23 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
         points: '0,0 0,0 0,0',
         class: 'cv-head cv-head-' + arr.id,
       });
+      // Background rect sits between line/head and label text. Sized from
+      // the label's bbox each frame; fills with the SVG bg color so any
+      // arrow line passing through the label is visually occluded.
+      const labelBg = svgEl('rect', {
+        x: 0, y: 0, width: 0, height: 0, rx: 2, ry: 2,
+        class: 'cv-flow-label-bg',
+      });
       const label = svgEl('text', {
         x: 0, y: 0, class: 'cv-flow-label',
         'text-anchor': 'middle', 'dominant-baseline': 'middle',
       });
       g.appendChild(line);
       g.appendChild(head);
+      g.appendChild(labelBg);
       g.appendChild(label);
       svg.appendChild(g);
-      arrowNodes[arr.id] = { g, line, head, label, def: arr };
+      arrowNodes[arr.id] = { g, line, head, labelBg, label, def: arr };
     }
 
     for (const key in layout.boxes) {
@@ -225,14 +244,21 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
       boxNodes[key] = { g, rect, title, volText, concText, amtText };
     }
 
+    infusionEl = null;
+    infusionBgEl = null;
     if (layout.infusion) {
-      const inf = svgEl('text', {
+      infusionBgEl = svgEl('rect', {
+        x: 0, y: 0, width: 0, height: 0, rx: 2, ry: 2,
+        class: 'cv-flow-label-bg',
+      });
+      infusionEl = svgEl('text', {
         x: layout.infusion.x, y: layout.infusion.y,
         class: 'cv-flow-label cv-infusion-label',
         'text-anchor': layout.infusion.anchor || 'middle',
       });
-      inf.textContent = 'Infusion';
-      svg.appendChild(inf);
+      infusionEl.textContent = 'Infusion';
+      svg.appendChild(infusionBgEl);
+      svg.appendChild(infusionEl);
     }
   }
 
@@ -301,17 +327,40 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
       `${(baseX + px).toFixed(1)},${(baseY + py).toFixed(1)} ` +
       `${(baseX - px).toFixed(1)},${(baseY - py).toFixed(1)}`);
 
-    // Push label off the line along the perpendicular, biased "up" (smaller
-    // y in SVG screen coords) so labels never sit on top of the stroke.
-    let nx = -uy;
-    let ny = ux;
-    if (ny > 0) { nx = -nx; ny = -ny; }
-    const offset = 20;
-    const mx = (from.x + to.x) / 2;
-    const my = (from.y + to.y) / 2;
-    a.label.setAttribute('x', mx + nx * offset);
-    a.label.setAttribute('y', my + ny * offset);
+    // Label position: explicit per-arrow override wins (used to keep short
+    // arrows' labels clear of destination boxes); otherwise auto-compute
+    // along the line's perpendicular, biased "up" in screen coords.
     a.label.textContent = fmtFlow(signedRate, drugId);
+    const override = layout.anchors[anchorKey].label;
+    if (override) {
+      a.label.setAttribute('x', override.x);
+      a.label.setAttribute('y', override.y);
+      a.label.setAttribute('text-anchor', override.anchor || 'middle');
+    } else {
+      let nx = -uy;
+      let ny = ux;
+      if (ny > 0) { nx = -nx; ny = -ny; }
+      const offset = 20;
+      const mx = (from.x + to.x) / 2;
+      const my = (from.y + to.y) / 2;
+      a.label.setAttribute('x', mx + nx * offset);
+      a.label.setAttribute('y', my + ny * offset);
+      a.label.setAttribute('text-anchor', 'middle');
+    }
+    sizeBgToText(a.labelBg, a.label);
+  }
+
+  // Compute the rendered bounding box of a text node and size a backing rect
+  // 4 viewBox-units wider/taller on each side so it fully occludes any line
+  // passing under it.
+  function sizeBgToText(bgEl, textEl) {
+    let bbox;
+    try { bbox = textEl.getBBox(); } catch (_) { return; }
+    if (!bbox || !bbox.width) return;
+    bgEl.setAttribute('x',      (bbox.x - 4).toFixed(1));
+    bgEl.setAttribute('y',      (bbox.y - 2).toFixed(1));
+    bgEl.setAttribute('width',  (bbox.width + 8).toFixed(1));
+    bgEl.setAttribute('height', (bbox.height + 4).toFixed(1));
   }
 
   function onFrame(tLive) {
@@ -364,6 +413,8 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
     updateArrow('v1v2', f12,   drug);
     updateArrow('v1v3', f13,   drug);
     updateArrow('v1ce', fCe,   drug);
+
+    if (infusionEl && infusionBgEl) sizeBgToText(infusionBgEl, infusionEl);
 
     if (timeEl) {
       const stamp = (m) => {
