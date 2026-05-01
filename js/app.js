@@ -30,6 +30,7 @@ import { createSession } from './app/session.js';
 import { initPortraitLayout, syncPortraitLayout } from './app/portrait-layout.js';
 import { createChartBridge } from './app/chart-bridge.js';
 import { initCompartmentViz } from './ui/compartment-viz.js';
+import './app/sw-register.js';
 
 const $ = id => document.getElementById(id);
 

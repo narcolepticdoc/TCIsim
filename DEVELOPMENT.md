@@ -4,6 +4,36 @@
 
 ## Session History
 
+### SW status badge under the version tag + first-install reload fix (v0.5.31.1) — Interim
+
+User asked for a notice under the version number that says whether the app loaded from cache, whether it's online, whether a new version was just installed, etc. Wired into the existing `js/app/sw-register.js` rather than a new module — it already knows about the SW lifecycle and is the only place that observes connectivity-relevant events.
+
+UI. New `#app-status-tag` div directly under `#app-version-tag` inside `.setup-brand`. The whole brand panel only shows on the setup screen; once the user picks a patient and starts a sim, neither the version nor the status are visible — that's fine, the status answers a "how did the app load just now / is the network there" question that's most relevant pre-case. Style: 9 px DM Mono, colored dot + label, four state classes (`online` green, `offline` amber, `updating` cyan with a pulsing dot, `updated` blue). `.status-tag:empty{display:none}` so the panel doesn't reserve space before the first status write.
+
+Status text. Two axes: connectivity (live, re-evaluated via `online` / `offline` events) and load source (set once at boot). Load source comes from `performance.getEntriesByType('navigation')[0].transferSize` — `0` means the document body never crossed the wire, so it was served by the SW cache (or HTTP cache); `> 0` means a network fetch. Combined into `online · cached`, `online · live`, `offline · cached`, `offline · live`. Two transient states wrap the SW update: `updating to latest…` while a new worker is installing, and `✓ updated to v0.5.31.1` for 6 s after the post-update reload.
+
+Bug found while wiring this up. The original `controllerchange` handler reloaded the page unconditionally. That's wrong on the very first visit: the SW activates, calls `clients.claim()`, that fires `controllerchange`, and a brand-new visitor would silently reload once for no reason. Fixed with an `updateTriggered` flag set only inside the `updatefound → installed` branch where we post `SKIP_WAITING`. First-install claim now just refreshes the status badge (we're newly controlled, so the next load will be `cached`).
+
+Update toast. Driven by a `sessionStorage` flag (`tcisim:justUpdated = '1'`) set immediately before `location.reload()` and read on the very next boot. After display the flag is cleared and the badge reverts to the connectivity status. SessionStorage was the right scope — it survives the reload but doesn't leak across tabs or across days.
+
+Older-browser fallback. When `'serviceWorker' in navigator` is false, the module still wires up `online`/`offline` listeners on `DOMContentLoaded` so the status badge is populated. Load source is hard-coded to `live` in that branch since there's no SW to serve from.
+
+Versions bumped in lockstep: `js/version.js` and `sw.js`'s `VERSION` constant `0.5.31 → 0.5.31.1` (per the CLAUDE.md "Adding a feature" workflow note added in 0.5.31).
+
+### Offline support via service worker + version-aware reload (v0.5.31) — Interim
+
+User asked for the app to run offline from cache and for the service worker to compare its version against the server and force a reload when the server is newer. The app had no SW at all (`grep -r serviceWorker js index.html` returned zero hits), but is otherwise an ideal PWA candidate — pure static, no build step, single entry HTML, ES modules.
+
+Approach. New `sw.js` at the repo root (scope `/`). Cache-first fetch handler with a version-keyed cache (`tcisim-v<APP_VERSION>`). On install it precaches `index.html`, `manifest.json`, every JS module under `js/` (~65 files, full list inlined), the four jsdelivr CDN scripts (Chart.js + annotation + zoom + hammer), and the Google Fonts CSS. Per-URL fetch with a try/catch in a `Promise.all` instead of `cache.addAll` — `addAll` is atomic, so one bad URL would abort the entire install and offline support would silently never come up. Activate handler deletes any cache whose name doesn't match `CACHE_NAME` and calls `clients.claim()` so the new SW takes over without a second reload.
+
+Two things make the version check robust. First, `sw.js` itself embeds a `VERSION` string that's kept in lockstep with `js/version.js`. When that string changes, the file's bytes change, the browser's normal SW update check on navigation/`registration.update()` fires, the new worker installs, and we tell it to skipWaiting → activate → fire `controllerchange` → `location.reload()`. Second — and this is the part that actually matters for a tab the user has open all day — the new `js/app/sw-register.js` polls `js/version.js` every 60 s and on `visibilitychange→visible`, with `cache: 'no-store'` so it goes through the SW's network-first branch for `js/version.js` and reaches the actual server when online. If the parsed `VERSION` constant differs from the running `APP_VERSION`, we call `registration.update()` to drag the SW lifecycle along and the same reload chain runs. The `VERSION_RE = /VERSION\s*=\s*['"]([^'"]+)['"]/` regex matches `js/version.js`'s single-line `export const VERSION = '...'` shape directly.
+
+Fetch handler. Network-first for `js/version.js` (the version-poll branch must always see fresh server bytes when online); cache-first for everything else, with opportunistic caching on miss — important because the cached Google Fonts CSS triggers `fonts.gstatic.com` woff2 fetches at runtime, and we want those to fall into the cache the first time they're seen so the *next* offline session has fonts. Navigation fetch failures fall back to cached `index.html` so a deep-link refresh while offline still boots the app.
+
+Wiring. `js/app.js` gets one new line: `import './app/sw-register.js';` alongside the existing `js/app/*` imports. The registration module guards on `'serviceWorker' in navigator`, so older browsers that don't support SWs no-op cleanly. No changes to `index.html` (the inline diagnostic block at the bottom is unaffected) or `manifest.json` (icons stay as-is — they're referenced but missing on disk; intentionally not in the precache list to avoid the per-URL fetch cluttering DevTools with 404s).
+
+Lockstep ritual. CLAUDE.md "Adding a feature" workflow now mentions that bumping `js/version.js` requires a matching bump in `sw.js`'s `VERSION` constant. If the two drift, the worst case is the version-check poll fires `registration.update()` on every poll and finds nothing to do (because `sw.js` bytes haven't changed) — the page would stay on the old version. So the lockstep is the linchpin.
+
 ### Compartment-flow viz: modal → retrospective Analysis screen (v0.5.30.1) — Interim
 
 The first cut of the compartment visualization (v0.5.30) was a modal overlay opened from a topbar button. User flagged that the modal blocked the chart underneath, which defeated the whole point — they couldn't move the chart's inspect cursor while the visualization was open, so the "scrub the chart, watch the compartments scrub with it" interaction was unreachable. We considered a few fixes (non-modal floating panel with click-through, side drawer, swap-with-history-tab); user chose: just give it its own retrospective Analysis page with the chart on the left and the visualization on the right.
