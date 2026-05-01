@@ -116,17 +116,17 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
     }
   }
 
-  // Pump stopped — emergence countdown (uses predictTrough; no curve scan needed)
+  // Pump stopped — emergence countdown.
+  // When the user has configured an exit Ce, exit-readout.js owns this readout
+  // (renders into a dedicated slot with the canonical "Emerge →" label).
   if ((m === 'none' || (rate === 0 && m !== 'tci')) && threshold === 0) {
-    const emergenceCe = (ctx.getExitCeForDrug && ctx.getExitCeForDrug(drugId) > 0)
-      ? ctx.getExitCeForDrug(drugId) : EMERGENCE_CE;
-    if (Ce <= emergenceCe + 0.05) return noData;
+    if (ctx.getExitCeForDrug && ctx.getExitCeForDrug(drugId) > 0) return noData;
+    if (Ce <= EMERGENCE_CE + 0.05) return noData;
     try {
-      const result = ctx.model.predictTrough(drugId, t, emergenceCe);
+      const result = ctx.model.predictTrough(drugId, t, EMERGENCE_CE);
       if (result && result.time !== null && result.time > t) {
-        const label = (ctx.getExitCeForDrug && ctx.getExitCeForDrug(drugId) > 0) ? 'Exit' : 'Emergence';
         return { ...noData,
-          prefix: `${label} <span class="appr-val">${smartDecimal(emergenceCe)}</span> in `,
+          prefix: `Emergence <span class="appr-val">${smartDecimal(EMERGENCE_CE)}</span> in `,
           arrivalMin: result.time,
         };
       }

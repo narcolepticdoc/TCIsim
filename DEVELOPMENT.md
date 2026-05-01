@@ -4,6 +4,16 @@
 
 ## Session History
 
+### Fix duplicate emergence timer when pump stopped (v0.5.31.7) — Interim
+
+User reported: when the pump is stopped on a drug card that has a configured emergence Ce threshold, two emergence countdowns appear simultaneously — `Exit 2.0 in 7:51` above the status row (live updating) and `Emerge → 2.0 in 7:54` below it (slower update cadence). Same prediction, two display paths, drifting times.
+
+Root cause was a leftover block in `js/ui/drug-panel/approach.js` (lines 119-135) that pre-dated the 0.5.24.3 "Emerge → / Emergence" naming refactor. The block rendered an emergence countdown into `#<drug>-approach` whenever the pump was stopped (`m === 'none'` or `rate === 0 && m !== 'tci'`) with no redose threshold set, using the user's configured exit Ce when present and labelling it `Exit`. Meanwhile `js/ui/drug-panel/exit-readout.js` — explicitly built for the same purpose, with the canonical `Emerge →` label, the green `Emergence Reached` state, and a 3 s `predictDecayTo` throttle — was rendering into `#<drug>-exit` unconditionally. No mutual exclusion existed.
+
+Fix is surgical: in the approach block, early-return `noData` when the user has configured an exit Ce. Exit-readout.js owns that readout exclusively. The fallback path (no user-set emergence) still triggers the default `EMERGENCE_CE` (1.5 mcg/mL) hint in the approach slot — it was the only path that reached the body once the user-set case was carved out — so the dead `Exit` vs `Emergence` label branch collapsed to a hardcoded `Emergence`.
+
+Net effect: stopped-with-emergence-set shows one timer (`Emerge → X.X in M:SS` in the exit-readout slot, with `Emergence Reached` once Ce ≤ exitCe). Stopped-without-emergence-set still shows the default `Emergence 1.5 in M:SS` hint in the approach slot. Versions bumped in lockstep `0.5.31.6 → 0.5.31.7`.
+
 ### Click the version tag to check for updates (v0.5.31.6) — Interim
 
 User asked for a manual update check, triggered by clicking the version number. The natural target — the version tag is already where the user looks when they want to know what they're running, and we now have a status line directly under it that's the perfect place to surface check results.
