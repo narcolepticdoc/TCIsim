@@ -42,9 +42,13 @@ const ARROWS = [
 // Two layouts — picked at runtime based on host element aspect ratio.
 // "wide" suits portrait viewports (panel below the chart, wide+short).
 // "tall" suits landscape viewports (panel right of the chart, narrow+tall).
+// `infusion` anchor is the position for the "Infusion" caption — stacked
+// above the flow rate label on the pump arrow (with a halo it stays clear
+// of both the line and the rate text).
 const LAYOUTS = {
   wide: {
     viewBox: '0 0 820 440',
+    infusion: { x: 270, y: 250 },
     boxes: {
       ce:   { x: 30,  y: 30,  w: 220, h: 110, label: 'Effect site' },
       v1:   { x: 310, y: 165, w: 220, h: 120, label: 'V1 (central)' },
@@ -61,20 +65,21 @@ const LAYOUTS = {
     },
   },
   tall: {
-    viewBox: '0 0 540 720',
+    viewBox: '0 0 500 940',
+    infusion: { x: 95, y: 525 },
     boxes: {
-      ce:   { x: 30,  y: 40,  w: 220, h: 120, label: 'Effect site' },
-      v2:   { x: 290, y: 40,  w: 220, h: 140, label: 'V2 (fast)' },
-      v1:   { x: 130, y: 290, w: 280, h: 160, label: 'V1 (central)' },
-      v3:   { x: 30,  y: 550, w: 230, h: 140, label: 'V3 (slow)' },
-      elim: { x: 300, y: 550, w: 210, h: 140, label: 'Eliminated' },
+      ce:   { x: 20,  y: 40,  w: 220, h: 150, label: 'Effect site' },
+      v2:   { x: 260, y: 40,  w: 220, h: 170, label: 'V2 (fast)' },
+      v1:   { x: 110, y: 380, w: 280, h: 200, label: 'V1 (central)' },
+      v3:   { x: 20,  y: 740, w: 220, h: 180, label: 'V3 (slow)' },
+      elim: { x: 260, y: 740, w: 220, h: 180, label: 'Eliminated' },
     },
     anchors: {
-      pump_to_v1: { from: { x: 105, y: 370 }, to: { x: 130, y: 370 } },
-      v1_to_elim: { from: { x: 410, y: 420 }, to: { x: 405, y: 550 } },
-      v1_to_v2:   { from: { x: 380, y: 290 }, to: { x: 400, y: 180 } },
-      v1_to_v3:   { from: { x: 200, y: 450 }, to: { x: 200, y: 550 } },
-      v1_to_ce:   { from: { x: 160, y: 290 }, to: { x: 140, y: 160 } },
+      pump_to_v1: { from: { x: 70,  y: 480 }, to: { x: 110, y: 480 } },
+      v1_to_elim: { from: { x: 380, y: 580 }, to: { x: 380, y: 740 } },
+      v1_to_v2:   { from: { x: 350, y: 380 }, to: { x: 380, y: 210 } },
+      v1_to_v3:   { from: { x: 200, y: 580 }, to: { x: 200, y: 740 } },
+      v1_to_ce:   { from: { x: 165, y: 380 }, to: { x: 140, y: 190 } },
     },
   },
 };
@@ -221,6 +226,15 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
       boxNodes[key] = { g, rect, title, volText, concText, amtText };
     }
 
+    if (layout.infusion) {
+      const inf = svgEl('text', {
+        x: layout.infusion.x, y: layout.infusion.y,
+        class: 'cv-flow-label cv-infusion-label',
+        'text-anchor': 'middle',
+      });
+      inf.textContent = 'Infusion';
+      svg.appendChild(inf);
+    }
   }
 
   function ensureParams(drugId, model) {
