@@ -11,6 +11,15 @@
 
 ---
 
+## [0.5.31.2] — 2026-05-01
+
+Make the version number on the setup-screen brand panel readable.
+
+- `index.html` — `.setup-brand .version-tag` font-size `9px → 13px`, color `var(--text-muted) → var(--text-secondary)`, dropped the `opacity:.6` damping. The tag now prints at the same weight as the rest of the brand-panel text instead of getting lost beneath the title.
+- `js/version.js` + `sw.js` — bumped `0.5.31.1 → 0.5.31.2` in lockstep.
+
+---
+
 ## [0.5.31.1] — 2026-05-01
 
 Status line under the version number on the setup-screen brand panel, plus a bug-fix in the SW reload flow.
