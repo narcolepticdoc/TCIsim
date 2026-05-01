@@ -42,13 +42,12 @@ const ARROWS = [
 // Two layouts — picked at runtime based on host element aspect ratio.
 // "wide" suits portrait viewports (panel below the chart, wide+short).
 // "tall" suits landscape viewports (panel right of the chart, narrow+tall).
-// `infusion` anchor is the position for the "Infusion" caption — stacked
-// above the flow rate label on the pump arrow (with a halo it stays clear
-// of both the line and the rate text).
+// `infusion` anchor is the position for the "Infusion" caption — sits just
+// outside V1's left edge (text-anchor: end) so it never overlaps the box.
 const LAYOUTS = {
   wide: {
     viewBox: '0 0 820 440',
-    infusion: { x: 270, y: 250 },
+    infusion: { x: 305, y: 250, anchor: 'end' },
     boxes: {
       ce:   { x: 30,  y: 30,  w: 220, h: 110, label: 'Effect site' },
       v1:   { x: 310, y: 165, w: 220, h: 120, label: 'V1 (central)' },
@@ -66,7 +65,7 @@ const LAYOUTS = {
   },
   tall: {
     viewBox: '0 0 500 940',
-    infusion: { x: 95, y: 525 },
+    infusion: { x: 105, y: 525, anchor: 'end' },
     boxes: {
       ce:   { x: 20,  y: 40,  w: 220, h: 150, label: 'Effect site' },
       v2:   { x: 260, y: 40,  w: 220, h: 170, label: 'V2 (fast)' },
@@ -230,7 +229,7 @@ export function initCompartmentViz({ getModel, getSelectedDrug, getInspectTime }
       const inf = svgEl('text', {
         x: layout.infusion.x, y: layout.infusion.y,
         class: 'cv-flow-label cv-infusion-label',
-        'text-anchor': 'middle',
+        'text-anchor': layout.infusion.anchor || 'middle',
       });
       inf.textContent = 'Infusion';
       svg.appendChild(inf);

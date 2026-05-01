@@ -11,6 +11,14 @@
 
 ---
 
+## [0.5.30.10] — 2026-04-30
+
+Compartment-viz: stop the "Infusion" caption from overlapping V1's left edge. Caption was anchored at midpoint just below the pump arrow; with the bumped flow-label font (14 viewBox units monospace ≈ 72 units of text), centering at `x = 95` gave a label spanning 59→131, overlapping V1's left wall at `x = 110`.
+
+- `js/ui/compartment-viz.js` — added an `anchor` field to each layout's `infusion` descriptor; `buildSvg()` reads it. Both layouts switched to `anchor: 'end'` with the x position set 5 viewBox units before V1's left edge (`wide x = 305`, `tall x = 105`). Result: the label's right edge sits cleanly to the left of V1, with the rest of the text trailing off to the left into open space.
+
+---
+
 ## [0.5.30.9] — 2026-04-30
 
 Compartment-viz UX polish: rename, in-screen drug switcher, restored Infusion caption, and a properly tall landscape layout.
