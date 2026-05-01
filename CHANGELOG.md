@@ -11,6 +11,17 @@
 
 ---
 
+## [0.5.30.9] — 2026-04-30
+
+Compartment-viz UX polish: rename, in-screen drug switcher, restored Infusion caption, and a properly tall landscape layout.
+
+- `index.html` — analysis screen title `Retrospective Analysis → Compartment Analysis`. Added a 3-button drug switcher in the analysis topbar (`#analysis-drug-switch`) — Propofol / Fentanyl / Ketamine. The active button uses the drug's brand color (`#0099ff` / `#ff6b35` / `#a855f7`) to match the rest of the app's per-drug palette.
+- `js/app.js` — the new buttons just programmatically click the matching `.drug-card`, which runs the existing switch logic (`chart.switchDrug`, history setup, mode refresh, `refreshChart`). `syncAnalysisDrugButtons()` keeps the active highlight in sync; called on screen entry and after each click.
+- `js/ui/compartment-viz.js` — added an `infusion` anchor to each layout, drawing the word "Infusion" as a haloed flow-label below the pump arrow. Both labels (Infusion above the arrow tail, flow rate above the arrow midpoint perpendicular) get the `paint-order: stroke fill` halo so they don't clash with the line.
+- Tall layout viewBox `540 × 720 → 500 × 940`. The landscape viz panel on iPad has aspect ~0.4 (narrow + very tall); the old 0.75 was leaving ~25 % of vertical space as letterbox bands. The new aspect (~0.53) fills the column and gives every box ~50 % more vertical room. Boxes resized: ce `220×120 → 220×150`, v2 `220×140 → 220×170`, v1 `280×160 → 280×200`, v3 `230×140 → 220×180`, elim `210×140 → 220×180`. Anchors recomputed.
+
+---
+
 ## [0.5.30.8] — 2026-04-28
 
 Compartment-viz: occlude arrow lines under flow labels with a halo, and drop the separate "Infusion" word that was crowding the pump-arrow flow label.

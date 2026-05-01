@@ -76,10 +76,17 @@ function teleportChart(targetHost) {
   }
 }
 
+function syncAnalysisDrugButtons() {
+  document.querySelectorAll('.btn-analysis-drug').forEach(b => {
+    b.classList.toggle('active', b.dataset.drug === selectedDrug);
+  });
+}
+
 function enterAnalysisScreen() {
   if (!model) return;
   teleportChart($('analysis-chart-host'));
   if (compartmentViz) compartmentViz.setActive(true);
+  syncAnalysisDrugButtons();
   showScreen('analysis-screen');
 }
 
@@ -566,6 +573,17 @@ function boot() {
   // into a side-by-side layout with the compartment visualization).
   $('btn-analyze')?.addEventListener('click', () => enterAnalysisScreen());
   $('btn-analysis-back')?.addEventListener('click', () => exitAnalysisScreen());
+
+  // Drug-switcher buttons in the analysis topbar — programmatically click
+  // the matching drug card so all the existing switch logic runs.
+  document.querySelectorAll('.btn-analysis-drug').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const drugId = btn.dataset.drug;
+      if (!drugId) return;
+      document.getElementById('drug-' + drugId)?.click();
+      syncAnalysisDrugButtons();
+    });
+  });
 
   // Wire chart controls
   const btnChartReset = $('btn-chart-reset');
