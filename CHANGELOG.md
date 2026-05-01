@@ -11,6 +11,20 @@
 
 ---
 
+## [0.5.31.1] — 2026-05-01
+
+Status line under the version number on the setup-screen brand panel, plus a bug-fix in the SW reload flow.
+
+- `index.html` — new `#app-status-tag` div directly below `#app-version-tag` inside `.setup-brand`. CSS adds a `.status-tag` rule with a 6 px colored dot + monospace label, and per-state classes (`online` / `offline` / `updating` / `updated`) that swap the dot and text color (green / amber / cyan-pulsing / blue). `.status-tag:empty{display:none}` so there's no layout jump before the first status write.
+- `js/app/sw-register.js`
+  - Added a status manager (`setStatus`, `refreshConnectivityStatus`) that writes one of: `online · cached`, `online · live`, `offline · cached`, `offline · live`, `updating to latest…`, `update available (vX)…`, `✓ updated to vX`. Connectivity is live (re-evaluated on `online`/`offline` events); the cached/live half is set once at load via `performance.getEntriesByType('navigation')[0].transferSize === 0`.
+  - Bug fix: the `controllerchange` handler used to call `location.reload()` unconditionally, which meant the very first visit (when `clients.claim()` makes the new SW the controller) would reload once for nothing. Now guarded by an `updateTriggered` flag set only when we actually post `SKIP_WAITING` to a waiting worker, so first-install claim just refreshes the status badge instead of reloading.
+  - The "✓ updated to vX" toast is driven by a `sessionStorage` flag set immediately before `location.reload()` and read on the next page load; it auto-clears after 6 s and reverts to the connectivity status.
+  - When `'serviceWorker' in navigator` is false (older browsers), the module still wires up `online`/`offline` listeners on `DOMContentLoaded` so the status line is populated even without SW support.
+- `js/version.js` + `sw.js` — bumped `0.5.31 → 0.5.31.1` in lockstep.
+
+---
+
 ## [0.5.31] — 2026-05-01
 
 Offline support via a service worker, plus an automatic reload when the server's version is newer than the running tab's.

@@ -4,6 +4,22 @@
 
 ## Session History
 
+### SW status badge under the version tag + first-install reload fix (v0.5.31.1) — Interim
+
+User asked for a notice under the version number that says whether the app loaded from cache, whether it's online, whether a new version was just installed, etc. Wired into the existing `js/app/sw-register.js` rather than a new module — it already knows about the SW lifecycle and is the only place that observes connectivity-relevant events.
+
+UI. New `#app-status-tag` div directly under `#app-version-tag` inside `.setup-brand`. The whole brand panel only shows on the setup screen; once the user picks a patient and starts a sim, neither the version nor the status are visible — that's fine, the status answers a "how did the app load just now / is the network there" question that's most relevant pre-case. Style: 9 px DM Mono, colored dot + label, four state classes (`online` green, `offline` amber, `updating` cyan with a pulsing dot, `updated` blue). `.status-tag:empty{display:none}` so the panel doesn't reserve space before the first status write.
+
+Status text. Two axes: connectivity (live, re-evaluated via `online` / `offline` events) and load source (set once at boot). Load source comes from `performance.getEntriesByType('navigation')[0].transferSize` — `0` means the document body never crossed the wire, so it was served by the SW cache (or HTTP cache); `> 0` means a network fetch. Combined into `online · cached`, `online · live`, `offline · cached`, `offline · live`. Two transient states wrap the SW update: `updating to latest…` while a new worker is installing, and `✓ updated to v0.5.31.1` for 6 s after the post-update reload.
+
+Bug found while wiring this up. The original `controllerchange` handler reloaded the page unconditionally. That's wrong on the very first visit: the SW activates, calls `clients.claim()`, that fires `controllerchange`, and a brand-new visitor would silently reload once for no reason. Fixed with an `updateTriggered` flag set only inside the `updatefound → installed` branch where we post `SKIP_WAITING`. First-install claim now just refreshes the status badge (we're newly controlled, so the next load will be `cached`).
+
+Update toast. Driven by a `sessionStorage` flag (`tcisim:justUpdated = '1'`) set immediately before `location.reload()` and read on the very next boot. After display the flag is cleared and the badge reverts to the connectivity status. SessionStorage was the right scope — it survives the reload but doesn't leak across tabs or across days.
+
+Older-browser fallback. When `'serviceWorker' in navigator` is false, the module still wires up `online`/`offline` listeners on `DOMContentLoaded` so the status badge is populated. Load source is hard-coded to `live` in that branch since there's no SW to serve from.
+
+Versions bumped in lockstep: `js/version.js` and `sw.js`'s `VERSION` constant `0.5.31 → 0.5.31.1` (per the CLAUDE.md "Adding a feature" workflow note added in 0.5.31).
+
 ### Offline support via service worker + version-aware reload (v0.5.31) — Interim
 
 User asked for the app to run offline from cache and for the service worker to compare its version against the server and force a reload when the server is newer. The app had no SW at all (`grep -r serviceWorker js index.html` returned zero hits), but is otherwise an ideal PWA candidate — pure static, no build step, single entry HTML, ES modules.
