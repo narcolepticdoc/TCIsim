@@ -4,6 +4,33 @@
 
 ## Session History
 
+### Lock SW updates to the setup screen (v0.5.31.3) — Interim
+
+User flagged the obvious safety issue with the freshly-added auto-update flow: a service worker reload mid-case would yank the running app's modules out from under an in-progress simulation. Fix: hard-gate every update-triggering path on `isOnSetupScreen()` so the version is locked in once the user clicks Start.
+
+Three paths to gate, all in `js/app/sw-register.js`:
+
+1. **The 60 s version poll.** `checkServerVersion()` early-returns if not on setup, so we never even fetch `js/version.js` while a case is running. (We still poll on the interval and on `visibilitychange`, but they no-op until the user is back on setup.)
+2. **The `SKIP_WAITING` post in `updatefound` → `installed`.** A new worker that finished installing while the user is mid-case stays parked in `waiting` indefinitely; we don't hand it the baton.
+3. **The `controllerchange` → `location.reload()` chain.** This handles the rare case where `SKIP_WAITING` was already in flight when the user clicked Start. If `controllerchange` fires off-setup, we set a `pendingReload` flag instead of reloading.
+
+When the user navigates back to the setup screen (driven by a new `tcisim:screenchange` custom event dispatched from `app.js#showScreen`), the screenchange listener does, in priority order:
+- If `pendingReload` is set → `triggerReload()` (sessionStorage flag + `location.reload()`).
+- Else if `registration.waiting` exists → activate it via `SKIP_WAITING` (covers both our queued updates and any update the browser found via its own background check during the case).
+- Else → fire a fresh `checkServerVersion()`.
+
+Status badge gets a new state: `↻ update queued · applies at next case start` (cyan, pulsing dot). User sees this if they happen to be on the setup screen when an update arrives but choose not to use the app for a moment, or — more typically — when they finish a case and return to setup with an update already queued.
+
+App-side touchpoint is one line in `js/app.js#showScreen`:
+
+```js
+document.dispatchEvent(new CustomEvent('tcisim:screenchange', { detail: { id } }));
+```
+
+This is the only coupling between `app.js` and `sw-register.js` — any future screen will get gated automatically as long as it's not `'setup-screen'`. The analysis screen, for instance, is also off-setup, which is correct: even though the user isn't actively running a sim there, they might be reviewing a case, and we shouldn't yank state.
+
+Versions bumped in lockstep `0.5.31.2 → 0.5.31.3`.
+
 ### Make the version tag readable (v0.5.31.2) — Interim
 
 User asked for the version number to be larger and not dimmed. The `.setup-brand .version-tag` rule was 9 px / `text-muted` / `opacity: .6` — chosen originally as a "footnote" treatment but barely legible at arm's length on a tablet. Bumped to 13 px / `text-secondary` and dropped the opacity damping. Same monospace face and letter-spacing so it still reads as a build label, just legibly. Versions bumped in lockstep `0.5.31.1 → 0.5.31.2`.

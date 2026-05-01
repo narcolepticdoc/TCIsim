@@ -11,6 +11,19 @@
 
 ---
 
+## [0.5.31.3] — 2026-05-01
+
+Lock SW updates to the setup screen — never apply mid-case.
+
+- `js/app/sw-register.js`
+  - All three update-triggering paths (the 60 s version poll, the post-`updatefound` `SKIP_WAITING` post, and the `controllerchange` → `location.reload()` chain) now hard-gate on `isOnSetupScreen()`. Once the user starts a case, the running version is locked in until they're back on setup.
+  - When an update arrives mid-case, the new worker is parked in `waiting` (we don't post `SKIP_WAITING`) or, if `controllerchange` already fired, we set a `pendingReload` flag instead of reloading. The status badge shows `↻ update queued · applies at next case start` so the user knows.
+  - On `tcisim:screenchange` to `setup-screen`: apply pending reload if set; else activate any waiting worker (covers updates the browser found via its own background check while we were on the sim screen); else run a fresh poll.
+- `js/app.js` — `showScreen(id)` dispatches `tcisim:screenchange` with `{detail: {id}}` so `sw-register.js` can react to navigation without coupling to the rest of the app.
+- `js/version.js` + `sw.js` — bumped `0.5.31.2 → 0.5.31.3` in lockstep.
+
+---
+
 ## [0.5.31.2] — 2026-05-01
 
 Make the version number on the setup-screen brand panel readable.

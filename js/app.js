@@ -60,6 +60,9 @@ function showScreen(id) {
   if (id === 'sim-screen') {
     requestAnimationFrame(() => requestAnimationFrame(syncPortraitLayout));
   }
+  // Notify sw-register so it can gate version checks/reloads to the setup
+  // screen — we never want the SW to swap out from under a running case.
+  document.dispatchEvent(new CustomEvent('tcisim:screenchange', { detail: { id } }));
 }
 
 // ---- Analysis (retrospective) screen ----
