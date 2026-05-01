@@ -4,6 +4,22 @@
 
 ## Session History
 
+### Status line shows install timestamp + prose phrasing (v0.5.31.4) — Interim
+
+User asked for the status notice under the version to spell out when the cached version was installed: "New Update Installed" right after an update, "No new version available. Last update <date time>." while online on cached, and "Offline. Cached version last updated <date time>." while offline.
+
+Tracking the install time. Two new `localStorage` keys: `tcisim:installedVersion` (the `APP_VERSION` string) and `tcisim:installedAt` (ISO datetime). On boot, `stampInstallTimeIfNeeded()` reads them; if `stored !== APP_VERSION` (or no stored entry exists), it stamps both with the current time. That trips exactly when an update has just been applied — because the SW reload hands control to a page whose `APP_VERSION` is the new version while `localStorage` still has the old one. So the timestamp tracks "when the currently-running cached version was first installed locally", which is what the user's wording asks for.
+
+Status messages rewritten as full sentences with `Date.toLocaleString(undefined, {month:'short', ...})` → "May 1, 2026, 2:23 PM". Steady states are split by connectivity:
+- online: `No new version available. Last update <ts>.`
+- offline: `Offline. Cached version last updated <ts>.`
+
+Transient states (around the SW update flow) keep their one-line phrasing but get sentence case + a period for consistency: `Update available (vX)…`, `Updating to latest…`, `↻ Update queued · applies at next case start.`, `✓ New update installed.`
+
+Layout. The brand panel is 220 px wide with a 16 px side padding so the usable text width is ~190 px. At 10 px DM Mono the longest sentence ("No new version available. Last update May 1, 2026, 02:23 PM.") spans roughly two lines. CSS changes: `font-size: 9 → 10 px`, `align-items: center → flex-start` so the dot anchors to the first line (with `margin-top: 4 px` to vertically center against a single text row), and the label moved into its own `<span class="text">` with `flex: 1; min-width: 0; word-break: break-word` so the sentence wraps inside the column instead of overflowing.
+
+Versions bumped in lockstep `0.5.31.3 → 0.5.31.4`.
+
 ### Lock SW updates to the setup screen (v0.5.31.3) — Interim
 
 User flagged the obvious safety issue with the freshly-added auto-update flow: a service worker reload mid-case would yank the running app's modules out from under an in-progress simulation. Fix: hard-gate every update-triggering path on `isOnSetupScreen()` so the version is locked in once the user clicks Start.

@@ -11,6 +11,22 @@
 
 ---
 
+## [0.5.31.4] — 2026-05-01
+
+Show when the cached version was last installed in the SW status line, and use prose phrasing instead of one-word states.
+
+- `js/app/sw-register.js`
+  - New `localStorage` pair tracks the install timestamp: `tcisim:installedVersion` (the `APP_VERSION` string) and `tcisim:installedAt` (ISO datetime). Re-stamped on the boot right after an update — detected by `stored !== APP_VERSION` — so the timestamp always reflects when the currently-running cached code was first installed locally. Also stamps on first ever boot.
+  - Status messages rewritten as full sentences with a localized date/time (`toLocaleString` with `month: 'short'` etc.):
+    - online steady state → `No new version available. Last update May 1, 2026, 02:23 PM.`
+    - offline steady state → `Offline. Cached version last updated May 1, 2026, 02:23 PM.`
+    - just-updated toast → `✓ New update installed.`
+    - mid-update transients → `Update available (vX)…` / `Updating to latest…` / `↻ Update queued · applies at next case start.`
+- `index.html` — `.status-tag` font-size `9px → 10px`, dot bumped `6→7px`, `align-items: flex-start`, dot gets a 4 px top margin and the label sits in its own `<span class="text">` so the new sentences wrap cleanly inside the 220 px brand panel.
+- `js/version.js` + `sw.js` — bumped `0.5.31.3 → 0.5.31.4` in lockstep.
+
+---
+
 ## [0.5.31.3] — 2026-05-01
 
 Lock SW updates to the setup screen — never apply mid-case.
