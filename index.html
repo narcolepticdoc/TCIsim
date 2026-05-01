@@ -45,9 +45,10 @@
     .setup-brand h1 span{color:var(--blue)}
     .setup-brand .subtitle{font-size:11px;color:var(--text-muted);letter-spacing:.4px;text-align:center}
     .setup-brand .version-tag{font-family:var(--font-mono);font-size:13px;color:var(--text-secondary);letter-spacing:.5px}
-    .setup-brand .status-tag{font-family:var(--font-mono);font-size:9px;letter-spacing:.4px;color:var(--text-muted);display:flex;align-items:center;gap:5px;min-height:11px;margin-top:-4px}
+    .setup-brand .status-tag{font-family:var(--font-mono);font-size:10px;letter-spacing:.2px;color:var(--text-muted);display:flex;align-items:flex-start;gap:6px;line-height:1.45;text-align:left}
     .setup-brand .status-tag:empty{display:none}
-    .setup-brand .status-tag .dot{width:6px;height:6px;border-radius:50%;background:var(--text-muted);flex-shrink:0}
+    .setup-brand .status-tag .dot{width:7px;height:7px;border-radius:50%;background:var(--text-muted);flex-shrink:0;margin-top:4px}
+    .setup-brand .status-tag .text{flex:1;min-width:0;word-break:break-word}
     .setup-brand .status-tag.online{color:var(--green)}
     .setup-brand .status-tag.online .dot{background:var(--green)}
     .setup-brand .status-tag.offline{color:var(--amber)}

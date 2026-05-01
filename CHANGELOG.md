@@ -11,6 +11,35 @@
 
 ---
 
+## [0.5.31.4] — 2026-05-01
+
+Show when the cached version was last installed in the SW status line, and use prose phrasing instead of one-word states.
+
+- `js/app/sw-register.js`
+  - New `localStorage` pair tracks the install timestamp: `tcisim:installedVersion` (the `APP_VERSION` string) and `tcisim:installedAt` (ISO datetime). Re-stamped on the boot right after an update — detected by `stored !== APP_VERSION` — so the timestamp always reflects when the currently-running cached code was first installed locally. Also stamps on first ever boot.
+  - Status messages rewritten as full sentences with a localized date/time (`toLocaleString` with `month: 'short'` etc.):
+    - online steady state → `No new version available. Last update May 1, 2026, 02:23 PM.`
+    - offline steady state → `Offline. Cached version last updated May 1, 2026, 02:23 PM.`
+    - just-updated toast → `✓ New update installed.`
+    - mid-update transients → `Update available (vX)…` / `Updating to latest…` / `↻ Update queued · applies at next case start.`
+- `index.html` — `.status-tag` font-size `9px → 10px`, dot bumped `6→7px`, `align-items: flex-start`, dot gets a 4 px top margin and the label sits in its own `<span class="text">` so the new sentences wrap cleanly inside the 220 px brand panel.
+- `js/version.js` + `sw.js` — bumped `0.5.31.3 → 0.5.31.4` in lockstep.
+
+---
+
+## [0.5.31.3] — 2026-05-01
+
+Lock SW updates to the setup screen — never apply mid-case.
+
+- `js/app/sw-register.js`
+  - All three update-triggering paths (the 60 s version poll, the post-`updatefound` `SKIP_WAITING` post, and the `controllerchange` → `location.reload()` chain) now hard-gate on `isOnSetupScreen()`. Once the user starts a case, the running version is locked in until they're back on setup.
+  - When an update arrives mid-case, the new worker is parked in `waiting` (we don't post `SKIP_WAITING`) or, if `controllerchange` already fired, we set a `pendingReload` flag instead of reloading. The status badge shows `↻ update queued · applies at next case start` so the user knows.
+  - On `tcisim:screenchange` to `setup-screen`: apply pending reload if set; else activate any waiting worker (covers updates the browser found via its own background check while we were on the sim screen); else run a fresh poll.
+- `js/app.js` — `showScreen(id)` dispatches `tcisim:screenchange` with `{detail: {id}}` so `sw-register.js` can react to navigation without coupling to the rest of the app.
+- `js/version.js` + `sw.js` — bumped `0.5.31.2 → 0.5.31.3` in lockstep.
+
+---
+
 ## [0.5.31.2] — 2026-05-01
 
 Make the version number on the setup-screen brand panel readable.

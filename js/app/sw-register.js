@@ -1,19 +1,27 @@
 /**
  * sw-register.js — Service worker registration, version polling, status display.
  *
- * Two reload triggers, both ending in a single location.reload():
- *   1. The browser's normal SW update lifecycle: when sw.js bytes change,
- *      a new worker installs in the background; we post SKIP_WAITING to it,
- *      it activates, controllerchange fires, we reload.
- *   2. A periodic poll of js/version.js (network-only via the SW's
- *      network-first path). If the server's VERSION constant differs from
- *      the running APP_VERSION, we kick registration.update() to drag the
- *      lifecycle along, so trigger #1 fires.
+ * Hard rule: nothing that could swap the running app's modules out from
+ * under it ever fires while a case is in progress. All three failure
+ * modes for that — version polling, SKIP_WAITING posts, and the
+ * controllerchange→reload chain — are gated on `isOnSetupScreen()`.
  *
- * Status display: writes a short status line into #app-status-tag (sits
- * under #app-version-tag in the setup-screen brand panel). Shows whether
- * the page was loaded from cache, current connectivity, and transient
- * "updating…" / "✓ updated to vX" messages around the SW update flow.
+ * If an update is detected (or a previous SKIP_WAITING already activated)
+ * while the user is on the sim/analysis screen, we park the new worker
+ * in `waiting` (or hold a `pendingReload` flag) and apply it the next
+ * time the user returns to the setup screen — driven by the
+ * `tcisim:screenchange` event dispatched from `app.js#showScreen`.
+ *
+ * Status display: writes a status line into #app-status-tag (sits under
+ * #app-version-tag in the setup-screen brand panel). Steady states show
+ * connectivity + the timestamp of the currently-cached version:
+ *   • online  → "No new version available. Last update <ts>."
+ *   • offline → "Offline. Cached version last updated <ts>."
+ * Transient states ("Update available…", "Updating to latest…",
+ * "✓ New update installed.") wrap around the SW update flow. The install
+ * timestamp is persisted in localStorage and re-stamped whenever the
+ * stored version no longer matches the running APP_VERSION (which is
+ * exactly when an update has just been applied).
  */
 
 import { APP_VERSION } from '../util/constants.js';
@@ -22,20 +30,24 @@ const POLL_INTERVAL_MS = 60_000;
 const VERSION_RE = /VERSION\s*=\s*['"]([^'"]+)['"]/;
 const STATUS_EL_ID = 'app-status-tag';
 const SS_JUST_UPDATED = 'tcisim:justUpdated';
+const LS_INSTALLED_VERSION = 'tcisim:installedVersion';
+const LS_INSTALLED_AT = 'tcisim:installedAt';
 const UPDATED_TOAST_MS = 6000;
 
 const supportsServiceWorker = 'serviceWorker' in navigator;
-let loadSource = detectLoadSource();
+const installedAt = stampInstallTimeIfNeeded();
 let updateTriggered = false;
+let pendingReload = false;
 let reloading = false;
+let registration = null;
 
 if (supportsServiceWorker) {
   window.addEventListener('load', () => { init().catch(() => {}); });
 } else {
-  // No SW support — still surface online/offline in the status tag so the
-  // user knows network state. Wait for DOMContentLoaded so the element exists.
+  // No SW support — still surface online/offline + last-update timestamp
+  // so the user has the same readout as the SW path. Wait for
+  // DOMContentLoaded so the status element exists.
   document.addEventListener('DOMContentLoaded', () => {
-    loadSource = 'live';
     refreshConnectivityStatus();
     window.addEventListener('online', refreshConnectivityStatus);
     window.addEventListener('offline', refreshConnectivityStatus);
@@ -48,7 +60,7 @@ async function init() {
   window.addEventListener('online', refreshConnectivityStatus);
   window.addEventListener('offline', refreshConnectivityStatus);
 
-  const registration = await navigator.serviceWorker.register('sw.js');
+  registration = await navigator.serviceWorker.register('sw.js');
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!updateTriggered) {
@@ -58,27 +70,35 @@ async function init() {
       return;
     }
     if (reloading) return;
-    reloading = true;
-    try { sessionStorage.setItem(SS_JUST_UPDATED, '1'); } catch (_) {}
-    location.reload();
+    if (!isOnSetupScreen()) {
+      // Update activated mid-case. Hold the reload until the user returns
+      // to setup — handled by the screenchange listener below.
+      pendingReload = true;
+      setStatus('updated', '↻ Update queued · applies at next case start.');
+      return;
+    }
+    triggerReload();
   });
 
   registration.addEventListener('updatefound', () => {
     const installing = registration.installing;
     if (!installing) return;
     installing.addEventListener('statechange', () => {
-      if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-        // A new worker is parked in `waiting` because this page already has
-        // a controller. Hand it the baton — skipWaiting → activate →
-        // controllerchange → reload.
-        updateTriggered = true;
-        setStatus('updating', 'updating to latest…');
-        installing.postMessage('SKIP_WAITING');
+      if (installing.state !== 'installed') return;
+      if (!navigator.serviceWorker.controller) return;
+      if (!isOnSetupScreen()) {
+        // New worker is parked in `waiting`. Don't activate during a sim;
+        // we'll post SKIP_WAITING the next time the user enters setup.
+        setStatus('updated', '↻ Update queued · applies at next case start.');
+        return;
       }
+      activateWaitingWorker(installing);
     });
   });
 
-  const poll = () => checkServerVersion(registration).catch(() => {});
+  document.addEventListener('tcisim:screenchange', onScreenChange);
+
+  const poll = () => checkServerVersion().catch(() => {});
   poll();
   setInterval(poll, POLL_INTERVAL_MS);
   document.addEventListener('visibilitychange', () => {
@@ -86,7 +106,37 @@ async function init() {
   });
 }
 
-async function checkServerVersion(registration) {
+function onScreenChange(event) {
+  const id = event && event.detail && event.detail.id;
+  if (id !== 'setup-screen') return;
+  if (pendingReload && !reloading) {
+    triggerReload();
+    return;
+  }
+  if (registration && registration.waiting) {
+    activateWaitingWorker(registration.waiting);
+    return;
+  }
+  checkServerVersion().catch(() => {});
+}
+
+function activateWaitingWorker(worker) {
+  updateTriggered = true;
+  setStatus('updating', 'Updating to latest…');
+  worker.postMessage('SKIP_WAITING');
+}
+
+function triggerReload() {
+  if (reloading) return;
+  reloading = true;
+  try { sessionStorage.setItem(SS_JUST_UPDATED, '1'); } catch (_) {}
+  location.reload();
+}
+
+async function checkServerVersion() {
+  if (!registration) return;
+  if (!isOnSetupScreen()) return;
+
   const res = await fetch(`js/version.js?_=${Date.now()}`, { cache: 'no-store' });
   if (!res.ok) return;
   const text = await res.text();
@@ -94,31 +144,57 @@ async function checkServerVersion(registration) {
   if (!match) return;
   const serverVersion = match[1];
   if (serverVersion !== APP_VERSION) {
-    setStatus('updating', `update available (v${serverVersion})…`);
-    // Drag the SW update lifecycle. The new sw.js (whose embedded VERSION
-    // bumps in lockstep) will install, the updatefound listener above
-    // posts SKIP_WAITING, and controllerchange reloads the page.
+    setStatus('updating', `Update available (v${serverVersion})…`);
     try { await registration.update(); } catch (_) {}
   }
 }
 
-function detectLoadSource() {
-  // transferSize === 0 on the navigation entry means the document body did
-  // not come over the wire — i.e. it was served from a cache (SW cache or
-  // HTTP cache). On the very first visit (no SW yet) this is > 0 → "live".
+function isOnSetupScreen() {
+  const el = document.getElementById('setup-screen');
+  return !!(el && el.classList.contains('active'));
+}
+
+// Stamp the install time the first ever boot, and re-stamp on the boot
+// right after an update (when stored version no longer matches APP_VERSION).
+function stampInstallTimeIfNeeded() {
+  let storedVersion = null;
+  let storedAt = null;
   try {
-    const nav = performance.getEntriesByType('navigation')[0];
-    if (nav && typeof nav.transferSize === 'number' && nav.transferSize === 0) {
-      return 'cached';
-    }
-  } catch (_) { /* fall through */ }
-  return 'live';
+    storedVersion = localStorage.getItem(LS_INSTALLED_VERSION);
+    storedAt = localStorage.getItem(LS_INSTALLED_AT);
+  } catch (_) { /* private mode etc. */ }
+
+  if (storedVersion !== APP_VERSION || !storedAt) {
+    const nowIso = new Date().toISOString();
+    try {
+      localStorage.setItem(LS_INSTALLED_VERSION, APP_VERSION);
+      localStorage.setItem(LS_INSTALLED_AT, nowIso);
+    } catch (_) {}
+    return new Date(nowIso);
+  }
+  const parsed = new Date(storedAt);
+  return isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function formatTimestamp(date) {
+  try {
+    return date.toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch (_) {
+    return date.toISOString().replace('T', ' ').slice(0, 16);
+  }
 }
 
 function refreshConnectivityStatus() {
   const online = navigator.onLine !== false;
-  const kind = online ? 'online' : 'offline';
-  setStatus(kind, `${kind} · ${loadSource}`);
+  const ts = formatTimestamp(installedAt);
+  if (online) {
+    setStatus('online', `No new version available. Last update ${ts}.`);
+  } else {
+    setStatus('offline', `Offline. Cached version last updated ${ts}.`);
+  }
 }
 
 function showJustUpdatedToastIfPending() {
@@ -126,7 +202,7 @@ function showJustUpdatedToastIfPending() {
   try { flag = sessionStorage.getItem(SS_JUST_UPDATED); } catch (_) {}
   if (flag !== '1') return;
   try { sessionStorage.removeItem(SS_JUST_UPDATED); } catch (_) {}
-  setStatus('updated', `✓ updated to v${APP_VERSION}`);
+  setStatus('updated', '✓ New update installed.');
   setTimeout(refreshConnectivityStatus, UPDATED_TOAST_MS);
 }
 
@@ -138,6 +214,7 @@ function setStatus(kind, label) {
   const dot = document.createElement('span');
   dot.className = 'dot';
   const text = document.createElement('span');
+  text.className = 'text';
   text.textContent = label;
   el.appendChild(dot);
   el.appendChild(text);
