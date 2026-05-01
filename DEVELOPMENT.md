@@ -4,6 +4,20 @@
 
 ## Session History
 
+### Live emergence countdown via cached arrivalMin (v0.5.31.8) — Interim
+
+Follow-up to v0.5.31.7. After fixing the duplicate timer, the remaining `exit-readout.js` was still on a 3 s `predictDecayTo` throttle — necessary in the original design because it baked the formatted countdown string into a cached HTML blob, and the only way to refresh the displayed seconds was to re-predict. The cost of re-predicting is real (per call: a coarse 0.5 min × 480 min lookahead scan = up to ~960 4×4 matrix-exp `engine.advance` calls, plus 40 bisection iterations, plus two full event-list replays). Without throttling we'd be doing 60–600 ms/sec of matrix-exp work per drug at native rAF. With it, ~1 ms/sec. The throttle was load-bearing.
+
+But it was also the reason the post-fix countdown still ticked once every 3 s instead of live. The right pattern was already in `approach.js`: cache the absolute `arrivalMin`, render `fmtCountdown(arrivalMin - t)` per frame from the cache, only re-predict on actual state changes.
+
+Refactored `exit-readout.js` to mirror that pattern. Per-drug cache holds `{exitCe, computedVersion, arrivalMin, prefixHtml}`. The invalidation triggers are: user-set `exitCe` changes, or the model curve version bumps (any event mutation). Each frame: read exitCe, check the two invalidation signals, re-predict if needed, then render `prefixHtml + fmtCountdown(arrivalMin - t)`. The `Ce ≤ exitCe` "Emergence Reached" branch stays as an early-return — no caching needed because the input flips it back the moment Ce drops through the threshold.
+
+Plumbing for the model-mutation signal: exposed `getCurveVersion()` from `approach.js` (the existing `_curveVersion` counter that gets incremented in `setCurveData`, called from `app.js` after every `refreshChart()`). Exit-readout reads it directly. Also exported `invalidateAll()` from exit-readout so `forceUpdate()` in `drug-panel/index.js` can invalidate both caches in lockstep on explicit "model mutated" signals.
+
+Edge case: arrival elapses while Ce is still above threshold (model mismatch / coarse-step rounding). Mirroring approach.js, set `cache.computedVersion = -1` on the next render to force a re-predict. In normal operation this branch is unreachable because Ce drops through exitCe right around arrivalMin, flipping the early-return to "Emergence Reached".
+
+Net cost change: was ~0.33 calls/s/drug → now ~0 calls/s/drug under steady state (recomputes only on event mutations and threshold changes). Net UX change: countdown ticks once per second instead of once every three. Versions bumped in lockstep `0.5.31.7 → 0.5.31.8`.
+
 ### Fix duplicate emergence timer when pump stopped (v0.5.31.7) — Interim
 
 User reported: when the pump is stopped on a drug card that has a configured emergence Ce threshold, two emergence countdowns appear simultaneously — `Exit 2.0 in 7:51` above the status row (live updating) and `Emerge → 2.0 in 7:54` below it (slower update cadence). Same prediction, two display paths, drifting times.

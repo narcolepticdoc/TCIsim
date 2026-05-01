@@ -22,7 +22,7 @@ import { setCurveData, updateApproachLine, _getApproachCache,
          getPlateauRegion, getSteadyStateCe, invalidateAll,
          _estimateTimeToTarget } from './approach.js';
 import { updateStepBar, _intermittentBarPct } from './step-bar.js';
-import { updateExitReadout } from './exit-readout.js';
+import { updateExitReadout, invalidateAll as invalidateExitReadout } from './exit-readout.js';
 
 // ── Shared context — populated by init(), read by all sub-modules ──
 
@@ -269,5 +269,6 @@ export { setCurveData, _estimateTimeToTarget, getPlateauRegion, getSteadyStateCe
 /** Force an immediate update (after a model mutation). */
 export function forceUpdate() {
   invalidateAll();
+  invalidateExitReadout();
   update();
 }

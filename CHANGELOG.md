@@ -11,6 +11,17 @@
 
 ---
 
+## [0.5.31.8] — 2026-05-01
+
+The emergence countdown now updates live every frame instead of every 3 seconds. Same pattern `approach.js` uses for its TCI / SS / plateau countdowns: `predictDecayTo` runs once per state change (user changes the emergence Ce, or the model curve mutates), the returned `arrivalMin` is cached, and each rAF frame renders `fmtCountdown(arrivalMin - t)` from the cache. No per-frame model calls.
+
+- `js/ui/drug-panel/approach.js` — exported `getCurveVersion()` so other drug-panel modules can use the curve-mutation counter as an invalidation signal.
+- `js/ui/drug-panel/exit-readout.js` — replaced the 3 s `predictDecayTo` throttle with a per-drug cache of `{exitCe, computedVersion, arrivalMin, prefixHtml}`. Re-predicts only when `exitCe` or `getCurveVersion()` changes; renders `prefixHtml + fmtCountdown(arrivalMin - t)` per frame from the cache. Force re-predicts next frame if arrival elapses while Ce is still above threshold.
+- `js/ui/drug-panel/index.js` — `forceUpdate()` now also invalidates the exit-readout cache via the newly exported `invalidateAll`, so explicit "model mutated" signals (`forceUpdate`) drop both caches in lockstep.
+- `js/version.js` + `sw.js` — bumped `0.5.31.7 → 0.5.31.8` in lockstep.
+
+---
+
 ## [0.5.31.7] — 2026-05-01
 
 Fix: when the pump is stopped on a drug card with a configured emergence Ce, two emergence countdowns rendered simultaneously — `Exit 2.0 in 7:51` (live) above the status row and `Emerge → 2.0 in 7:54` (3 s throttle) below it. The two predictions used different APIs (`predictTrough` vs `predictDecayTo`) and different update cadences, so the displayed times drifted apart. The `Exit` label was also stale per the post-0.5.24.3 naming convention ("Emerge → / Emergence" everywhere users see it).
