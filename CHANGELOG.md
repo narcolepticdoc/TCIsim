@@ -11,6 +11,20 @@
 
 ---
 
+## [0.5.30.11] — 2026-04-30
+
+Compartment-viz: real backing rect behind every flow label, plus per-arrow label-position overrides. The `paint-order: stroke fill` halo from v0.5.30.8 only painted around individual glyphs, so arrow lines still showed through the gaps between letters; with bumped fonts the label bbox was also wider than 2× the perpendicular offset, meaning lines crossed into the label rectangle on vertical arrows.
+
+- `js/ui/compartment-viz.js` — every arrow group now contains a `<rect class="cv-flow-label-bg">` behind its `<text>` label. `updateArrow()` calls `sizeBgToText()` after positioning the label to read the text's `getBBox()` and resize the rect with 4 / 2 viewBox-unit padding around it. Document order in the arrow group is `line → head → labelBg → label`, so the rect occludes the line/head where they overlap, and the label paints on top.
+- Per-arrow `label` override added to the `anchors` table. When set, `updateArrow()` uses the explicit `{x, y, anchor}` instead of computing perpendicular offset. Used to keep short arrows' labels clear of destination boxes:
+  - Wide `pump_to_v1`: `x = 305, y = 205, anchor: end` (sits left of V1's `x = 310`).
+  - Wide `v1_to_v2`: `x = 540, y = 155, anchor: end` (clears V2's left edge at `x = 590`).
+  - Tall `pump_to_v1`: `x = 105, y = 460, anchor: end` (clears V1's `x = 110`).
+- The "Infusion" caption gets the same backing rect treatment, sized every frame from `onFrame` (cheap — one `getBBox` per frame).
+- `index.html` — `.cv-flow-label-bg` styled with `fill: var(--bg-deep); stroke: none`.
+
+---
+
 ## [0.5.30.10] — 2026-04-30
 
 Compartment-viz: stop the "Infusion" caption from overlapping V1's left edge. Caption was anchored at midpoint just below the pump arrow; with the bumped flow-label font (14 viewBox units monospace ≈ 72 units of text), centering at `x = 95` gave a label spanning 59→131, overlapping V1's left wall at `x = 110`.
