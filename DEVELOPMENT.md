@@ -4,6 +4,10 @@
 
 ## Session History
 
+### Make the version tag readable (v0.5.31.2) — Interim
+
+User asked for the version number to be larger and not dimmed. The `.setup-brand .version-tag` rule was 9 px / `text-muted` / `opacity: .6` — chosen originally as a "footnote" treatment but barely legible at arm's length on a tablet. Bumped to 13 px / `text-secondary` and dropped the opacity damping. Same monospace face and letter-spacing so it still reads as a build label, just legibly. Versions bumped in lockstep `0.5.31.1 → 0.5.31.2`.
+
 ### SW status badge under the version tag + first-install reload fix (v0.5.31.1) — Interim
 
 User asked for a notice under the version number that says whether the app loaded from cache, whether it's online, whether a new version was just installed, etc. Wired into the existing `js/app/sw-register.js` rather than a new module — it already knows about the SW lifecycle and is the only place that observes connectivity-relevant events.
