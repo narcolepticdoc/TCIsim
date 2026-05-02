@@ -4,6 +4,20 @@
 
 ## Session History
 
+### Stop Pump clears future events during replay (v0.5.31.9) — Interim
+
+User reported: when replaying a case (current time scrubbed into the past with future events queued ahead), Stop Pump didn't clear those events. The sim ended up in a contradictory state — UI showed the pump stopped, but the pump silently resumed at the next queued rate-restore or bolus.
+
+Two bugs in `onPumpPause` (`js/app.js:321-342`):
+
+1. The `clearAfter(drugId, t)` call was inside an `if (mode === 'tci')` block. The original comment ("Stop drops out of current mode and clears future events") matched the right intent, but the implementation only honored it for TCI-mode cases. Manual mode with queued events left them in place. After `addPause` inserts a rate=0 event at `t`, the very next future event resumes infusion, exactly the contradictory state the user described.
+
+2. The early-return guard `if (conc.rate === 0 && mode !== 'tci') return` blocked the entire handler when the current replay time landed in a momentary rate=0 gap (e.g., between two infusion segments in the saved case). The user had no way to cancel queued resumptions because the button silently no-op'd.
+
+Fix is two surgical edits: lift `clearAfter` out of the TCI conditional so it always runs after the pause is inserted, and refine the guard to allow the handler when there are future events queued (`getEvents(drugId).some(e => e.time > t + 0.0001)`). Cached `mode.get(selectedDrug)` once in a local `m` while in there. The "genuinely idle, no-op the button" case now reads as `rate === 0 && m !== 'tci' && !hasFuture` — pump idle, not in TCI, and nothing queued ahead. Anything else proceeds: insert pause, clear all future events, drop mode to 'none' (if not already), refresh chart.
+
+Versions bumped in lockstep `0.5.31.8 → 0.5.31.9`.
+
 ### Live emergence countdown via cached arrivalMin (v0.5.31.8) — Interim
 
 Follow-up to v0.5.31.7. After fixing the duplicate timer, the remaining `exit-readout.js` was still on a 3 s `predictDecayTo` throttle — necessary in the original design because it baked the formatted countdown string into a cached HTML blob, and the only way to refresh the displayed seconds was to re-predict. The cost of re-predicting is real (per call: a coarse 0.5 min × 480 min lookahead scan = up to ~960 4×4 matrix-exp `engine.advance` calls, plus 40 bisection iterations, plus two full event-list replays). Without throttling we'd be doing 60–600 ms/sec of matrix-exp work per drug at native rAF. With it, ~1 ms/sec. The throttle was load-bearing.

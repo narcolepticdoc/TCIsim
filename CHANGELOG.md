@@ -11,6 +11,20 @@
 
 ---
 
+## [0.5.31.9] — 2026-05-01
+
+Fix: when replaying a case (current time scrubbed into the past with rate-resume / bolus events queued ahead), Stop Pump did not clear the queued events. The simulation ended up in a contradictory state — pump shown as stopped at the current time, but resuming when the next future event fired. Two underlying problems in `onPumpPause` (`js/app.js`):
+
+1. `clearAfter(drugId, t)` was gated on `mode === 'tci'` only. Manual-mode cases with future events kept them after a Stop Pump.
+2. The early-return guard `if (conc.rate === 0 && mode !== 'tci') return` blocked the handler entirely when the current replay time landed in a momentary rate=0 gap, even if future events would resume the pump — the user had no way to cancel them.
+
+Fix: always call `clearAfter` after the pause is inserted, regardless of mode. Refine the early-return guard to allow the handler when future events exist (`getEvents(drugId).some(e => e.time > t + 0.0001)`), so replay scenarios can cancel queued resumptions.
+
+- `js/app.js` — `onPumpPause` rewritten per the above. No-ops only when pump is genuinely idle: `rate === 0`, mode not TCI, and nothing queued ahead.
+- `js/version.js` + `sw.js` — bumped `0.5.31.8 → 0.5.31.9` in lockstep.
+
+---
+
 ## [0.5.31.8] — 2026-05-01
 
 The emergence countdown now updates live every frame instead of every 3 seconds. Same pattern `approach.js` uses for its TCI / SS / plateau countdowns: `predictDecayTo` runs once per state change (user changes the emergence Ce, or the model curve mutates), the returned `arrivalMin` is cached, and each rAF frame renders `fmtCountdown(arrivalMin - t)` from the cache. No per-frame model calls.
