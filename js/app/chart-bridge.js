@@ -330,5 +330,13 @@ export function createChartBridge({
     if (t > 0) settings.check(t);
   }
 
+  // The settings UI dispatches `tci:theme-change` after swapping
+  // `<html data-theme>`. Push the new CSS variable values into the chart
+  // (idempotent inside the chart itself).
+  document.addEventListener('tci:theme-change', () => {
+    const chart = getChart && getChart();
+    if (chart && typeof chart.applyTheme === 'function') chart.applyTheme();
+  });
+
   return { getConfig, computeEffectOverlay, refresh, onFrame };
 }

@@ -4,6 +4,26 @@
 
 ## Session History
 
+### Themable color schemes — dark + light (v0.5.32.0) — Interim
+
+User asked for a themable app with at least a "light" color scheme alongside the existing dark default.
+
+The HTML/CSS side was already 90% there: every UI surface in `index.html` consumes CSS custom properties (`--bg-deep`, `--text-primary`, `--blue`, etc.) defined once in a single `:root { … }` block. What was missing was (a) a user-facing toggle, (b) a second theme defined as variable overrides, and (c) Chart.js participation — the chart axes/grid/legend/tooltip and the custom annotation overlays were hard-coded hex literals (`'#9ca3af'`, `'#1e293b'`, `'#ffffff'`, `'#f59e0b'`, etc.) that would have looked broken on a light background.
+
+**Pattern:** `<html data-theme="light">` + a sibling `:root[data-theme="light"]` CSS block that overrides every variable. One attribute swap re-themes the entire document; cascades through modals/portals; no specificity surprises. Default load (`data-theme="dark"`) keeps the current values, so this is a zero-regression change for existing users.
+
+**Settings integration** mirrors the existing `textSize` pattern exactly: added `theme: 'dark'` to `DEFAULTS` in `js/ui/settings.js`, a `THEMES = ['dark', 'light']` validator list, getter/setter pass-through, and a Theme segmented control in the Appearance pane styled with the existing `.seg-group` / `.seg-btn` classes (no new CSS for the toggle itself). `js/app/settings-ui.js` exports `applyTheme()` that sets `document.documentElement.dataset.theme`, swaps `<meta name="theme-color">`, and dispatches a `tci:theme-change` CustomEvent.
+
+**Chart conversion** introduced six new chart-specific CSS variables (`--chart-axis-title`, `--chart-tick`, `--chart-grid`, `--chart-legend`, `--chart-tooltip-bg`, `--chart-label-fg`) so we don't conflate UI text colors with chart axis colors. A small `readThemeVars()` helper at the top of `js/ui/chart/index.js` samples them via `getComputedStyle(document.documentElement)`. Chart construction reads the helper once for the initial config; a new public `chart.applyTheme()` re-reads the helper and updates `options.scales.{x,y}.{title,ticks,grid}.color`, `legend.labels.color`, `tooltip.backgroundColor`, then rebuilds annotations + calls `chart.update('none')`.
+
+`js/ui/chart/annotations.js` got a parallel `readAnnotationColors()` helper that reads `--amber`, `--green`, `--red`, and `--chart-label-fg`. The trailing-alpha hex concatenation pattern (`'#f59e0b' + s.overlayAlpha` → `c.amber + s.overlayAlpha`) keeps working as long as both theme blocks use 6-char hex values, which they do. The most important fix was the BIS band label color at line 117 — previously hard-coded `'#ffffff'`, now `c.labelFg` — without this, plateau pill labels would be invisible white-on-white in light theme.
+
+`js/app/chart-bridge.js` adds a single `document.addEventListener('tci:theme-change', …)` listener that calls `chart.applyTheme()` on the live chart instance. The bridge is constructed once in `app.js`, so this is a single listener for the lifetime of the app; chart recreation on New Case is handled because `getChart()` always returns the current instance.
+
+**Intentionally not themed:** drug brand colors (propofol blue, fentanyl orange, ketamine purple, remifentanil amber) and chart dataset colors (Cp red, Ce blue, BIS green, rate purple, target orange) live in `js/util/constants.js DRUG_DEFS` + `COLORS`. These are clinical identity tokens — propofol is "the blue drug" regardless of background — and changing them across themes would defeat color-recognition. Chart curves render the same hue against either background; if any specific clinical color reads poorly in light mode, the fix is to tune the corresponding semantic CSS variable (e.g. `--amber: #d97706` instead of `#f59e0b` for better contrast on white), not to recolor the dataset itself.
+
+Versions bumped in lockstep `0.5.31.9 → 0.5.32.0`.
+
 ### Stop Pump clears future events during replay (v0.5.31.9) — Interim
 
 User reported: when replaying a case (current time scrubbed into the past with future events queued ahead), Stop Pump didn't clear those events. The sim ended up in a contradictory state — UI showed the pump stopped, but the pump silently resumed at the next queued rate-restore or bolus.

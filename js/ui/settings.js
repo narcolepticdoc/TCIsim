@@ -30,10 +30,12 @@ const DEFAULTS     = {
   overlayOpacity:  1.0, // Threshold/target line opacity (0.1–1.0)
   eventMarkerSize: 7,   // Future-event marker radius in px (4–16)
   textSize:    'normal',// Text scale: 'normal' | 'large' | 'xl' | 'xxl'
+  theme:       'dark',  // App color scheme: 'dark' | 'light'
   showCeBand:  false,   // Show the Ce drift tolerance band around target lines
 };
 
 const TEXT_SIZES = ['normal', 'large', 'xl', 'xxl'];
+const THEMES     = ['dark', 'light'];
 
 const DRUG_NAMES = {
   propofol:     'Propofol',
@@ -100,6 +102,9 @@ export function getSettings() {
       const textSize = (typeof p.textSize === 'string' && TEXT_SIZES.includes(p.textSize))
         ? p.textSize : DEFAULTS.textSize;
 
+      const theme = (typeof p.theme === 'string' && THEMES.includes(p.theme))
+        ? p.theme : DEFAULTS.theme;
+
       const showCeBand = (typeof p.showCeBand === 'boolean')
         ? p.showCeBand : DEFAULTS.showCeBand;
 
@@ -118,6 +123,7 @@ export function getSettings() {
         overlayOpacity,
         eventMarkerSize,
         textSize,
+        theme,
         showCeBand,
       };
     }
@@ -125,8 +131,8 @@ export function getSettings() {
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize, showCeBand }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize, showCeBand })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize, theme, showCeBand }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize, theme, showCeBand })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
