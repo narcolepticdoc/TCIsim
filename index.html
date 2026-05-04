@@ -48,6 +48,10 @@
       --bis-deeper:#16a34a;--bis-very-deep:#7c3aed;
     }
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    /* Globally suppress the iOS double-tap-zoom delay on tappable controls.
+       Without this, rapid second taps on keypad buttons can be dropped while
+       the browser waits to see if the user is double-tapping to zoom. */
+    button,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
     html,body{height:100%;width:100%;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-display);-webkit-font-smoothing:antialiased;overflow:hidden;padding-bottom:6px}
     .screen{display:none;width:100%;height:100%}.screen.active{display:flex}
 
@@ -133,7 +137,7 @@
     .pm-error{font-family:var(--font-mono);font-size:11px;color:var(--red);margin:4px 0 0;min-height:0}
     .pm-error:empty{display:none}
     .pm-keypad{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:12px 0}
-    .pm-key{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:20px;padding:14px 0;cursor:pointer;transition:background .15s,opacity .15s;-webkit-tap-highlight-color:transparent}
+    .pm-key{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:20px;padding:14px 0;cursor:pointer;transition:background .15s,opacity .15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;-webkit-user-select:none}
     .pm-key:hover{background:var(--bg-hover)}
     .pm-key:active{background:var(--bg-card)}
     .pm-key[disabled]{opacity:.25;cursor:default;pointer-events:none}
@@ -815,7 +819,7 @@
 
     .keypad-right{display:flex;flex-direction:column;gap:6px;width:212px;flex-shrink:0}
     .keypad-numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
-    .key{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:18px;padding:10px 0;text-align:center;cursor:pointer;transition:all .1s;user-select:none;-webkit-user-select:none}
+    .key{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:18px;padding:10px 0;text-align:center;cursor:pointer;transition:all .1s;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
     .key:hover{background:var(--bg-hover)}
     .key:active{background:var(--blue-dim);transform:scale(.95)}
     .key-wide{grid-column:span 2}

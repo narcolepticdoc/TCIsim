@@ -4,6 +4,21 @@
 
 ## Session History
 
+### Keypad input lag on iOS — global touch-action fix (v0.5.32.3) — Interim
+
+User report: typing the patient's age, pressing "3" then "5" too fast occasionally lands just "3" — the second tap is dropped. They flagged it as possibly systemic.
+
+Cause is the iOS Safari "fast-tap" issue. Even with `<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">` set in `index.html`, iOS still holds tap events for ~300 ms on plain `<button>` elements when neither `touch-action` nor a few other heuristics tell it that double-tap-zoom is unwanted. A fast follow-up tap that lands inside that holding window can be dropped entirely. The patient-modal keypad (`.pm-key`) and the main numeric keypad (`.key`) had `-webkit-tap-highlight-color:transparent` and `cursor:pointer` but neither had `touch-action: manipulation`, so the holding window was active.
+
+Fix is two-tiered:
+
+1. **Global default**: `button, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-color: transparent }` near the top of the stylesheet, so every existing and future button in the app gets the snappy behavior by default. `manipulation` is the right keyword — it allows panning and pinch-zoom but disables double-tap-zoom, which is exactly what we want on a clinical app where pinch-zoom on the chart is intentional but you never want the simulator to interpret a fast keypad sequence as a zoom gesture.
+2. **Explicit on the keypad classes**: kept the explicit `touch-action:manipulation` on `.pm-key` and `.key` because they're the most rapid-tap-prone surfaces and explicitness here documents intent for future readers.
+
+No JS changes — the `addEventListener('click', ...)` handlers in `js/ui/patient-modal.js`, `js/ui/keypad.js`, and `js/ui/event-editor.js` are correct; the bug was at the platform layer. Considered switching to `pointerdown`/`touchend` but that has its own pitfalls (firing on accidental drags, harder to support keyboard-driven taps for accessibility) and the CSS fix is sufficient.
+
+Versions bumped in lockstep `0.5.32.2 → 0.5.32.3`.
+
 ### eBIS readout — restored on phones, theme-aware color (v0.5.32.2) — Interim
 
 User report after v0.5.32.1: "Bis display is gone. It is gone." Screenshot showed the propofol drug card on an iPhone-portrait viewport with the header row containing only "PROPOFOL" — the eBIS readout that's supposed to be right-justified next to the drug name was absent.

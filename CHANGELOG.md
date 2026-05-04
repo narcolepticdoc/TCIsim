@@ -11,6 +11,15 @@
 
 ---
 
+## [0.5.32.3] — 2026-05-04
+
+Fix: rapid second taps on keypad buttons (patient demographics, numeric keypad, event editor) were occasionally being dropped on iOS — typing "35" too fast for the age field could land just "3". Cause: the buttons lacked `touch-action: manipulation`, so iOS was holding each tap for ~300 ms to disambiguate against a double-tap-zoom gesture, and a fast follow-up tap landed inside that window and got swallowed. Added a global `button, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-color: transparent }` rule so every tappable control in the app responds immediately on iOS, plus an explicit `touch-action:manipulation` on `.pm-key` and `.key` for clarity.
+
+- `index.html` — global `button` rule + explicit additions to `.pm-key` / `.key`.
+- `js/version.js` + `sw.js` — bumped `0.5.32.2 → 0.5.32.3` in lockstep.
+
+---
+
 ## [0.5.32.2] — 2026-05-04
 
 Two BIS-readout fixes surfaced while testing the new themable colors:
