@@ -45,6 +45,24 @@ function fmtTick(v) {
 }
 
 /**
+ * Read theme-derived chart colors from the document's CSS custom properties.
+ * Chart.js doesn't observe CSS variables, so we sample them here at chart
+ * construction and again whenever the user switches themes.
+ */
+export function readThemeVars() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (name, fallback) => (cs.getPropertyValue(name).trim() || fallback);
+  return {
+    axisTitle: v('--chart-axis-title', '#9ca3af'),
+    tick:      v('--chart-tick',       '#6b7280'),
+    grid:      v('--chart-grid',       '#1e293b'),
+    legend:    v('--chart-legend',     '#9ca3af'),
+    tooltipBg: v('--chart-tooltip-bg', '#1e293bee'),
+    labelFg:   v('--chart-label-fg',   '#ffffff'),
+  };
+}
+
+/**
  * Create a TCI chart instance.
  *
  * @param {HTMLCanvasElement} canvas - The canvas element to render into
@@ -69,6 +87,9 @@ export function createChart(canvas, config = {}) {
   };
 
   const s = createState(cfg);
+
+  // Sampled once here for chart construction; kept up-to-date by applyTheme().
+  const theme = readThemeVars();
 
   // Build datasets
   const datasets = [];
@@ -166,28 +187,28 @@ export function createChart(canvas, config = {}) {
       scales: {
         x: {
           type: 'linear',
-          title: { display: true, text: 'Time (min)', color: '#9ca3af', font: { size: 10 } },
+          title: { display: true, text: 'Time (min)', color: theme.axisTitle, font: { size: 10 } },
           min: s.viewMin,
           max: s.viewMax,
           ticks: {
-            color: '#6b7280',
+            color: theme.tick,
             font: { size: 9 },
             maxTicksLimit: 12,
             callback: fmtTick,
           },
-          grid: { color: '#1e293b' },
+          grid: { color: theme.grid },
         },
         y: {
           type: 'linear',
-          title: { display: true, text: 'μg/mL', color: '#9ca3af', font: { size: 10 } },
+          title: { display: true, text: 'μg/mL', color: theme.axisTitle, font: { size: 10 } },
           min: 0,
           suggestedMax: 8,
           ticks: {
-            color: '#6b7280',
+            color: theme.tick,
             font: { size: 9 },
             callback: fmtTick,
           },
-          grid: { color: '#1e293b' },
+          grid: { color: theme.grid },
         },
         ...(cfg.showRate ? {
           yRate: {
@@ -205,7 +226,7 @@ export function createChart(canvas, config = {}) {
           display: true,
           position: 'top',
           labels: {
-            color: '#9ca3af', font: { size: 10 }, boxWidth: 12, padding: 8,
+            color: theme.legend, font: { size: 10 }, boxWidth: 12, padding: 8,
             // Hide the ghost dataset from the legend — it only appears
             // during a reconciliation, and the purple dashed line is
             // self-explanatory next to the live Ce. A persistent legend
@@ -215,7 +236,7 @@ export function createChart(canvas, config = {}) {
         },
         tooltip: {
           enabled: false,
-          backgroundColor: '#1e293bee',
+          backgroundColor: theme.tooltipBg,
           titleFont: { size: 11 },
           bodyFont: { size: 10 },
           callbacks: {
@@ -592,6 +613,27 @@ export function createChart(canvas, config = {}) {
     chart.update('none');
   }
 
+  /**
+   * Re-read theme CSS variables and push the new colors into the chart.
+   * Called by chart-bridge in response to the `tci:theme-change` event;
+   * also safe to call any time after a CSS variable change.
+   */
+  function applyTheme() {
+    const t = readThemeVars();
+    const opts = chart.options;
+    opts.scales.x.title.color = t.axisTitle;
+    opts.scales.x.ticks.color = t.tick;
+    opts.scales.x.grid.color  = t.grid;
+    opts.scales.y.title.color = t.axisTitle;
+    opts.scales.y.ticks.color = t.tick;
+    opts.scales.y.grid.color  = t.grid;
+    opts.plugins.legend.labels.color = t.legend;
+    opts.plugins.tooltip.backgroundColor = t.tooltipBg;
+    // Annotations sample CSS variables themselves on rebuild — see annotations.js.
+    opts.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
   function setEventAnnotations(markers) {
     s.eventMarkers = Array.isArray(markers) ? markers : [];
     chart.update('none');
@@ -657,6 +699,7 @@ export function createChart(canvas, config = {}) {
     toggleEventAnnotations,
     setEventMarkerSize,
     setFontScale,
+    applyTheme,
     destroy,
     get inspectEnabled() { return s.inspectEnabled; },
     get inspectTime() { return s.inspectTime; },

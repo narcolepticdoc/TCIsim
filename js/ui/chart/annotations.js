@@ -8,14 +8,33 @@
 
 import { COLORS } from '../../util/constants.js';
 
+/**
+ * Read the semantic + chart CSS variables annotations rely on. Sampled fresh
+ * on every rebuild so theme switches take effect on the next chart.update().
+ * Each color is a 6-char hex string so the trailing-alpha concatenation
+ * pattern (e.g. `amber + s.overlayAlpha`) keeps producing valid 8-char hex.
+ */
+function readAnnotationColors() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (name, fallback) => (cs.getPropertyValue(name).trim() || fallback);
+  return {
+    amber:   v('--amber',           '#f59e0b'),
+    green:   v('--green',           '#22c55e'),
+    red:     v('--red',             '#ef4444'),
+    cursor:  v('--chart-label-fg',  '#ffffff'),
+    labelFg: v('--chart-label-fg',  '#ffffff'),
+  };
+}
+
 export function buildAnnotations(s) {
   const annotations = {};
+  const c = readAnnotationColors();
 
   annotations.cursor = {
     type: 'line',
     xMin: s.cursorTime,
     xMax: s.cursorTime,
-    borderColor: '#ffffff',
+    borderColor: c.cursor,
     borderWidth: 1.5,
     borderDash: [4, 3],
   };
@@ -25,7 +44,7 @@ export function buildAnnotations(s) {
       type: 'line',
       xMin: s.inspectTime,
       xMax: s.inspectTime,
-      borderColor: '#f59e0b',
+      borderColor: c.amber,
       borderWidth: 1.5,
       borderDash: [],
     };
@@ -71,7 +90,7 @@ export function buildAnnotations(s) {
       type: 'line',
       yMin: s.thresholdCe,
       yMax: s.thresholdCe,
-      borderColor: '#f59e0b' + s.overlayAlpha,
+      borderColor: c.amber + s.overlayAlpha,
       borderWidth: 1.5,
       borderDash: [4, 3],
     };
@@ -82,7 +101,7 @@ export function buildAnnotations(s) {
       type: 'line',
       yMin: s.steadyStateCe,
       yMax: s.steadyStateCe,
-      borderColor: '#22c55e' + s.overlayAlpha,
+      borderColor: c.green + s.overlayAlpha,
       borderWidth: 1.5,
       borderDash: [8, 4],
     };
@@ -93,7 +112,7 @@ export function buildAnnotations(s) {
       type: 'line',
       yMin: s.exitCe,
       yMax: s.exitCe,
-      borderColor: '#ef4444' + s.overlayAlpha,
+      borderColor: c.red + s.overlayAlpha,
       borderWidth: 1.5,
       borderDash: [5, 4],
     };
@@ -114,7 +133,7 @@ export function buildAnnotations(s) {
         content: band.label,
         position: { x: 'end', y: 'center' },
         xAdjust: -36,
-        color: '#ffffff' + labelAlpha,
+        color: c.labelFg + labelAlpha,
         font: { size: Math.round(9 * (s.fontScale || 1)) },
       } : undefined,
     };
@@ -130,8 +149,8 @@ export function buildAnnotations(s) {
       xMax: s.plateauRegion.endMin ?? s.viewMax,
       yMin: s.plateauRegion.ceMin,
       yMax: s.plateauRegion.ceMax,
-      backgroundColor: '#f59e0b' + fillA,
-      borderColor: '#f59e0b' + s.overlayAlpha,
+      backgroundColor: c.amber + fillA,
+      borderColor: c.amber + s.overlayAlpha,
       borderWidth: 2,
       drawTime: 'afterDatasetsDraw',
     };
@@ -150,8 +169,8 @@ export function buildAnnotations(s) {
       yScaleID: 'y',
       xMin: s.reconciliationRegion.xMin,
       xMax: s.reconciliationRegion.xMax,
-      backgroundColor: '#f59e0b' + fillA,
-      borderColor: '#f59e0b' + s.overlayAlpha,
+      backgroundColor: c.amber + fillA,
+      borderColor: c.amber + s.overlayAlpha,
       borderWidth: 1,
       borderDash: [6, 4],
       drawTime: 'afterDatasetsDraw',

@@ -23,8 +23,29 @@
       --text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#475569;--text-accent:#60a5fa;
       --blue:#3b82f6;--blue-dim:#1e40af;--red:#ef4444;--green:#22c55e;
       --amber:#f59e0b;--cyan:#06b6d4;--purple:#8b5cf6;
+      /* Chart-specific tokens (consumed by Chart.js axes/grid/legend/labels). */
+      --chart-axis-title:#9ca3af;--chart-tick:#6b7280;--chart-grid:#1e293b;
+      --chart-legend:#9ca3af;--chart-tooltip-bg:#1e293bee;--chart-label-fg:#ffffff;
+      /* BIS-band fill alpha (2-char hex appended to band base color). Tuned per
+         theme so the nomogram bands stay visible against either backdrop. */
+      --bis-band-alpha:30;
+      /* eBIS readout text colors per BIS depth band (consumed by bisColor). */
+      --bis-mild:#ef4444;--bis-moderate:#f97316;--bis-deep:#eab308;
+      --bis-deeper:#22c55e;--bis-very-deep:#a855f7;
       --font-display:'Outfit',sans-serif;--font-mono:'DM Mono',monospace;
       --radius-sm:6px;--radius-md:10px;--radius-lg:16px;
+    }
+    :root[data-theme="light"]{
+      --bg-deep:#f4f6fa;--bg-card:#ffffff;--bg-input:#eef1f6;--bg-hover:#e3e8f0;
+      --border-subtle:#d6dbe3;--border-focus:#2563eb;
+      --text-primary:#0f172a;--text-secondary:#475569;--text-muted:#94a3b8;--text-accent:#2563eb;
+      --blue:#2563eb;--blue-dim:#bfdbfe;--red:#dc2626;--green:#16a34a;
+      --amber:#d97706;--cyan:#0891b2;--purple:#7c3aed;
+      --chart-axis-title:#475569;--chart-tick:#64748b;--chart-grid:#e2e8f0;
+      --chart-legend:#475569;--chart-tooltip-bg:#ffffffee;--chart-label-fg:#0f172a;
+      --bis-band-alpha:55;
+      --bis-mild:#dc2626;--bis-moderate:#c2410c;--bis-deep:#a16207;
+      --bis-deeper:#16a34a;--bis-very-deep:#7c3aed;
     }
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     html,body{height:100%;width:100%;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-display);-webkit-font-smoothing:antialiased;overflow:hidden;padding-bottom:6px}
@@ -570,8 +591,6 @@
       .drug-panel{width:215px;min-width:175px}
       .drug-card{padding:5px 8px;gap:1px}
       .drug-card .drug-model{display:none}
-      .drug-card .drug-header-row{display:block}
-      .drug-card .drug-bis-header{display:none}
       .drug-card .exit-readout{font-size:9px;white-space:normal}
       .drug-card .drug-name{font-size:10px}
       .drug-card .ce-current{font-size:16px}
@@ -618,8 +637,6 @@
       .drug-panel{order:1;width:100%;min-width:unset;flex:0 0 auto;border-right:none;border-top:1px solid var(--border-subtle);max-height:45%;overflow-y:auto}
       .drug-card{padding:6px 10px;gap:2px}
       .drug-card .drug-model{display:none}
-      .drug-card .drug-header-row{display:block}
-      .drug-card .drug-bis-header{display:none}
       .drug-card .exit-readout{font-size:9px;white-space:normal}
       .drug-card .drug-name{font-size:12px}
       .drug-card .ce-current{font-size:18px}
@@ -1819,6 +1836,15 @@
                   <button type="button" class="seg-btn" data-size="large">Large</button>
                   <button type="button" class="seg-btn" data-size="xl">XL</button>
                   <button type="button" class="seg-btn" data-size="xxl">XXL</button>
+                </div>
+              </div>
+            </div>
+            <div class="settings-row">
+              <label>Theme</label>
+              <div class="settings-control">
+                <div class="seg-group" id="set-theme">
+                  <button type="button" class="seg-btn active" data-theme="dark">Dark</button>
+                  <button type="button" class="seg-btn" data-theme="light">Light</button>
                 </div>
               </div>
             </div>

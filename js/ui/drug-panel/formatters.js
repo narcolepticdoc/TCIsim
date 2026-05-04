@@ -27,21 +27,24 @@ export function fmtCountdown(minutes) {
 }
 
 /**
- * BIS → color matching the chart nomogram bands:
- *   > 90  muted       (awake, no band)
- *  80-90  #ef4444 red    Light Sedation
- *  60-80  #f97316 orange Deep Sedation
- *  40-60  #eab308 yellow GA
- *  20-40  #22c55e green  Deep Anesthesia
- *   < 20  #a855f7 purple Very Deep
+ * BIS → color matching the chart nomogram bands. Returns CSS variable refs
+ * so the eBIS readout adapts to the active theme — the dark-tuned hex
+ * values (#eab308 yellow in particular) are invisible against a light
+ * background, so the per-theme `--bis-*` blocks darken them.
+ *   > 90  --text-muted   (awake, no band)
+ *  80-90  --bis-mild     red    Light Sedation
+ *  60-80  --bis-moderate orange Deep Sedation
+ *  40-60  --bis-deep     yellow GA
+ *  20-40  --bis-deeper   green  Deep Anesthesia
+ *   < 20  --bis-very-deep purple Very Deep
  */
 export function bisColor(bis) {
   if (bis > 90) return 'var(--text-muted)';
-  if (bis > 80) return '#ef4444';
-  if (bis > 60) return '#f97316';
-  if (bis > 40) return '#eab308';
-  if (bis > 20) return '#22c55e';
-  return '#a855f7';
+  if (bis > 80) return 'var(--bis-mild)';
+  if (bis > 60) return 'var(--bis-moderate)';
+  if (bis > 40) return 'var(--bis-deep)';
+  if (bis > 20) return 'var(--bis-deeper)';
+  return 'var(--bis-very-deep)';
 }
 
 /** Returns true when the most recent event at/before t is a bolus. */

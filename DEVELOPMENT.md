@@ -4,6 +4,56 @@
 
 ## Session History
 
+### eBIS readout — restored on phones, theme-aware color (v0.5.32.2) — Interim
+
+User report after v0.5.32.1: "Bis display is gone. It is gone." Screenshot showed the propofol drug card on an iPhone-portrait viewport with the header row containing only "PROPOFOL" — the eBIS readout that's supposed to be right-justified next to the drug name was absent.
+
+Two separate problems, both surfaced by the themable-colors PR but not all caused by it:
+
+**1. The eBIS readout was hard-hidden on phones.** A CSS rule added back in v0.5.24.16 set `.drug-card .drug-bis-header{display:none}` inside two media queries — phone-landscape (`max-width:900px and max-height:420px`) and phone-portrait (`max-width:500px and orientation:portrait`) — and also flipped `.drug-card .drug-header-row` from flex to `display:block`. Net effect: on every phone form factor, the propofol BIS readout was just gone. Verified with a puppeteer test against the running localhost — at viewport 430×932 portrait, `getComputedStyle(document.getElementById('propofol-bis-header')).display === 'none'` and the matched rules were both phone media query overrides.
+
+The display:block override was probably to allow long drug names to wrap. But the only drug names we have (Propofol, Fentanyl, Ketamine) are short enough to share the row. Removed both `display:none` rules and the matching `display:block` rule on header-row. Header-row reverts to its default flex layout (justify-content: space-between, align-items: baseline), so the drug name sits left and the eBIS sits right. Empty bis-headers still collapse via the existing `:empty{display:none}` rule, so non-propofol drug cards (which never get BIS) are visually identical to before. Re-ran the puppeteer test with mock content injected — at iPhone width, the BIS readout renders at `x=372 (right-edge), w=48px` next to the drug name at `x=16, w=71px`, both `align-items: baseline`. Confirmed visually with a screenshot.
+
+**2. The eBIS color was invisible in light theme.** `bisColor()` in `js/ui/drug-panel/formatters.js` returned hard-coded hex literals tuned for a dark backdrop — `#ef4444` red, `#f97316` orange, `#eab308` yellow, `#22c55e` green, `#a855f7` purple. The yellow at BIS 40-60 (typical anesthetic depth — what the user would see during most cases) is unreadable text on white. The light-purple (#a855f7) and light-green (#22c55e) read OK but feel garish on white. Promoted all five depth-band colors to per-theme CSS variables (`--bis-mild`, `--bis-moderate`, `--bis-deep`, `--bis-deeper`, `--bis-very-deep`). Dark theme keeps the original brights (no visual change). Light theme uses darker variants — `#a16207` (deep amber) for the BIS 40-60 GA range, `#dc2626` red, `#c2410c` orange, `#16a34a` green, `#7c3aed` purple. `bisColor()` returns `var(--bis-…)` strings, which work fine when assigned to `element.style.color`.
+
+The `> 90` muted band was already `var(--text-muted)` — already adapted, no change needed.
+
+Same lesson as the BIS-band-alpha fix in v0.5.32.1: any color hard-coded for a dark backdrop is a latent landmine when adding light theme. The themable-colors PR has now exposed and fixed three of these (chart axes/grid, BIS-band fills, BIS readout text); the rest of the codebase passed the audit (drug brand colors, dataset colors are intentionally non-themed for clinical recognizability).
+
+Versions bumped in lockstep `0.5.32.1 → 0.5.32.2`.
+
+### BIS nomogram bands invisible in light theme (v0.5.32.1) — Interim
+
+User report after the v0.5.32.0 themable-colors ship: "Bis display is gone. Doesn't show up at all."
+
+The BIS nomogram bands (Light Sedation / Deep Sedation / GA / Deep Anesthesia colored regions on the chart) were hard-coded at `30` hex alpha = ~19% in `chart-bridge.js computeEffectOverlay()`. That value was originally tuned for a near-black backdrop where 19% colored fills are still readily visible. On the new white background, 19% red/orange/yellow/green fills are essentially imperceptible — and the band labels (positioned inside the bands) disappear with them, so it does look like the entire BIS display is missing.
+
+Fix: promote the alpha to a per-theme CSS variable. `--bis-band-alpha: 30` for dark (unchanged), `55` (≈33%) for light. `computeEffectOverlay()` reads it via `getComputedStyle(document.documentElement).getPropertyValue('--bis-band-alpha')` and appends it to the band base hex (`'#ef4444' + a`). Fallback `|| '30'` keeps the old alpha if the variable isn't defined (e.g., a stale service-worker `index.html` with new chart-bridge).
+
+Wired the existing `tci:theme-change` listener in chart-bridge.js to also call `computeEffectOverlay()` after `chart.applyTheme()`, so toggling themes mid-session re-renders the bands with the new alpha. The chart-side `applyTheme()` was already rebuilding annotations from current `s.effectBands`, but those bands had the OLD alpha baked in — recomputing here regenerates them with the new alpha pulled from the theme-aware CSS variable.
+
+Versions bumped in lockstep `0.5.32.0 → 0.5.32.1`.
+
+### Themable color schemes — dark + light (v0.5.32.0) — Interim
+
+User asked for a themable app with at least a "light" color scheme alongside the existing dark default.
+
+The HTML/CSS side was already 90% there: every UI surface in `index.html` consumes CSS custom properties (`--bg-deep`, `--text-primary`, `--blue`, etc.) defined once in a single `:root { … }` block. What was missing was (a) a user-facing toggle, (b) a second theme defined as variable overrides, and (c) Chart.js participation — the chart axes/grid/legend/tooltip and the custom annotation overlays were hard-coded hex literals (`'#9ca3af'`, `'#1e293b'`, `'#ffffff'`, `'#f59e0b'`, etc.) that would have looked broken on a light background.
+
+**Pattern:** `<html data-theme="light">` + a sibling `:root[data-theme="light"]` CSS block that overrides every variable. One attribute swap re-themes the entire document; cascades through modals/portals; no specificity surprises. Default load (`data-theme="dark"`) keeps the current values, so this is a zero-regression change for existing users.
+
+**Settings integration** mirrors the existing `textSize` pattern exactly: added `theme: 'dark'` to `DEFAULTS` in `js/ui/settings.js`, a `THEMES = ['dark', 'light']` validator list, getter/setter pass-through, and a Theme segmented control in the Appearance pane styled with the existing `.seg-group` / `.seg-btn` classes (no new CSS for the toggle itself). `js/app/settings-ui.js` exports `applyTheme()` that sets `document.documentElement.dataset.theme`, swaps `<meta name="theme-color">`, and dispatches a `tci:theme-change` CustomEvent.
+
+**Chart conversion** introduced six new chart-specific CSS variables (`--chart-axis-title`, `--chart-tick`, `--chart-grid`, `--chart-legend`, `--chart-tooltip-bg`, `--chart-label-fg`) so we don't conflate UI text colors with chart axis colors. A small `readThemeVars()` helper at the top of `js/ui/chart/index.js` samples them via `getComputedStyle(document.documentElement)`. Chart construction reads the helper once for the initial config; a new public `chart.applyTheme()` re-reads the helper and updates `options.scales.{x,y}.{title,ticks,grid}.color`, `legend.labels.color`, `tooltip.backgroundColor`, then rebuilds annotations + calls `chart.update('none')`.
+
+`js/ui/chart/annotations.js` got a parallel `readAnnotationColors()` helper that reads `--amber`, `--green`, `--red`, and `--chart-label-fg`. The trailing-alpha hex concatenation pattern (`'#f59e0b' + s.overlayAlpha` → `c.amber + s.overlayAlpha`) keeps working as long as both theme blocks use 6-char hex values, which they do. The most important fix was the BIS band label color at line 117 — previously hard-coded `'#ffffff'`, now `c.labelFg` — without this, plateau pill labels would be invisible white-on-white in light theme.
+
+`js/app/chart-bridge.js` adds a single `document.addEventListener('tci:theme-change', …)` listener that calls `chart.applyTheme()` on the live chart instance. The bridge is constructed once in `app.js`, so this is a single listener for the lifetime of the app; chart recreation on New Case is handled because `getChart()` always returns the current instance.
+
+**Intentionally not themed:** drug brand colors (propofol blue, fentanyl orange, ketamine purple, remifentanil amber) and chart dataset colors (Cp red, Ce blue, BIS green, rate purple, target orange) live in `js/util/constants.js DRUG_DEFS` + `COLORS`. These are clinical identity tokens — propofol is "the blue drug" regardless of background — and changing them across themes would defeat color-recognition. Chart curves render the same hue against either background; if any specific clinical color reads poorly in light mode, the fix is to tune the corresponding semantic CSS variable (e.g. `--amber: #d97706` instead of `#f59e0b` for better contrast on white), not to recolor the dataset itself.
+
+Versions bumped in lockstep `0.5.31.9 → 0.5.32.0`.
+
 ### Stop Pump clears future events during replay (v0.5.31.9) — Interim
 
 User reported: when replaying a case (current time scrubbed into the past with future events queued ahead), Stop Pump didn't clear those events. The sim ended up in a contradictory state — UI showed the pump stopped, but the pump silently resumed at the next queued rate-restore or bolus.
