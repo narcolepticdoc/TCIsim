@@ -122,11 +122,16 @@ export function createChartBridge({
     const ce40 = ceForBIS(40, params);  // GA / Deep Anesthesia boundary
     const ce20 = ceForBIS(20, params);  // Deep Anesthesia lower boundary
 
+    // Theme-aware fill alpha: 19% for dark, ~33% for light. The 19% bands
+    // tuned for a near-black backdrop are essentially invisible on white.
+    const a = (getComputedStyle(document.documentElement)
+                .getPropertyValue('--bis-band-alpha').trim() || '30');
+
     chart.setEffectOverlay([
-      { ceMin: ce90, ceMax: ce80, color: '#ef444430', label: 'Light Sedation' },  // Red    BIS 80-90
-      { ceMin: ce80, ceMax: ce60, color: '#f9731630', label: 'Deep Sedation' },   // Orange BIS 60-80
-      { ceMin: ce60, ceMax: ce40, color: '#eab30830', label: 'GA' },              // Yellow BIS 40-60
-      { ceMin: ce40, ceMax: ce20, color: '#22c55e30', label: 'Deep Anesthesia' }, // Green  BIS 20-40
+      { ceMin: ce90, ceMax: ce80, color: '#ef4444' + a, label: 'Light Sedation' },  // Red    BIS 80-90
+      { ceMin: ce80, ceMax: ce60, color: '#f97316' + a, label: 'Deep Sedation' },   // Orange BIS 60-80
+      { ceMin: ce60, ceMax: ce40, color: '#eab308' + a, label: 'GA' },              // Yellow BIS 40-60
+      { ceMin: ce40, ceMax: ce20, color: '#22c55e' + a, label: 'Deep Anesthesia' }, // Green  BIS 20-40
     ]);
   }
 
@@ -332,10 +337,12 @@ export function createChartBridge({
 
   // The settings UI dispatches `tci:theme-change` after swapping
   // `<html data-theme>`. Push the new CSS variable values into the chart
-  // (idempotent inside the chart itself).
+  // (idempotent inside the chart itself), then recompute the BIS overlay
+  // so the band fills pick up the per-theme `--bis-band-alpha`.
   document.addEventListener('tci:theme-change', () => {
     const chart = getChart && getChart();
     if (chart && typeof chart.applyTheme === 'function') chart.applyTheme();
+    computeEffectOverlay();
   });
 
   return { getConfig, computeEffectOverlay, refresh, onFrame };

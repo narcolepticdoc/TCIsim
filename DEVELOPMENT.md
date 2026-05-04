@@ -4,6 +4,18 @@
 
 ## Session History
 
+### BIS nomogram bands invisible in light theme (v0.5.32.1) — Interim
+
+User report after the v0.5.32.0 themable-colors ship: "Bis display is gone. Doesn't show up at all."
+
+The BIS nomogram bands (Light Sedation / Deep Sedation / GA / Deep Anesthesia colored regions on the chart) were hard-coded at `30` hex alpha = ~19% in `chart-bridge.js computeEffectOverlay()`. That value was originally tuned for a near-black backdrop where 19% colored fills are still readily visible. On the new white background, 19% red/orange/yellow/green fills are essentially imperceptible — and the band labels (positioned inside the bands) disappear with them, so it does look like the entire BIS display is missing.
+
+Fix: promote the alpha to a per-theme CSS variable. `--bis-band-alpha: 30` for dark (unchanged), `55` (≈33%) for light. `computeEffectOverlay()` reads it via `getComputedStyle(document.documentElement).getPropertyValue('--bis-band-alpha')` and appends it to the band base hex (`'#ef4444' + a`). Fallback `|| '30'` keeps the old alpha if the variable isn't defined (e.g., a stale service-worker `index.html` with new chart-bridge).
+
+Wired the existing `tci:theme-change` listener in chart-bridge.js to also call `computeEffectOverlay()` after `chart.applyTheme()`, so toggling themes mid-session re-renders the bands with the new alpha. The chart-side `applyTheme()` was already rebuilding annotations from current `s.effectBands`, but those bands had the OLD alpha baked in — recomputing here regenerates them with the new alpha pulled from the theme-aware CSS variable.
+
+Versions bumped in lockstep `0.5.32.0 → 0.5.32.1`.
+
 ### Themable color schemes — dark + light (v0.5.32.0) — Interim
 
 User asked for a themable app with at least a "light" color scheme alongside the existing dark default.

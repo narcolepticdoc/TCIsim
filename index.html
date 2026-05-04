@@ -26,6 +26,9 @@
       /* Chart-specific tokens (consumed by Chart.js axes/grid/legend/labels). */
       --chart-axis-title:#9ca3af;--chart-tick:#6b7280;--chart-grid:#1e293b;
       --chart-legend:#9ca3af;--chart-tooltip-bg:#1e293bee;--chart-label-fg:#ffffff;
+      /* BIS-band fill alpha (2-char hex appended to band base color). Tuned per
+         theme so the nomogram bands stay visible against either backdrop. */
+      --bis-band-alpha:30;
       --font-display:'Outfit',sans-serif;--font-mono:'DM Mono',monospace;
       --radius-sm:6px;--radius-md:10px;--radius-lg:16px;
     }
@@ -37,6 +40,7 @@
       --amber:#d97706;--cyan:#0891b2;--purple:#7c3aed;
       --chart-axis-title:#475569;--chart-tick:#64748b;--chart-grid:#e2e8f0;
       --chart-legend:#475569;--chart-tooltip-bg:#ffffffee;--chart-label-fg:#0f172a;
+      --bis-band-alpha:55;
     }
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     html,body{height:100%;width:100%;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-display);-webkit-font-smoothing:antialiased;overflow:hidden;padding-bottom:6px}

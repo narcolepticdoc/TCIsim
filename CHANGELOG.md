@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.32.1] — 2026-05-04
+
+Fix: BIS nomogram bands invisible in light theme. The band fills were hard-coded at 19% alpha (`30` hex), tuned for a near-black backdrop. On the new white background that's essentially imperceptible — the bands and their labels disappeared. Promoted the alpha to a per-theme CSS token (`--bis-band-alpha`: `30` dark, `55` ≈ 33% light) so the bands stay visible against either backdrop without overwhelming the curves on top.
+
+- `index.html` — added `--bis-band-alpha` to both `:root` and `:root[data-theme="light"]` blocks.
+- `js/app/chart-bridge.js` `computeEffectOverlay()` — reads `--bis-band-alpha` via `getComputedStyle()` and appends it to each band's base hex (`'#ef4444' + a`). The `tci:theme-change` listener now also re-runs `computeEffectOverlay()` so the bands re-render with the new alpha when the user toggles themes mid-session.
+- `js/version.js` + `sw.js` — bumped `0.5.32.0 → 0.5.32.1` in lockstep.
+
+---
+
 ## [0.5.32.0] — 2026-05-03
 
 Themable color scheme. The app now ships with a **Dark** (default, current look) and **Light** theme, selectable from Settings → Appearance. CSS custom properties on `<html>` cascade through every surface; chart axes/grid/legend/tooltip and annotation overlays re-read the theme tokens on theme change so the chart never looks orphaned against the rest of the UI.
