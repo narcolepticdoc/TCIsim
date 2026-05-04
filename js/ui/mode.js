@@ -215,7 +215,10 @@ function updateModeUI(drugId) {
       br.textContent = 'Set Rate';
     }
   } else if (!pumpOn) {
-    // Non-TCI drug, pump disabled — bolus-only simplified interface
+    // Non-TCI drug, pump disabled — bolus is the operating mode by default.
+    // No infusion is possible, so Add Bolus is the primary action and stays
+    // highlighted; setting a redose threshold is additive (promotes the mode
+    // label from BOLUS to INTERMITTENT but doesn't change the bolus highlight).
     br.style.display = 'none';
     // Hide Stop Pump after case starts; keep Start visible before case starts
     if (bp) bp.style.display = isCaseStarted() ? 'none' : '';
@@ -223,15 +226,15 @@ function updateModeUI(drugId) {
 
     const hasThreshold = (intermittentThresholds[resolvedDrug] || 0) > 0;
     bt.textContent = hasThreshold ? 'Change Threshold' : 'Set Threshold';
+    bb.classList.add('active-mode');
 
     if (hasThreshold) {
       ml.textContent = 'INTERMITTENT';
       ml.className = 'mode-label target-mode';
       bt.classList.add('active-mode');
-      bb.classList.add('active-mode');
     } else {
-      ml.textContent = 'NO MODE';
-      ml.className = 'mode-label no-mode';
+      ml.textContent = 'BOLUS';
+      ml.className = 'mode-label manual-mode';
     }
   } else {
     // Non-TCI drug, pump enabled — full infusion controls
