@@ -4,6 +4,24 @@
 
 ## Session History
 
+### eBIS readout — restored on phones, theme-aware color (v0.5.32.2) — Interim
+
+User report after v0.5.32.1: "Bis display is gone. It is gone." Screenshot showed the propofol drug card on an iPhone-portrait viewport with the header row containing only "PROPOFOL" — the eBIS readout that's supposed to be right-justified next to the drug name was absent.
+
+Two separate problems, both surfaced by the themable-colors PR but not all caused by it:
+
+**1. The eBIS readout was hard-hidden on phones.** A CSS rule added back in v0.5.24.16 set `.drug-card .drug-bis-header{display:none}` inside two media queries — phone-landscape (`max-width:900px and max-height:420px`) and phone-portrait (`max-width:500px and orientation:portrait`) — and also flipped `.drug-card .drug-header-row` from flex to `display:block`. Net effect: on every phone form factor, the propofol BIS readout was just gone. Verified with a puppeteer test against the running localhost — at viewport 430×932 portrait, `getComputedStyle(document.getElementById('propofol-bis-header')).display === 'none'` and the matched rules were both phone media query overrides.
+
+The display:block override was probably to allow long drug names to wrap. But the only drug names we have (Propofol, Fentanyl, Ketamine) are short enough to share the row. Removed both `display:none` rules and the matching `display:block` rule on header-row. Header-row reverts to its default flex layout (justify-content: space-between, align-items: baseline), so the drug name sits left and the eBIS sits right. Empty bis-headers still collapse via the existing `:empty{display:none}` rule, so non-propofol drug cards (which never get BIS) are visually identical to before. Re-ran the puppeteer test with mock content injected — at iPhone width, the BIS readout renders at `x=372 (right-edge), w=48px` next to the drug name at `x=16, w=71px`, both `align-items: baseline`. Confirmed visually with a screenshot.
+
+**2. The eBIS color was invisible in light theme.** `bisColor()` in `js/ui/drug-panel/formatters.js` returned hard-coded hex literals tuned for a dark backdrop — `#ef4444` red, `#f97316` orange, `#eab308` yellow, `#22c55e` green, `#a855f7` purple. The yellow at BIS 40-60 (typical anesthetic depth — what the user would see during most cases) is unreadable text on white. The light-purple (#a855f7) and light-green (#22c55e) read OK but feel garish on white. Promoted all five depth-band colors to per-theme CSS variables (`--bis-mild`, `--bis-moderate`, `--bis-deep`, `--bis-deeper`, `--bis-very-deep`). Dark theme keeps the original brights (no visual change). Light theme uses darker variants — `#a16207` (deep amber) for the BIS 40-60 GA range, `#dc2626` red, `#c2410c` orange, `#16a34a` green, `#7c3aed` purple. `bisColor()` returns `var(--bis-…)` strings, which work fine when assigned to `element.style.color`.
+
+The `> 90` muted band was already `var(--text-muted)` — already adapted, no change needed.
+
+Same lesson as the BIS-band-alpha fix in v0.5.32.1: any color hard-coded for a dark backdrop is a latent landmine when adding light theme. The themable-colors PR has now exposed and fixed three of these (chart axes/grid, BIS-band fills, BIS readout text); the rest of the codebase passed the audit (drug brand colors, dataset colors are intentionally non-themed for clinical recognizability).
+
+Versions bumped in lockstep `0.5.32.1 → 0.5.32.2`.
+
 ### BIS nomogram bands invisible in light theme (v0.5.32.1) — Interim
 
 User report after the v0.5.32.0 themable-colors ship: "Bis display is gone. Doesn't show up at all."

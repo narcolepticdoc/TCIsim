@@ -29,6 +29,9 @@
       /* BIS-band fill alpha (2-char hex appended to band base color). Tuned per
          theme so the nomogram bands stay visible against either backdrop. */
       --bis-band-alpha:30;
+      /* eBIS readout text colors per BIS depth band (consumed by bisColor). */
+      --bis-mild:#ef4444;--bis-moderate:#f97316;--bis-deep:#eab308;
+      --bis-deeper:#22c55e;--bis-very-deep:#a855f7;
       --font-display:'Outfit',sans-serif;--font-mono:'DM Mono',monospace;
       --radius-sm:6px;--radius-md:10px;--radius-lg:16px;
     }
@@ -41,6 +44,8 @@
       --chart-axis-title:#475569;--chart-tick:#64748b;--chart-grid:#e2e8f0;
       --chart-legend:#475569;--chart-tooltip-bg:#ffffffee;--chart-label-fg:#0f172a;
       --bis-band-alpha:55;
+      --bis-mild:#dc2626;--bis-moderate:#c2410c;--bis-deep:#a16207;
+      --bis-deeper:#16a34a;--bis-very-deep:#7c3aed;
     }
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     html,body{height:100%;width:100%;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-display);-webkit-font-smoothing:antialiased;overflow:hidden;padding-bottom:6px}
@@ -586,8 +591,6 @@
       .drug-panel{width:215px;min-width:175px}
       .drug-card{padding:5px 8px;gap:1px}
       .drug-card .drug-model{display:none}
-      .drug-card .drug-header-row{display:block}
-      .drug-card .drug-bis-header{display:none}
       .drug-card .exit-readout{font-size:9px;white-space:normal}
       .drug-card .drug-name{font-size:10px}
       .drug-card .ce-current{font-size:16px}
@@ -634,8 +637,6 @@
       .drug-panel{order:1;width:100%;min-width:unset;flex:0 0 auto;border-right:none;border-top:1px solid var(--border-subtle);max-height:45%;overflow-y:auto}
       .drug-card{padding:6px 10px;gap:2px}
       .drug-card .drug-model{display:none}
-      .drug-card .drug-header-row{display:block}
-      .drug-card .drug-bis-header{display:none}
       .drug-card .exit-readout{font-size:9px;white-space:normal}
       .drug-card .drug-name{font-size:12px}
       .drug-card .ce-current{font-size:18px}

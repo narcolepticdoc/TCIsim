@@ -11,6 +11,20 @@
 
 ---
 
+## [0.5.32.2] — 2026-05-04
+
+Two BIS-readout fixes surfaced while testing the new themable colors:
+
+1. **eBIS missing on phones.** A pre-existing CSS rule (added in v0.5.24.16) hard-hid `.drug-card .drug-bis-header` on phone-landscape (`max-width:900px and max-height:420px`) and phone-portrait (`max-width:500px and orientation:portrait`) viewports, plus reverted `.drug-card .drug-header-row` to `display:block`. On modern phones there's plenty of horizontal space in the header for the readout — kept the row as flex (default) and let the eBIS render right-justified next to the drug name. Empty bis-headers still collapse via the existing `:empty{display:none}` rule, so non-propofol drug cards are unaffected.
+
+2. **eBIS color invisible in light theme.** `bisColor()` returned hard-coded hex literals tuned for a dark backdrop — `#eab308` yellow for BIS 40-60 (typical anesthetic depth) is unreadable on white. Promoted the five depth-band colors to per-theme CSS variables (`--bis-mild`, `--bis-moderate`, `--bis-deep`, `--bis-deeper`, `--bis-very-deep`) — dark theme keeps the original brights, light theme uses darker variants (`#a16207` darker amber for the GA range, `#dc2626` red, `#16a34a` green, etc.). `bisColor()` now returns `var(--bis-…)` strings.
+
+- `index.html` — removed two `.drug-bis-header{display:none}` rules + matching `.drug-header-row{display:block}` overrides; added `--bis-mild` / `--bis-moderate` / `--bis-deep` / `--bis-deeper` / `--bis-very-deep` to both `:root` blocks.
+- `js/ui/drug-panel/formatters.js` — `bisColor()` returns `var(--bis-…)` refs.
+- `js/version.js` + `sw.js` — bumped `0.5.32.1 → 0.5.32.2` in lockstep.
+
+---
+
 ## [0.5.32.1] — 2026-05-04
 
 Fix: BIS nomogram bands invisible in light theme. The band fills were hard-coded at 19% alpha (`30` hex), tuned for a near-black backdrop. On the new white background that's essentially imperceptible — the bands and their labels disappeared. Promoted the alpha to a per-theme CSS token (`--bis-band-alpha`: `30` dark, `55` ≈ 33% light) so the bands stay visible against either backdrop without overwhelming the curves on top.
