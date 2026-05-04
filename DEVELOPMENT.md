@@ -4,6 +4,25 @@
 
 ## Session History
 
+### BOLUS mode for pump-disabled fentanyl/ketamine (v0.5.32.4) — Interim
+
+User asked about the mode taxonomy and pointed out a real UX inconsistency: in propofol MANUAL mode the Set Rate + Add Bolus buttons highlight to show the active operating actions, but in fentanyl/ketamine "intermittent bolus" mode the buttons "are always dimmed."
+
+Investigation: in the pump-disabled non-TCI branch of `updateModeUI()`, `active-mode` was only applied to btn-target + btn-bolus when `hasThreshold` was true (i.e. when the user had explicitly set a redose threshold). Without a threshold, mode label was `NO MODE` and all bottom-bar buttons dim. But for these drugs there's no infusion possible when the pump is off — bolus IS the operating mode by default. Calling that "NO MODE" with passive-looking buttons was misleading.
+
+Verified with puppeteer (selecting fentanyl, calling `mode.setIntermittentThreshold('fentanyl', 1.5)`, then `refreshUI`) that the active-mode CSS applies correctly in both themes when the rule is reached — the bug was the gating condition, not the styling.
+
+Fix: split the pump-disabled branch into two states with Add Bolus *always* highlighted, since bolus is always the primary action when the pump is disabled:
+
+- `BOLUS` — default state, no redose threshold. `manual-mode` label class (purple, matching the bolus-button color). Add Bolus highlighted.
+- `INTERMITTENT` — redose threshold set. `target-mode` label class (amber). Change Threshold + Add Bolus highlighted.
+
+Setting a threshold becomes additive — it promotes the label and lights up the threshold button, but the bolus highlight is unchanged across both states. Net result: drug cards no longer go visually inert just because the user hasn't set a threshold.
+
+TCI-capable drugs (propofol, remifentanil) and pump-enabled non-TCI drugs are deliberately unchanged. Their `NO MODE` label still makes sense because both Set Target and Set Rate are real, available alternatives that the user might pick — there's no single primary action to highlight by default.
+
+Versions bumped in lockstep `0.5.32.3 → 0.5.32.4`.
+
 ### Keypad input lag on iOS — global touch-action fix (v0.5.32.3) — Interim
 
 User report: typing the patient's age, pressing "3" then "5" too fast occasionally lands just "3" — the second tap is dropped. They flagged it as possibly systemic.
