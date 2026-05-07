@@ -20,7 +20,8 @@ import * as history from './ui/history.js';
 import * as eventEditor from './ui/event-editor.js';
 import * as reconcileModal from './ui/reconcile-modal.js';
 import { createChart } from './ui/chart.js';
-import { bolusDeliveryMinutes, APP_VERSION, DRUG_IDS, isPumpEnabled } from './util/constants.js';
+import { bolusDeliveryMinutes, APP_VERSION, DRUG_IDS, DRUG_DEFS, isPumpEnabled } from './util/constants.js';
+import { hexToRgba } from './util/color.js';
 import { getQuantizeConfig } from './util/units.js';
 import * as persist from './ui/persist.js';
 import * as settings from './ui/settings.js';
@@ -84,6 +85,28 @@ function syncAnalysisDrugButtons() {
   document.querySelectorAll('.btn-analysis-drug').forEach(b => {
     b.classList.toggle('active', b.dataset.drug === selectedDrug);
   });
+}
+
+/**
+ * Push DRUG_DEFS[drugId].color into the CSS custom properties that drive
+ * every drug-keyed UI surface (drug-card border/highlight, analysis-screen
+ * drug button, future drug-tinted panels). Called once at boot so the
+ * per-drug color is sourced from a single place — DRUG_DEFS.
+ */
+function applyDrugColorVars() {
+  for (const drugId of DRUG_IDS) {
+    const def = DRUG_DEFS[drugId];
+    if (!def || !def.color) continue;
+    const card = document.getElementById('drug-' + drugId);
+    if (card) {
+      card.style.setProperty('--drug-color', def.color);
+      card.style.setProperty('--drug-color-muted', hexToRgba(def.color, 0.25));
+    }
+    document.querySelectorAll('.btn-analysis-drug[data-drug="' + drugId + '"]').forEach(btn => {
+      btn.style.setProperty('--drug-color', def.color);
+      btn.style.setProperty('--drug-color-muted', hexToRgba(def.color, 0.25));
+    });
+  }
 }
 
 function enterAnalysisScreen() {
@@ -167,6 +190,10 @@ function initSimScreen(patient) {
   // but the `.active` classes (and expand glyph) persist across cases.
   $('btn-chart-tooltip')?.classList.remove('active');
   $('btn-chart-events')?.classList.remove('active');
+  // Ghost-trace toggle is persisted via settings; reflect that on the
+  // fresh chart's button so the user's preference survives New Case.
+  const btnGhosts = $('btn-chart-ghosts');
+  if (btnGhosts) btnGhosts.classList.toggle('active', !!settings.getSettings().ghostTracesEnabled);
   const btnExpand = $('btn-chart-expand');
   if (btnExpand) {
     btnExpand.classList.remove('active');
@@ -229,6 +256,11 @@ function boot() {
   // Display app version
   const vt = document.getElementById('app-version-tag');
   if (vt) vt.textContent = 'v' + APP_VERSION;
+
+  // Push DRUG_DEFS[].color into the per-element CSS custom properties so
+  // drug-card highlights and analysis buttons read from the single source
+  // of truth. Done before any drug surface paints.
+  applyDrugColorVars();
 
   // Create the model
   model = createModel({ primaryDrug: 'propofol' });
@@ -621,6 +653,18 @@ function boot() {
       const enabled = chart.toggleEventAnnotations();
       btnChartEvents.classList.toggle('active', enabled);
     }
+  });
+  const btnChartGhosts = $('btn-chart-ghosts');
+  if (btnChartGhosts) btnChartGhosts.addEventListener('click', () => {
+    if (!chart) return;
+    const enabled = chart.toggleGhostTraces();
+    btnChartGhosts.classList.toggle('active', enabled);
+    // Persist via the settings store so the toggle survives reload.
+    const cur = settings.getSettings();
+    settings.setSettings({ ...cur, ghostTracesEnabled: enabled });
+    // Push fresh ghost curves immediately so toggling on doesn't wait
+    // for the next refresh trigger (e.g. an event edit or rAF tick).
+    chartBridge.refresh();
   });
   const btnNewCaseConfirm = $('btn-new-case-confirm');
   if (btnNewCaseConfirm) btnNewCaseConfirm.addEventListener('click', () => {

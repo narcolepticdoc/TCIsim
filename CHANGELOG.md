@@ -11,6 +11,45 @@
 
 ---
 
+## [0.5.33.0] — 2026-05-07
+
+Promoted `DRUG_DEFS[drugId].color` to the single source of truth for every drug-keyed UI surface, and added ghost Ce traces of non-selected drugs for peripheral awareness during co-administered cases.
+
+**Drug-color rework — `DRUG_DEFS[drugId].color`:**
+
+The drug card highlights, analysis-screen drug buttons, compartment viz, and chart Ce trace all now read the same per-drug color. Drug-class color coding (medical convention) is preserved with distinct shades inside each class so two ghost Ce traces don't collide on the chart:
+
+- propofol — `#eab308` (hypnotic, primary yellow)
+- ketamine — `#f59e0b` (hypnotic, amber)
+- fentanyl — `#3b82f6` (narcotic, primary blue)
+- remifentanil — `#06b6d4` (narcotic, cyan; reserved — no PK model yet)
+
+The four `#drug-{id}` literal CSS rules in `index.html` and the three hardcoded analysis-button hex literals are gone — `--drug-color` and `--drug-color-muted` are pushed onto each element at boot from `DRUG_DEFS`. The chart's foreground Ce trace now also reads from `DRUG_DEFS[drugId].color` (was hardcoded `COLORS.ce` blue) and is bumped from 2 px to 3 px for better contrast against the lighter ghost lines below it. Cp stays red (`COLORS.cp`) — anatomical convention for blood/plasma.
+
+**Ghost Ce traces:**
+
+A new `∿` button on the chart-controls strip toggles dimmed Ce-only traces of every non-selected drug that has events. Each ghost is drawn in that drug's color, lightened (HSL luminance shift) and 1 px dashed `[2,4]`. Each ghost is bound to its own hidden Y-axis so the line height matches that drug's foreground calibration even though X-axis pan/zoom is shared with the foreground.
+
+- Off by default; persisted via `settings.ghostTracesEnabled`.
+- "Ghost trace opacity" slider added to Settings → Appearance (default 40%, range 10–100%).
+- Switching drugs hides the new selected drug's ghost (its data is now drawn as the foreground) and unhides the others.
+- Drugs with no events skip ghost computation — no flat-zero baselines on session start.
+
+**Files:**
+
+- `js/util/color.js` — new. `lighten()`, `hexToRgba()`, `alphaToHex()`.
+- `js/util/constants.js` — updated `DRUG_DEFS[].color` to class-coded values.
+- `js/ui/chart/index.js` — foreground Ce reads `DRUG_DEFS[drugId].color` at 3 px; per-drug ghost datasets + hidden `yGhost_<drugId>` axes; new setters `setDrugColor`, `setGhostTraces`, `setGhostAxisMax`, `setGhostOpacity`, `setGhostEnabled`, `toggleGhostTraces`. `switchDrug()` re-tints + re-evaluates ghost visibility. Legend filter extended to hide per-drug ghost labels.
+- `js/ui/chart/state.js` — added `drugColor`, `ghostOpacity`, `ghostEnabled`, `ghostTracesSigs`.
+- `js/app/chart-bridge.js` — `refresh()` computes per-drug ghost curves and pushes them with matched Y-axis maxes; `onFrame()` calls the new idempotent setters every frame so chart recreation (new case) self-heals.
+- `js/app.js` — boot-time `applyDrugColorVars()` pushes `--drug-color` / `--drug-color-muted` onto each drug card and analysis button; `btn-chart-ghosts` wired with persistence + active-state seeding on new case.
+- `js/ui/settings.js` — `ghostOpacity` (0.1–1.0, default 0.4) and `ghostTracesEnabled` (default false) added to defaults + validation + persistence.
+- `js/app/settings-ui.js` — wired the new ghost-opacity slider.
+- `index.html` — removed four hardcoded `#drug-{id}` CSS rules + three `.btn-analysis-drug.active[data-drug=…]` hex literals (replaced with `var(--drug-color)`); added `btn-chart-ghosts` to chart-controls and `set-ghost-opacity` slider to the Appearance pane.
+- `js/version.js` + `sw.js` — bumped `0.5.32.4 → 0.5.33.0` in lockstep; added `js/util/color.js` to the SW precache list.
+
+---
+
 ## [0.5.32.4] — 2026-05-04
 
 UX fix: pump-disabled fentanyl/ketamine drug cards previously showed `NO MODE` with all bottom-bar buttons dimmed, even though intermittent bolus IS the operating mode for these drugs by default — there's no infusion possible when the pump is off. The label was misleading and Add Bolus looked passive when it was actually the primary action.

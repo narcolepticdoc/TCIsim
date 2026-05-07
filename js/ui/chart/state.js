@@ -21,6 +21,16 @@ export function createState(cfg) {
     // Used by setGhostCurve to short-circuit when nothing has changed,
     // since the bridge calls it every frame.
     ghostCurveSig: '',
+    // Per-drug ghost trace signatures (multi-drug peripheral-awareness
+    // ghosts). Distinct from `ghostCurveSig` (the single pre-reconcile
+    // ghost) — keyed by drugId.
+    ghostTracesSigs: {},
+    ghostOpacity: 0.4,
+    ghostEnabled: false,
+    // Foreground drug color (chart Ce trace + UI tinting). Cached so the
+    // bridge's per-frame setDrugColor() call short-circuits when nothing
+    // has changed. Resolved at construction from cfg.drugId.
+    drugColor: null,
     steadyStateCe: null,
     exitCe: null,
     viewMin: 0,

@@ -8,6 +8,7 @@
  */
 
 import { ceForBIS } from '../pk/pd.js';
+import { DRUG_IDS } from '../util/constants.js';
 
 const $ = id => document.getElementById(id);
 
@@ -166,6 +167,34 @@ export function createChartBridge({
     chart.setCurveData(chartCurve);
     drugPanel.setCurveData(rawCurve);  // drug-panel uses canonical mcg/mL for threshold comparisons
     computeEffectOverlay();  // clears BIS bands for drugs without a PD model
+
+    // Per-drug ghost Ce traces — peripheral awareness of every other
+    // drug currently on the case. Only computed for drugs that have
+    // events (avoids drawing flat-zero baselines on session start).
+    // Each ghost runs against its own hidden Y-axis so the line height
+    // matches the user's calibration for that drug.
+    if (chart.setGhostTraces) {
+      const tracesByDrug = {};
+      for (const drugId of DRUG_IDS) {
+        if (drugId === selectedDrug) continue;
+        const drugEvents = model.getEvents(drugId);
+        if (!drugEvents || drugEvents.length === 0) continue;
+        const drugCurve = model.computeCurve(drugId, 0, endTime, 10 / 60);
+        const ys = getConfig(drugId).yScale;
+        tracesByDrug[drugId] = ys === 1
+          ? drugCurve.map(p => ({ time: p.time, Ce: p.Ce }))
+          : drugCurve.map(p => ({ time: p.time, Ce: p.Ce * ys }));
+
+        // Match the ghost's Y-axis max to that drug's foreground
+        // calibration: prefer a saved per-drug zoom, fall back to the
+        // chart-config default. Idempotent inside the chart.
+        let ghostMax = NaN;
+        try { ghostMax = parseFloat(localStorage.getItem('chart-ymax-' + drugId)); } catch (e) {}
+        if (!Number.isFinite(ghostMax) || ghostMax <= 0) ghostMax = getConfig(drugId).yDefault;
+        if (chart.setGhostAxisMax) chart.setGhostAxisMax(drugId, ghostMax);
+      }
+      chart.setGhostTraces(tracesByDrug);
+    }
 
     // Show chart controls
     const cc = $('chart-controls');
@@ -329,6 +358,20 @@ export function createChartBridge({
       }
       if (typeof chart.setFontScale === 'function') {
         chart.setFontScale(TEXT_SCALE[s.textSize] ?? 1.0);
+      }
+      // Foreground Ce trace color follows the active drug. Idempotent;
+      // re-applies after chart recreation (new case) on the first frame.
+      if (typeof chart.setDrugColor === 'function') {
+        chart.setDrugColor(selectedDrug);
+      }
+      // Ghost trace appearance + on/off. setGhostEnabled is idempotent
+      // and also re-evaluates per-dataset visibility relative to the
+      // selected drug, so drug switches naturally hide/unhide ghosts.
+      if (typeof chart.setGhostOpacity === 'function') {
+        chart.setGhostOpacity(s.ghostOpacity ?? 0.4);
+      }
+      if (typeof chart.setGhostEnabled === 'function') {
+        chart.setGhostEnabled(!!s.ghostTracesEnabled);
       }
     }
     // Check for upcoming events requiring advance warning

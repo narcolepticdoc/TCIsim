@@ -28,6 +28,8 @@ const DEFAULTS     = {
   cpOpacity:   1.0,    // Cp line opacity (0.1–1.0)
   nomogramOpacity: 1.0, // BIS nomogram band opacity (0.1–1.0, applied as multiplier)
   overlayOpacity:  1.0, // Threshold/target line opacity (0.1–1.0)
+  ghostOpacity:    0.4, // Per-drug ghost Ce trace opacity (0.1–1.0)
+  ghostTracesEnabled: false, // Show ghost Ce traces of non-selected drugs
   eventMarkerSize: 7,   // Future-event marker radius in px (4–16)
   textSize:    'normal',// Text scale: 'normal' | 'large' | 'xl' | 'xxl'
   theme:       'dark',  // App color scheme: 'dark' | 'light'
@@ -95,6 +97,13 @@ export function getSettings() {
                               && p.overlayOpacity >= 0.1 && p.overlayOpacity <= 1.0)
         ? p.overlayOpacity : DEFAULTS.overlayOpacity;
 
+      const ghostOpacity = (typeof p.ghostOpacity === 'number'
+                            && p.ghostOpacity >= 0.1 && p.ghostOpacity <= 1.0)
+        ? p.ghostOpacity : DEFAULTS.ghostOpacity;
+
+      const ghostTracesEnabled = (typeof p.ghostTracesEnabled === 'boolean')
+        ? p.ghostTracesEnabled : DEFAULTS.ghostTracesEnabled;
+
       const eventMarkerSize = (typeof p.eventMarkerSize === 'number'
                                && p.eventMarkerSize >= 4 && p.eventMarkerSize <= 16)
         ? p.eventMarkerSize : DEFAULTS.eventMarkerSize;
@@ -121,6 +130,8 @@ export function getSettings() {
         cpOpacity,
         nomogramOpacity,
         overlayOpacity,
+        ghostOpacity,
+        ghostTracesEnabled,
         eventMarkerSize,
         textSize,
         theme,
@@ -131,8 +142,8 @@ export function getSettings() {
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize, theme, showCeBand }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize, theme, showCeBand })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand })); } catch (e) {}
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────

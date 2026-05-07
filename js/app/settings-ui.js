@@ -85,6 +85,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
   const nomogramVal       = $('set-nomogram-opacity-val');
   const overlaySlider     = $('set-overlay-opacity');
   const overlayVal        = $('set-overlay-opacity-val');
+  const ghostOpacSlider   = $('set-ghost-opacity');
+  const ghostOpacVal      = $('set-ghost-opacity-val');
   const markerSizeSlider  = $('set-event-marker-size');
   const markerSizeVal     = $('set-event-marker-size-val');
   const showCeBandChk     = $('set-show-ce-band');
@@ -118,6 +120,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (nomogramVal)       nomogramVal.textContent       = Math.round((savedSettings.nomogramOpacity ?? 1.0) * 100) + '%';
   if (overlaySlider)     overlaySlider.value           = Math.round((savedSettings.overlayOpacity ?? 1.0) * 100);
   if (overlayVal)        overlayVal.textContent        = Math.round((savedSettings.overlayOpacity ?? 1.0) * 100) + '%';
+  if (ghostOpacSlider)   ghostOpacSlider.value         = Math.round((savedSettings.ghostOpacity ?? 0.4) * 100);
+  if (ghostOpacVal)      ghostOpacVal.textContent      = Math.round((savedSettings.ghostOpacity ?? 0.4) * 100) + '%';
   if (markerSizeSlider)  markerSizeSlider.value        = (savedSettings.eventMarkerSize ?? 7);
   if (markerSizeVal)     markerSizeVal.textContent     = (savedSettings.eventMarkerSize ?? 7) + ' px';
   if (showCeBandChk)     showCeBandChk.checked         = savedSettings.showCeBand ?? false;
@@ -147,6 +151,12 @@ export function initSettingsUI({ getSettings, setSettings }) {
     const nomogramOpacity   = nomogramPct / 100;
     const overlayPct        = overlaySlider ? parseInt(overlaySlider.value, 10) : 100;
     const overlayOpacity    = overlayPct / 100;
+    const ghostOpacPct      = ghostOpacSlider ? parseInt(ghostOpacSlider.value, 10) : 40;
+    const ghostOpacity      = ghostOpacPct / 100;
+    // Ghost on/off lives on the chart-controls strip, not in the settings
+    // modal. Re-read the persisted flag so saveAll() doesn't lose it when
+    // a slider/checkbox in this modal is changed.
+    const ghostTracesEnabled = !!getSettings().ghostTracesEnabled;
     const eventMarkerSize   = markerSizeSlider ? parseInt(markerSizeSlider.value, 10) : 7;
     const textSize          = currentTextSize;
     const theme             = currentTheme;
@@ -160,8 +170,9 @@ export function initSettingsUI({ getSettings, setSettings }) {
     if (cpOpacityVal)    cpOpacityVal.textContent    = cpOpacityPct      + '%';
     if (nomogramVal)     nomogramVal.textContent     = nomogramPct       + '%';
     if (overlayVal)      overlayVal.textContent      = overlayPct        + '%';
+    if (ghostOpacVal)    ghostOpacVal.textContent    = ghostOpacPct      + '%';
     if (markerSizeVal)   markerSizeVal.textContent   = eventMarkerSize   + ' px';
-    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, eventMarkerSize, textSize, theme, showCeBand });
+    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand });
   }
 
   prepSlider.addEventListener('input',    saveAll);
@@ -176,6 +187,7 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (cpOpacitySlider)   cpOpacitySlider.addEventListener('input',   saveAll);
   if (nomogramSlider)    nomogramSlider.addEventListener('input',    saveAll);
   if (overlaySlider)     overlaySlider.addEventListener('input',     saveAll);
+  if (ghostOpacSlider)   ghostOpacSlider.addEventListener('input',   saveAll);
   if (markerSizeSlider)  markerSizeSlider.addEventListener('input',  saveAll);
   if (showCeBandChk)     showCeBandChk.addEventListener('change',    saveAll);
   for (const btn of textSizeBtns) {
