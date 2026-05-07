@@ -4,6 +4,24 @@
 
 ## Session History
 
+### Fix TCI event flags rendering on the wrong dataset (v0.5.33.4) — Interim
+
+User screenshot of v0.5.33.3 showed the green TCI event flags (rate triangles, bolus arrows, stop octagons) clustered at the bottom of the chart at Y ≈ 0.2–0.5 instead of along the propofol Ce trace at Y ≈ 4. The flags were tracing the trajectory of the fentanyl ghost line.
+
+Root cause: four chart plugins identified the foreground Ce/Cp datasets by string-matching `borderColor.startsWith(COLORS.ce)` / `COLORS.cp` — a pattern that worked when Ce was always `#3b82f6` (blue) and Cp always `#ef4444` (red). The v0.5.33.0 promotion of foreground Ce to per-drug color broke this contract: the foreground Ce dataset now starts with whatever drug color is active (`#facc15` canary for propofol). The plugins' Ce-match falls through and the loop finds the next dataset whose `borderColor` starts with `#3b82f6` — that's the fentanyl ghost trace, since fentanyl's class color is narcotic blue. Markers then plot Y values from fentanyl-ng/mL space (canonical 0.4 mcg/mL × yScale 1000 = 400 ng/mL) interpreted on the propofol µg/mL axis (max ~5), pushing them way off-scale into the bottom of the visible region.
+
+Affected plugins:
+- `event-markers.js` — TCI flag markers (the symptom)
+- `cursor-dots.js` — the small filled dots at the live-time cursor
+- `inspect-dots.js` — the amber inspect-cursor dots
+- `readout-panel.js` — the Ce/Cp/eBIS/Rate text panel during inspect mode
+
+Plus a fifth code path inside the disabled tooltip callback that searched by `lbl.startsWith('Ce')` — would have collided with `'Ce ghost (...)'` labels if the tooltip were ever re-enabled.
+
+Fix: introduce a `role` field on each dataset at construction time (`'cp'`, `'ce'`, `'rate'`, `'ghost-reconcile'`, `'ghost-drug'`) and switch every matcher to use it. Color-string matching is brittle the moment colors become per-drug; role tagging is declarative, ghost-safe, and survives any future color tweaks. This is the same lesson we learned with the chart's idempotent setters — once the dataset arrangement gets richer (multi-drug ghosts) you can't keep using shape-of-dataset proxies.
+
+Versions bumped in lockstep `0.5.33.3 → 0.5.33.4`.
+
 ### Drop lighten() from ghost color path — preserve drug identity (v0.5.33.3) — Interim
 
 User asked how the ghost traces are currently delineated and noted: "we may be fighting ourselves on color differentiation by reducing their luminance." Correct.

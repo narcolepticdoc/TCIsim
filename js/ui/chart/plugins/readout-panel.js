@@ -4,7 +4,6 @@
  * Shows time, Ce, Cp, eBIS, and pump rate at the inspect point.
  */
 
-import { COLORS } from '../../../util/constants.js';
 import { interpolateAtTime, nearestIndexAtTime } from '../interpolation.js';
 import { formatRateForDisplay } from '../rate-format.js';
 
@@ -17,14 +16,15 @@ export function createReadoutPanelPlugin(s) {
       if (!ca) return;
       const ctx = ch.ctx;
 
+      // Match by role tag so ghosts don't get picked up as the
+      // foreground Ce/Cp readouts.
       let ceVal = null, cpVal = null, refData = null;
       for (const ds of ch.data.datasets) {
         if (!ds.data || ds.data.length === 0) continue;
-        const color = ds.borderColor;
-        if (color.startsWith(COLORS.ce)) {
+        if (ds.role === 'ce') {
           ceVal = interpolateAtTime(ds.data, s.inspectTime);
           refData = ds.data;
-        } else if (color.startsWith(COLORS.cp)) {
+        } else if (ds.role === 'cp') {
           cpVal = interpolateAtTime(ds.data, s.inspectTime);
           if (!refData) refData = ds.data;
         }
@@ -68,7 +68,8 @@ export function createReadoutPanelPlugin(s) {
       const lineCount = line3 ? 3 : 2;
       const panelH = 6 + lineCount * lineH + 2;
       const px = ca.right - panelW - 4;
-      const py = Math.max(ca.top + 4, 52);
+      // Floor clears the chart-controls strip (top:32, height:38, +clearance).
+      const py = Math.max(ca.top + 4, 80);
 
       ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
       ctx.beginPath();

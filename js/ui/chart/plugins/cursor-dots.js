@@ -2,8 +2,6 @@
  * cursor-dots.js — Draw dots on Ce/Cp curves at the "now" cursor time.
  */
 
-import { COLORS } from '../../../util/constants.js';
-
 export function createCursorDotsPlugin(s) {
   return {
     id: 'cursorDots',
@@ -19,8 +17,10 @@ export function createCursorDotsPlugin(s) {
 
       for (const ds of ch.data.datasets) {
         if (!ds.data || ds.data.length === 0) return;
+        // Only draw dots on the foreground Ce/Cp curves; skip ghosts
+        // and the rate dataset.
+        if (ds.role !== 'ce' && ds.role !== 'cp') continue;
         const color = ds.borderColor;
-        if (!color.startsWith(COLORS.ce) && !color.startsWith(COLORS.cp)) continue;
         const data = ds.data;
         let lo = 0, hi = data.length - 1;
         while (lo < hi) {

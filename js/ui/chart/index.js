@@ -108,6 +108,7 @@ export function createChart(canvas, config = {}) {
     cpDsIdx = datasets.length;
     datasets.push({
       label: 'Cp (μg/mL)',
+      role: 'cp',
       data: [],
       borderColor: COLORS.cp,
       backgroundColor: COLORS.cp + '18',
@@ -123,6 +124,7 @@ export function createChart(canvas, config = {}) {
     ceDsIdx = datasets.length;
     datasets.push({
       label: 'Ce (μg/mL)',
+      role: 'ce',
       data: [],
       borderColor: initialDrugColor,
       backgroundColor: initialDrugColor + '18',
@@ -137,6 +139,7 @@ export function createChart(canvas, config = {}) {
   if (cfg.showRate) {
     datasets.push({
       label: 'Rate (mg/min)',
+      role: 'rate',
       data: [],
       borderColor: COLORS.rate,
       backgroundColor: COLORS.rate + '30',
@@ -157,6 +160,7 @@ export function createChart(canvas, config = {}) {
   const ghostDsIdx = datasets.length;
   datasets.push({
     label: 'Ce (pre-reconcile)',
+    role: 'ghost-reconcile',
     data: [],
     borderColor: COLORS.ghost,
     backgroundColor: COLORS.ghost + '00',
@@ -184,6 +188,7 @@ export function createChart(canvas, config = {}) {
     ghostTraceDsIdx[drugId] = datasets.length;
     datasets.push({
       label: 'Ce ghost (' + drugId + ')',
+      role: 'ghost-drug',
       drugId,
       data: [],
       borderColor: def.color + initialGhostAlphaHex,
@@ -321,10 +326,7 @@ export function createChart(canvas, config = {}) {
                 }
               }
               if (s.pdModel) {
-                const ceItem = items.find(it => {
-                  const lbl = it.dataset && it.dataset.label;
-                  return typeof lbl === 'string' && lbl.startsWith('Ce');
-                });
+                const ceItem = items.find(it => it.dataset && it.dataset.role === 'ce');
                 if (ceItem) {
                   try {
                     const ce  = ceItem.parsed.y / (s.yScale || 1);
