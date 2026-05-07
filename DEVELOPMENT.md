@@ -4,6 +4,36 @@
 
 ## Session History
 
+### Re-predict emergence countdown on a 1 s wall clock so it tracks Ce drift (v0.5.33.5) — Interim
+
+User report: "When you set an emergence threshold, the system correctly calculates the time and sets the countdown in the display, but … it assumes that you have stopped the infusion and does not update. The user will expect a live update of how long emergence will take if they stopped all interventions, as they progress through the case and make changes. Currently the readout sets a timer at the point in time that it is engaged and does not update."
+
+The semantics of "Emerge → X.X in M:SS" — *if you stopped now, when would Ce reach the threshold?* — are correct. The bug is the prediction's freshness, not its meaning.
+
+**How it broke.** v0.5.31.8 moved the readout off a 3 s render throttle onto a frame-driven render that reads from a cached `arrivalMin`. The cache invalidates on (a) the user changing the exit Ce, and (b) `_curveVersion` bumping after an event mutation (bolus, rate change, pause). That made the seconds digit tick smoothly each frame, but it inadvertently dropped the property the old throttle was — by accident — providing: re-running `predictDecayTo` on a wall clock so the prediction stays current with the engine's drifting Ce. Between event mutations the displayed time-to-emergence kept ticking down toward an arrival moment frozen at engagement, even while the user kept infusing and Ce kept climbing.
+
+**Why event-only invalidation isn't enough.** During a manual infusion the rate is constant and there are no events for ten, twenty, sixty seconds at a stretch — but Ce is still moving (rising under infusion, falling on washout). `predictDecayTo` with the current engine state and `rate=0` from "now" gives an answer that depends on current Ce. If you don't recompute it, the rendered countdown drifts from reality.
+
+**Fix.** Add a wall-clock invalidator alongside the existing event/threshold ones:
+
+```js
+const stale = (now - cache.lastPredictMs) >= PREDICTION_REFRESH_MS;
+if (cache.exitCe !== exitCe || cache.computedVersion !== curveVersion || stale) {
+  // re-predict ...
+  cache.lastPredictMs = now;
+}
+```
+
+`PREDICTION_REFRESH_MS = 1000`. The render path is unchanged: every frame, if `arrivalMin !== null`, render `prefixHtml + fmtCountdown(arrivalMin - t)`. The seconds field still ticks live; only the underlying `arrivalMin` re-baselines once per second.
+
+**Cost.** `predictDecayTo` is one full event-list replay + a 0.5-min coarse decay scan to a 480-min lookahead + ≤40 bisection iterations — roughly 1–5 ms. With three drugs configured for emergence and 1 Hz refresh, ~3–15 ms per second total. Comfortably under one frame's worth of budget per second.
+
+**Why 1 s.** Drug Ce typically drifts <1 %/s in clinical regimes. A 1 s refresh keeps the displayed M:SS within a single second of the live "if you stopped now" answer, which is well below the perceptible jitter threshold against a once-per-second tick. 500 ms or 2 s would also be defensible; 1 s is the cheap default that feels snappy.
+
+The "arrival elapsed → force re-predict" branch in the render loop already sets `cache.computedVersion = -1` on the next frame; that path keeps working since the regular condition runs first.
+
+Versions bumped in lockstep `0.5.33.4 → 0.5.33.5`. Test suite green (485 tests, no model/simulation changes).
+
 ### Fix TCI event flags rendering on the wrong dataset (v0.5.33.4) — Interim
 
 User screenshot of v0.5.33.3 showed the green TCI event flags (rate triangles, bolus arrows, stop octagons) clustered at the bottom of the chart at Y ≈ 0.2–0.5 instead of along the propofol Ce trace at Y ≈ 4. The flags were tracing the trajectory of the fentanyl ghost line.
