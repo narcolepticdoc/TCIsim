@@ -11,6 +11,20 @@
 
 ---
 
+## [0.5.33.2] — 2026-05-07
+
+Re-tune the hypnotic-class colors so propofol and ketamine separate by luminance rather than hue:
+
+- Propofol → `#facc15` (Tailwind yellow-400, bright canary yellow). Previous `#eab308` was reading as a deeper goldenrod on screen rather than a primary yellow.
+- Ketamine → reverted to `#f59e0b` (Tailwind amber-500). The v0.5.33.1 detour to orange (`#ea580c`) over-corrected; now that propofol has been pushed to a brighter canary, the original amber gives clear luminance separation while keeping ketamine cleanly in the warm-induction palette.
+
+Net result: foreground Ce traces now read as canary yellow (propofol) vs amber (ketamine) — clearly distinct at a glance — while staying well clear of narcotic blue (fentanyl) and the BIS band overlays.
+
+- `js/util/constants.js` — `DRUG_DEFS.propofol.color`, `DRUG_DEFS.ketamine.color`.
+- `js/version.js` + `sw.js` — bumped `0.5.33.1 → 0.5.33.2` in lockstep.
+
+---
+
 ## [0.5.33.1] — 2026-05-07
 
 Three visual tweaks on top of v0.5.33.0:

@@ -4,6 +4,18 @@
 
 ## Session History
 
+### Re-tune hypnotic-class colors: propofol canary, revert ketamine (v0.5.33.2) — Interim
+
+User feedback after v0.5.33.1: propofol's `#eab308` was reading as a deeper goldenrod on the iPad screen, not the bright primary yellow they wanted. They asked to push propofol into "brighter primary canary yellow" and revert ketamine to where it was before (`#f59e0b` amber).
+
+The v0.5.33.1 fix had shifted ketamine to orange (`#ea580c`) to separate the two yellows by hue. With propofol now bumped up to a much brighter canary (`#facc15`, Tailwind yellow-400), there's enough luminance separation between propofol (bright) and ketamine (deeper amber) that they read as clearly distinct without needing to push ketamine all the way out of the yellow family. Going back to amber for ketamine restores the original "two shades of warm yellow" intent while keeping the chart legible.
+
+Final hypnotic-class colors:
+- propofol: `#facc15` (canary yellow, bright)
+- ketamine: `#f59e0b` (amber, deeper)
+
+Versions bumped in lockstep `0.5.33.1 → 0.5.33.2`.
+
 ### Visual tweaks on the ghost-traces feature (v0.5.33.1) — Interim
 
 User screenshot of v0.5.33.0 running on iPad in landscape flagged three things:
