@@ -188,7 +188,7 @@ export function createChart(canvas, config = {}) {
       data: [],
       borderColor: tinted + initialGhostAlphaHex,
       backgroundColor: 'transparent',
-      borderWidth: 1,
+      borderWidth: 1.5,
       borderDash: [2, 4],
       pointRadius: 0,
       tension: 0.1,

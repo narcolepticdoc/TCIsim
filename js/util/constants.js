@@ -38,7 +38,7 @@ export const DRUG_DEFS = {
   ketamine: {
     name: 'Ketamine',
     concentration: 10,        // mg/mL (typical 1%)
-    color: '#f59e0b',         // hypnotic class — amber (distinct from propofol yellow)
+    color: '#ea580c',         // hypnotic class — orange (clear hue separation from propofol yellow)
     maxRate: 10,               // mg/min
     bolusRateMlH: 750,
   },

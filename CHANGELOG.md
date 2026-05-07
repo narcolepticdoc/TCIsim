@@ -11,6 +11,21 @@
 
 ---
 
+## [0.5.33.1] — 2026-05-07
+
+Three visual tweaks on top of v0.5.33.0:
+
+1. **Chart-controls strip dropped 24 px** so the buttons no longer overlap the Chart.js legend at the top of the chart. `.chart-controls { top: 8px → 32px }` in `index.html`.
+2. **Ketamine color shifted yellow-amber → orange** (`#f59e0b → #ea580c`). The previous amber was too close to propofol's primary yellow to read as distinct on the chart when both drugs were running. Orange gives a clear hue separation while staying within the warm-induction palette and away from narcotic blue.
+3. **Ghost trace `borderWidth` 1 → 1.5 px** so each ghost carries a touch more color presence. Foreground Ce stays 3 px solid, so the foreground/ghost contrast is preserved — the ghost just has a bit more weight to register as a real line rather than a hairline.
+
+- `index.html` — `.chart-controls` top offset.
+- `js/util/constants.js` — ketamine `DRUG_DEFS.color`.
+- `js/ui/chart/index.js` — ghost dataset `borderWidth`.
+- `js/version.js` + `sw.js` — bumped `0.5.33.0 → 0.5.33.1` in lockstep.
+
+---
+
 ## [0.5.33.0] — 2026-05-07
 
 Promoted `DRUG_DEFS[drugId].color` to the single source of truth for every drug-keyed UI surface, and added ghost Ce traces of non-selected drugs for peripheral awareness during co-administered cases.
