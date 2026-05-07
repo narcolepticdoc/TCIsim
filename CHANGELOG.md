@@ -11,6 +11,19 @@
 
 ---
 
+## [0.5.33.5] — 2026-05-07
+
+Fix: the "Emerge → X.X in M:SS" countdown answers *"if you stopped now, when would Ce reach the threshold"* — but it was answering for the moment the user *engaged* the threshold, not the live moment.
+
+In v0.5.31.8 the readout moved off a 3 s render throttle onto a frame-driven render that reads from a cached `arrivalMin`. The cache invalidates on (a) the user changing the exit Ce, and (b) `_curveVersion` bumping after an event mutation. That made the seconds digit tick smoothly, but it inadvertently dropped the property the old throttle was — by accident — providing: re-running `predictDecayTo` on a wall clock so the prediction stays current with the engine's drifting Ce. Between mutations the displayed time-to-emergence kept ticking down toward a target frozen at engagement, even while the user kept infusing and Ce kept climbing.
+
+Fix: re-predict on a 1 s wall-clock cadence in addition to the existing event/threshold invalidations. The render path is unchanged — `arrivalMin` updates once per second to track Ce drift; `fmtCountdown(arrivalMin - t)` runs every frame so the M:SS field still ticks live. Cost is one `predictDecayTo` per drug per second when emergence is configured (~1–5 ms each).
+
+- `js/ui/drug-panel/exit-readout.js` — added `lastPredictMs` field to the per-drug cache, added `stale = (now - lastPredictMs) >= 1000 ms` to the invalidation condition, updated `lastPredictMs` after each predict.
+- `js/version.js` + `sw.js` — bumped `0.5.33.4 → 0.5.33.5` in lockstep.
+
+---
+
 ## [0.5.33.4] — 2026-05-07
 
 Fix: TCI event-flag markers (and a handful of other Ce/Cp-coupled chart features) drew against the wrong dataset once the foreground Ce trace started using the per-drug color.

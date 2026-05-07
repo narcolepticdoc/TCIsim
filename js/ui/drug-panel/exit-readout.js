@@ -2,20 +2,24 @@
  * drug-panel/exit-readout.js — "Time to Exit Ce if stopped now" readout.
  *
  * Shown in the upper-right of the drug card when an Exit Ce threshold
- * is configured. Mirrors the approach.js cache pattern: re-predicts only
- * when the exit Ce changes or the model curve version bumps; renders the
- * countdown live every frame from the cached `arrivalMin`.
+ * is configured. Re-predicts on user input changes (exit Ce, model
+ * curve version) AND on a 1 s wall-clock interval so the prediction
+ * tracks Ce drift between event mutations. Renders the countdown live
+ * every frame from the cached `arrivalMin`.
  */
 
 import { fmtCountdown, smartDecimal } from './formatters.js';
 import { getCurveVersion } from './approach.js';
 
-const _exitReadoutCache = {};   // { drugId: { exitCe, computedVersion, arrivalMin, prefixHtml } }
+const _exitReadoutCache = {};   // { drugId: { exitCe, computedVersion, arrivalMin, prefixHtml, lastPredictMs } }
+
+const PREDICTION_REFRESH_MS = 1000;   // re-predict at most once per second to track Ce drift
 
 function _getCache(drugId) {
   if (!_exitReadoutCache[drugId]) {
     _exitReadoutCache[drugId] = {
       exitCe: 0, computedVersion: -1, arrivalMin: null, prefixHtml: '',
+      lastPredictMs: 0,
     };
   }
   return _exitReadoutCache[drugId];
@@ -40,9 +44,12 @@ export function updateExitReadout(ctx, drugId, t, Ce, caseStarted) {
 
   const cache = _getCache(drugId);
   const curveVersion = getCurveVersion();
+  const now = Date.now();
+  const stale = (now - cache.lastPredictMs) >= PREDICTION_REFRESH_MS;
 
-  // Re-predict only when inputs change (user-set exit Ce or model state)
-  if (cache.exitCe !== exitCe || cache.computedVersion !== curveVersion) {
+  // Re-predict on user input changes, model mutation, or periodic refresh
+  // (so the "if you stopped now" answer keeps up with Ce drift between events).
+  if (cache.exitCe !== exitCe || cache.computedVersion !== curveVersion || stale) {
     const result = ctx.model.predictDecayTo(drugId, t, exitCe);
     if (result && result.time !== null && result.time > t) {
       const lbl = ctx.getExitCeLabelForDrug ? ctx.getExitCeLabelForDrug(drugId) : '';
@@ -56,6 +63,7 @@ export function updateExitReadout(ctx, drugId, t, Ce, caseStarted) {
     }
     cache.exitCe          = exitCe;
     cache.computedVersion = curveVersion;
+    cache.lastPredictMs   = now;
   }
 
   // Render countdown live every frame from cached arrivalMin
