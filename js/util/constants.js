@@ -5,33 +5,40 @@
 export { VERSION as APP_VERSION } from '../version.js';
 
 // ---- Drug definitions ----
+//
+// `color` is the drug-class highlight color used everywhere a drug surface
+// is tinted (drug card border, chart Ce trace, ghost Ce trace, compartment
+// viz, analysis-screen drug buttons). Drug-class color coding follows the
+// medical convention: yellow for hypnotics (propofol/ketamine), blue for
+// narcotics (fentanyl/remifentanil). Distinct shades are used inside each
+// class so two ghost Ce traces don't visually collide on the chart.
 
 export const DRUG_DEFS = {
   propofol: {
     name: 'Propofol',
     concentration: 10,        // mg/mL (1% propofol)
-    color: '#0099ff',
+    color: '#eab308',         // hypnotic class — primary yellow
     maxRate: 200,              // mg/min clinical max
     bolusRateMlH: 750,        // mL/h pump bolus delivery rate
   },
   fentanyl: {
     name: 'Fentanyl',
     concentration: 0.05,      // mg/mL (50 mcg/mL)
-    color: '#ff6b35',
+    color: '#3b82f6',         // narcotic class — primary blue
     maxRate: 0.01,             // mg/min
     bolusRateMlH: 750,
   },
   remifentanil: {
     name: 'Remifentanil',
     concentration: 0.05,      // mg/mL (50 mcg/mL typical reconstitution)
-    color: '#f7b801',
+    color: '#06b6d4',         // narcotic class — cyan (distinct from fentanyl blue)
     maxRate: 0.05,             // mg/min
     bolusRateMlH: 750,
   },
   ketamine: {
     name: 'Ketamine',
     concentration: 10,        // mg/mL (typical 1%)
-    color: '#a855f7',
+    color: '#f59e0b',         // hypnotic class — amber (distinct from propofol yellow)
     maxRate: 10,               // mg/min
     bolusRateMlH: 750,
   },

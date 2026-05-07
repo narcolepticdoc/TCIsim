@@ -5,8 +5,9 @@
  * Sub-modules handle plugins, annotations, gestures, and state.
  */
 
-import { COLORS } from '../../util/constants.js';
+import { COLORS, DRUG_DEFS, DRUG_IDS } from '../../util/constants.js';
 import { fromCanonical, getDefaultUnit, getPrefKey, formatValue, getAllowedUnits } from '../../util/units.js';
+import { lighten, alphaToHex } from '../../util/color.js';
 
 import { createState } from './state.js';
 import { buildAnnotations } from './annotations.js';
@@ -91,10 +92,20 @@ export function createChart(canvas, config = {}) {
   // Sampled once here for chart construction; kept up-to-date by applyTheme().
   const theme = readThemeVars();
 
+  // Resolve the foreground drug color from DRUG_DEFS — single source of
+  // truth shared with drug-card highlights and analysis buttons. The Ce
+  // trace adopts this color; setDrugColor() re-tints on drug switch.
+  const initialDrugColor = (DRUG_DEFS[cfg.drugId] && DRUG_DEFS[cfg.drugId].color) || COLORS.ce;
+  s.drugColor = initialDrugColor;
+
   // Build datasets
   const datasets = [];
 
+  let cpDsIdx = -1;
+  let ceDsIdx = -1;
+
   if (cfg.showCp) {
+    cpDsIdx = datasets.length;
     datasets.push({
       label: 'Cp (μg/mL)',
       data: [],
@@ -109,12 +120,13 @@ export function createChart(canvas, config = {}) {
   }
 
   if (cfg.showCe) {
+    ceDsIdx = datasets.length;
     datasets.push({
       label: 'Ce (μg/mL)',
       data: [],
-      borderColor: COLORS.ce,
-      backgroundColor: COLORS.ce + '18',
-      borderWidth: 2,
+      borderColor: initialDrugColor,
+      backgroundColor: initialDrugColor + '18',
+      borderWidth: 3,
       pointRadius: 0,
       tension: 0.1,
       fill: false,
@@ -156,6 +168,36 @@ export function createChart(canvas, config = {}) {
     spanGaps: false,
     order: 0, // draw on top of the live Ce so the comparison is legible
   });
+
+  // Per-drug ghost Ce datasets — peripheral-awareness traces for every
+  // non-selected drug that has events. Each runs against its own hidden
+  // Y-axis (yGhost_<drugId>) so the line height matches the user's
+  // calibration for that drug, while X stays shared with the foreground.
+  // Color = lighten(drug color), width 1, dashed [2,4]; alpha set by
+  // ghostOpacity. Hidden by default; toggled on via the chart's `∿` button.
+  const ghostTraceDsIdx = {};
+  const initialGhostAlphaHex = alphaToHex(s.ghostOpacity);
+  for (const drugId of DRUG_IDS) {
+    const def = DRUG_DEFS[drugId];
+    if (!def) continue;
+    ghostTraceDsIdx[drugId] = datasets.length;
+    const tinted = lighten(def.color, 0.25);
+    datasets.push({
+      label: 'Ce ghost (' + drugId + ')',
+      drugId,
+      data: [],
+      borderColor: tinted + initialGhostAlphaHex,
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderDash: [2, 4],
+      pointRadius: 0,
+      tension: 0.1,
+      fill: false,
+      hidden: true,
+      yAxisID: 'yGhost_' + drugId,
+      order: 4,
+    });
+  }
 
   // Create chart instance
   const chart = new Chart(canvas, {
@@ -220,6 +262,17 @@ export function createChart(canvas, config = {}) {
             ticks: { color: COLORS.rate, font: { size: 9 }, callback: fmtTick },
           },
         } : {}),
+        // Per-drug hidden ghost Y-axes. `display: false` keeps Chart.js
+        // positioning the line correctly while drawing nothing on either
+        // side of the chart. The bridge sets `max` per drug via
+        // setGhostAxisMax() so each ghost's height matches that drug's
+        // foreground calibration.
+        ...Object.fromEntries(DRUG_IDS.map(drugId => ['yGhost_' + drugId, {
+          type: 'linear',
+          display: false,
+          min: 0,
+          max: 10,
+        }])),
       },
       plugins: {
         legend: {
@@ -227,11 +280,11 @@ export function createChart(canvas, config = {}) {
           position: 'top',
           labels: {
             color: theme.legend, font: { size: 10 }, boxWidth: 12, padding: 8,
-            // Hide the ghost dataset from the legend — it only appears
-            // during a reconciliation, and the purple dashed line is
-            // self-explanatory next to the live Ce. A persistent legend
-            // entry that's unused most of the time just adds clutter.
-            filter: (item) => !/pre-reconcile/i.test(item.text || ''),
+            // Hide ghost datasets from the legend — both the
+            // pre-reconcile purple dashed line and the per-drug ghost
+            // traces are self-explanatory next to the live Ce. A
+            // persistent legend entry would just add clutter.
+            filter: (item) => !/(pre-reconcile|ghost)/i.test(item.text || ''),
           },
         },
         tooltip: {
@@ -430,6 +483,119 @@ export function createChart(canvas, config = {}) {
   }
 
   /**
+   * Re-tint the foreground Ce trace to match the active drug's color.
+   * Idempotent — bridge calls every frame (CLAUDE.md self-heal invariant).
+   */
+  function setDrugColor(drugId) {
+    if (ceDsIdx < 0) return;
+    const def = DRUG_DEFS[drugId];
+    if (!def || !def.color) return;
+    if (s.drugColor === def.color) return;
+    s.drugColor = def.color;
+    const ce = datasets[ceDsIdx];
+    ce.borderColor = def.color;
+    ce.backgroundColor = def.color + '18';
+    chart.update('none');
+  }
+
+  /**
+   * Update per-drug ghost Ce traces.
+   * `tracesByDrug` is `{ [drugId]: [{ time, Ce }, ...] | null }` — pass
+   * null for a drug to clear that ghost (e.g. when its event list is
+   * empty). Per-drug signature cache short-circuits unchanged drugs.
+   */
+  function setGhostTraces(tracesByDrug) {
+    let dirty = false;
+    for (const drugId of DRUG_IDS) {
+      const dsIdx = ghostTraceDsIdx[drugId];
+      if (dsIdx == null) continue;
+      const ds = datasets[dsIdx];
+      const points = tracesByDrug ? tracesByDrug[drugId] : null;
+      const sig = points && points.length > 0
+        ? `${drugId}|${points.length}|${points[0].time}|${points[points.length - 1].time}|${points[points.length - 1].Ce.toFixed(4)}`
+        : `${drugId}|`;
+      if (s.ghostTracesSigs[drugId] === sig) continue;
+      s.ghostTracesSigs[drugId] = sig;
+      ds.data = (points && points.length > 0)
+        ? points.map(p => ({ x: p.time, y: p.Ce }))
+        : [];
+      dirty = true;
+    }
+    if (dirty) chart.update('none');
+  }
+
+  /**
+   * Set the Y-axis max for a drug's ghost trace. Bridge calls this once
+   * per drug in refresh() so each ghost line height matches that drug's
+   * own foreground Y calibration. Idempotent.
+   */
+  function setGhostAxisMax(drugId, max) {
+    if (!Number.isFinite(max) || max <= 0) return;
+    const ax = chart.options.scales['yGhost_' + drugId];
+    if (!ax) return;
+    if (ax.max === max) return;
+    ax.max = max;
+    chart.update('none');
+  }
+
+  /** Re-apply the lightened drug color × ghost opacity to all per-drug ghost datasets. */
+  function _applyGhostColors() {
+    const aHex = alphaToHex(s.ghostOpacity);
+    for (const drugId of DRUG_IDS) {
+      const dsIdx = ghostTraceDsIdx[drugId];
+      if (dsIdx == null) continue;
+      const def = DRUG_DEFS[drugId];
+      if (!def) continue;
+      datasets[dsIdx].borderColor = lighten(def.color, 0.25) + aHex;
+    }
+  }
+
+  function setGhostOpacity(opacity) {
+    const clamped = Math.max(0.1, Math.min(1.0, opacity));
+    if (s.ghostOpacity === clamped) return;
+    s.ghostOpacity = clamped;
+    _applyGhostColors();
+    chart.update('none');
+  }
+
+  /** Show/hide all per-drug ghost datasets, except the active drug's own ghost. */
+  function _refreshGhostVisibility() {
+    let changed = false;
+    for (const drugId of DRUG_IDS) {
+      const dsIdx = ghostTraceDsIdx[drugId];
+      if (dsIdx == null) continue;
+      const ds = datasets[dsIdx];
+      const shouldHide = !s.ghostEnabled || drugId === s.currentDrugId;
+      if (ds.hidden !== shouldHide) {
+        ds.hidden = shouldHide;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  function setGhostEnabled(enabled) {
+    const want = !!enabled;
+    if (s.ghostEnabled === want) {
+      // Even if the flag hasn't changed, re-evaluate per-dataset visibility
+      // — switchDrug can leave a stale `hidden: true` on the now-non-active
+      // drug's ghost. Idempotent inside _refreshGhostVisibility().
+      if (_refreshGhostVisibility()) chart.update('none');
+      return;
+    }
+    s.ghostEnabled = want;
+    _refreshGhostVisibility();
+    chart.update('none');
+  }
+
+  function toggleGhostTraces() {
+    s.ghostEnabled = !s.ghostEnabled;
+    _refreshGhostVisibility();
+    chart.update('none');
+    return s.ghostEnabled;
+  }
+
+  /**
    * Show/hide the dose-reconciliation untrustworthy region.
    * Pass `{ xMin, xMax }` to show, or null to clear. Idempotent — safe to
    * call every frame from the bridge (CLAUDE.md invariant).
@@ -574,6 +740,13 @@ export function createChart(canvas, config = {}) {
       delete chart.options.scales.y.max;
       chart.options.scales.y.suggestedMax = suggestedMax || 10;
     }
+
+    // Re-tint the foreground Ce trace to the new drug's color and
+    // re-evaluate ghost visibility so the new drug's own ghost is hidden
+    // (its data is now drawn as the foreground) while the others reappear.
+    setDrugColor(drugId);
+    _refreshGhostVisibility();
+
     chart.update('none');
   }
 
@@ -699,11 +872,18 @@ export function createChart(canvas, config = {}) {
     toggleEventAnnotations,
     setEventMarkerSize,
     setFontScale,
+    setDrugColor,
+    setGhostTraces,
+    setGhostAxisMax,
+    setGhostOpacity,
+    setGhostEnabled,
+    toggleGhostTraces,
     applyTheme,
     destroy,
     get inspectEnabled() { return s.inspectEnabled; },
     get inspectTime() { return s.inspectTime; },
     get eventAnnotationsEnabled() { return s.eventAnnotationsEnabled; },
+    get ghostTracesEnabled() { return s.ghostEnabled; },
     get chart() { return chart; },
   };
 }

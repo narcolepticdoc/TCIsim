@@ -4,6 +4,29 @@
 
 ## Session History
 
+### Per-drug color source of truth + ghost Ce traces (v0.5.33.0) — Interim
+
+User asked about adding peripheral-awareness "ghost" traces of non-selected drugs to the chart, and in the same conversation flagged that `DRUG_DEFS[drugId].color` should be the single source of truth — used everywhere the drug panel highlights are sourced from, the chart Ce trace, the compartment viz, the analysis-screen drug buttons. Audit confirmed three drifted truths today: the drug-card highlight came from four hardcoded `#drug-{id}` CSS rules in `index.html` (class colors — yellow for hypnotics, blue for narcotics), the chart Ce was hardcoded `COLORS.ce` blue, and three `.btn-analysis-drug.active[data-drug=…]` rules carried their own hex literals. Compartment viz alone was reading `DRUG_DEFS.color`.
+
+**Color decisions.** The drug-panel highlights are class-coded by medical convention (induction yellow, narcotic blue) and the user wanted that scheme preserved. Promoting `DRUG_DEFS.color` to the source meant rewriting the four hex values to the class scheme — but with distinct shades inside each class so two ghost Ce traces (e.g. propofol + ketamine when fentanyl is foregrounded) don't visually collide:
+
+- propofol — `#eab308` primary yellow
+- ketamine — `#f59e0b` amber (within the hypnotic yellow family, distinguishable)
+- fentanyl — `#3b82f6` primary blue
+- remifentanil — `#06b6d4` cyan (within the narcotic blue family, reserved — no PK model yet)
+
+Foreground Ce now adopts the active drug's color and was bumped from 2 px to 3 px so it dominates the lighter ghost lines below it. Foreground Cp stays red (`COLORS.cp`) — anatomical convention for blood/plasma is intentional and the user confirmed it should hold.
+
+**Ghosts.** Each non-selected drug with events draws a Ce trace at `lighten(DRUG_DEFS[drugId].color, 0.25)` × `ghostOpacity`, 1 px, dashed `[2, 4]`. The luminance shift is HSL-based (raise L by 0.25, drop S by 0.125), implemented in a new `js/util/color.js` (~30 LoC: `lighten`, `hexToRgba`, `alphaToHex`). Each ghost runs against its own hidden secondary Y-axis (`yGhost_<drugId>`) so the line height matches that drug's foreground calibration — X-axis pan/zoom is shared with the foreground, Y is per-drug. The bridge resolves each ghost's Y max from `localStorage 'chart-ymax-' + drugId` ‖ `CHART_DRUG_CONFIG[drugId].yDefault` (same fallback the foreground uses).
+
+**Toggle placement.** On/off lives on the chart-controls strip (`∿` button between `⚑` events and `⤢` expand) per user instruction — not in the Settings modal. The opacity slider does live in Settings → Appearance, mirroring the existing Cp/nomogram/overlay sliders. Both are persisted under the existing `tci-warn-settings` blob (`ghostTracesEnabled`, `ghostOpacity`).
+
+**Self-heal invariant.** Chart-bridge `onFrame()` calls `setDrugColor`, `setGhostOpacity`, and `setGhostEnabled` every frame — all idempotent inside the chart. This matches the existing pattern for `setCpOpacity`/`setNomogramOpacity` and is the CLAUDE.md invariant that lets New Case (which rebuilds the chart from scratch) self-heal: the fresh chart's defaults differ from the user's persisted settings, so the first post-recreate frame applies them. `switchDrug` also re-tints the foreground Ce and re-evaluates per-dataset ghost visibility so the new selected drug's ghost is hidden (its data is the foreground) and the others reappear.
+
+**Boot wiring.** `applyDrugColorVars()` runs once at boot, iterating `DRUG_IDS` and calling `el.style.setProperty('--drug-color', DRUG_DEFS[drugId].color)` on each `#drug-<drugId>` card and `.btn-analysis-drug[data-drug="<drugId>"]` button. The matching `--drug-color-muted` (rgba 25% alpha) is computed via the new `hexToRgba` helper. The drug-card highlight CSS in `index.html` already read `var(--drug-color)` — the change was upstream, deleting the four hardcoded rules and feeding the variable from JS.
+
+Versions bumped in lockstep `0.5.32.4 → 0.5.33.0`. Added `js/util/color.js` to the service-worker precache list so it loads offline.
+
 ### BOLUS mode for pump-disabled fentanyl/ketamine (v0.5.32.4) — Interim
 
 User asked about the mode taxonomy and pointed out a real UX inconsistency: in propofol MANUAL mode the Set Rate + Add Bolus buttons highlight to show the active operating actions, but in fentanyl/ketamine "intermittent bolus" mode the buttons "are always dimmed."
