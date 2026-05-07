@@ -2,7 +2,6 @@
  * inspect-dots.js — Draw amber dots on Ce/Cp curves at the inspect time.
  */
 
-import { COLORS } from '../../../util/constants.js';
 import { interpolateAtTime } from '../interpolation.js';
 
 export function createInspectDotsPlugin(s) {
@@ -20,8 +19,8 @@ export function createInspectDotsPlugin(s) {
 
       for (const ds of ch.data.datasets) {
         if (!ds.data || ds.data.length === 0) continue;
-        const color = ds.borderColor;
-        if (!color.startsWith(COLORS.ce) && !color.startsWith(COLORS.cp)) continue;
+        // Only draw dots on the foreground Ce/Cp curves; skip ghosts.
+        if (ds.role !== 'ce' && ds.role !== 'cp') continue;
         const yVal = interpolateAtTime(ds.data, s.inspectTime);
         if (yVal === null) continue;
         const py = yScl.getPixelForValue(yVal);

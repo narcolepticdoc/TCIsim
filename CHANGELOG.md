@@ -11,6 +11,25 @@
 
 ---
 
+## [0.5.33.4] — 2026-05-07
+
+Fix: TCI event-flag markers (and a handful of other Ce/Cp-coupled chart features) drew against the wrong dataset once the foreground Ce trace started using the per-drug color.
+
+Four chart plugins identified the foreground Ce/Cp datasets by `borderColor.startsWith(COLORS.ce)` / `COLORS.cp` — a pattern that worked while Ce was always blue (`#3b82f6`) and Cp always red. Now that foreground Ce reads `DRUG_DEFS[drugId].color` (e.g. canary `#facc15` for propofol), the Ce match falls through and the next dataset whose color happens to start with `#3b82f6` wins instead — that's the **fentanyl ghost trace**, since fentanyl's class color is narcotic blue.
+
+Symptom: with propofol foregrounded, the green TCI event flags (rate up/down triangles, bolus arrows, stop octagons) appeared at the bottom of the chart along the fentanyl ghost trajectory in ng/mL space rather than on the propofol Ce curve at ~4 µg/mL. The inspect cursor dots, the inspect readout panel, and the (currently disabled) tooltip all had the same matcher pattern.
+
+Fix: tag each dataset with a stable `role` field at construction (`'cp'`, `'ce'`, `'rate'`, `'ghost-reconcile'`, `'ghost-drug'`) and switch all four plugins to match on `ds.role` instead of color string. Color matching for dataset identity is brittle the moment colors become per-drug; the role tag is declarative and ghost-safe.
+
+- `js/ui/chart/index.js` — added `role` to every dataset; switched the disabled tooltip's Ce-finder to use it.
+- `js/ui/chart/plugins/event-markers.js` — match `ds.role === 'ce'`.
+- `js/ui/chart/plugins/cursor-dots.js` — skip `ds.role !== 'ce' && ds.role !== 'cp'`.
+- `js/ui/chart/plugins/inspect-dots.js` — same.
+- `js/ui/chart/plugins/readout-panel.js` — separate Ce/Cp matchers by role; floor `py` raised from 52 to 80 to clear the chart-controls strip after its v0.5.33.1 drop to `top: 32px`.
+- `js/version.js` + `sw.js` — bumped `0.5.33.3 → 0.5.33.4` in lockstep.
+
+---
+
 ## [0.5.33.3] — 2026-05-07
 
 Stop fighting ourselves on ghost-trace color identity.

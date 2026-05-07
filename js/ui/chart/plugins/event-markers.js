@@ -2,7 +2,6 @@
  * event-markers.js — Shape markers for TCI events on the Ce curve.
  */
 
-import { COLORS } from '../../../util/constants.js';
 import { drawOctagon, drawTriangle, drawDoubleUpArrow } from '../shapes.js';
 
 export function createEventMarkersPlugin(s) {
@@ -15,11 +14,12 @@ export function createEventMarkersPlugin(s) {
       const ca = ch.chartArea;
       if (!xScl || !yScl || !ca) return;
 
+      // Match the foreground Ce dataset by role tag — borderColor matching
+      // would falsely target a per-drug ghost whose class hue happens to
+      // coincide with the previous hardcoded Ce color.
       let ceData = null;
       for (const ds of ch.data.datasets) {
-        if (ds.borderColor && ds.borderColor.startsWith(COLORS.ce)) {
-          ceData = ds.data; break;
-        }
+        if (ds.role === 'ce') { ceData = ds.data; break; }
       }
       if (!ceData || ceData.length === 0) return;
 
