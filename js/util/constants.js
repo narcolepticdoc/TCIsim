@@ -17,7 +17,7 @@ export const DRUG_DEFS = {
   propofol: {
     name: 'Propofol',
     concentration: 10,        // mg/mL (1% propofol)
-    color: '#eab308',         // hypnotic class — primary yellow
+    color: '#facc15',         // hypnotic class — bright canary yellow
     maxRate: 200,              // mg/min clinical max
     bolusRateMlH: 750,        // mL/h pump bolus delivery rate
   },
@@ -38,7 +38,7 @@ export const DRUG_DEFS = {
   ketamine: {
     name: 'Ketamine',
     concentration: 10,        // mg/mL (typical 1%)
-    color: '#f59e0b',         // hypnotic class — amber (distinct from propofol yellow)
+    color: '#f59e0b',         // hypnotic class — amber (deeper than propofol's canary yellow)
     maxRate: 10,               // mg/min
     bolusRateMlH: 750,
   },

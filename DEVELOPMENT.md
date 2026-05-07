@@ -4,6 +4,28 @@
 
 ## Session History
 
+### Re-tune hypnotic-class colors: propofol canary, revert ketamine (v0.5.33.2) — Interim
+
+User feedback after v0.5.33.1: propofol's `#eab308` was reading as a deeper goldenrod on the iPad screen, not the bright primary yellow they wanted. They asked to push propofol into "brighter primary canary yellow" and revert ketamine to where it was before (`#f59e0b` amber).
+
+The v0.5.33.1 fix had shifted ketamine to orange (`#ea580c`) to separate the two yellows by hue. With propofol now bumped up to a much brighter canary (`#facc15`, Tailwind yellow-400), there's enough luminance separation between propofol (bright) and ketamine (deeper amber) that they read as clearly distinct without needing to push ketamine all the way out of the yellow family. Going back to amber for ketamine restores the original "two shades of warm yellow" intent while keeping the chart legible.
+
+Final hypnotic-class colors:
+- propofol: `#facc15` (canary yellow, bright)
+- ketamine: `#f59e0b` (amber, deeper)
+
+Versions bumped in lockstep `0.5.33.1 → 0.5.33.2`.
+
+### Visual tweaks on the ghost-traces feature (v0.5.33.1) — Interim
+
+User screenshot of v0.5.33.0 running on iPad in landscape flagged three things:
+
+1. **Chart-controls strip overlapped the Chart.js legend.** The reset/info/flag/`∿`/expand buttons sat at `top: 8px` and partially obscured the `Ce (μg/mL) / Cp (μg/mL)` legend rendered by Chart.js at the top of the chart. Bumped to `top: 32px` so the buttons sit just below the legend strip.
+2. **Propofol yellow vs ketamine amber were too similar.** `#eab308` (yellow) and `#f59e0b` (amber) both read as "yellow-ish" on the chart — fine for distinct cards but the two ghost lines on the same chart didn't separate cleanly when fentanyl was foregrounded. Shifted ketamine to `#ea580c` (Tailwind orange-600) so we now have yellow vs orange — clearly distinct hues, both still in the warm-induction palette and well away from narcotic blue. The slight visual overlap with the BIS "Deep Sedation" band (`#f97316` at ~19% alpha) is acceptable: the band is a wide horizontal region, the ketamine line is thin and dashed (when ghosted) or thick saturated (when foreground), and `#ea580c` is one step deeper than the band hex.
+3. **Ghost lines wanted a touch more color tinge.** Bumped ghost `borderWidth` from 1 → 1.5. Foreground Ce stays 3 px solid; ghost is still clearly secondary by being lightened + dashed + thinner, but now carries enough weight to register as a real line rather than a hairline.
+
+Versions bumped in lockstep `0.5.33.0 → 0.5.33.1`.
+
 ### Per-drug color source of truth + ghost Ce traces (v0.5.33.0) — Interim
 
 User asked about adding peripheral-awareness "ghost" traces of non-selected drugs to the chart, and in the same conversation flagged that `DRUG_DEFS[drugId].color` should be the single source of truth — used everywhere the drug panel highlights are sourced from, the chart Ce trace, the compartment viz, the analysis-screen drug buttons. Audit confirmed three drifted truths today: the drug-card highlight came from four hardcoded `#drug-{id}` CSS rules in `index.html` (class colors — yellow for hypnotics, blue for narcotics), the chart Ce was hardcoded `COLORS.ce` blue, and three `.btn-analysis-drug.active[data-drug=…]` rules carried their own hex literals. Compartment viz alone was reading `DRUG_DEFS.color`.
