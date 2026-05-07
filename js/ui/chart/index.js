@@ -7,7 +7,7 @@
 
 import { COLORS, DRUG_DEFS, DRUG_IDS } from '../../util/constants.js';
 import { fromCanonical, getDefaultUnit, getPrefKey, formatValue, getAllowedUnits } from '../../util/units.js';
-import { lighten, alphaToHex } from '../../util/color.js';
+import { alphaToHex } from '../../util/color.js';
 
 import { createState } from './state.js';
 import { buildAnnotations } from './annotations.js';
@@ -173,20 +173,20 @@ export function createChart(canvas, config = {}) {
   // non-selected drug that has events. Each runs against its own hidden
   // Y-axis (yGhost_<drugId>) so the line height matches the user's
   // calibration for that drug, while X stays shared with the foreground.
-  // Color = lighten(drug color), width 1, dashed [2,4]; alpha set by
-  // ghostOpacity. Hidden by default; toggled on via the chart's `∿` button.
+  // Color = full saturation DRUG_DEFS color; secondary feel comes from
+  // dash [2,4] + thin stroke + user-tunable alpha. Hidden by default;
+  // toggled on via the chart's `∿` button.
   const ghostTraceDsIdx = {};
   const initialGhostAlphaHex = alphaToHex(s.ghostOpacity);
   for (const drugId of DRUG_IDS) {
     const def = DRUG_DEFS[drugId];
     if (!def) continue;
     ghostTraceDsIdx[drugId] = datasets.length;
-    const tinted = lighten(def.color, 0.25);
     datasets.push({
       label: 'Ce ghost (' + drugId + ')',
       drugId,
       data: [],
-      borderColor: tinted + initialGhostAlphaHex,
+      borderColor: def.color + initialGhostAlphaHex,
       backgroundColor: 'transparent',
       borderWidth: 1.5,
       borderDash: [2, 4],
@@ -538,7 +538,7 @@ export function createChart(canvas, config = {}) {
     chart.update('none');
   }
 
-  /** Re-apply the lightened drug color × ghost opacity to all per-drug ghost datasets. */
+  /** Re-apply drug color × ghost opacity to all per-drug ghost datasets. */
   function _applyGhostColors() {
     const aHex = alphaToHex(s.ghostOpacity);
     for (const drugId of DRUG_IDS) {
@@ -546,7 +546,7 @@ export function createChart(canvas, config = {}) {
       if (dsIdx == null) continue;
       const def = DRUG_DEFS[drugId];
       if (!def) continue;
-      datasets[dsIdx].borderColor = lighten(def.color, 0.25) + aHex;
+      datasets[dsIdx].borderColor = def.color + aHex;
     }
   }
 

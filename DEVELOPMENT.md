@@ -4,6 +4,25 @@
 
 ## Session History
 
+### Drop lighten() from ghost color path — preserve drug identity (v0.5.33.3) — Interim
+
+User asked how the ghost traces are currently delineated and noted: "we may be fighting ourselves on color differentiation by reducing their luminance." Correct.
+
+The v0.5.33.0 design stacked four "ghost" cues simultaneously:
+
+1. `order: 4` (drawn behind everything)
+2. `borderDash: [2, 4]`
+3. `borderWidth: 1.5` (vs foreground 3 px)
+4. `borderColor: lighten(DRUG_DEFS[drugId].color, 0.25) + alpha(ghostOpacity)`
+
+Cues 1–3 are color-neutral; they tell the eye "this is supplementary" without touching the drug-color identity. Cue 4 layered TWO desaturating treatments on top: an HSL luminance shift (raise L by 0.25, drop S by 0.125) AND an alpha multiplier (default 0.4). At the default settings, a propofol ghost was reading as ~`#fde892` at 40% alpha — a near-cream wash, not recognizably "canary yellow."
+
+Fix: drop the `lighten()` step. Ghost color is now `def.color + alphaToHex(s.ghostOpacity)` — full saturation hue at user opacity. Default opacity bumped 0.4 → 0.5 since we're no longer also lightening; 0.5 reads as clearly secondary while keeping color identity readable. The `lighten()` helper stays exported from `js/util/color.js` for any future use; it's just unused by the chart now.
+
+Net result: ghosts retain their per-drug color identity (canary propofol, amber ketamine, blue fentanyl) at any opacity setting. Dash + thin + draw-order handle the visual hierarchy; opacity slider is the single fade control.
+
+Versions bumped in lockstep `0.5.33.2 → 0.5.33.3`.
+
 ### Re-tune hypnotic-class colors: propofol canary, revert ketamine (v0.5.33.2) — Interim
 
 User feedback after v0.5.33.1: propofol's `#eab308` was reading as a deeper goldenrod on the iPad screen, not the bright primary yellow they wanted. They asked to push propofol into "brighter primary canary yellow" and revert ketamine to where it was before (`#f59e0b` amber).

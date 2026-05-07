@@ -28,7 +28,7 @@ const DEFAULTS     = {
   cpOpacity:   1.0,    // Cp line opacity (0.1–1.0)
   nomogramOpacity: 1.0, // BIS nomogram band opacity (0.1–1.0, applied as multiplier)
   overlayOpacity:  1.0, // Threshold/target line opacity (0.1–1.0)
-  ghostOpacity:    0.4, // Per-drug ghost Ce trace opacity (0.1–1.0)
+  ghostOpacity:    0.5, // Per-drug ghost Ce trace opacity (0.1–1.0)
   ghostTracesEnabled: false, // Show ghost Ce traces of non-selected drugs
   eventMarkerSize: 7,   // Future-event marker radius in px (4–16)
   textSize:    'normal',// Text scale: 'normal' | 'large' | 'xl' | 'xxl'
