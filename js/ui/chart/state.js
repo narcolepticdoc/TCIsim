@@ -25,7 +25,7 @@ export function createState(cfg) {
     // ghosts). Distinct from `ghostCurveSig` (the single pre-reconcile
     // ghost) — keyed by drugId.
     ghostTracesSigs: {},
-    ghostOpacity: 0.4,
+    ghostOpacity: 0.5,
     ghostEnabled: false,
     // Foreground drug color (chart Ce trace + UI tinting). Cached so the
     // bridge's per-frame setDrugColor() call short-circuits when nothing

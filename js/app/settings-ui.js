@@ -120,8 +120,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (nomogramVal)       nomogramVal.textContent       = Math.round((savedSettings.nomogramOpacity ?? 1.0) * 100) + '%';
   if (overlaySlider)     overlaySlider.value           = Math.round((savedSettings.overlayOpacity ?? 1.0) * 100);
   if (overlayVal)        overlayVal.textContent        = Math.round((savedSettings.overlayOpacity ?? 1.0) * 100) + '%';
-  if (ghostOpacSlider)   ghostOpacSlider.value         = Math.round((savedSettings.ghostOpacity ?? 0.4) * 100);
-  if (ghostOpacVal)      ghostOpacVal.textContent      = Math.round((savedSettings.ghostOpacity ?? 0.4) * 100) + '%';
+  if (ghostOpacSlider)   ghostOpacSlider.value         = Math.round((savedSettings.ghostOpacity ?? 0.5) * 100);
+  if (ghostOpacVal)      ghostOpacVal.textContent      = Math.round((savedSettings.ghostOpacity ?? 0.5) * 100) + '%';
   if (markerSizeSlider)  markerSizeSlider.value        = (savedSettings.eventMarkerSize ?? 7);
   if (markerSizeVal)     markerSizeVal.textContent     = (savedSettings.eventMarkerSize ?? 7) + ' px';
   if (showCeBandChk)     showCeBandChk.checked         = savedSettings.showCeBand ?? false;
@@ -151,7 +151,7 @@ export function initSettingsUI({ getSettings, setSettings }) {
     const nomogramOpacity   = nomogramPct / 100;
     const overlayPct        = overlaySlider ? parseInt(overlaySlider.value, 10) : 100;
     const overlayOpacity    = overlayPct / 100;
-    const ghostOpacPct      = ghostOpacSlider ? parseInt(ghostOpacSlider.value, 10) : 40;
+    const ghostOpacPct      = ghostOpacSlider ? parseInt(ghostOpacSlider.value, 10) : 50;
     const ghostOpacity      = ghostOpacPct / 100;
     // Ghost on/off lives on the chart-controls strip, not in the settings
     // modal. Re-read the persisted flag so saveAll() doesn't lose it when

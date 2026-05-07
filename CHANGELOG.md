@@ -11,6 +11,24 @@
 
 ---
 
+## [0.5.33.3] — 2026-05-07
+
+Stop fighting ourselves on ghost-trace color identity.
+
+The previous design layered four "this is secondary" cues on top of each other: dashed pattern, thinner stroke, `lighten(color, 0.25)` luminance shift, AND an opacity multiplier. Dash + thin already do most of the "in the background" work; layering luminance shift and alpha on top desaturated the per-drug color we just spent two patches tuning. At default 0.4 opacity on a `lighten()`-shifted hue, the canary-yellow propofol ghost was reading as a near-white wash instead of "yellow."
+
+- Dropped the `lighten()` step from the ghost color path. Ghost color is now the full saturation `DRUG_DEFS[drugId].color`; the alpha multiplier is the single user-tunable fade.
+- Bumped the default ghost opacity from `0.4 → 0.5`. With `lighten()` removed, 0.5 reads as clearly secondary while keeping the drug color recognizable.
+- `lighten()` stays in `js/util/color.js` for any future use; just unused by the chart now.
+
+Net result: ghosts retain their drug-color identity (canary propofol, amber ketamine, blue fentanyl) at any opacity setting, with dash + thin handling the visual hierarchy.
+
+- `js/ui/chart/index.js` — drop `lighten()` from ghost dataset constructor and `_applyGhostColors()`.
+- `js/ui/settings.js`, `js/ui/chart/state.js`, `js/app/chart-bridge.js`, `js/app/settings-ui.js`, `index.html` — default `ghostOpacity 0.4 → 0.5`.
+- `js/version.js` + `sw.js` — bumped `0.5.33.2 → 0.5.33.3` in lockstep.
+
+---
+
 ## [0.5.33.2] — 2026-05-07
 
 Re-tune the hypnotic-class colors so propofol and ketamine separate by luminance rather than hue:

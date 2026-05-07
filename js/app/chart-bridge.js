@@ -368,7 +368,7 @@ export function createChartBridge({
       // and also re-evaluates per-dataset visibility relative to the
       // selected drug, so drug switches naturally hide/unhide ghosts.
       if (typeof chart.setGhostOpacity === 'function') {
-        chart.setGhostOpacity(s.ghostOpacity ?? 0.4);
+        chart.setGhostOpacity(s.ghostOpacity ?? 0.5);
       }
       if (typeof chart.setGhostEnabled === 'function') {
         chart.setGhostEnabled(!!s.ghostTracesEnabled);
