@@ -11,6 +11,14 @@
 
 ---
 
+## [0.5.33.8] — 2026-05-08
+
+Version bump to retrigger deployment. v0.5.33.7's deploy did not complete cleanly; bumping `VERSION` in `js/version.js` and `sw.js` in lockstep produces a fresh service-worker `CACHE_NAME` (`tcisim-v0.5.33.8`) and forces every client to fetch the new bundle on next navigation. No code changes.
+
+- `js/version.js` + `sw.js` — bumped `0.5.33.7 → 0.5.33.8` in lockstep.
+
+---
+
 ## [0.5.33.7] — 2026-05-08
 
 Fix: setting a target then setting another target before tapping Start delivered both loading boluses on Start, instead of replacing the first plan with the second. Total dose was roughly the sum of the two plans' boluses.
