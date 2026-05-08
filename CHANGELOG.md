@@ -11,6 +11,27 @@
 
 ---
 
+## [0.5.33.6] — 2026-05-08
+
+Fix: the "Emerge → X.X in M:SS" countdown introduced in v0.5.33.5 stopped flickering during decay but oscillated 1 Hz at clinical steady state (`5:30 ↔ 5:29 ↔ 5:30`). Two-mode state machine fixes both regimes properly.
+
+The v0.5.33.5 design rendered `fmtCountdown(arrivalMin - t)` every frame and re-baselined `arrivalMin` once per second. At true SS (Ce held flat by an active infusion) `arrivalMin` re-baselined to roughly the same value each second, but between refreshes `t` advanced continuously and crossed `Math.round`'s half-second boundary downward. The 1 Hz wall-clock refresh then snapped `arrivalMin` back up. Net: a visible `↓ ↑ ↓ ↑` flicker on a stable case.
+
+Root cause is semantic: the "if you stopped now" answer has different semantics depending on whether you actually stopped. While infusing it's a *counter-factual* that needs periodic re-evaluation but doesn't tick down in real time; while idle it's *actually happening* and should tick at exactly 1 sec/sec.
+
+Fix: split `js/ui/drug-panel/exit-readout.js` into two modes selected per frame from `ctx.model.getRateAtTime(drugId, t)`.
+
+- **Active (`rate > 0`)**: cache `displayedDecayMin`, re-predict on a 1 s wall clock with ±1.5 s symmetric hysteresis, render directly with no `t` subtraction. The DOM string stays identical at SS, so the display is truly stable.
+- **Idle (`rate == 0`)**: snapshot `idleStartT` and `idleStartDecayMin` at the Active→Idle transition (or first Idle frame), render every frame as `idleStartDecayMin - (t - idleStartT)` for a smooth 1 sec/sec countdown driven by the simulator clock. Periodic 5 s sanity re-predict re-baselines if cumulative drift exceeds hysteresis.
+
+Mode transitions (Active↔Idle, exit-Ce change, `_curveVersion` bump from a bolus or event edit) trigger a forced re-predict. A bolus pushed during Idle bumps `_curveVersion`, which re-baselines the smooth countdown to the post-bolus Ce and resumes ticking.
+
+- `js/ui/drug-panel/exit-readout.js` — replaced single-mode logic with Active/Idle state machine; cache holds both `displayedDecayMin` (Active) and `idleStartT` / `idleStartDecayMin` (Idle); `lastIsIdle` drives transition detection; render branch per mode.
+- `js/version.js` + `sw.js` — bumped `0.5.33.5 → 0.5.33.6` in lockstep.
+- `CLAUDE.md` — added a workflow note: before pushing follow-up commits to an existing branch, check whether the prior PR is already merged or closed; if so, open a new PR instead of assuming a push will update the closed one.
+
+---
+
 ## [0.5.33.5] — 2026-05-07
 
 Fix: the "Emerge → X.X in M:SS" countdown answers *"if you stopped now, when would Ce reach the threshold"* — but it was answering for the moment the user *engaged* the threshold, not the live moment.
