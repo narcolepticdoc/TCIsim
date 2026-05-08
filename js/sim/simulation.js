@@ -389,6 +389,15 @@ export function createModel(config = {}) {
   }
 
   /**
+   * Clear all events for a drug at and after a given time.
+   * `clearFrom(drugId, 0)` wipes the entire plan for the drug
+   * (all event times are >= 0).
+   */
+  function clearFrom(drugId, time) {
+    return eventList.clearFrom(drugId, time);
+  }
+
+  /**
    * Reset everything — clear all events, reset engines.
    */
   function reset() {
@@ -663,7 +672,7 @@ export function createModel(config = {}) {
     // Commands
     addRate, addBolus, addPause, planTCI,
     editEvent, deleteEvent, deleteEventAndAfter,
-    clearAfter, reset, refreshDrugConfig,
+    clearAfter, clearFrom, reset, refreshDrugConfig,
     applyRateAugmentation,
 
     // Queries
