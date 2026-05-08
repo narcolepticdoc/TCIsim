@@ -4,6 +4,45 @@
 
 ## Session History
 
+### Two-mode emergence countdown — stable at SS, smooth on decay (v0.5.33.6) — Interim
+
+User feedback after v0.5.33.5 shipped: the countdown now tracks Ce drift correctly, but at clinical SS the M:SS field oscillates 1 Hz between adjacent seconds (`5:30 ↔ 5:29`). User: *"In order to retain a smooth countdown, would detecting when the pump is stopped and initiating a countdown at that point work?"* The instinct was right — and it points at the underlying semantic asymmetry that v0.5.33.5 papered over.
+
+**Root cause is semantic, not bisection jitter.** The "if you stopped now, when would Ce reach exitCe" answer has fundamentally different semantics depending on whether the pump is actually delivering:
+
+- **Active (current rate > 0)** — the answer is a *counter-factual*. Reality is that you keep infusing, so the prediction must be re-evaluated periodically against current Ce. Frame-ticking `arrivalMin − t` here implies "if I stopped at engagement I'd be N seconds closer now," which isn't what the readout claims to show. At true SS the answer is roughly constant; the display should be **stable**.
+- **Idle (current rate == 0)** — the answer is *actually happening*. Ce decays along the model's decay path; the prediction made the moment rate hit zero is mathematically valid for as long as no new intervention happens, and `now − transition_time` is exactly the right thing to subtract from it. The display should **count down smoothly at 1 sec/sec**.
+
+**Mechanism of the v0.5.33.5 SS flicker.** `fmtCountdown(min)` does `Math.round(min * 60)` on whole seconds (`js/ui/drug-panel/formatters.js:21–27`). Per frame the render is `fmtCountdown(arrivalMin − t)`. Between two re-predicts `arrivalMin` is held constant, but `t` advances continuously, so `rem` decreases linearly and crosses `Math.round`'s half-second boundary downward each second. Then the next 1 s wall-clock re-predict resets `arrivalMin ≈ t' + decayDuration`, snapping `rem` back up. Net visual: 1 Hz `↓ ↑ ↓ ↑`. Bisection inside `predictTroughTime` (`js/pk/decay-predictor.js:30–114`, tolerance 0.01 min ≈ 0.6 sec, ±0.3 sec midpoint jitter) adds residual flicker on top.
+
+**Fix: two-mode state machine in `js/ui/drug-panel/exit-readout.js`.** Mode is selected per frame from `ctx.model.getRateAtTime(drugId, t)` (already on the public facade at `js/sim/simulation.js:431–433`).
+
+```js
+const currentRate = ctx.model.getRateAtTime(drugId, t);
+const isIdle = !(currentRate > 0);
+```
+
+Active mode (`currentRate > 0`):
+- Re-predict on a 1 s wall clock and on forced invalidation (`exitCe` change, `_curveVersion` bump, mode change).
+- Cache `displayedDecayMin` (a delta in minutes from the predict call).
+- Apply small symmetric hysteresis (`HYSTERESIS_MIN = 1.5 / 60` = 1.5 sec) so bisection jitter and sub-second wobble don't flip the rounded display. Forced updates skip hysteresis.
+- Render directly from `cache.displayedDecayMin` — no `t` subtraction. The DOM string only changes when the cached value changes, so at SS the display is truly stable.
+
+Idle mode (`currentRate == 0`):
+- On Active → Idle transition (or first frame ever in Idle, including the user setting Emergence Ce while pump already off), call `predictDecayTo` and store `cache.idleStartT = t` and `cache.idleStartDecayMin = result.time − t`.
+- Render every frame as `fmtCountdown(idleStartDecayMin − (t − idleStartT))` — smooth 1 sec/sec countdown driven by the simulator clock.
+- Periodic 5 s sanity re-predict; if the fresh decay-from-now differs from the frame-ticked value by ≥ `HYSTERESIS_MIN`, re-baseline `idleStartT` and `idleStartDecayMin`. Otherwise keep ticking. Corrects cumulative drift without visible jumps.
+
+Mode-transition detection via `cache.lastIsIdle`: any change forces a re-predict in the new mode. A bolus push during Idle bumps `_curveVersion`, which forces a re-predict, which writes new `idleStartT` and `idleStartDecayMin` so the smooth countdown re-baselines from the post-bolus Ce and resumes ticking.
+
+**Why this beats blanket hysteresis.** A single-mode 1.5 s symmetric hysteresis on the cached decay value would fix SS flicker too — but at the cost of choppy 2 sec-every-2-sec ticking during real decay. The two-mode design gives each regime its semantically correct rendering: Active is genuinely stable (no per-frame computation that varies), Idle is genuinely smooth (1 sec/sec, mathematically exact).
+
+**No model/simulation/predictor/formatter changes.** `predictDecayTo`, `decay-predictor.js`, `fmtCountdown`, `getCurveVersion`, and `invalidateAll()` are untouched. `getRateAtTime` is already on the public facade.
+
+**CLAUDE.md updated.** PR #228 was merged before the v0.5.33.6 commit, so a `git push -u` to the branch wouldn't update the original PR — it'd orphan the new commit behind a closed PR. Added a workflow note: before pushing follow-up commits to an existing branch, check whether the prior PR is `merged` or `closed` (via `mcp__github__list_pull_requests` or `pull_request_read`), and open a new PR if so.
+
+Versions bumped in lockstep `0.5.33.5 → 0.5.33.6`. Test suite green (no model/simulation changes).
+
 ### Re-predict emergence countdown on a 1 s wall clock so it tracks Ce drift (v0.5.33.5) — Interim
 
 User report: "When you set an emergence threshold, the system correctly calculates the time and sets the countdown in the display, but … it assumes that you have stopped the infusion and does not update. The user will expect a live update of how long emergence will take if they stopped all interventions, as they progress through the case and make changes. Currently the readout sets a timer at the point in time that it is engaged and does not update."
