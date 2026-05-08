@@ -4,6 +4,31 @@
 
 ## Session History
 
+### Pre-case TCI re-target was additive instead of replacing the prior plan (v0.5.33.7) — Interim
+
+User report: *"If you set a target, then set another target before hitting Start, it is additive."*
+
+**Reproduction.** Fresh case (do not tap Start). Tap Set Target propofol → Ce 4.0. Tap Set Target again → Ce 2.0. Tap Start. Expected: a single loading bolus sized for Ce 2.0 + the Ce 2.0 maintenance ramp. Actual: two stacked loading boluses (sized for plans #1 and #2 respectively) delivered at the case origin, then the Ce 2.0 maintenance.
+
+**Mechanism.** The pre-case `'ceTarget'` handler in `js/app.js:404–430` reads a per-drug `preStartClock` (defined at `js/app.js:43–45`), passes it as `fromTime` into `model.planTCI`, then advances the clock by 0.01 min. Inside `planTCI` (`js/sim/simulation.js:232–285`), the very first step is `eventList.clearAfter(drugId, fromTime)` — which removes events with `time > fromTime`, **strictly** (`js/sim/events/list-ops.js:63–69`).
+
+Walk through:
+
+- **Set Target #1 (Ce 4.0)** — `t = 0`. `clearAfter(propofol, 0)` is a no-op (no prior events). Plan inserts bolus at t=0, rate steps at t=0, 0.5, 1.0, … `advancePreStartClock` → 0.01.
+- **Set Target #2 (Ce 2.0)** — `t = 0.01`. `clearAfter(propofol, 0.01)` removes events with `time > 0.01`. Plan #1's bolus at t=0 is **kept**. Plan #2's bolus at t=0.01 is added. On Start, both boluses replay.
+
+Two compounding causes: (A) `clearAfter` is exclusive (keeps events at `=fromTime`), and (B) the pre-start clock has advanced past the prior plan's t=0 origin so the prior bolus is below the cutoff anyway. (B) is dominant; (A) would still leak a same-`t` re-plan if (B) weren't already triggering.
+
+**Why the running-case path doesn't have this bug.** During a running case, Set Target opens the TCI delay modal and defers `planTCI` to the confirm callback. Re-tapping Set Target overwrites the deferred pending state in `tciModal` before any events are inserted; only the most recent target's plan ever reaches `planTCI`.
+
+**Fix.** Treat pre-case re-target as a clean restart for the drug. In the pre-case branch of the `'ceTarget'` handler, rewind `preStartClock[selectedDrug]` to 0, wipe all events for the drug via the new public `model.clearFrom(drugId, 0)`, then plan from `t = 0`. First-time target: rewind 0→0 is a no-op; `clearFrom(drugId, 0)` removes nothing (no prior events); plan as before. Re-target: rewind, wipe plan #1, plan #2 from origin. Other drugs' pre-case plans are untouched because `clearFrom` filters by `drugId`. The running-case path (`js/app.js:418–423`) is unchanged.
+
+`eventList.clearFrom` already existed (`js/sim/events/list-ops.js:79–85`). Exposed it on the simulation facade in `js/sim/simulation.js` as a sibling of `clearAfter` — "wipe all events for a drug" is generally useful and reads more clearly than the alternative `clearAfter(drugId, -1)` sentinel.
+
+Versions bumped in lockstep `0.5.33.6 → 0.5.33.7`. Test suite green (no engine/planner changes; the change is in the caller layer).
+
+This is the fix shipped on a fresh branch (`claude/fix-pre-case-tci-restack-RPLT8`) per the v0.5.33.6 CLAUDE.md guidance to open a new PR rather than push to a branch whose prior PR is already merged. PRs #228 and #229 on `claude/fix-duplicate-emergence-timer-FQMMT` have both landed; this fix is independent and gets its own PR.
+
 ### Two-mode emergence countdown — stable at SS, smooth on decay (v0.5.33.6) — Interim
 
 User feedback after v0.5.33.5 shipped: the countdown now tracks Ce drift correctly, but at clinical SS the M:SS field oscillates 1 Hz between adjacent seconds (`5:30 ↔ 5:29`). User: *"In order to retain a smooth countdown, would detecting when the pump is stopped and initiating a countdown at that point work?"* The instinct was right — and it points at the underlying semantic asymmetry that v0.5.33.5 papered over.

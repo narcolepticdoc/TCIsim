@@ -11,6 +11,22 @@
 
 ---
 
+## [0.5.33.7] — 2026-05-08
+
+Fix: setting a target then setting another target before tapping Start delivered both loading boluses on Start, instead of replacing the first plan with the second. Total dose was roughly the sum of the two plans' boluses.
+
+The pre-case Set-Target handler in `js/app.js` advances a per-drug `preStartClock` by 0.01 min after every successful plan so subsequent events don't all collide at t=0. On a re-target, that means the second `planTCI` is called with `fromTime = 0.01`. Inside `planTCI`, `eventList.clearAfter(drugId, 0.01)` removes only events with `time > 0.01` — so plan #1's loading bolus at t=0 (and its initial rate event at t=0) survive. Plan #2 then appends its own bolus at t=0.01. Both boluses replay at the case origin.
+
+Fix: in the pre-case `'ceTarget'` branch, treat re-targeting as a clean restart for the drug — rewind the pre-start clock to 0, wipe all events for the drug via the new `model.clearFrom(drugId, 0)`, then plan from t=0. First-time target is unaffected (rewind from 0→0 is a no-op; nothing to wipe). Other drugs' pre-case plans are untouched. The running-case path (which defers `planTCI` to the TCI delay modal's confirm) is untouched.
+
+`clearFrom` already existed on the internal `eventList` (`js/sim/events/list-ops.js:79–85`); this exposes it on the public simulation facade as a sibling of `clearAfter`. "Wipe all events for a drug" is generally useful and reads more clearly than a `clearAfter(drugId, -1)` sentinel.
+
+- `js/sim/simulation.js` — added `clearFrom(drugId, time)` wrapper after the existing `clearAfter`; added to facade exports.
+- `js/app.js` — pre-case `'ceTarget'` branch now rewinds `preStartClock[selectedDrug]` to 0 and calls `model.clearFrom(selectedDrug, 0)` before re-planning.
+- `js/version.js` + `sw.js` — bumped `0.5.33.6 → 0.5.33.7` in lockstep.
+
+---
+
 ## [0.5.33.6] — 2026-05-08
 
 Fix: the "Emerge → X.X in M:SS" countdown introduced in v0.5.33.5 stopped flickering during decay but oscillated 1 Hz at clinical steady state (`5:30 ↔ 5:29 ↔ 5:30`). Two-mode state machine fixes both regimes properly.

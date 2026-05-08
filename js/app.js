@@ -422,7 +422,14 @@ function boot() {
           tciModal.showDelay(canonicalValue, selectedDrug);
           return; // skip refreshChart — nothing committed yet
         } else {
-          // Pre-case: plan immediately, no delay needed
+          // Pre-case re-target: a new "Set Target" defines the plan from
+          // scratch. Wipe any prior events for this drug and rewind the
+          // per-drug pre-start clock to 0 so the fresh plan starts at the
+          // case origin — otherwise the prior plan's loading bolus at t=0
+          // survives clearAfter(advancedClock) and stacks with the new one.
+          preStartClock[selectedDrug] = 0;
+          model.clearFrom(selectedDrug, 0);
+          t = 0;
           mode.setCeTarget(selectedDrug, canonicalValue);
           model.planTCI(selectedDrug, t, canonicalValue, { tciMode, ceTolerance: settings.getSettings().ceTolerance, ...quantConfig });
           mode.set(selectedDrug, 'tci', `TCI target Ce=${canonicalValue.toFixed(1)} μg/mL`);
