@@ -4,6 +4,12 @@
 
 ## Session History
 
+### Version bump to retrigger deployment (v0.5.33.8) — Interim
+
+v0.5.33.7's deployment did not complete cleanly. Bumping `VERSION` in `js/version.js` and `sw.js` in lockstep produces a fresh service-worker `CACHE_NAME` (`tcisim-v0.5.33.8`), which forces each client to fetch the new bundle on next navigation and gives the deploy pipeline a new commit to act on.
+
+No code changes — patch-level bump only, per the CLAUDE.md scheme: "Never bump a higher-level version because a lower level looks 'full'." `0.5.33.7 → 0.5.33.8` is the right shape for a routine deploy retrigger.
+
 ### Pre-case TCI re-target was additive instead of replacing the prior plan (v0.5.33.7) — Interim
 
 User report: *"If you set a target, then set another target before hitting Start, it is additive."*
