@@ -4,6 +4,31 @@
 
 ## Session History
 
+### Bolus shown in mL/h + adjustable reaction delay (v0.5.34.0) — Interim
+
+User report: *"I think there might be an issue with the bolus rate — when I run propofol it shows the rate way over the pump's max."* On investigation the rate was correct; the user was looking at the drug card's `mcg/kg/min` readout during a bolus and reading it as `mL/h`. The conversion gap between the sim's display units and what the real pump shows is a recurring source of confusion. Two changes follow from that — a display alignment and a presentation-layer reaction-time setting.
+
+**Part A — Bolus display in mL/h.** During a pump-delivered bolus, the drug card's "rate" line now forces `mL/h` (mirroring the actual pump screen) regardless of the user's preferred rate unit. The history panel's pump-bolus rows are augmented from `Pump Bolus | 100 mg` to `Pump Bolus | 100 mg @ 750 mL/h`. The mL/h figure is converted via the user's currently-configured pump concentration (`getPumpSettings(drug).concentration`), so it agrees with the real pump rather than the drug's `DRUG_DEFS` default. `IV Push` events are unchanged.
+
+- `js/ui/drug-panel/formatters.js` — `fmtRateInline` accepts `opts.bolusOverride`; when true, forces `mL/h` and threads the live pump concentration through `fromCanonical`.
+- `js/ui/drug-panel/index.js` — drug card detects "bolus in progress" via the existing `isInBolusPhase(ctx, dId, t) || rate > 50` heuristic and passes `bolusOverride`.
+- `js/ui/history.js` — bolus-row builder appends `@ <round(bolusRateMlH)> mL/h` for pump deliveries.
+
+Fentanyl and ketamine's *default* rate-display units (`mcg/kg/min`, `mg/kg/h`) are unchanged. That's the unit-mismatch root cause but flipping defaults silently would surprise existing users; leaving it as a follow-up.
+
+**Part B — Reaction-time presentation offset.** A new Notifications-tab slider (`Reaction delay — present TCI cues this much earlier`, 0–2 s, step 0.5 s, default 0). It does *not* move events in the engine, history, or chart — it only shifts the displayed "seconds to next event" earlier for TCI-scheduled user-action events (`source: 'tci'`, type bolus/rate/pause). The countdown reaches zero `reactionDelaySec` seconds before the event actually fires; prep visual pulse, prep chime, alert popup, warning chime, and the zero-chime all trigger that much earlier. System-generated rate restorations after a bolus (`source: 'system'`) are not offset — those don't require a human at the pump. Manual events also bypass the offset since the user is already in the loop when dispatching them.
+
+The implementation is a single helper, `displayedSecToEvent(evt, currentMin, reactionDelaySec)`, in `js/ui/settings.js`. Every site that compared "seconds to event" against a threshold or rendered a countdown routes through it: `settings.check()` prep/alert/zero-chime, the popup's live countdown, and `drug-panel/step-bar.js`'s bar progress + countdown text (where the bar fill is also rescaled so it reaches 100% at displayed-zero, keeping bar and countdown visually in sync). Exit-readout (emergence countdown) is *not* routed through the helper — emergence is a passive observation, not a user-action prompt.
+
+The setting persists under the existing `'tci-warn-settings'` JSON blob. Validator clamps to `[0, 2]` and snaps to the 0.5-s grid; bad values (NaN, negative, out of range) fall back to the default of 0.
+
+19 new tests in `tests/test-reaction-delay.js` cover: identity when delay = 0, exact shift for each event type, floor at 0, system and manual sources untouched, non-actionable event types untouched, validator clamp + snap. Full suite is 512 tests, all passing.
+
+- `js/ui/settings.js` — DEFAULTS, validator, setter destructure, `displayedSecToEvent` export, `check()` + `_showPopup()` wiring.
+- `js/ui/drug-panel/step-bar.js` — import + use the helper; bar fill rescaled to `displayedTime - prevTime` window.
+- `js/app/settings-ui.js` + `index.html` — slider + readout in Notifications tab.
+- `js/version.js` + `sw.js` — bumped `0.5.33.8 → 0.5.34.0` in lockstep.
+
 ### Version bump to retrigger deployment (v0.5.33.8) — Interim
 
 v0.5.33.7's deployment did not complete cleanly. Bumping `VERSION` in `js/version.js` and `sw.js` in lockstep produces a fresh service-worker `CACHE_NAME` (`tcisim-v0.5.33.8`), which forces each client to fetch the new bundle on next navigation and gives the deploy pipeline a new commit to act on.

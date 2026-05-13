@@ -151,7 +151,14 @@ function update() {
     }
 
     if (rateEl) {
-      rateEl.textContent = (caseStarted && rate > 0) ? fmtRateInline(ctx, dId, rate) : '';
+      // During bolus delivery, switch the rate readout to mL/h so the trainee
+      // sees the same number their real pump's screen would show. Uses the
+      // same bolus-detection heuristic as the status label above.
+      const showingBolus = caseStarted && rate > 0
+        && (isInBolusPhase(ctx, dId, t) || rate > 50);
+      rateEl.textContent = (caseStarted && rate > 0)
+        ? fmtRateInline(ctx, dId, rate, { bolusOverride: showingBolus })
+        : '';
     }
 
     // ── eBIS header-row placement (propofol-only; empty hides via :empty CSS rule) ──
