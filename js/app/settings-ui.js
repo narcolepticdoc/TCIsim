@@ -73,6 +73,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
   const redoseSoundChk    = $('set-redose-sound');
   const statusWarnSlider  = $('set-status-warn');
   const statusWarnVal     = $('set-status-warn-val');
+  const reactDelaySlider  = $('set-reaction-delay');
+  const reactDelayVal     = $('set-reaction-delay-val');
   const ceTolSlider       = $('set-tci-fraction');
   const ceTolVal          = $('set-tci-fraction-val');
   const ssSlopeSlider     = $('set-ss-slope');
@@ -106,6 +108,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (redoseSoundChk)    redoseSoundChk.checked        = savedSettings.redoseSound ?? true;
   if (statusWarnSlider)  statusWarnSlider.value        = savedSettings.statusWarnMinutes ?? 2;
   if (statusWarnVal)     statusWarnVal.textContent     = (savedSettings.statusWarnMinutes ?? 2) + ' min';
+  if (reactDelaySlider)  reactDelaySlider.value        = (savedSettings.reactionDelaySec ?? 0).toFixed(1);
+  if (reactDelayVal)     reactDelayVal.textContent     = (savedSettings.reactionDelaySec ?? 0).toFixed(1) + ' s';
   // Slider value represents tenths of a percent: 5..30 step 5 maps to 0.5%..3.0%.
   // Stored ceTolerance is a fraction (0.005..0.030); slider value = ceTolerance * 1000.
   if (ceTolSlider) ceTolSlider.value                   = Math.round((savedSettings.ceTolerance ?? 0.015) * 1000);
@@ -139,6 +143,8 @@ export function initSettingsUI({ getSettings, setSettings }) {
     const alertSound        = alertSoundChk     ? alertSoundChk.checked     : true;
     const redoseSound       = redoseSoundChk    ? redoseSoundChk.checked    : true;
     const statusWarnMinutes = statusWarnSlider ? parseInt(statusWarnSlider.value, 10) : 2;
+    const reactionDelayRaw  = reactDelaySlider ? parseFloat(reactDelaySlider.value) : 0;
+    const reactionDelaySec  = Math.round(Math.max(0, Math.min(2, reactionDelayRaw)) * 2) / 2;
     const ceTolTenths       = ceTolSlider ? parseInt(ceTolSlider.value, 10) : 15;
     const ceTolerance       = ceTolTenths / 1000;
     const ssSlopePct        = ssSlopeSlider ? parseFloat(ssSlopeSlider.value) : 0.10;
@@ -164,6 +170,7 @@ export function initSettingsUI({ getSettings, setSettings }) {
     if (prepVal)         prepVal.textContent         = prepSec           + 's';
     if (alertVal)        alertVal.textContent        = alertSec          + 's';
     if (statusWarnVal)   statusWarnVal.textContent   = statusWarnMinutes + ' min';
+    if (reactDelayVal)   reactDelayVal.textContent   = reactionDelaySec.toFixed(1) + ' s';
     if (ceTolVal)        ceTolVal.textContent        = (ceTolTenths / 10).toFixed(1) + '%';
     if (ssSlopeVal)      ssSlopeVal.textContent      = ssSlopeLabel(ssSlopeTol);
     if (exitBandVal)     exitBandVal.textContent     = '±' + exitBandInt + '%';
@@ -172,7 +179,7 @@ export function initSettingsUI({ getSettings, setSettings }) {
     if (overlayVal)      overlayVal.textContent      = overlayPct        + '%';
     if (ghostOpacVal)    ghostOpacVal.textContent    = ghostOpacPct      + '%';
     if (markerSizeVal)   markerSizeVal.textContent   = eventMarkerSize   + ' px';
-    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand });
+    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand });
   }
 
   prepSlider.addEventListener('input',    saveAll);
@@ -181,6 +188,7 @@ export function initSettingsUI({ getSettings, setSettings }) {
   if (alertSoundChk)     alertSoundChk.addEventListener('change',    saveAll);
   if (redoseSoundChk)    redoseSoundChk.addEventListener('change',   saveAll);
   if (statusWarnSlider)  statusWarnSlider.addEventListener('input',  saveAll);
+  if (reactDelaySlider)  reactDelaySlider.addEventListener('input',  saveAll);
   if (ceTolSlider)       ceTolSlider.addEventListener('input',       saveAll);
   if (ssSlopeSlider)     ssSlopeSlider.addEventListener('input',     saveAll);
   if (exitBandSlider)    exitBandSlider.addEventListener('input',    saveAll);

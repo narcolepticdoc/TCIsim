@@ -11,6 +11,28 @@
 
 ---
 
+## [0.5.34.0] — 2026-05-13
+
+Two simulator-realism additions prompted by a unit-conversion confusion (a user comparing a mcg/kg/min value against the pump's mL/h reading and reading it as an out-of-range bolus rate):
+
+**Bolus delivery shown in mL/h.** Pump-delivered boluses in the history panel now read `<dose> @ <bolusRateMlH> mL/h` (e.g. `100 mg @ 750 mL/h`), and the drug card's live rate readout switches from the user's preferred unit (mcg/kg/min etc.) to mL/h *while a bolus is in progress*, mirroring what a real infusion pump displays during delivery. The pump's currently-configured concentration is threaded through the conversion so the displayed mL/h matches the actual pump. `IV Push` rows are unchanged (push is not metered). No effect on engine, planner, history times, or saved cases — display-only.
+
+- `js/ui/history.js:319-336` — bolus row augmented with `@ <mL/h>` for pump deliveries.
+- `js/ui/drug-panel/formatters.js:108-141` — `fmtRateInline` accepts `{ bolusOverride: true }` to force mL/h with pump concentration.
+- `js/ui/drug-panel/index.js:153-164` — drug card passes `bolusOverride` while `isInBolusPhase` or rate > 50 mg/min.
+
+**Adjustable clinician reaction delay (0–2 s).** A new Notifications-tab setting that biases *only* the displayed countdown and the prep/alert firing thresholds earlier by `reactionDelaySec` for TCI-scheduled user-action events (`source: 'tci'`, type bolus/rate/pause). System-generated rate restorations after a bolus are not offset. The trainee's natural reaction lag then lands them at the planner's intended event time. The engine, history rows, and chart event markers all remain ground truth — nothing in the event list is shifted. Default is 0 s so existing cases see no behavior change until a user opts in.
+
+- `js/ui/settings.js` — `reactionDelaySec` in DEFAULTS + validator (0–2 s, 0.5 s snap); new `displayedSecToEvent(evt, currentMin, reactionDelaySec)` helper; `check()` and `_showPopup()` route countdowns / prep / alert / zero-chime through it.
+- `js/ui/drug-panel/step-bar.js` — step-bar progress + countdown shifted earlier for TCI events.
+- `js/app/settings-ui.js` + `index.html` — Reaction-delay slider on the Notifications tab.
+- `tests/test-reaction-delay.js` (new) — 19 tests covering helper edge cases (TCI / system / manual sources, all event types, floor at 0, validator clamp + 0.5-step snap).
+- `js/version.js` + `sw.js` — bumped `0.5.33.8 → 0.5.34.0` in lockstep.
+
+Note: fentanyl and ketamine rate-display defaults (`mcg/kg/min`, `mg/kg/h`) are unchanged. The display-unit confusion was the trigger for these changes, but flipping defaults silently would surprise existing users; this is left as a follow-up.
+
+---
+
 ## [0.5.33.8] — 2026-05-08
 
 Version bump to retrigger deployment. v0.5.33.7's deploy did not complete cleanly; bumping `VERSION` in `js/version.js` and `sw.js` in lockstep produces a fresh service-worker `CACHE_NAME` (`tcisim-v0.5.33.8`) and forces every client to fetch the new bundle on next navigation. No code changes.

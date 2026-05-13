@@ -22,6 +22,9 @@ const DEFAULTS     = {
   alertSec: 10, alertSound: true,
   redoseSound: true,
   statusWarnMinutes: 2,
+  reactionDelaySec: 0, // 0–2 s; offsets countdowns/alerts earlier for TCI events
+                       // so the trainee's natural reaction lag lands at the
+                       // planned event time. Engine/history/chart are untouched.
   ceTolerance: 0.015,  // CET emulation post-extraction drift tolerance (0.005–0.030)
   ssSlopeTol:  0.0010, // Manual-mode plateau slope — per-minute relative (0.10 %/min)
   exitBandPct: 0.05,   // Plateau exit ±% band (0.05 = ±5%)
@@ -117,6 +120,11 @@ export function getSettings() {
       const showCeBand = (typeof p.showCeBand === 'boolean')
         ? p.showCeBand : DEFAULTS.showCeBand;
 
+      // Clamp to [0, 2] and snap to a 0.5 s grid.
+      const reactionDelaySec = (typeof p.reactionDelaySec === 'number' && isFinite(p.reactionDelaySec))
+        ? Math.round(Math.max(0, Math.min(2, p.reactionDelaySec)) * 2) / 2
+        : DEFAULTS.reactionDelaySec;
+
       return {
         prepSec:           (typeof p.prepSec           === 'number'  && p.prepSec  >= 0) ? p.prepSec           : DEFAULTS.prepSec,
         prepSound:         (typeof p.prepSound         === 'boolean')                    ? p.prepSound          : DEFAULTS.prepSound,
@@ -124,6 +132,7 @@ export function getSettings() {
         alertSound:        (typeof p.alertSound        === 'boolean')                    ? p.alertSound         : DEFAULTS.alertSound,
         redoseSound:       (typeof p.redoseSound       === 'boolean')                    ? p.redoseSound        : DEFAULTS.redoseSound,
         statusWarnMinutes: (typeof p.statusWarnMinutes === 'number'  && p.statusWarnMinutes >= 0) ? p.statusWarnMinutes : DEFAULTS.statusWarnMinutes,
+        reactionDelaySec,
         ceTolerance,
         ssSlopeTol,
         exitBandPct,
@@ -142,8 +151,31 @@ export function getSettings() {
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand })); } catch (e) {}
+}
+
+/**
+ * Compute the displayed "seconds to event" used by countdowns and alert
+ * thresholds. For TCI-scheduled events that require a human at the pump
+ * (`source: 'tci'`, type bolus/rate/pause), the value is biased earlier by
+ * `reactionDelaySec` so the trainee's natural reaction lag lands them at the
+ * planner's intended event time. The underlying event time is unchanged —
+ * history, chart markers, and engine firing remain ground truth.
+ *
+ * Manual and system events return raw seconds-to-event unchanged.
+ *
+ * @param {Object} evt — event object with .time (min), .type, .source
+ * @param {number} currentMin — current elapsed minutes
+ * @param {number} [reactionDelaySec=0] — offset in seconds
+ * @returns {number} displayed seconds-to-event (floored at 0 for TCI events)
+ */
+export function displayedSecToEvent(evt, currentMin, reactionDelaySec = 0) {
+  const rawSec = (evt.time - currentMin) * 60;
+  if (!evt || evt.source !== 'tci') return rawSec;
+  if (evt.type !== 'bolus' && evt.type !== 'rate' && evt.type !== 'pause') return rawSec;
+  if (!(reactionDelaySec > 0)) return rawSec;
+  return Math.max(0, rawSec - reactionDelaySec);
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -189,7 +221,7 @@ export function checkBelowThreshold(drugId, isBelow) {
 
 export function check(t) {
   if (!_model) return;
-  const { prepSec, prepSound, alertSec, alertSound } = getSettings();
+  const { prepSec, prepSound, alertSec, alertSound, reactionDelaySec } = getSettings();
   let anyPrep = false;
 
   for (const drugId of _getDrugIds()) {
@@ -209,7 +241,10 @@ export function check(t) {
         continue;
       }
 
-      const remSec = (nextEvt.time - t) * 60;
+      // Bias the displayed seconds-to-event earlier for TCI events so the
+      // visual pulse, popup, and chimes fire `reactionDelaySec` ahead of the
+      // event's real time. Manual events use raw seconds.
+      const remSec = displayedSecToEvent(nextEvt, t, reactionDelaySec);
       const inPrep = remSec <= prepSec;
 
       // ── Prep: visual pulse + optional one-shot chime ──────────────────────
@@ -233,17 +268,21 @@ export function check(t) {
       if (_activePopups.has(nextEvt.id)) {
         const cntEl = document.getElementById('wc-' + nextEvt.id);
         if (cntEl) {
-          const rem = nextEvt.time - t;
-          cntEl.textContent = rem > 0 ? 'in ' + _fmtCountdown(rem) : 'now';
+          const remSec2 = displayedSecToEvent(nextEvt, t, reactionDelaySec);
+          cntEl.textContent = remSec2 > 0 ? 'in ' + _fmtCountdown(remSec2 / 60) : 'now';
         }
       }
     } catch (e) {}
   }
 
-  // ── Zero-chime: fire once when any active popup's event time is reached ────
+  // ── Zero-chime: fire once when an active popup's displayed countdown reaches zero.
+  // For TCI events that's `reactionDelaySec` ahead of the real event time, so the
+  // ding aligns with the popup's "now".
   for (const [evtId, el] of _activePopups) {
     const evtTime = Number(el.dataset.evtTime);
-    if (t >= evtTime && !_zeroChimeFired.has(evtId)) {
+    const offsetMin = (el.dataset.evtSource === 'tci' && reactionDelaySec > 0)
+      ? reactionDelaySec / 60 : 0;
+    if (t >= evtTime - offsetMin && !_zeroChimeFired.has(evtId)) {
       _zeroChimeFired.add(evtId);
       const cntEl = document.getElementById('wc-' + evtId);
       if (cntEl) cntEl.textContent = 'now';
@@ -280,16 +319,17 @@ function _showPopup(drugId, evt, t) {
 
   const drugName = DRUG_NAMES[drugId] || (drugId.charAt(0).toUpperCase() + drugId.slice(1));
   const desc     = _fmtEventDesc(evt, drugId);
-  const remMin   = evt.time - t;
+  const remSec   = displayedSecToEvent(evt, t, getSettings().reactionDelaySec);
 
   const el = document.createElement('div');
   el.className = 'warn-popup';
   el.dataset.evtId = evt.id;
   el.dataset.evtTime = evt.time;
+  el.dataset.evtSource = evt.source || '';
   el.innerHTML =
     `<div class="warn-drug">${_esc(drugName)}</div>` +
     `<div class="warn-desc">${_esc(desc)}</div>` +
-    `<div class="warn-countdown" id="wc-${_esc(evt.id)}">${remMin > 0 ? 'in ' + _fmtCountdown(remMin) : 'now'}</div>` +
+    `<div class="warn-countdown" id="wc-${_esc(evt.id)}">${remSec > 0 ? 'in ' + _fmtCountdown(remSec / 60) : 'now'}</div>` +
     `<button class="warn-dismiss">Got it</button>`;
 
   el.querySelector('.warn-dismiss').addEventListener('click', () => dismiss(evt.id));

@@ -7,6 +7,7 @@
  */
 
 import { fromCanonical, formatValue, getAllowedUnits, getDefaultUnit, getPrefKey } from '../../util/units.js';
+import { getPumpSettings } from '../../util/constants.js';
 
 // Emergence Ce level (mcg/mL). Could become a user setting later.
 export const EMERGENCE_CE = 1.5;
@@ -105,21 +106,38 @@ export function fmtCeHTML(ceMcgMl, drugId) {
   return `${fixed.slice(0, -1)}<span class="ce-frac">${fixed.slice(-1)}</span>`;
 }
 
-/** Format rate for inline display next to status label. Returns '' if no rate. */
-export function fmtRateInline(ctx, drugId, rate) {
+/**
+ * Format rate for inline display next to status label. Returns '' if no rate.
+ *
+ * During pump-bolus delivery (`opts.bolusOverride === true`), the display
+ * forces mL/h with the pump's currently-configured concentration, mirroring
+ * what a real infusion pump shows on its screen. Removes the conversion
+ * mismatch trainees would otherwise see between the sim's preferred unit
+ * (e.g. mcg/kg/min) and the pump's mL/h readout.
+ */
+export function fmtRateInline(ctx, drugId, rate, opts = {}) {
   if (!rate || rate <= 0) return '';
   try {
     const weight = ctx.model.getPatient().weight;
-    const prefKey = getPrefKey(drugId, 'rate');
-    let displayUnit = getDefaultUnit(drugId, 'rate');
-    if (prefKey) {
-      try {
-        const saved = localStorage.getItem(prefKey);
-        const allowed = getAllowedUnits(drugId, 'rate');
-        if (saved && allowed.includes(saved)) displayUnit = saved;
-      } catch (e) {}
+    let displayUnit;
+    let concentration;
+    if (opts.bolusOverride) {
+      displayUnit = 'mL/h';
+      try { concentration = getPumpSettings(drugId).concentration; } catch (e) {}
+    } else {
+      const prefKey = getPrefKey(drugId, 'rate');
+      displayUnit = getDefaultUnit(drugId, 'rate');
+      if (prefKey) {
+        try {
+          const saved = localStorage.getItem(prefKey);
+          const allowed = getAllowedUnits(drugId, 'rate');
+          if (saved && allowed.includes(saved)) displayUnit = saved;
+        } catch (e) {}
+      }
     }
-    const displayVal = fromCanonical(rate, displayUnit, drugId, 'rate', { weightKg: weight });
+    const conv = { weightKg: weight };
+    if (concentration) conv.concentration = concentration;
+    const displayVal = fromCanonical(rate, displayUnit, drugId, 'rate', conv);
     return `${formatValue(displayVal, displayUnit)} ${displayUnit}`;
   } catch (e) {
     return `${rate.toFixed(2)} mg/min`;

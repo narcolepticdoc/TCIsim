@@ -8,6 +8,7 @@
 
 import { fromCanonical, formatValue, getAllowedUnits, getDefaultUnit, getPrefKey } from '../../util/units.js';
 import { fmtCountdown } from './formatters.js';
+import { getSettings, displayedSecToEvent } from '../settings.js';
 
 /**
  * Format a short description for the next event shown in the step bar.
@@ -92,10 +93,18 @@ export function updateStepBar(ctx, drugId, t) {
       if (events[i].time <= t + 0.0001) { prevTime = events[i].time; break; }
     }
 
-    const span      = nextEvt.time - prevTime;
+    // Reaction-delay bias: for TCI-scheduled events, present the countdown and
+    // bar fill as if the event were `reactionDelaySec` earlier. Underlying
+    // event time is unchanged.
+    const reactionDelaySec = getSettings().reactionDelaySec || 0;
+    const offsetMin = (nextEvt.source === 'tci' && reactionDelaySec > 0)
+      ? reactionDelaySec / 60 : 0;
+    const displayedTime = nextEvt.time - offsetMin;
+
+    const span      = displayedTime - prevTime;
     const elapsed   = t - prevTime;
-    const pct       = span > 0 ? Math.min(100, Math.max(0, (elapsed / span) * 100)) : 0;
-    const remaining = nextEvt.time - t;
+    const pct       = span > 0 ? Math.min(100, Math.max(0, (elapsed / span) * 100)) : 100;
+    const remaining = displayedSecToEvent(nextEvt, t, reactionDelaySec) / 60;
 
     barEl.style.width = pct + '%';
     if (remaining > 0) {
