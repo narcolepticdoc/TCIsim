@@ -15,9 +15,8 @@
 
 Two simulator-realism additions prompted by a unit-conversion confusion (a user comparing a mcg/kg/min value against the pump's mL/h reading and reading it as an out-of-range bolus rate):
 
-**Bolus delivery shown in mL/h.** Pump-delivered boluses in the history panel now read `<dose> @ <bolusRateMlH> mL/h` (e.g. `100 mg @ 750 mL/h`), and the drug card's live rate readout switches from the user's preferred unit (mcg/kg/min etc.) to mL/h *while a bolus is in progress*, mirroring what a real infusion pump displays during delivery. The pump's currently-configured concentration is threaded through the conversion so the displayed mL/h matches the actual pump. `IV Push` rows are unchanged (push is not metered). No effect on engine, planner, history times, or saved cases — display-only.
+**Bolus delivery shown in mL/h on the drug card.** The drug card's live rate readout switches from the user's preferred unit (mcg/kg/min etc.) to mL/h *while a bolus is in progress*, mirroring what a real infusion pump displays during delivery. The pump's currently-configured concentration is threaded through the conversion so the displayed mL/h matches the actual pump. History rows are unchanged — the dose remains the only value shown there. No effect on engine, planner, history times, or saved cases — display-only.
 
-- `js/ui/history.js:319-336` — bolus row augmented with `@ <mL/h>` for pump deliveries.
 - `js/ui/drug-panel/formatters.js:108-141` — `fmtRateInline` accepts `{ bolusOverride: true }` to force mL/h with pump concentration.
 - `js/ui/drug-panel/index.js:153-164` — drug card passes `bolusOverride` while `isInBolusPhase` or rate > 50 mg/min.
 

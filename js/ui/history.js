@@ -319,21 +319,9 @@ export function render(drugId) {
     let desc = '';
     if (evt.type === 'bolus') {
       const dose = fmtBolusDose(evt.value, evt.drug);
-      const isPush = evt.deliveryMode === 'push';
-      const modeLabel = isPush ? 'IV Push' : 'Pump Bolus';
-      // For pump-delivered boluses, append the pump's running mL/h rate —
-      // that's what shows on the real pump's screen during delivery.
-      let valueStr = dose;
-      if (!isPush) {
-        try {
-          const ps = getPumpSettings(evt.drug);
-          if (ps && ps.bolusRateMlH) {
-            valueStr = `${dose} @ ${Math.round(ps.bolusRateMlH)} mL/h`;
-          }
-        } catch (e) { /* fall back to dose only */ }
-      }
+      const modeLabel = evt.deliveryMode === 'push' ? 'IV Push' : 'Pump Bolus';
       desc = `<span class="h-type">${badge}${modeLabel}</span>` +
-             `<span class="h-value"><strong>${valueStr}</strong></span>`;
+             `<span class="h-value"><strong>${dose}</strong></span>`;
     } else if (evt.type === 'rate') {
       if (evt.value === 0 && evt.source === 'tci') {
         // TCI-scheduled pause (pump holds until next TCI step)
