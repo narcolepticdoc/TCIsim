@@ -8,11 +8,10 @@
 
 User report: *"I think there might be an issue with the bolus rate — when I run propofol it shows the rate way over the pump's max."* On investigation the rate was correct; the user was looking at the drug card's `mcg/kg/min` readout during a bolus and reading it as `mL/h`. The conversion gap between the sim's display units and what the real pump shows is a recurring source of confusion. Two changes follow from that — a display alignment and a presentation-layer reaction-time setting.
 
-**Part A — Bolus display in mL/h.** During a pump-delivered bolus, the drug card's "rate" line now forces `mL/h` (mirroring the actual pump screen) regardless of the user's preferred rate unit. The history panel's pump-bolus rows are augmented from `Pump Bolus | 100 mg` to `Pump Bolus | 100 mg @ 750 mL/h`. The mL/h figure is converted via the user's currently-configured pump concentration (`getPumpSettings(drug).concentration`), so it agrees with the real pump rather than the drug's `DRUG_DEFS` default. `IV Push` events are unchanged.
+**Part A — Bolus display in mL/h on the drug card.** During a pump-delivered bolus, the drug card's "rate" line now forces `mL/h` (mirroring the actual pump screen) regardless of the user's preferred rate unit. The mL/h figure is converted via the user's currently-configured pump concentration (`getPumpSettings(drug).concentration`), so it agrees with the real pump rather than the drug's `DRUG_DEFS` default. History rows show the bolus dose only — keeping them clinically focused on the prescribed amount.
 
 - `js/ui/drug-panel/formatters.js` — `fmtRateInline` accepts `opts.bolusOverride`; when true, forces `mL/h` and threads the live pump concentration through `fromCanonical`.
 - `js/ui/drug-panel/index.js` — drug card detects "bolus in progress" via the existing `isInBolusPhase(ctx, dId, t) || rate > 50` heuristic and passes `bolusOverride`.
-- `js/ui/history.js` — bolus-row builder appends `@ <round(bolusRateMlH)> mL/h` for pump deliveries.
 
 Fentanyl and ketamine's *default* rate-display units (`mcg/kg/min`, `mg/kg/h`) are unchanged. That's the unit-mismatch root cause but flipping defaults silently would surprise existing users; leaving it as a follow-up.
 
