@@ -4,6 +4,20 @@
 
 ## Session History
 
+### Fix missed keystrokes on rapid keypad entry (v0.5.34.1) — Interim
+
+User report: *"Have noticed I am getting missed keystrokes on keypad entry. With rapid entry, the key is seen as pressed (highlights when touched) but not registered."* The visual `:active` highlight firing while the digit fails to register is the diagnostic tell — `:active` is driven by the real pointer event, but the input handler was wired to `click`, a synthesized event that mobile browsers (iOS Safari especially) are free to coalesce or drop under rapid successive taps. `touch-action: manipulation` removes the 300 ms double-tap delay but does not make synthesized click delivery reliable for fast keypad input.
+
+Fix: rebind the three modal keypads to `pointerdown` and call `preventDefault()` to suppress the follow-on synthesized click that would otherwise double-register the press.
+
+- `js/ui/keypad.js` — main keypad (`#modal-keypad .key`).
+- `js/ui/patient-modal.js` — patient demographics (`.pm-key`). The `[disabled]` state of `Next →` already uses `pointer-events:none`, so disabled buttons remain inert under `pointerdown`.
+- `js/ui/event-editor.js` — event editor (`#modal-evt-editor .ee-key`).
+
+Non-keypad buttons (Confirm/Cancel, Next, sex/unit toggles, pause-mode tabs, etc.) keep `click`. They're not tapped at high rates and `click` gives correct slide-off-to-cancel semantics for them. The `:active` CSS keeps working because it has always been driven by the underlying pointer event, not by `click`.
+
+---
+
 ### Bolus shown in mL/h + adjustable reaction delay (v0.5.34.0) — Interim
 
 User report: *"I think there might be an issue with the bolus rate — when I run propofol it shows the rate way over the pump's max."* On investigation the rate was correct; the user was looking at the drug card's `mcg/kg/min` readout during a bolus and reading it as `mL/h`. The conversion gap between the sim's display units and what the real pump shows is a recurring source of confusion. Two changes follow from that — a display alignment and a presentation-layer reaction-time setting.

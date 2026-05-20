@@ -67,11 +67,13 @@ export function init(opts = {}) {
   getIntermittentThreshold = opts.getIntermittentThreshold || (() => 0);
   isPumpEnabled = opts.isPumpEnabled || (() => true);
 
-  // Wire keypad buttons (numeric keys)
+  // Wire keypad buttons (numeric keys).
+  // pointerdown (not click) so rapid taps register reliably — synthesized
+  // click events can be coalesced or dropped under fast touch input.
   document.querySelectorAll('#modal-keypad .key').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const k = btn.textContent;
-      handleKey(k);
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      handleKey(btn.textContent);
     });
   });
 
