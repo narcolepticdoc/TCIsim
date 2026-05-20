@@ -139,8 +139,13 @@ function _wireSexToggle() {
 }
 
 function _wireKeypad() {
+  // pointerdown (not click) so rapid taps register reliably — synthesized
+  // click events can be coalesced or dropped under fast touch input.
   document.querySelectorAll('.pm-key').forEach(btn => {
-    btn.addEventListener('click', () => _handleKey(btn.dataset.key));
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      _handleKey(btn.dataset.key);
+    });
   });
 }
 

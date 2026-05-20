@@ -11,6 +11,18 @@
 
 ---
 
+## [0.5.34.1] — 2026-05-20
+
+Fix missed keystrokes on rapid keypad entry. All three modal keypads (main numeric keypad, patient demographics, event editor) registered input via the `click` event, which on mobile is a synthesized event that the browser may coalesce or drop under fast successive taps. The visual `:active` highlight kept firing because it's driven by the underlying pointer event, so the user saw the key press but the digit never reached the buffer. Switched the input listeners to `pointerdown` with `preventDefault()` so taps register immediately and the follow-on synthesized click never double-registers.
+
+- `js/ui/keypad.js` — `#modal-keypad .key` listener: `click` → `pointerdown`.
+- `js/ui/patient-modal.js` — `.pm-key` listener: `click` → `pointerdown`.
+- `js/ui/event-editor.js` — `#modal-evt-editor .ee-key` listener: `click` → `pointerdown`.
+
+Non-keypad buttons (Confirm/Cancel, Next, unit toggles) keep their `click` handlers — they aren't tapped at high rates and `click` gives them correct slide-off cancellation.
+
+---
+
 ## [0.5.34.0] — 2026-05-13
 
 Two simulator-realism additions prompted by a unit-conversion confusion (a user comparing a mcg/kg/min value against the pump's mL/h reading and reading it as an out-of-range bolus rate):

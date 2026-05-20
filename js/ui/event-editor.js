@@ -62,9 +62,13 @@ export function init(opts) {
     });
   });
 
-  // Keypad keys
+  // Keypad keys — pointerdown (not click) so rapid taps register reliably;
+  // synthesized click events can be coalesced or dropped under fast touch input.
   document.querySelectorAll('#modal-evt-editor .ee-key').forEach(btn => {
-    btn.addEventListener('click', () => handleKey(btn.textContent));
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      handleKey(btn.textContent);
+    });
   });
 
   // Pause mode toggle
