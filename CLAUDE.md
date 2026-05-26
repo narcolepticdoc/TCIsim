@@ -1,6 +1,6 @@
 # TCI Sim — Claude Code Reference
 
-Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.24.23** (see `js/version.js`).
+Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.34.1** (see `js/version.js`).
 
 ## Quick Start
 
@@ -12,7 +12,7 @@ python3 -m http.server 8080
 # or
 npx serve .
 
-# Run the test suite (485 tests, 13 suites)
+# Run the test suite (512 tests, 15 suites)
 node tests/run-tests.js
 ```
 
@@ -169,7 +169,7 @@ Other persisted keys (separate from the warnings blob):
 node tests/run-tests.js
 ```
 
-Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 485 tests across 13 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
+Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 512 tests across 15 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
 
 ## Versioning Scheme
 

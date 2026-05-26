@@ -119,7 +119,7 @@ tci-sim/
 │       ├── math.js               # Matrix-exp, eigenvalue utilities
 │       └── units.js              # Unit conversion helpers
 ├── tests/
-│   ├── run-tests.js              # Test runner (485 tests, 13 suites)
+│   ├── run-tests.js              # Test runner (512 tests, 15 suites)
 │   └── test-*.js                 # Test suites
 └── _legacy/                      # Archived legacy code
 ```
