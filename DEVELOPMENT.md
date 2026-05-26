@@ -4,6 +4,16 @@
 
 ## Session History
 
+### Fix TCI first-step countdown ignoring reaction delay (v0.5.34.2) — Interim
+
+User report: the reaction-delay feature *"seems to be inverted — telling the user to initiate the event one second late instead of one second early."* Narrowed down by the user's follow-up: lowering the target raises a "pause the pump" countdown alert, and the drug-panel countdown in the background reaches zero ~1 s *before* that alert's countdown finishes.
+
+Root cause: the reaction-delay offset (v0.5.34.0) was wired into `js/ui/settings.js` (prep/alert/popup/zero-chime) and `js/ui/drug-panel/step-bar.js`, but **not** into `js/app/tci-modal.js`'s first-step countdown. That modal — which appears whenever a TCI plan is committed, including a target-down replan whose first step is "Hold infusion (pump off)" — counted down the raw `delaySeconds` and reached "Now!" at the real event time `T`. The step bar, correctly offset, reached zero at `T − reactionDelaySec`. So the two countdowns ran `reactionDelaySec` apart, and the prominent modal fired *late* relative to every other cue. A trainee following the modal would then act `reactionDelaySec` after `T` — exactly the "one second late" inversion reported.
+
+Fix: `showFirstStep()` now reads `getSettings().reactionDelaySec` and starts the countdown at `Math.max(0, delaySeconds − reactionDelaySec)`, so the modal reaches "Now!" at `T − reactionDelaySec` in lockstep with the step bar and alert popup. The planned event time in the engine/event list is unchanged. Default reaction delay is 0, so existing behavior is unaffected until a user opts in. No import cycle: `settings.js` does not import `tci-modal.js`.
+
+---
+
 ### Fix missed keystrokes on rapid keypad entry (v0.5.34.1) — Interim
 
 User report: *"Have noticed I am getting missed keystrokes on keypad entry. With rapid entry, the key is seen as pressed (highlights when touched) but not registered."* The visual `:active` highlight firing while the digit fails to register is the diagnostic tell — `:active` is driven by the real pointer event, but the input handler was wired to `click`, a synthesized event that mobile browsers (iOS Safari especially) are free to coalesce or drop under rapid successive taps. `touch-action: manipulation` removes the 300 ms double-tap delay but does not make synthesized click delivery reliable for fast keypad input.

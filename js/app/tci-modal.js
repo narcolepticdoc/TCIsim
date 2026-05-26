@@ -9,6 +9,7 @@
 import { getAllowedUnits, getDefaultUnit, getPrefKey, fromCanonical, formatValue, getQuantizeConfig } from '../util/units.js';
 import { getPumpSettings } from '../util/constants.js';
 import { playAlert } from '../ui/alert-sound.js';
+import { getSettings } from '../ui/settings.js';
 
 const $ = id => document.getElementById(id);
 
@@ -121,7 +122,12 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal })
     // Clear any existing countdown
     if (tciCountdownInterval) clearInterval(tciCountdownInterval);
 
-    let remainingMs = delaySeconds * 1000;
+    // Reaction-delay bias: the first step is a TCI user action, so reach "Now!"
+    // reactionDelaySec ahead of the planned event time — matching the drug-panel
+    // step bar and the alert popup. Without this the modal counted to the real
+    // event time, finishing reactionDelaySec later than every other cue.
+    const reactionDelaySec = getSettings().reactionDelaySec || 0;
+    let remainingMs = Math.max(0, delaySeconds - reactionDelaySec) * 1000;
     const intervalMs = 100;
 
     let _zeroChimeFired = false;

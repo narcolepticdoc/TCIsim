@@ -11,6 +11,14 @@
 
 ---
 
+## [0.5.34.2] — 2026-05-26
+
+Fix the TCI first-step countdown ignoring the reaction-delay offset. When a TCI plan is committed (including a target change that pauses the pump), the first-step modal counted down the raw plan delay and reached "Now!" at the real event time, while the drug-panel step bar and the alert popup reach zero `reactionDelaySec` *earlier*. With a non-zero reaction delay set, the prominent modal therefore fired one reaction-time later than every other cue — following it put the user's action late by exactly that lag, the opposite of the feature's intent. The modal now subtracts `reactionDelaySec` from its countdown so all three surfaces reach zero together, `reactionDelaySec` ahead of the planned event.
+
+- `js/app/tci-modal.js` — `showFirstStep()` reads `getSettings().reactionDelaySec` and starts the countdown at `max(0, delaySeconds − reactionDelaySec)`.
+
+---
+
 ## [0.5.34.1] — 2026-05-20
 
 Fix missed keystrokes on rapid keypad entry. All three modal keypads (main numeric keypad, patient demographics, event editor) registered input via the `click` event, which on mobile is a synthesized event that the browser may coalesce or drop under fast successive taps. The visual `:active` highlight kept firing because it's driven by the underlying pointer event, so the user saw the key press but the digit never reached the buffer. Switched the input listeners to `pointerdown` with `preventDefault()` so taps register immediately and the follow-on synthesized click never double-registers.
