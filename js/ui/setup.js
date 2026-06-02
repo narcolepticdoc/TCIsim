@@ -719,6 +719,34 @@ function updateAllPumpDerived() {
 }
 
 /**
+ * Current global max pump rate (mL/h) — the single bolus/infusion delivery rate
+ * shared across all pumped drugs. Reads the effective propofol pump setting.
+ */
+export function getGlobalMaxPumpRate() {
+  return getPumpSettings('propofol').bolusRateMlH;
+}
+
+/**
+ * Set the global max pump rate (mL/h) for every drug, persist it, and keep the
+ * setup-screen control + derived displays in sync. Safe to call mid-case — it
+ * updates runtime pump settings (and the derived mg/min max), so subsequent TCI
+ * plans and bolus deliveries use the new rate; already-delivered events are
+ * unaffected.
+ */
+export function setGlobalMaxPumpRate(mlh) {
+  const rate = parseFloat(mlh);
+  if (!isFinite(rate) || rate <= 0) return;
+  for (const drugId of SETUP_DRUGS) {
+    setPumpSettings(drugId, { bolusRateMlH: rate });
+  }
+  try { localStorage.setItem('tci-pump-max-rate', String(rate)); } catch (e) {}
+  // Keep the setup-screen select in lockstep so a later Confirm doesn't revert it.
+  const setupEl = $('input-max-pump-rate');
+  if (setupEl && setupEl.value !== String(rate)) setupEl.value = String(rate);
+  updateAllPumpDerived();
+}
+
+/**
  * Get the currently selected TCI planning mode.
  * @returns {string} 'stepped' | 'cet' | 'cet-conservative'
  */

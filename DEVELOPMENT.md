@@ -4,6 +4,14 @@
 
 ## Session History
 
+### Expose max pump rate in settings (v0.5.36.0) — Interim
+
+User request: make the global max pump rate changeable mid-case. It was only on the pre-case setup screen (`#input-max-pump-rate`, a 750/1000/1200 mL/h select that sets `bolusRateMlH` for all drugs via `applyPumpSettings` on Confirm), which is unreachable once a case is running — and there's no settings access from the setup screen either.
+
+Approach: add a mirror control to the Settings → Simulation pane (`#set-max-pump-rate`). To avoid duplicating the "apply global rate to every drug + persist + sync setup control + refresh derived displays" logic, factored it into two exported helpers in `setup.js`: `getGlobalMaxPumpRate()` (reads `getPumpSettings('propofol').bolusRateMlH`) and `setGlobalMaxPumpRate(mlh)` (loops `SETUP_DRUGS` calling the partial-update `setPumpSettings`, persists `tci-pump-max-rate`, syncs `#input-max-pump-rate`, calls `updateAllPumpDerived`). `settings-ui.js` imports them, initializes the select, wires `change`, and re-syncs the select on modal open (so a restored case shows the right rate). No new import cycle — `setup.js` does not import `settings-ui.js`.
+
+Mid-case semantics: TCI planners and bolus-delivery math read `getPumpSettings` live, so the change applies to subsequent plans/boluses; already-delivered events are untouched, and no automatic replan is triggered (that would be surprising). The derived mg/min `maxRate` is re-derived inside `setPumpSettings`.
+
 ### Cloud patient pull follow-ups (v0.5.35.1) — Interim
 
 Two fixes on top of the 0.5.35.0 feature, both from real testing of the open PR.

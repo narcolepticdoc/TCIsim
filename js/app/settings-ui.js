@@ -8,6 +8,7 @@
 
 import { syncPortraitLayout } from './portrait-layout.js';
 import { getStoredCode, setStoredCode, normalizeCode, isValidCode } from '../sync/patient-sync.js';
+import { getGlobalMaxPumpRate, setGlobalMaxPumpRate } from '../ui/setup.js';
 
 const $ = id => document.getElementById(id);
 
@@ -26,7 +27,7 @@ const ssSlopeToSlider = (tol) => {
 
 const INFO_TEXTS = {
   notifications: 'Configure how the simulator alerts you to upcoming pump events. Prep alerts provide early visual warning with an amber pulse on drug cards. Alert popups appear closer to the event with optional sound cues. The status indicator colors the drug card edge based on event proximity.',
-  simulation: 'Fine-tune how the simulator generates TCI plans. Ce drift tolerance sets how far the effect-site concentration is allowed to drift from target before the planner emits a new pump rate step \u2014 lower values give tighter tracking at the cost of more frequent rate changes; higher values produce simpler plans with more visible Ce variation. The default (1.5%) is already tighter than a live clinician could hold manually. Plateau slope tolerance determines how flat the concentration curve must be to qualify as steady-state.',
+  simulation: 'Fine-tune how the simulator generates TCI plans. Max pump rate is the global delivery rate (mL/h) shared by every pumped drug; it caps the infusion rate and sets how fast boluses are delivered, and can be changed mid-case (it affects subsequent plans and boluses, not already-delivered events). Ce drift tolerance sets how far the effect-site concentration is allowed to drift from target before the planner emits a new pump rate step \u2014 lower values give tighter tracking at the cost of more frequent rate changes; higher values produce simpler plans with more visible Ce variation. The default (1.5%) is already tighter than a live clinician could hold manually. Plateau slope tolerance determines how flat the concentration curve must be to qualify as steady-state.',
   appearance: 'Adjust the visual presentation of the chart and readouts. Reducing Cp line opacity pushes the plasma concentration curve into the background so the effect-site (Ce) curve stands out more clearly. The Ce drift band highlights the \u00b1drift tolerance around each TCI target \u2014 Ce may briefly touch this boundary at planned step transitions by design. Text size enlarges the drug-panel and history informational text; it is gated to screens that have the space for it. Theme switches the entire app between dark and light color schemes.',
   sync: 'Pair this simulator with a separate scratchpad app to pull patient demographics from the cloud. Enter the 6-character code that the scratchpad app displays; both apps then share a private scratch area. On the patient setup screen, tap \u201cPull patient from cloud\u201d to fetch the latest demographics (age, sex, height, weight) \u2014 the timestamp confirms how recent they are. De-identified / training use only; do not transfer protected health information.',
 };
@@ -250,6 +251,18 @@ export function initSettingsUI({ getSettings, setSettings }) {
     });
   }
 
+  // Max pump rate (mL/h) — global delivery rate, changeable mid-case. Not part
+  // of the settings blob; it drives runtime pump settings via setup.js (which
+  // persists it under tci-pump-max-rate and syncs the setup-screen control).
+  const maxPumpRateEl = $('set-max-pump-rate');
+  const syncMaxPumpRateSelect = () => {
+    if (maxPumpRateEl) maxPumpRateEl.value = String(getGlobalMaxPumpRate());
+  };
+  syncMaxPumpRateSelect();
+  if (maxPumpRateEl) {
+    maxPumpRateEl.addEventListener('change', () => setGlobalMaxPumpRate(maxPumpRateEl.value));
+  }
+
   // Tab switching + info panel
   const infoText = $('settings-info-text');
   document.querySelectorAll('.settings-tab').forEach(tab => {
@@ -265,6 +278,9 @@ export function initSettingsUI({ getSettings, setSettings }) {
 
   const btnSettingsOpen  = $('btn-settings');
   const btnSettingsClose = $('btn-settings-close');
-  if (btnSettingsOpen)  btnSettingsOpen.addEventListener('click',  () => $('modal-settings').classList.add('open'));
+  if (btnSettingsOpen)  btnSettingsOpen.addEventListener('click',  () => {
+    syncMaxPumpRateSelect(); // reflect current pump rate (may have changed via case restore)
+    $('modal-settings').classList.add('open');
+  });
   if (btnSettingsClose) btnSettingsClose.addEventListener('click', () => $('modal-settings').classList.remove('open'));
 }
