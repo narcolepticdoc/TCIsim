@@ -4,6 +4,15 @@
 
 ## Session History
 
+### Cloud patient pull follow-ups (v0.5.35.1) — Interim
+
+Two fixes on top of the 0.5.35.0 feature, both from real testing of the open PR.
+
+- **Pairing unreachable from the setup screen.** User report: the Pull button told them to "pair in Settings → Sync" but the settings gear only exists on the sim-screen top bar — there is no way to open settings from the setup screen, where pairing actually needs to happen before a case starts. Fix: the Pull button is now state-aware. With no stored pairing code it relabels to "⚙ Pair to enable cloud pull" and opens the settings modal directly on the Sync tab (the modal is a top-level overlay, so it opens fine over the setup screen), focusing `#set-sync-code`; once a valid code is entered it relabels to "↓ Pull patient from cloud" live via the `tci:sync-code-change` event. The button stays enabled in both states rather than being a dead disabled control. `js/app.js`.
+- **Vercel build failure.** `vercel.json` used `functions.runtime: "nodejs20.x"`, which is only valid for *community* runtimes (they need a `name@version` identifier) and failed the build with "Function Runtimes must have a valid version". The built-in Node runtime is auto-detected for `api/*.js`; pin its version via `engines.node` (`20.x`) in `package.json` instead and drop `vercel.json` entirely. Also added `.gitignore` (`node_modules`, `.env*`, `.vercel/`) and `DEPLOY.md` documenting the Upstash env-var setup.
+
+---
+
 ### Cloud patient pull (v0.5.35.0) — Interim
 
 User has a separate "scratchpad" PWA (on another device) where they enter patient demographics in imperial and convert to metric; they wanted those values to flow into TCIsim without re-typing. Constraints established with the user: cross-device (both apps on Vercel but different phones), iOS, de-identified/training data only. That rules out same-device transports (URL handoff, shared `localStorage`, `BroadcastChannel`) and Web Share Target (poor iOS support), leaving a network "scratch area."

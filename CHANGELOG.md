@@ -11,6 +11,15 @@
 
 ---
 
+## [0.5.35.1] — 2026-06-02
+
+Follow-up fixes for the cloud patient pull (0.5.35.0).
+
+- **Pairing reachable from the setup screen.** The settings gear lives only on the sim-screen top bar, so when unpaired the "Pull patient from cloud" button pointed users to Settings → Sync with no way to get there before a case starts. The button is now state-aware: with no pairing code it reads "⚙ Pair to enable cloud pull" and opens the settings modal directly on the Sync tab (focusing the code field); once paired it reverts to "↓ Pull patient from cloud". It stays enabled in both states instead of being a dead disabled control. `js/app.js`.
+- **Fix Vercel build failure.** Removed `vercel.json`, whose `functions.runtime: "nodejs20.x"` is only valid for community runtimes (which require `name@version`) and failed the build with "Function Runtimes must have a valid version". The built-in Node runtime is auto-detected for `api/*.js`; its version is now pinned via `engines.node` (`20.x`) in `package.json`. Added `.gitignore` (`node_modules`, `.env*`, `.vercel/`) and a `DEPLOY.md` walkthrough for the Upstash env-var setup.
+
+---
+
 ## [0.5.35.0] — 2026-06-02
 
 Add cloud patient pull, so demographics entered in a separate scratchpad app (on another device) can be pulled into the simulator without re-typing. A small Vercel serverless endpoint backed by Upstash Redis acts as a short-lived "scratch area": the scratchpad continuously pushes age / sex / height / weight (canonical metric) keyed by a shared 6-character pairing code, and the simulator pulls the latest entry on demand. De-identified / training use only — only those four fields transfer (opioid co-administration is never synced), payloads are validated and size-capped server-side, and entries expire after 30 minutes.
@@ -19,7 +28,7 @@ Add cloud patient pull, so demographics entered in a separate scratchpad app (on
 - `js/sync/patient-sync.js` — new front-end module. Pure, tested helpers (`normalizeCode`, `isValidCode`, `normalizeIncomingPatient`, `canonicalToDisplay`, `formatRelativeTime`, code persistence) plus `fetchPatient()` and `applyPatientToInputs()` (injects via the existing `_writeHidden` setup pipeline, converting to the current display units).
 - `js/ui/patient-modal.js` — export `_writeHidden` for reuse.
 - `index.html` / `js/app/settings-ui.js` — new **Sync** settings tab with the pairing-code field (persisted to `tci-sync-code`); **Pull patient from cloud** button + freshness status under the patient summary on the setup screen.
-- `js/app.js` — wire the Pull button (fetch → inject → "updated N min ago"; amber when stale or on error). When unpaired the button reads "Pair to enable cloud pull" and opens Settings → Sync directly, so pairing is reachable from the setup screen (the settings gear is sim-screen only).
+- `js/app.js` — wire the Pull button (fetch → inject → "updated N min ago"; amber when stale or on error; disabled with no code).
 - `sw.js` — VERSION bump, precache `js/sync/patient-sync.js`, and bypass `/api/` in the fetch handler so sync responses are never cached.
 - `package.json` — new, for the serverless function only: declares `@upstash/redis` and pins the Node runtime via `engines.node` (`20.x`); Vercel auto-detects `api/*.js` (no `vercel.json` needed). The PWA stays build-step-free; the CommonJS test runner is preserved by intentionally omitting `"type": "module"`.
 - `SCRATCHPAD-SYNC-SPEC.md` — handoff spec for the scratchpad app: pairing-code format, the POST contract/JSON schema, CORS/TTL notes, and a drop-in debounced auto-push snippet.
