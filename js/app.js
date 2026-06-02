@@ -347,18 +347,32 @@ function boot() {
     pullStatus.classList.remove('is-error', 'is-stale', 'is-ok');
     if (cls) pullStatus.classList.add(cls);
   };
+  // Open the settings modal directly on the Sync tab — the settings gear lives
+  // on the sim screen, so this is the only way to reach pairing from setup.
+  const openSettingsToSync = () => {
+    const modal = $('modal-settings');
+    if (modal) modal.classList.add('open');
+    const tab = document.querySelector('.settings-tab[data-tab="sync"]');
+    if (tab) tab.click();
+    const codeInput = $('set-sync-code');
+    if (codeInput) codeInput.focus();
+  };
   const refreshPullButton = () => {
     if (!btnPullPatient) return;
     const hasCode = !!patientSync.getStoredCode();
-    btnPullPatient.disabled = !hasCode;
-    // Muted (non-error) hint when unpaired; clear any stale status once paired.
-    if (!hasCode) setPullStatus('Pair in Settings → Sync to enable');
-    else setPullStatus('');
+    // Keep the button enabled either way: when unpaired it opens Settings → Sync
+    // so pairing is reachable from the setup screen (the gear is sim-screen only).
+    btnPullPatient.textContent = hasCode
+      ? '↓ Pull patient from cloud'
+      : '⚙ Pair to enable cloud pull';
+    btnPullPatient.classList.toggle('is-unpaired', !hasCode);
+    // The button label communicates the unpaired state, so no separate hint.
+    if (!hasCode) setPullStatus('');
   };
   if (btnPullPatient) {
     btnPullPatient.addEventListener('click', async () => {
       const code = patientSync.getStoredCode();
-      if (!code) { setPullStatus('Pair in Settings → Sync to enable'); return; }
+      if (!code) { openSettingsToSync(); return; }
       btnPullPatient.disabled = true;
       setPullStatus('Pulling…', 'is-ok');
       const res = await patientSync.fetchPatient(code);
