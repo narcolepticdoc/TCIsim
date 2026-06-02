@@ -1,6 +1,6 @@
 # TCI Sim — Claude Code Reference
 
-Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.35.3** (see `js/version.js`).
+Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.36.0** (see `js/version.js`).
 
 ## Quick Start
 
@@ -117,6 +117,8 @@ isPumpEnabled('fentanyl')     // false by default (opt-in via setup screen)
 ```
 
 `maxRate` is auto-derived as `bolusRateMlH * concentration / 60` mg/min. Persisted to localStorage. Always read pump settings from `getPumpSettings` — never hardcode 750 or 10.
+
+The global max pump rate (`bolusRateMlH`, shared across drugs) is set on the setup screen (`#input-max-pump-rate`) and **also in Settings → Simulation (`#set-max-pump-rate`) so it can be changed mid-case**. Both route through `setup.js` `setGlobalMaxPumpRate(mlh)` / `getGlobalMaxPumpRate()`, which apply to all `SETUP_DRUGS`, persist `tci-pump-max-rate`, and keep the two controls in lockstep. Changes affect subsequent plans/boluses only (no automatic replan).
 
 `pumpEnabled` controls per-drug delivery method. Propofol is always pump-mandatory (`PUMP_MANDATORY` set). Fentanyl and ketamine default to manual (bolus only) — when pump is OFF, `updateModeUI()` in `mode.js` hides Set Rate / Stop Pump buttons and the UI locks to intermittent bolus mode with IV Push delivery. The toggle lives on the setup screen per-drug tab and is persisted to `tci-pump-enabled-{drugId}` in localStorage and in case save/restore.
 

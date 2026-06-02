@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.36.0] — 2026-06-02
+
+Expose the global **max pump rate** in the Settings → Simulation tab so it can be changed mid-case (previously only settable on the pre-case setup screen, which is unreachable once a case is running). The control mirrors the setup-screen options (750 / 1000 / 1200 mL/h); changing it updates the runtime pump settings for every drug and the derived mg/min cap, so subsequent TCI plans and bolus deliveries use the new rate while already-delivered events are unaffected. The setup-screen control and the `tci-pump-max-rate` localStorage key stay in lockstep, and the settings select re-reads the current value each time the modal opens (so a restored case shows the right rate).
+
+- `js/ui/setup.js` — new exported `getGlobalMaxPumpRate()` / `setGlobalMaxPumpRate(mlh)` (applies to all `SETUP_DRUGS`, persists, syncs the setup control + derived displays).
+- `js/app/settings-ui.js` — wire the new `#set-max-pump-rate` select; refresh on modal open; expanded Simulation info text.
+- `index.html` — Max pump rate row at the top of the Simulation settings pane.
+
+---
+
 ## [0.5.35.3] — 2026-06-02
 
 Accept both Upstash credential namings in the sync backend. `api/sync.js` now reads `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` **or** the Vercel KV / Marketplace integration names `KV_REST_API_URL` / `KV_REST_API_TOKEN`. Which pair a deployment gets depends on how the store was provisioned, and a name mismatch was producing a spurious "kv-not-configured" 500 even with a connected store.
