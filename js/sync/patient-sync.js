@@ -130,9 +130,11 @@ export function setStoredCode(raw) {
 
 /**
  * Fetch the latest patient for `code`. Never throws — any failure resolves to
- * { found:false, patient:null, error }.
+ * { found:false, patient:null, error }. On an HTTP error the response status
+ * and the server's `{error}` string (if any) are surfaced for diagnostics.
  *
- * @returns {Promise<{found:boolean, patient:object|null, error?:string}>}
+ * @returns {Promise<{found:boolean, patient:object|null, error?:string,
+ *                     status?:number, serverError?:string}>}
  */
 export async function fetchPatient(code, { endpoint = SYNC_ENDPOINT, fetchImpl = fetch } = {}) {
   const c = normalizeCode(code);
@@ -143,7 +145,11 @@ export async function fetchPatient(code, { endpoint = SYNC_ENDPOINT, fetchImpl =
       headers: { Accept: 'application/json' },
       cache: 'no-store',
     });
-    if (!res.ok) return { found: false, patient: null, error: `http-${res.status}` };
+    if (!res.ok) {
+      let serverError;
+      try { serverError = (await res.json()).error; } catch (e) { /* non-JSON body */ }
+      return { found: false, patient: null, error: 'http', status: res.status, serverError };
+    }
     const body = await res.json();
     if (!body || body.found !== true) return { found: false, patient: null };
     const patient = normalizeIncomingPatient(body.patient);

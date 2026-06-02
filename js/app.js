@@ -382,8 +382,19 @@ function boot() {
         const rel = patientSync.formatRelativeTime(res.patient.updatedAt);
         const ageMin = (Date.now() - res.patient.updatedAt) / 60000;
         setPullStatus(rel ? `Pulled — updated ${rel}` : 'Pulled', ageMin > 10 ? 'is-stale' : 'is-ok');
-      } else if (res.error === 'network' || res.error === 'invalid-code' || (res.error && res.error.startsWith('http'))) {
-        setPullStatus('Sync unavailable — check connection', 'is-error');
+      } else if (res.error === 'invalid-code') {
+        setPullStatus('Invalid pairing code — re-check it in Settings → Sync', 'is-error');
+      } else if (res.error === 'network') {
+        setPullStatus("Can't reach sync server — check connection", 'is-error');
+      } else if (res.error === 'http') {
+        // Surface the real cause so misconfiguration is debuggable.
+        if (res.serverError === 'kv-not-configured') {
+          setPullStatus('Sync backend not configured (KV env vars missing)', 'is-error');
+        } else if (res.status === 404) {
+          setPullStatus('Sync endpoint not found (/api not deployed)', 'is-error');
+        } else {
+          setPullStatus(`Sync error ${res.status}${res.serverError ? ' — ' + res.serverError : ''}`, 'is-error');
+        }
       } else if (res.error === 'bad-payload') {
         setPullStatus('Received data was invalid', 'is-error');
       } else {
