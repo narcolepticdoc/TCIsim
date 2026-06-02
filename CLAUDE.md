@@ -201,5 +201,7 @@ correct; `0.5.9` → `0.6.0` for a routine patch is not.
 - `TCI-PLANNERS.md` — planner algorithms, validation data, remaining gaps
 - `DEVELOPMENT.md` — complete session log, known issues, roadmap (single source of truth)
 - `CHANGELOG.md` — versioned release notes
+- `DEPLOY.md` — Vercel + Upstash setup for the cloud patient-sync backend (env vars)
+- `SCRATCHPAD-SYNC-SPEC.md` — sender-side contract for the scratchpad app (cloud patient sync)
 - `LICENSE-NOTES.md` — clean-room implementation notes, file audit
 - `README.md` — public-facing overview and project structure
