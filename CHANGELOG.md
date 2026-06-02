@@ -11,6 +11,20 @@
 
 ---
 
+## [0.5.35.2] — 2026-06-02
+
+Make cloud-pull failures diagnosable. The Pull button previously collapsed every non-success outcome into "Sync unavailable — check connection," which hid the actual cause (and mislabeled an invalid pairing code as a connection problem). `fetchPatient` now surfaces the HTTP status and the server's `{error}` string, and the on-screen status distinguishes the real cases:
+
+- invalid pairing code → "Invalid pairing code — re-check it in Settings → Sync"
+- network/CORS failure → "Can't reach sync server — check connection"
+- HTTP 500 `kv-not-configured` → "Sync backend not configured (KV env vars missing)" — the Upstash env vars aren't set on that deployment
+- HTTP 404 → "Sync endpoint not found (/api not deployed)"
+- other HTTP errors → "Sync error \<status\> — \<server message\>"
+
+`js/sync/patient-sync.js`, `js/app.js`.
+
+---
+
 ## [0.5.35.1] — 2026-06-02
 
 Follow-up fixes for the cloud patient pull (0.5.35.0).
