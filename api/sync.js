@@ -26,8 +26,11 @@ const CODE_RE = /^[A-HJ-NP-Z2-9]{6}$/;
 let _redis = null;
 function getRedis() {
   if (_redis) return _redis;
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  // Accept both the native Upstash names and the Vercel KV / Marketplace
+  // integration names — which set the function gets depends on how the store
+  // was provisioned, and a mismatch is the usual cause of "kv-not-configured".
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
   if (!url || !token) throw new Error('KV not configured');
   _redis = new Redis({ url, token });
   return _redis;

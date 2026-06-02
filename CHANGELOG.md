@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.35.3] — 2026-06-02
+
+Accept both Upstash credential namings in the sync backend. `api/sync.js` now reads `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` **or** the Vercel KV / Marketplace integration names `KV_REST_API_URL` / `KV_REST_API_TOKEN`. Which pair a deployment gets depends on how the store was provisioned, and a name mismatch was producing a spurious "kv-not-configured" 500 even with a connected store.
+
+---
+
 ## [0.5.35.2] — 2026-06-02
 
 Make cloud-pull failures diagnosable. The Pull button previously collapsed every non-success outcome into "Sync unavailable — check connection," which hid the actual cause (and mislabeled an invalid pairing code as a connection problem). `fetchPatient` now surfaces the HTTP status and the server's `{error}` string, and the on-screen status distinguishes the real cases:
