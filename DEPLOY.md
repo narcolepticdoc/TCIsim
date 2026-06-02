@@ -18,6 +18,10 @@ its environment variables and setup.
 |---|---|---|
 | `UPSTASH_REDIS_REST_URL` | REST endpoint of the Redis store (e.g. `https://us1-xxxx.upstash.io`) | Upstash — auto-injected by the Vercel integration |
 | `UPSTASH_REDIS_REST_TOKEN` | Bearer token used to read/write that store | Upstash — same |
+
+> The function also accepts the Vercel KV / Marketplace integration names
+> `KV_REST_API_URL` / `KV_REST_API_TOKEN` as a fallback, since the integration
+> sometimes injects those instead. Either pair works; you do not need both.
 | `SYNC_ALLOWED_ORIGINS` | Comma-separated CORS allow-list of origins permitted to call `/api/sync`. **Must include the scratchpad app's origin.** | Set manually |
 
 The first two are credentials for the cloud store; the third is the security

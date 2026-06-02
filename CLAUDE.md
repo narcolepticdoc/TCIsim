@@ -1,6 +1,6 @@
 # TCI Sim — Claude Code Reference
 
-Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.35.2** (see `js/version.js`).
+Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.35.3** (see `js/version.js`).
 
 ## Quick Start
 
