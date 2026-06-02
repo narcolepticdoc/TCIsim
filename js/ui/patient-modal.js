@@ -352,7 +352,7 @@ function _markError(field) {
   if (row) row.classList.add('error');
 }
 
-function _writeHidden(id, value) {
+export function _writeHidden(id, value) {
   const el = $(id);
   if (!el) return;
   el.value = value;

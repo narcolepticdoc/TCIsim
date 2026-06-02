@@ -11,6 +11,21 @@
 
 ---
 
+## [0.5.35.0] — 2026-06-02
+
+Add cloud patient pull, so demographics entered in a separate scratchpad app (on another device) can be pulled into the simulator without re-typing. A small Vercel serverless endpoint backed by Upstash Redis acts as a short-lived "scratch area": the scratchpad continuously pushes age / sex / height / weight (canonical metric) keyed by a shared 6-character pairing code, and the simulator pulls the latest entry on demand. De-identified / training use only — only those four fields transfer (opioid co-administration is never synced), payloads are validated and size-capped server-side, and entries expire after 30 minutes.
+
+- `api/sync.js` — new Vercel serverless function. `GET /api/sync?code=` reads the latest patient; `POST /api/sync` writes `{code, patient}` with a 30-min TTL and a server-set `updatedAt`. CORS allow-list via `SYNC_ALLOWED_ORIGINS`; Upstash via `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`. 1 KB body cap, strict range validation.
+- `js/sync/patient-sync.js` — new front-end module. Pure, tested helpers (`normalizeCode`, `isValidCode`, `normalizeIncomingPatient`, `canonicalToDisplay`, `formatRelativeTime`, code persistence) plus `fetchPatient()` and `applyPatientToInputs()` (injects via the existing `_writeHidden` setup pipeline, converting to the current display units).
+- `js/ui/patient-modal.js` — export `_writeHidden` for reuse.
+- `index.html` / `js/app/settings-ui.js` — new **Sync** settings tab with the pairing-code field (persisted to `tci-sync-code`); **Pull patient from cloud** button + freshness status under the patient summary on the setup screen.
+- `js/app.js` — wire the Pull button (fetch → inject → "updated N min ago"; amber when stale or on error; disabled with no code).
+- `sw.js` — VERSION bump, precache `js/sync/patient-sync.js`, and bypass `/api/` in the fetch handler so sync responses are never cached.
+- `package.json` / `vercel.json` — new, for the serverless function only (the PWA stays build-step-free; the CommonJS test runner is preserved by intentionally omitting `"type": "module"`).
+- `SCRATCHPAD-SYNC-SPEC.md` — handoff spec for the scratchpad app: pairing-code format, the POST contract/JSON schema, CORS/TTL notes, and a drop-in debounced auto-push snippet.
+
+---
+
 ## [0.5.34.2] — 2026-05-26
 
 Fix the TCI first-step countdown ignoring the reaction-delay offset. When a TCI plan is committed (including a target change that pauses the pump), the first-step modal counted down the raw plan delay and reached "Now!" at the real event time, while the drug-panel step bar and the alert popup reach zero `reactionDelaySec` *earlier*. With a non-zero reaction delay set, the prominent modal therefore fired one reaction-time later than every other cue — following it put the user's action late by exactly that lag, the opposite of the feature's intent. The modal now subtracts `reactionDelaySec` from its countdown so all three surfaces reach zero together, `reactionDelaySec` ahead of the planned event.
