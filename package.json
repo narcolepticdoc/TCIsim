@@ -2,6 +2,9 @@
   "name": "tcisim",
   "private": true,
   "description": "Dependency manifest for the Vercel serverless function (api/sync.js) only. The PWA itself is a build-step-free static site served straight from the repo root, and the Node test runner (tests/run-tests.js) is CommonJS — so this package intentionally does NOT set \"type\": \"module\".",
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
     "@upstash/redis": "^1.34.3"
   }

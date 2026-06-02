@@ -21,7 +21,7 @@ Add cloud patient pull, so demographics entered in a separate scratchpad app (on
 - `index.html` / `js/app/settings-ui.js` — new **Sync** settings tab with the pairing-code field (persisted to `tci-sync-code`); **Pull patient from cloud** button + freshness status under the patient summary on the setup screen.
 - `js/app.js` — wire the Pull button (fetch → inject → "updated N min ago"; amber when stale or on error; disabled with no code).
 - `sw.js` — VERSION bump, precache `js/sync/patient-sync.js`, and bypass `/api/` in the fetch handler so sync responses are never cached.
-- `package.json` / `vercel.json` — new, for the serverless function only (the PWA stays build-step-free; the CommonJS test runner is preserved by intentionally omitting `"type": "module"`).
+- `package.json` — new, for the serverless function only: declares `@upstash/redis` and pins the Node runtime via `engines.node` (`20.x`); Vercel auto-detects `api/*.js` (no `vercel.json` needed). The PWA stays build-step-free; the CommonJS test runner is preserved by intentionally omitting `"type": "module"`.
 - `SCRATCHPAD-SYNC-SPEC.md` — handoff spec for the scratchpad app: pairing-code format, the POST contract/JSON schema, CORS/TTL notes, and a drop-in debounced auto-push snippet.
 
 ---

@@ -105,7 +105,8 @@ curl 'https://<tcisim-host>/api/sync?code=ABC234'
   1 KB, and stores only age/sex/height/weight + a server-set `updatedAt`. It is
   unauthenticated (the pairing code is the only secret) and last-writer-wins —
   de-identified / training data only.
-- **Runtime:** pinned in `vercel.json` (`nodejs20.x`). `package.json` exists
-  only to declare `@upstash/redis`; it intentionally omits `"type": "module"` so
-  the CommonJS test runner keeps working, which is why `api/sync.js` is written
-  in CommonJS.
+- **Runtime:** the Node version is pinned via `engines.node` (`20.x`) in
+  `package.json`; Vercel auto-detects `api/*.js` as Node serverless functions
+  (no `vercel.json` needed). `package.json` exists only to declare
+  `@upstash/redis`; it intentionally omits `"type": "module"` so the CommonJS
+  test runner keeps working, which is why `api/sync.js` is written in CommonJS.
