@@ -1,0 +1,10 @@
+# Dependencies (only needed for the api/sync.js serverless function)
+node_modules/
+
+# Local env files — may contain the Upstash token from `vercel env pull`
+.env
+.env.local
+.env.*.local
+
+# Vercel CLI local state
+.vercel/

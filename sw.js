@@ -13,7 +13,7 @@
  * caches, and the page reloads onto the new version.
  */
 
-const VERSION = '0.5.34.2';
+const VERSION = '0.5.35.0';
 const CACHE_NAME = `tcisim-v${VERSION}`;
 
 const PRECACHE_URLS = [
@@ -90,6 +90,8 @@ const PRECACHE_URLS = [
   'js/ui/setup.js',
   'js/ui/timer.js',
 
+  'js/sync/patient-sync.js',
+
   'js/util/color.js',
   'js/util/constants.js',
   'js/util/math.js',
@@ -132,6 +134,11 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
+
+  // Never cache or intercept the serverless sync API — always hit the network
+  // so the cloud patient pull returns live data (and never serves stale/offline
+  // responses). Lets the browser handle it normally.
+  if (url.pathname.startsWith('/api/')) return;
 
   // Network-first for js/version.js so the client-side version poller always
   // sees fresh server bytes when online; falls back to cache when offline.

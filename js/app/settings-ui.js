@@ -7,6 +7,7 @@
  */
 
 import { syncPortraitLayout } from './portrait-layout.js';
+import { getStoredCode, setStoredCode, normalizeCode, isValidCode } from '../sync/patient-sync.js';
 
 const $ = id => document.getElementById(id);
 
@@ -27,6 +28,7 @@ const INFO_TEXTS = {
   notifications: 'Configure how the simulator alerts you to upcoming pump events. Prep alerts provide early visual warning with an amber pulse on drug cards. Alert popups appear closer to the event with optional sound cues. The status indicator colors the drug card edge based on event proximity.',
   simulation: 'Fine-tune how the simulator generates TCI plans. Ce drift tolerance sets how far the effect-site concentration is allowed to drift from target before the planner emits a new pump rate step \u2014 lower values give tighter tracking at the cost of more frequent rate changes; higher values produce simpler plans with more visible Ce variation. The default (1.5%) is already tighter than a live clinician could hold manually. Plateau slope tolerance determines how flat the concentration curve must be to qualify as steady-state.',
   appearance: 'Adjust the visual presentation of the chart and readouts. Reducing Cp line opacity pushes the plasma concentration curve into the background so the effect-site (Ce) curve stands out more clearly. The Ce drift band highlights the \u00b1drift tolerance around each TCI target \u2014 Ce may briefly touch this boundary at planned step transitions by design. Text size enlarges the drug-panel and history informational text; it is gated to screens that have the space for it. Theme switches the entire app between dark and light color schemes.',
+  sync: 'Pair this simulator with a separate scratchpad app to pull patient demographics from the cloud. Enter the 6-character code that the scratchpad app displays; both apps then share a private scratch area. On the patient setup screen, tap \u201cPull patient from cloud\u201d to fetch the latest demographics (age, sex, height, weight) \u2014 the timestamp confirms how recent they are. De-identified / training use only; do not transfer protected health information.',
 };
 
 /** Apply the text-size body class. Only one of `.text-lg` / `.text-xl` / `.text-xxl` is active at a time. */
@@ -216,6 +218,35 @@ export function initSettingsUI({ getSettings, setSettings }) {
       for (const b of themeBtns) b.classList.toggle('active', b.dataset.theme === theme);
       applyTheme(theme);
       saveAll();
+    });
+  }
+
+  // Pairing code (cloud patient sync) — persisted separately from the settings
+  // blob under its own localStorage key (see patient-sync.js).
+  const syncCodeInput  = $('set-sync-code');
+  const syncCodeStatus = $('set-sync-code-status');
+  const renderSyncStatus = (code) => {
+    if (!syncCodeStatus) return;
+    syncCodeStatus.classList.remove('is-ok', 'is-error');
+    if (!code) {
+      syncCodeStatus.textContent = 'Enter the 6-character code shown in your scratchpad app.';
+    } else if (isValidCode(code)) {
+      syncCodeStatus.textContent = 'Paired — pull demographics from the patient setup screen.';
+      syncCodeStatus.classList.add('is-ok');
+    } else {
+      syncCodeStatus.textContent = 'Code must be 6 characters (letters/digits, no 0/O/1/I).';
+      syncCodeStatus.classList.add('is-error');
+    }
+  };
+  if (syncCodeInput) {
+    syncCodeInput.value = getStoredCode();
+    renderSyncStatus(syncCodeInput.value);
+    syncCodeInput.addEventListener('input', () => {
+      const norm = normalizeCode(syncCodeInput.value);
+      if (syncCodeInput.value !== norm) syncCodeInput.value = norm;
+      setStoredCode(norm);
+      renderSyncStatus(norm);
+      document.dispatchEvent(new CustomEvent('tci:sync-code-change', { detail: { code: getStoredCode() } }));
     });
   }
 

@@ -4,6 +4,23 @@
 
 ## Session History
 
+### Cloud patient pull (v0.5.35.0) — Interim
+
+User has a separate "scratchpad" PWA (on another device) where they enter patient demographics in imperial and convert to metric; they wanted those values to flow into TCIsim without re-typing. Constraints established with the user: cross-device (both apps on Vercel but different phones), iOS, de-identified/training data only. That rules out same-device transports (URL handoff, shared `localStorage`, `BroadcastChannel`) and Web Share Target (poor iOS support), leaving a network "scratch area."
+
+Design: a small Vercel serverless endpoint (`api/sync.js`) backed by Upstash Redis. The two apps are paired by a user-entered 6-character code (`^[A-HJ-NP-Z2-9]{6}$` — no ambiguous 0/O/1/I). The scratchpad generates/displays the code and continuously pushes (auto, debounced, no Send button); TCIsim requires the code in **Settings → Sync** and pulls on demand. Only **age, sex, height, weight** transfer (opioid is never synced); the payload is canonical metric with a server-set `updatedAt`. Entries carry a 30-min TTL so a reused code never serves stale demographics, and the UI shows "updated N min ago" (amber if > 10 min) so the user can confirm freshness.
+
+Implementation notes:
+- **Reuse over new coupling.** Injection goes through `patient-modal.js`'s `_writeHidden` (now exported) → dispatched `input`/`change` events → the existing `setup.js` reactive pipeline recomputes previews/derived/summary. No new hooks into setup's render functions. Metric→display conversion lives in a pure `canonicalToDisplay()`.
+- **Build-step-free preserved.** `package.json` exists only to declare `@upstash/redis` for the serverless function. It intentionally **omits `"type": "module"`** — adding it would make Node treat the CommonJS test runner (`tests/run-tests.js`, which uses `require`) as ESM and break it. Consequently `api/sync.js` is written in CommonJS (`require` / `module.exports`). The browser PWA loads ESM via `<script type="module">` regardless of package.json.
+- **SW `/api/` bypass.** The cache-first fetch handler now early-returns for `/api/*` so sync responses are always live and never cached/served offline.
+- **Local dev.** `python3 -m http.server` does not execute `/api`, so the Pull button shows a graceful "Sync unavailable" error locally. For end-to-end sync testing use `npm i && vercel dev` (or a Vercel Preview) with the Upstash env vars set.
+- **Env / config.** Serverless reads `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, and `SYNC_ALLOWED_ORIGINS` (CORS allow-list — must include the scratchpad's origin; the JSON POST triggers an OPTIONS preflight which the function handles). The Node runtime is pinned via `engines.node` in `package.json` (`20.x`); Vercel auto-detects `api/*.js` so no `vercel.json` is needed. (An early `vercel.json` using `functions.runtime: "nodejs20.x"` broke the build — that key is for community runtimes needing `name@version`; the built-in Node runtime is configured via `engines` instead.)
+- **Privacy / scope.** De-identified training data only; server validates ranges, caps the body at 1 KB, and the endpoint is unauthenticated (the code is the only secret) with last-writer-wins. Documented in `SCRATCHPAD-SYNC-SPEC.md`, which also carries the POST contract and a drop-in debounced auto-push snippet for the scratchpad's own coding session.
+- **Tests.** `tests/test-patient-sync.js` dynamically imports the real module (no top-level DOM/network access) and covers code normalization/validation, payload normalization + range checks, metric→imperial conversion, and relative-time boundaries. Suite is green at 554 tests.
+
+---
+
 ### Fix TCI first-step countdown ignoring reaction delay (v0.5.34.2) — Interim
 
 User report: the reaction-delay feature *"seems to be inverted — telling the user to initiate the event one second late instead of one second early."* Narrowed down by the user's follow-up: lowering the target raises a "pause the pump" countdown alert, and the drug-panel countdown in the background reaches zero ~1 s *before* that alert's countdown finishes.

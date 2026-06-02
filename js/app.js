@@ -31,6 +31,8 @@ import { createSession } from './app/session.js';
 import { initPortraitLayout, syncPortraitLayout } from './app/portrait-layout.js';
 import { createChartBridge } from './app/chart-bridge.js';
 import { initCompartmentViz } from './ui/compartment-viz.js';
+import { _writeHidden } from './ui/patient-modal.js';
+import * as patientSync from './sync/patient-sync.js';
 import './app/sw-register.js';
 
 const $ = id => document.getElementById(id);
@@ -332,6 +334,51 @@ function boot() {
       showScreen('sim-screen');
     },
   });
+
+  // Cloud patient pull — fetch demographics from the scratch area for the
+  // stored pairing code and inject them into the setup pipeline. On-demand;
+  // degrades gracefully when /api is unavailable (e.g. local static server).
+  const btnPullPatient = $('btn-pull-patient');
+  const pullStatus     = $('pull-patient-status');
+  const setPullStatus  = (text, cls) => {
+    if (!pullStatus) return;
+    pullStatus.textContent = text || '';
+    pullStatus.hidden = !text;
+    pullStatus.classList.remove('is-error', 'is-stale', 'is-ok');
+    if (cls) pullStatus.classList.add(cls);
+  };
+  const refreshPullButton = () => {
+    if (!btnPullPatient) return;
+    const hasCode = !!patientSync.getStoredCode();
+    btnPullPatient.disabled = !hasCode;
+    // Muted (non-error) hint when unpaired; clear any stale status once paired.
+    if (!hasCode) setPullStatus('Pair in Settings → Sync to enable');
+    else setPullStatus('');
+  };
+  if (btnPullPatient) {
+    btnPullPatient.addEventListener('click', async () => {
+      const code = patientSync.getStoredCode();
+      if (!code) { setPullStatus('Pair in Settings → Sync to enable'); return; }
+      btnPullPatient.disabled = true;
+      setPullStatus('Pulling…', 'is-ok');
+      const res = await patientSync.fetchPatient(code);
+      btnPullPatient.disabled = false;
+      if (res.found && res.patient) {
+        patientSync.applyPatientToInputs(res.patient, { getUnits: setup.getUnits, writeHidden: _writeHidden });
+        const rel = patientSync.formatRelativeTime(res.patient.updatedAt);
+        const ageMin = (Date.now() - res.patient.updatedAt) / 60000;
+        setPullStatus(rel ? `Pulled — updated ${rel}` : 'Pulled', ageMin > 10 ? 'is-stale' : 'is-ok');
+      } else if (res.error === 'network' || res.error === 'invalid-code' || (res.error && res.error.startsWith('http'))) {
+        setPullStatus('Sync unavailable — check connection', 'is-error');
+      } else if (res.error === 'bad-payload') {
+        setPullStatus('Received data was invalid', 'is-error');
+      } else {
+        setPullStatus('No patient found for that code yet', 'is-error');
+      }
+    });
+  }
+  document.addEventListener('tci:sync-code-change', refreshPullButton);
+  refreshPullButton();
 
   // Initialize timer
   timer.init({

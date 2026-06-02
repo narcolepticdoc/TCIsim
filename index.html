@@ -169,6 +169,13 @@
     .btn-restore{width:100%;padding:9px;background:transparent;border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-secondary);font-family:var(--font-display);font-size:12px;cursor:pointer;transition:all .15s;flex-shrink:0}
     .btn-restore:hover{background:var(--bg-hover);color:var(--text-primary)}
     .btn-restore .restore-summary{display:block;font-size:10px;color:var(--text-muted);margin-top:2px}
+    .btn-pull-patient{width:100%;padding:8px;background:transparent;border:1px dashed var(--border);border-radius:var(--radius-md);color:var(--text-secondary);font-family:var(--font-display);font-size:11.5px;cursor:pointer;transition:all .15s;flex-shrink:0}
+    .btn-pull-patient:hover:not(:disabled){background:var(--bg-hover);color:var(--text-primary);border-color:var(--border-focus)}
+    .btn-pull-patient:disabled{opacity:.5;cursor:default}
+    .pull-patient-status{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:-2px;text-align:center}
+    .pull-patient-status.is-error{color:var(--amber,#d9a23a)}
+    .pull-patient-status.is-stale{color:var(--amber,#d9a23a)}
+    .pull-patient-status.is-ok{color:var(--text-secondary)}
     @media(max-height:380px){.setup-brand{width:160px;min-width:140px;padding:12px 10px;gap:6px}.setup-brand h1{font-size:20px}.setup-form{padding:8px 14px;gap:6px}.input-grid{gap:5px 10px}.form-row input[type="text"],.form-row select{padding:5px 8px;font-size:13px}.form-row label{font-size:10px}.btn-confirm{padding:8px;font-size:13px}.derived-bar{padding:5px 8px}.derived-item .d-value{font-size:12px}}
     @media(min-width:900px){.setup-form{max-width:540px}}
 
@@ -315,6 +322,10 @@
     .settings-content{flex:1;padding:0 14px;overflow-y:auto;max-height:280px;min-width:0}
     .settings-pane{display:none}
     .settings-pane.active{display:block}
+    .settings-sync-status{font-family:var(--font-mono);font-size:10.5px;color:var(--text-muted)}
+    .settings-sync-status.is-ok{color:var(--green,#3fae6b)}
+    .settings-sync-status.is-error{color:var(--amber,#d9a23a)}
+    .settings-sync-note{font-size:10px;color:var(--text-muted);line-height:1.5}
     .settings-info{width:175px;flex-shrink:0;border-left:1px solid var(--border-subtle);padding-left:14px;overflow-y:auto;max-height:280px}
     .settings-info-title{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;font-family:var(--font-mono)}
     .settings-info-text{font-size:11px;color:var(--text-secondary);line-height:1.55;font-family:var(--font-display)}
@@ -1039,6 +1050,8 @@
         <span class="patient-summary-text" id="patient-summary-text" hidden></span>
         <span class="patient-summary-icon">&#9998;</span>
       </div>
+      <button class="btn-pull-patient" id="btn-pull-patient" type="button" title="Pull patient demographics from the cloud scratch area">&#8595; Pull patient from cloud</button>
+      <div class="pull-patient-status" id="pull-patient-status" hidden></div>
       <div id="hint-height" hidden>(cm)</div>
       <div id="hint-weight" hidden>(kg)</div>
       <input type="hidden" id="input-age">
@@ -1730,6 +1743,7 @@
           <button class="settings-tab active" data-tab="notifications">Notifications</button>
           <button class="settings-tab" data-tab="simulation">Simulation</button>
           <button class="settings-tab" data-tab="appearance">Appearance</button>
+          <button class="settings-tab" data-tab="sync">Sync</button>
         </nav>
         <div class="settings-content">
           <div class="settings-pane active" id="pane-notifications">
@@ -1861,6 +1875,20 @@
                   <button type="button" class="seg-btn" data-theme="light">Light</button>
                 </div>
               </div>
+            </div>
+          </div>
+          <div class="settings-pane" id="pane-sync">
+            <div class="settings-row">
+              <label for="set-sync-code">Pairing code</label>
+              <div class="settings-control">
+                <input type="text" id="set-sync-code" maxlength="6" inputmode="text" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="ABC234" style="text-transform:uppercase;width:8em;font-family:var(--font-mono);letter-spacing:.15em;text-align:center">
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-sync-status" id="set-sync-code-status">Enter the 6-character code shown in your scratchpad app.</div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-sync-note">Pairs this simulator with a scratchpad app so you can pull patient demographics (age, sex, height, weight) from the cloud. De-identified / training use only &mdash; do not transfer protected health information.</div>
             </div>
           </div>
         </div>
