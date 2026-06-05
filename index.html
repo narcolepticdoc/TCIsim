@@ -825,6 +825,7 @@
     .keypad-unit-toggle button.active{background:var(--blue-dim);color:var(--text-primary)}
     .keypad-unit-toggle button:hover:not(.active){background:var(--bg-hover);color:var(--text-secondary)}
     .keypad-conversion{font-family:var(--font-mono);font-size:11px;color:var(--cyan);min-height:16px}
+    .keypad-bolus-time{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);min-height:14px}
 
     .keypad-right{display:flex;flex-direction:column;gap:6px;width:212px;flex-shrink:0}
     .keypad-numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
@@ -1460,6 +1461,7 @@
           </div>
           <div class="keypad-unit-toggle" id="keypad-units"></div>
           <div class="keypad-conversion" id="keypad-conversion"></div>
+          <div class="keypad-bolus-time" id="keypad-bolus-time"></div>
         </div>
         <div class="keypad-right">
           <div class="ee-grid">
@@ -1526,6 +1528,7 @@
             </div>
             <div class="keypad-unit-toggle" id="ee-units"></div>
             <div class="keypad-conversion" id="ee-conversion"></div>
+            <div class="keypad-bolus-time" id="ee-bolus-time"></div>
           </div>
           <div class="keypad-right">
             <div class="ee-grid">

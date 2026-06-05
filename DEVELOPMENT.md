@@ -4,6 +4,14 @@
 
 ## Session History
 
+### Bolus delivery-time display (v0.5.37) — Interim
+
+User request: in the Add Bolus modals, show the time the bolus is expected to be given over, beneath the unit-conversion calculation section.
+
+Approach: both modals (`js/ui/keypad.js` and the unified `js/ui/event-editor.js`) already compute the canonical mg dose inside `updateDisplay()` to render the unit-conversion line. Added a sibling `#keypad-bolus-time` / `#ee-bolus-time` element under each `#…-conversion` line and a small `fmtDeliveryTime(min)` helper (`Ns` under a minute, `M:SS` above) plus `updateBolusTime(doseMg)`. The duration math reuses the existing `bolusDeliveryMinutes` / `pushDeliveryMinutes` exports in `constants.js`, which mirror the delivery engine (`events/delivery.js`) — pump bolus at the configured `bolusRateMlH` (3 s min), IV push at 3600 mL/h (1 s min).
+
+Both delivery times are shown when an infusion pump is available so the user can compare before tapping **Pump Bolus** vs **IV Push** (`Given over ~1:36 pump · ~20s push`). When the bolus is push-only — pump off, or in keypad a redose threshold is set while not in manual mode — it collapses to `Given over ~20s`. The line is cleared at the top of `updateDisplay()` so it disappears for non-bolus types / empty buffers.
+
 ### Expose max pump rate in settings (v0.5.36.0) — Interim
 
 User request: make the global max pump rate changeable mid-case. It was only on the pre-case setup screen (`#input-max-pump-rate`, a 750/1000/1200 mL/h select that sets `bolusRateMlH` for all drugs via `applyPumpSettings` on Confirm), which is unreachable once a case is running — and there's no settings access from the setup screen either.

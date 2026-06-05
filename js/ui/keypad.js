@@ -11,7 +11,7 @@
 
 import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, getRoundingNoteText }
   from '../util/units.js';
-import { DRUG_DEFS } from '../util/constants.js';
+import { DRUG_DEFS, bolusDeliveryMinutes, pushDeliveryMinutes } from '../util/constants.js';
 
 const $ = id => document.getElementById(id);
 
@@ -336,6 +336,10 @@ function updateDisplay() {
     el.classList.toggle('empty', !buffer);
   }
 
+  // Estimated bolus delivery time — cleared here, populated below for bolus
+  const bt = $('keypad-bolus-time');
+  if (bt) bt.textContent = '';
+
   // Conversion preview (skip for exitCe — no unit conversion)
   const cv = $('keypad-conversion');
   if (!cv) return;
@@ -366,8 +370,45 @@ function updateDisplay() {
     }
 
     cv.textContent = parts.length > 0 ? '= ' + parts.join(' · ') : '';
+
+    // For bolus, show how long the dose will be delivered over (canonical = mg).
+    if (currentType === 'bolus') updateBolusTime(canonical.value);
   } catch (e) {
     cv.textContent = '';
+  }
+}
+
+/**
+ * Format a delivery duration (minutes) as "Ns" under a minute or "M:SS" above.
+ */
+function fmtDeliveryTime(minutes) {
+  const sec = Math.max(1, Math.round(minutes * 60));
+  if (sec < 60) return `${sec}s`;
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Populate the bolus-time line with the estimated delivery duration(s).
+ * Shows both pump and push times when an infusion pump is available for the
+ * dose, or just the push time when the bolus can only be given by hand.
+ * @param {number} doseMg - bolus dose in canonical mg
+ */
+function updateBolusTime(doseMg) {
+  const bt = $('keypad-bolus-time');
+  if (!bt) return;
+  if (!(doseMg > 0)) { bt.textContent = ''; return; }
+
+  // Same condition as show(): no pump, or a redose threshold is set while not
+  // in manual mode → the bolus is always an IV push.
+  const isIntermittentBolus =
+    !isPumpEnabled() || (getIntermittentThreshold() > 0 && getMode() !== 'manual');
+
+  const pushT = fmtDeliveryTime(pushDeliveryMinutes(doseMg, currentDrug));
+  if (isIntermittentBolus) {
+    bt.textContent = `Given over ~${pushT}`;
+  } else {
+    const pumpT = fmtDeliveryTime(bolusDeliveryMinutes(doseMg, currentDrug));
+    bt.textContent = `Given over ~${pumpT} pump · ~${pushT} push`;
   }
 }
 
