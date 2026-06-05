@@ -13,7 +13,7 @@
  * caches, and the page reloads onto the new version.
  */
 
-const VERSION = '0.5.36.0';
+const VERSION = '0.5.37';
 const CACHE_NAME = `tcisim-v${VERSION}`;
 
 const PRECACHE_URLS = [

@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.37] — 2026-06-05
+
+Show the **estimated bolus delivery time** in the Add Bolus keypad and the event-editor modal, beneath the unit-conversion line. As a dose is typed, a muted line reads e.g. `Given over ~1:36 pump · ~20s push`, so the user can see how long the bolus will actually be infused before choosing **Pump Bolus** vs **IV Push**. When the bolus can only be given by hand (pump off, or a redose threshold is set outside manual mode), it collapses to a single `Given over ~20s`. Times are derived from the same pump settings (concentration + bolus rate) and push rate (3600 mL/h) used by the delivery engine.
+
+- `js/ui/keypad.js` — bolus-time line in `updateDisplay()` via new `fmtDeliveryTime` / `updateBolusTime` helpers (uses `bolusDeliveryMinutes` / `pushDeliveryMinutes` from constants).
+- `js/ui/event-editor.js` — same line for the unified Add/Edit Event modal.
+- `index.html` — `#keypad-bolus-time` / `#ee-bolus-time` rows + `.keypad-bolus-time` styling.
+
+---
+
 ## [0.5.36.0] — 2026-06-02
 
 Expose the global **max pump rate** in the Settings → Simulation tab so it can be changed mid-case (previously only settable on the pre-case setup screen, which is unreachable once a case is running). The control mirrors the setup-screen options (750 / 1000 / 1200 mL/h); changing it updates the runtime pump settings for every drug and the derived mg/min cap, so subsequent TCI plans and bolus deliveries use the new rate while already-delivered events are unaffected. The setup-screen control and the `tci-pump-max-rate` localStorage key stay in lockstep, and the settings select re-reads the current value each time the modal opens (so a restored case shows the right rate).

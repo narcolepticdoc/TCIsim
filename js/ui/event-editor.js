@@ -14,7 +14,7 @@
 
 import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, getQuantizeConfig }
   from '../util/units.js';
-import { isPumpEnabled } from '../util/constants.js';
+import { isPumpEnabled, bolusDeliveryMinutes, pushDeliveryMinutes } from '../util/constants.js';
 
 const $ = id => document.getElementById(id);
 
@@ -296,6 +296,9 @@ function updateDisplay() {
     el.classList.toggle('empty', !_buffer);
   }
 
+  const bt = $('ee-bolus-time');
+  if (bt) bt.textContent = '';
+
   const cv = $('ee-conversion');
   if (!cv) return;
   if (_currentType === 'pause') { cv.textContent = ''; return; }
@@ -318,8 +321,40 @@ function updateDisplay() {
       parts.unshift(`${formatValue(canonical.value, canonical.unit)} ${canonical.unit}`);
     }
     cv.textContent = parts.length > 0 ? '= ' + parts.join(' · ') : '';
+
+    // For bolus, show how long the dose will be delivered over (canonical = mg).
+    if (_currentType === 'bolus') updateBolusTime(canonical.value);
   } catch (e) {
     cv.textContent = '';
+  }
+}
+
+/**
+ * Format a delivery duration (minutes) as "Ns" under a minute or "M:SS" above.
+ */
+function fmtDeliveryTime(minutes) {
+  const sec = Math.max(1, Math.round(minutes * 60));
+  if (sec < 60) return `${sec}s`;
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Populate the bolus-time line with the estimated delivery duration(s).
+ * Shows both pump and push times when an infusion pump is enabled, or just the
+ * push time when the bolus can only be given by hand.
+ * @param {number} doseMg - bolus dose in canonical mg
+ */
+function updateBolusTime(doseMg) {
+  const bt = $('ee-bolus-time');
+  if (!bt) return;
+  if (!(doseMg > 0)) { bt.textContent = ''; return; }
+
+  const pushT = fmtDeliveryTime(pushDeliveryMinutes(doseMg, _selectedDrug));
+  if (!isPumpEnabled(_selectedDrug)) {
+    bt.textContent = `Given over ~${pushT}`;
+  } else {
+    const pumpT = fmtDeliveryTime(bolusDeliveryMinutes(doseMg, _selectedDrug));
+    bt.textContent = `Given over ~${pumpT} pump · ~${pushT} push`;
   }
 }
 
