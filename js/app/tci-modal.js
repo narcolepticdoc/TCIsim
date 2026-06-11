@@ -24,9 +24,10 @@ const TCI_DELAY_OPTIONS = [5, 10, 15, 20, 30]; // seconds
  *   mode: object,
  *   refreshChart: Function,
  *   closeModal: Function,
+ *   addAnnotation: Function,
  * }} deps
  */
-export function createTciModal({ model, timer, mode, refreshChart, closeModal }) {
+export function createTciModal({ model, timer, mode, refreshChart, closeModal, addAnnotation }) {
   // Internal state — previously module-scope vars in app.js
   let pendingTCI = null;          // { drugId, ceTarget, tciMode }
   let tciDelaySeconds = 10;       // last-selected delay, persists within session
@@ -69,7 +70,8 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal })
     // entry points that haven't been updated yet).
     const qc = quantConfig || getQuantizeConfig(drugId);
     const { scheme } = model.planTCI(drugId, futureTime, ceTarget, { tciMode, ceTolerance, ...qc });
-    mode.set(drugId, 'tci', `TCI target Ce=${ceTarget.toFixed(1)} μg/mL`);
+    mode.set(drugId, 'tci');
+    if (addAnnotation) addAnnotation({ heading: 'TCI Target Set', sub: `Ce ${ceTarget.toFixed(1)} mcg/mL` }, drugId);
     refreshChart();
 
     closeModal('modal-tci-delay');

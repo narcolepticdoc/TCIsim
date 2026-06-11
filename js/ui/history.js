@@ -27,6 +27,11 @@ let _onEventTap = null;
 let _timeFormat = 'et'; // 'et' = elapsed time, 'rt' = real time
 let _getWallClockStart = null;
 let _bolusOnly = false;  // When true, only bolus events are shown (intermittent mode)
+let _getAnnotations = null;   // () => annotations[]  (editorial notations)
+let _onNotationDelete = null; // (annotId) => void
+let _notationsVisible = true; // Notes show/hide toggle (persisted)
+
+const NOTES_PREF_KEY = 'tci-pref-history-show-notations';
 
 /**
  * Initialize the history module.
@@ -42,16 +47,33 @@ export function init(opts) {
   _getPatient = opts.getPatient || (() => ({ weight: 70 }));
   _onEventTap = opts.onEventTap || null;
   _getWallClockStart = opts.getWallClockStart || null;
+  _getAnnotations = opts.getAnnotations || (() => []);
+  _onNotationDelete = opts.onNotationDelete || null;
 
-  // Delegate click: in edit mode, any row click opens the event editor.
+  // Seed notation visibility from the persisted preference.
+  try {
+    const saved = localStorage.getItem(NOTES_PREF_KEY);
+    if (saved !== null) _notationsVisible = saved !== 'false';
+  } catch (e) {}
+
+  // Delegate click: in edit mode, the notation ✕ deletes a note, and any
+  // event row click opens the event editor.
   const list = $('history-list');
   if (list) {
     list.addEventListener('click', (e) => {
       if (!document.body.classList.contains('edit-history-mode')) return;
+      // Notation delete affordance
+      const delBtn = e.target.closest('.h-note-del');
+      if (delBtn) {
+        e.stopPropagation();
+        const annotId = delBtn.dataset.annotId;
+        if (annotId && _onNotationDelete) _onNotationDelete(annotId);
+        return;
+      }
       const row = e.target.closest('.history-row');
       if (!row || !_onEventTap) return;
       const evtId = row.dataset.evtId;
-      if (!evtId) return;
+      if (!evtId) return; // notation rows have no evtId — body taps are inert
       // Clear any prior selection, mark this row as the one being edited.
       list.querySelectorAll('.history-row.h-row-selected').forEach(el => el.classList.remove('h-row-selected'));
       row.classList.add('h-row-selected');
@@ -137,7 +159,29 @@ export function setBolusOnly(v) {
   _bolusOnly = !!v;
 }
 
+/** Toggle notation rows on/off (persisted). Returns the new visible state. */
+export function toggleNotations() {
+  _notationsVisible = !_notationsVisible;
+  try { localStorage.setItem(NOTES_PREF_KEY, String(_notationsVisible)); } catch (e) {}
+  render(_selectedDrug);
+  return _notationsVisible;
+}
+
+/** Whether notation rows are currently shown. */
+export function getNotationsVisible() {
+  return _notationsVisible;
+}
+
 // ---- Formatting helpers ----
+
+/** Minimal HTML escape for user/notation text rendered via innerHTML join. */
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 function fmtTime(minutes) {
   if (_timeFormat === 'rt' && _getWallClockStart) {
@@ -281,8 +325,58 @@ function typeClass(evt) {
 
 // ---- Main render ----
 
+/** Build the HTML for one pump-command (event) row. */
+function buildEventRow(evt, now) {
+  const isPast = evt.time <= now;
+  const isSystem = evt.source === 'system';
+  const dimClass = isPast ? '' : ' h-future';
+  const sysClass = isSystem ? ' h-system' : '';
+  const tc = typeClass(evt);
+  const badge = sourceBadge(evt.source);
+
+  let desc = '';
+  if (evt.type === 'bolus') {
+    const dose = fmtBolusDose(evt.value, evt.drug);
+    const modeLabel = evt.deliveryMode === 'push' ? 'IV Push' : 'Pump Bolus';
+    desc = `<span class="h-type">${badge}${modeLabel}</span>` +
+           `<span class="h-value"><strong>${dose}</strong></span>`;
+  } else if (evt.type === 'rate') {
+    if (evt.value === 0 && evt.source === 'tci') {
+      // TCI-scheduled pause (pump holds until next TCI step)
+      desc = `<span class="h-type">${badge}Paused</span>`;
+    } else {
+      const rate = fmtRate(evt.value, evt.drug);
+      const prefix = isSystem ? '↩ ' : '';
+      desc = `<span class="h-type">${badge}${prefix}Rate</span>` +
+             `<span class="h-value"><strong>${rate}</strong></span>`;
+    }
+  } else if (evt.type === 'pause') {
+    desc = `<span class="h-type">${badge}Pump Stopped</span>`;
+  }
+
+  return `<div class="history-row ${tc}${dimClass}${sysClass}" data-evt-id="${evt.id}" data-evt-time="${evt.time}">` +
+           `<span class="h-time">${fmtTime(evt.time)}</span>` +
+           desc +
+         `</div>`;
+}
+
+/** Build the HTML for one notation row (two-line heading + sub). */
+function buildNoteRow(a, now) {
+  const tMin = a.timeMin || 0;
+  const dimClass = tMin <= now ? '' : ' h-future';
+  const sub = a.sub ? `<span class="h-note-sub">${esc(a.sub)}</span>` : '';
+  return `<div class="history-row h-note${dimClass}" data-annot-id="${esc(a.id)}" data-annot-time="${tMin}">` +
+           `<span class="h-time">${fmtTime(tMin)}</span>` +
+           `<span class="h-type">Note</span>` +
+           `<span class="h-note-head">${esc(a.heading)}</span>` +
+           sub +
+           `<button class="h-note-del" data-annot-id="${esc(a.id)}" title="Delete note">✕</button>` +
+         `</div>`;
+}
+
 /**
- * Render the event history for the selected drug.
+ * Render the event history for the selected drug — pump-command rows plus
+ * editorial notation rows, merged and sorted chronologically.
  * Call after every model mutation or time change.
  */
 export function render(drugId) {
@@ -294,7 +388,13 @@ export function render(drugId) {
   let events = _model.getEvents(drug);
   if (_bolusOnly) events = events.filter(e => e.type === 'bolus');
 
-  if (events.length === 0) {
+  // Notations for this drug: drug-tagged ones for this drug, plus globals.
+  let notes = [];
+  if (_notationsVisible && _getAnnotations) {
+    notes = (_getAnnotations() || []).filter(a => a.drug == null || a.drug === drug);
+  }
+
+  if (events.length === 0 && notes.length === 0) {
     empty.style.display = 'block';
     list.innerHTML = '';
     renderTotals(drug);
@@ -305,46 +405,19 @@ export function render(drugId) {
 
   const now = _getElapsedMinutes ? _getElapsedMinutes() : Infinity;
 
-  // Build HTML
-  const rows = [];
+  // Merge into a single time-sorted list. Events rank before notations at the
+  // same timestamp so a notation reads as a caption under the event it narrates.
+  // Array.sort is stable, so same-(time,rank) items keep insertion order.
+  const items = [];
   for (let i = 0; i < events.length; i++) {
-    const evt = events[i];
-    const isPast = evt.time <= now;
-    const isSystem = evt.source === 'system';
-    const dimClass = isPast ? '' : ' h-future';
-    const sysClass = isSystem ? ' h-system' : '';
-    const tc = typeClass(evt);
-    const badge = sourceBadge(evt.source);
-
-    let desc = '';
-    if (evt.type === 'bolus') {
-      const dose = fmtBolusDose(evt.value, evt.drug);
-      const modeLabel = evt.deliveryMode === 'push' ? 'IV Push' : 'Pump Bolus';
-      desc = `<span class="h-type">${badge}${modeLabel}</span>` +
-             `<span class="h-value"><strong>${dose}</strong></span>`;
-    } else if (evt.type === 'rate') {
-      if (evt.value === 0 && evt.source === 'tci') {
-        // TCI-scheduled pause (pump holds until next TCI step)
-        desc = `<span class="h-type">${badge}Paused</span>`;
-      } else {
-        const rate = fmtRate(evt.value, evt.drug);
-        const prefix = isSystem ? '↩ ' : '';
-        desc = `<span class="h-type">${badge}${prefix}Rate</span>` +
-               `<span class="h-value"><strong>${rate}</strong></span>`;
-      }
-    } else if (evt.type === 'pause') {
-      desc = `<span class="h-type">${badge}Pump Stopped</span>`;
-    }
-
-    rows.push(
-      `<div class="history-row ${tc}${dimClass}${sysClass}" data-evt-id="${evt.id}" data-evt-time="${evt.time}">` +
-        `<span class="h-time">${fmtTime(evt.time)}</span>` +
-        desc +
-      `</div>`
-    );
+    items.push({ time: events[i].time, rank: 0, html: buildEventRow(events[i], now) });
   }
+  for (let i = 0; i < notes.length; i++) {
+    items.push({ time: notes[i].timeMin || 0, rank: 1, html: buildNoteRow(notes[i], now) });
+  }
+  items.sort((x, y) => (x.time - y.time) || (x.rank - y.rank));
 
-  list.innerHTML = rows.join('');
+  list.innerHTML = items.map(it => it.html).join('');
   renderTotals(drug);
 }
 
@@ -358,7 +431,10 @@ export function updateDimming() {
   const now = _getElapsedMinutes ? _getElapsedMinutes() : Infinity;
   const rows = list.children;
   for (let i = 0; i < rows.length; i++) {
-    const t = parseFloat(rows[i].dataset.evtTime);
+    const raw = rows[i].dataset.evtTime !== undefined
+      ? rows[i].dataset.evtTime
+      : rows[i].dataset.annotTime;
+    const t = parseFloat(raw);
     if (isNaN(t)) continue;
     rows[i].classList.toggle('h-future', t > now);
   }

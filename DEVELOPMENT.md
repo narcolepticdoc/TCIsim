@@ -4,6 +4,20 @@
 
 ## Session History
 
+### Notations in the event log (v0.5.38) — Interim
+
+User request: surface narrative notations in the event history — two-line entries like `TCI Target Set / Ce 4.5 mcg/mL`, `TCI Ended / Manual Bolus`, `TCI Ended / Manual Rate Set`, `TCI Ended / Pump Stopped`.
+
+Background: an annotation system already existed (`annotations[]` + `addAnnotation()` in `js/app.js`), persisted and restored, but its rendering was a known-temporary hack — `addAnnotation` and `session.restore` each `appendChild`'d rows using stale markup (`.h-step/.h-desc/.h-time`) that didn't match the real two-line history schema, and every `history.render()` (`list.innerHTML = …`) clobbered them. So notations never reliably showed.
+
+Approach: make `history.render()` the single renderer that merges pump-command rows and notation rows, time-sorted, reusing the `.history-row` grid. Notations stay in the editorial `annotations[]` array — they must NOT enter the PK event list (engine-replay invariant). `addAnnotation` now takes `(text, drugId)` where `text` is a string or `{ heading, sub }`, and stores `{ id, timeMin, time, heading, sub, drug }`. The numeric `timeMin` lets notations interleave with events (which use numeric `evt.time`) and honor the ET/RT toggle. Both DOM-append hacks were removed; restore just calls `setAnnotations` and lets `refreshChart` → `history.render` paint.
+
+Decisions (asked up front): (1) render ALL existing annotations as notation rows, not just the four TCI ones; (2) drug-tag notations — drug-specific ones show only in that drug's history, global ones (`drug === null`: Case Started/Restored) show everywhere; (3) notations are deletable in Edit mode (a ✕ per note → `deleteAnnotation` → re-render + save) and gated by a persisted **Notes** show/hide toggle (`tci-pref-history-show-notations`).
+
+Wording was unified into one consistent scheme (heading = Title-Case action, sub = the detail), replacing the old inconsistent strings (`"Manual rate: X"`, `"Dropped out of TCI — manual bolus"`, `"Exit Ce set to X"`, `"TCI target Ce=X μg/mL"`). The four TCI-lifecycle notations are emitted explicitly at their call sites (pre-case keypad + running-case `tci-modal` for target-set; rate/bolus/pump-stop branches for TCI-end), and `onModeChange`'s detail-string fallback now drug-tags via the `drugId` it already receives. No legacy-format migration needed — the only restored data is the current-format interrupted-session snapshot.
+
+Merge ordering: events rank before notations at the same timestamp (`sort` by `(time, rank)`, stable) so a notation reads as a caption under the action it describes. `updateDimming()` reads `data-annot-time` for notation rows so past/future dimming still applies.
+
 ### Bolus delivery-time display (v0.5.37) — Interim
 
 User request: in the Add Bolus modals, show the time the bolus is expected to be given over, beneath the unit-conversion calculation section.
