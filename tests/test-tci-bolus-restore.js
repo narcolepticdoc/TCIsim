@@ -55,6 +55,35 @@ function ok(cond, msg) {
     ok(c30.Ce < 3.0, `No runaway from a stuck bolus rate — Ce stays under target (${c30.Ce.toFixed(2)})`);
   }
 
+  // --- Restore round-trip: re-inserting saved events the way session.restore()
+  //     does (passing source) must preserve the 'tci' tag on rate steps, so the
+  //     TCI badge survives a case restore. ---
+  {
+    const src = createModel();
+    src.planTCI('propofol', 0, 3.0);
+    // Serialize like session.save(): keep source, drop snapshot.
+    const saved = src.getEvents('propofol').map(e => ({
+      time: e.time, type: e.type, value: e.value, source: e.source, deliveryMode: e.deliveryMode,
+    }));
+
+    // Re-insert like session.restore(): skip system rows, pass source through.
+    const dst = createModel();
+    for (const e of saved) {
+      if (e.source === 'system') continue;
+      if (e.type === 'rate') dst.addRate('propofol', e.time, e.value, '', { source: e.source || 'manual' });
+      else if (e.type === 'bolus') dst.addBolus('propofol', e.time, e.value, '', { deliveryMode: e.deliveryMode || 'pump', source: e.source || 'manual' });
+      else if (e.type === 'pause') dst.addPause('propofol', e.time, '');
+    }
+
+    const rates = dst.getEvents('propofol').filter(e => e.type === 'rate');
+    ok(rates.length > 0 && rates.every(e => e.source === 'tci'),
+      `Restored TCI rate steps keep source 'tci' (${rates.map(e => e.source).join(',')})`);
+    const bolus = dst.getEvents('propofol').find(e => e.type === 'bolus');
+    ok(bolus && bolus.source === 'tci', 'Restored TCI bolus keeps source tci');
+    ok(dst.getEvents('propofol').filter(e => e.source === 'system').length === 0,
+      'Restored TCI bolus regenerates no system rate-restore');
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch(err => {
