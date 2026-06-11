@@ -11,6 +11,15 @@
 
 ---
 
+## [0.5.38.1] — 2026-06-11
+
+Stop emitting the redundant **"Rate restored after bolus"** (`source:'system'`, dimmed ↩) row after a **TCI** bolus. `planTCI` already inserts explicit rate steps that define post-bolus delivery, so the system restore was pure clutter — and misleading, since it showed the *pre-plan* rate (often 0) immediately before the TCI maintenance rate. It was also a functional no-op: engine replay never changes the active rate across a bolus, so the restore only ever set the rate to the value it already was. Manual boluses are unchanged — they keep the restore marker, which is the only log evidence the pump resumed at its prior rate when there's no plan.
+
+- `js/sim/events/actions.js` — `addBolus` skips the system rate-restore when `opts.source === 'tci'` (fresh-bolus path) / `existing.source === 'tci'` (merge path).
+- `tests/test-tci-bolus-restore.js` — new real-module regression test (imports `js/sim/simulation.js`): a TCI plan's loading bolus produces no `system` event, a manual bolus still produces exactly one at the prior rate, and delivery still tracks toward target.
+
+---
+
 ## [0.5.38] — 2026-06-11
 
 Add **Notations** to the event history. The history panel now interleaves narrative two-line notes with the pump-command rows, so the log reads as a clinical timeline: `TCI Target Set / Ce 4.5 mcg/mL`, `TCI Ended / Manual Bolus`, `TCI Ended / Manual Rate Set`, `TCI Ended / Pump Stopped`, plus `Redose Threshold Set/Cleared`, `Emergence Set/Cleared`, `Dose Reconciled`, and the global `Case Started` / `Case Restored`. Notations are drug-tagged — drug-specific notes appear only in that drug's history, while global ones show everywhere. A **Notes** toggle in the history bar hides/shows all notations (persisted), and in Edit mode each note carries a ✕ to delete it.

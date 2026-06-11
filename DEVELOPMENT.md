@@ -4,6 +4,16 @@
 
 ## Session History
 
+### Suppress rate-restore after TCI boluses (v0.5.38.1) — Interim
+
+User observation: a TCI loading bolus in the event log is followed by the dimmed ↩ "Rate restored after bolus" (`source:'system'`) row, then the TCI plan's own rate steps — cluttered and confusing, especially as the restore shows the pre-plan rate (often 0).
+
+Finding: that restore is **functionally redundant**. In `js/sim/events/replay.js` the bolus branch advances the engine transiently at the bolus rate but never touches `currentRate`, so the pump automatically resumes the pre-bolus rate afterward. The system rate-restore just sets the rate to the value it already is — removing it changes zero simulation output (verified). It exists only as a UI/audit marker, which is genuinely useful for *manual* boluses (the only log evidence the pump resumed) but redundant for TCI boluses (the plan's rate steps already define post-bolus delivery).
+
+Decision (confirmed with user): suppress the restore **only for TCI-sourced boluses**. `js/sim/events/actions.js` `addBolus` now skips inserting the `source:'system'` event when `opts.source === 'tci'` (fresh-bolus path) or `existing.source === 'tci'` (merge path). Manual boluses keep theirs. Save/restore stays consistent — `js/app/session.js` re-inserts boluses with `source: evt.source` and skips saved `system` rows, so a restored TCI bolus regenerates no restore. The Case-1 "TCI rate step at the same maintenance rate" was intentionally left as-is (it documents the settling rate).
+
+Testing note: the existing `test-*.js` files inline a reimplementation of the engine/events and don't exercise the real `addBolus`, so a regression test there would be meaningless. Added `tests/test-tci-bolus-restore.js` which dynamically imports the real `js/sim/simulation.js` (the runner executes any `test-*.js` that prints the `N passed, M failed` line) and asserts: TCI bolus → no `system` event; manual bolus → exactly one restore at the prior rate; and the plan still delivers toward target (no runaway from a stuck bolus rate).
+
 ### Notations in the event log (v0.5.38) — Interim
 
 User request: surface narrative notations in the event history — two-line entries like `TCI Target Set / Ce 4.5 mcg/mL`, `TCI Ended / Manual Bolus`, `TCI Ended / Manual Rate Set`, `TCI Ended / Pump Stopped`.
