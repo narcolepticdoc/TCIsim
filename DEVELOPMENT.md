@@ -4,6 +4,10 @@
 
 ## Session History
 
+### Don't duplicate "Case Started" on restore (v0.5.38.3) — Interim
+
+Bug: restoring a case showed both a "Case Started" and a "Case Restored" notation freshly added at restore time. `session.restore()` loads the saved annotations (already containing the original "Case Started") and then calls `controls.ensureStarted()` to start the timer — `ensureStarted` fires the `onCaseStart` callback, which calls `addAnnotation('Case Started')`, minting a duplicate. `ensureStarted` is only ever called from restore (the keypad/Start paths use `handleButton`), so the fix is localized: `ensureStarted(opts)` forwards `opts` to `onCaseStart`, `onCaseStart(opts)` skips the annotation when `opts.restored`, and restore passes `{ restored: true }`. The normal Start button still logs "Case Started" (it calls `onCaseStart()` with no opts). No test added — the path is DOM/timer-coupled; verified by inspection + manual restore.
+
 ### Preserve TCI source on case restore (v0.5.38.2) — Interim
 
 Bug: a restored TCI case showed its rate steps un-badged (treated as manual). `js/app/session.js` `save()` serializes `source` for every event, but `restore()`'s replay loop called `model.addRate(drugId, time, value, annotation)` with no `opts`, so `actions.js addRate` defaulted `source` to `'manual'` and the saved `'tci'` tag was lost. Boluses were unaffected — that branch already passed `{ source: evt.source || 'manual' }`.

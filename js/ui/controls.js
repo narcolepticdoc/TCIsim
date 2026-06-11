@@ -51,15 +51,17 @@ export function isCaseStarted() { return caseStarted; }
 
 /**
  * Ensure the case is started (auto-start if not yet).
- * Called by keypad confirm — setting a target should start the case.
+ * Called on case restore. Passes opts through to onCaseStart so callers
+ * can suppress side effects (e.g. the "Case Started" annotation on restore).
+ * @param {Object} [opts] - forwarded to onCaseStart (e.g. { restored: true })
  * @returns {boolean} true if case was just started
  */
-export function ensureStarted() {
+export function ensureStarted(opts) {
   if (caseStarted) return false;
   caseStarted = true;
   timer.start();
   updateButton();
-  if (onCaseStart) onCaseStart();
+  if (onCaseStart) onCaseStart(opts);
   return true;
 }
 
