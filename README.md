@@ -13,7 +13,7 @@ A mobile-first progressive web app for anesthesia training, focused on pharmacok
   - CET (Conservative) — SimTIVA-style rate-corrected bolus
   - CET (Emulation) — ported SimTIVA `deliver_cpt` algorithm with eigenstate-based maintenance
 - **Realistic pump delivery** simulation (configurable max rate 750-1200 mL/h)
-- **Event history** with add/edit/delete, TCI conflict rules, manual rate and bolus support
+- **Event history** with add/edit/delete, TCI conflict rules, manual rate and bolus support, and interleaved editorial notations (TCI target set / ended, redose, emergence, dose reconciled)
 - **Real-time chart** with Cp, Ce, and BIS curves
 - **Opioid co-administration** toggle (affects Eleveld PK and PD parameters)
 - **BIS prediction** via Eleveld PD model (Ce50, sigmoid Emax)

@@ -25,7 +25,7 @@ const STORAGE_KEY = 'tci-sim-last-case';
  * @param {string|null} state.wallClockStart - ISO string of case start time
  * @param {Object} state.modes - { drugId: modeString }
  * @param {Object} state.ceTargets - { drugId: number }
- * @param {Array} state.annotations - [{ time, text }]
+ * @param {Array} state.annotations - notations: [{ id, timeMin, time, heading, sub, drug }]
  * @param {string} state.primaryDrug
  */
 export function saveCase(state) {

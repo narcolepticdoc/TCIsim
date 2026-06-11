@@ -11,6 +11,21 @@
 
 ---
 
+## [0.5.38] — 2026-06-11
+
+Add **Notations** to the event history. The history panel now interleaves narrative two-line notes with the pump-command rows, so the log reads as a clinical timeline: `TCI Target Set / Ce 4.5 mcg/mL`, `TCI Ended / Manual Bolus`, `TCI Ended / Manual Rate Set`, `TCI Ended / Pump Stopped`, plus `Redose Threshold Set/Cleared`, `Emergence Set/Cleared`, `Dose Reconciled`, and the global `Case Started` / `Case Restored`. Notations are drug-tagged — drug-specific notes appear only in that drug's history, while global ones show everywhere. A **Notes** toggle in the history bar hides/shows all notations (persisted), and in Edit mode each note carries a ✕ to delete it.
+
+This replaces a half-wired annotation system whose rows were rendered with stale markup and clobbered on every history repaint. `history.render()` is now the single source of truth, merging events and notations into one time-sorted list (events rank before a same-timestamp notation so the note reads as a caption under the action it describes).
+
+- `js/app.js` — `addAnnotation(text, drugId)` accepts a `{ heading, sub }` notation and a drug tag, stores `{ id, timeMin, time, heading, sub, drug }`, and repaints via `history.render`; new `deleteAnnotation`; the four TCI-lifecycle emission points + redose/emergence wording; `history.init` wiring (`getAnnotations`, `onNotationDelete`); Notes toggle button wiring.
+- `js/ui/history.js` — unified merge/sort renderer (`buildEventRow` / `buildNoteRow`), notation delete handling, `updateDimming` for notation rows, `toggleNotations` / `getNotationsVisible` (persisted under `tci-pref-history-show-notations`).
+- `js/app/tci-modal.js` — running-case `TCI Target Set` notation.
+- `js/app/session.js` — drop the manual DOM injection on restore; render via the unified path.
+- `js/ui/reconcile-modal.js` — `Dose Reconciled` notation; `js/ui/persist.js` — annotation JSDoc.
+- `index.html` — `.h-note*` row styling, Notes toggle button.
+
+---
+
 ## [0.5.37] — 2026-06-05
 
 Show the **estimated bolus delivery time** in the Add Bolus keypad and the event-editor modal, beneath the unit-conversion line. As a dose is typed, a muted line reads e.g. `Given over ~1:36 pump · ~20s push`, so the user can see how long the bolus will actually be infused before choosing **Pump Bolus** vs **IV Push**. When the bolus can only be given by hand (pump off, or a redose threshold is set outside manual mode), it collapses to a single `Given over ~20s`. Times are derived from the same pump settings (concentration + bolus rate) and push rate (3600 mL/h) used by the delivery engine.

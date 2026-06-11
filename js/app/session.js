@@ -214,24 +214,10 @@ export function createSession({
         }
       }
 
-      // Restore annotations
+      // Restore annotations — the unified history renderer (via refreshChart
+      // below) paints them interleaved with pump events. No manual DOM build.
       if (saved.annotations) {
         setAnnotations(saved.annotations);
-        const list = $('history-list');
-        const empty = $('history-empty');
-        if (list && empty) {
-          empty.style.display = 'none';
-          list.innerHTML = '';
-          saved.annotations.forEach((a, i) => {
-            const row = document.createElement('div');
-            row.className = 'history-row';
-            row.innerHTML = `<span class="h-step">${i}</span>` +
-              `<span class="h-desc"></span>` +
-              `<span class="h-time">${a.time}</span>`;
-            row.querySelector('.h-desc').textContent = a.text;
-            list.appendChild(row);
-          });
-        }
       }
 
       // Start the case (timer)
@@ -240,7 +226,7 @@ export function createSession({
       // Refresh chart
       refreshChart();
 
-      addAnnotation('Case restored');
+      addAnnotation('Case Restored');
     } catch (err) {
       console.error('[TCI Sim] Restore failed:', err);
       addAnnotation('\u26a0 Restore failed: ' + err.message);

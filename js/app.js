@@ -45,7 +45,8 @@ let chart = null;
 const preStartClock = {}; // { [drugId]: minutes } — per-drug so multi-drug events can overlap
 function getPreStartClock(drugId) { return preStartClock[drugId] || 0; }
 function advancePreStartClock(drugId, by) { preStartClock[drugId] = (preStartClock[drugId] || 0) + by; }
-let annotations = []; // mode transitions, editorial actions
+let annotations = []; // notations: mode transitions, editorial actions
+let _annotSeq = 0;     // monotonic id source for notations (stable across a session)
 
 // Controllers — created in boot()
 let tciModal = null;
@@ -166,6 +167,7 @@ function initSimScreen(patient) {
   mode.reset();
   Object.keys(preStartClock).forEach(k => delete preStartClock[k]);
   annotations = [];
+  _annotSeq = 0;
 
   // Reset drug selection to propofol (default)
   selectedDrug = 'propofol';
@@ -228,28 +230,47 @@ function initSimScreen(patient) {
 
 // ---- Annotations ----
 
-function addAnnotation(text) {
-  if (!text) return;
+/**
+ * Record a notation in the editorial log.
+ *
+ * @param {string|{heading:string, sub?:string}} text - plain heading, or a
+ *   two-line `{ heading, sub }` notation.
+ * @param {string|null} [drugId] - drug this notation belongs to. Drug-tagged
+ *   notations show only in that drug's history; `null` = global (all drugs).
+ */
+function addAnnotation(text, drugId = null) {
+  const heading = (text && typeof text === 'object') ? (text.heading || '') : text;
+  const sub = (text && typeof text === 'object') ? (text.sub || '') : '';
+  if (!heading) return;
+
+  const timeMin = timer.getElapsedMs() / 60000;
   const t = Math.floor(timer.getElapsedMs() / 1000);
   const h = Math.floor(t / 3600);
   const m = Math.floor((t % 3600) / 60);
   const s = t % 60;
   const ts = h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
-  annotations.push({ time: ts, text });
 
-  // Render to history panel (temporary — will be replaced by event-driven rendering)
-  const list = $('history-list');
-  const empty = $('history-empty');
-  if (list && empty) {
-    empty.style.display = 'none';
-    const row = document.createElement('div');
-    row.className = 'history-row';
-    row.innerHTML = `<span class="h-step">${annotations.length - 1}</span>` +
-      `<span class="h-desc"></span>` +
-      `<span class="h-time">${ts}</span>`;
-    row.querySelector('.h-desc').textContent = text;
-    list.appendChild(row);
-  }
+  annotations.push({
+    id: 'note_' + (_annotSeq++),
+    timeMin,
+    time: ts,
+    heading,
+    sub,
+    drug: drugId,
+  });
+
+  // Repaint via the unified history renderer so the notation interleaves
+  // chronologically with pump events instead of being clobbered.
+  history.render(selectedDrug);
+}
+
+/** Delete a notation by id (from the history Edit-mode ✕ affordance). */
+function deleteAnnotation(annotId) {
+  const i = annotations.findIndex(a => a.id === annotId);
+  if (i === -1) return;
+  annotations.splice(i, 1);
+  history.render(selectedDrug);
+  if (session) session.save();
 }
 
 // ---- Boot ----
@@ -289,7 +310,7 @@ function boot() {
   });
 
   // Create TCI modal controller
-  tciModal = createTciModal({ model, timer, mode, refreshChart, closeModal });
+  tciModal = createTciModal({ model, timer, mode, refreshChart, closeModal, addAnnotation });
 
   // Create session controller (save/restore/new case)
   session = createSession({
@@ -298,7 +319,15 @@ function boot() {
     setConfirmedPatient: (p) => { confirmedPatient = p; },
     getSelectedDrug: () => selectedDrug,
     getAnnotations: () => annotations,
-    setAnnotations: (a) => { annotations = a; },
+    setAnnotations: (a) => {
+      annotations = Array.isArray(a) ? a : [];
+      // Keep the id sequence ahead of any restored ids so new notations stay unique.
+      for (const an of annotations) {
+        const n = (typeof an.id === 'string' && an.id.startsWith('note_'))
+          ? parseInt(an.id.slice(5), 10) : NaN;
+        if (!isNaN(n) && n >= _annotSeq) _annotSeq = n + 1;
+      }
+    },
     getChart: () => chart,
     destroyChart: () => { if (chart) { chart.destroy(); chart = null; } },
     timer, mode, settings, controls, setup,
@@ -417,7 +446,7 @@ function boot() {
     timer,
     onCaseStart() {
       Object.keys(preStartClock).forEach(k => delete preStartClock[k]);
-      addAnnotation('Case started');
+      addAnnotation('Case Started');
       // Re-evaluate button visibility now that case has started —
       // hides Stop Pump for drugs without a pump.
       mode.refreshUI(selectedDrug);
@@ -440,12 +469,16 @@ function boot() {
       if (conc && conc.rate === 0 && m !== 'tci' && !hasFuture) return;
 
       model.addPause(selectedDrug, t, 'Pump stopped');
-      addAnnotation('Pump stopped');
+      if (m === 'tci') {
+        addAnnotation({ heading: 'TCI Ended', sub: 'Pump Stopped' }, selectedDrug);
+      } else {
+        addAnnotation({ heading: 'Pump Stopped' }, selectedDrug);
+      }
       // Stop drops out of current mode and clears all future events,
       // regardless of mode — the user is asking to halt forward delivery.
       model.clearAfter(selectedDrug, t);
       if (m !== 'none') {
-        mode.set(selectedDrug, 'none', 'Pump stopped');
+        mode.set(selectedDrug, 'none');  // no detail — notation emitted explicitly above
       }
       refreshChart();
     },
@@ -454,7 +487,7 @@ function boot() {
   // Initialize mode tracking
   mode.init({
     onModeChange(drugId, newMode, oldMode, detail) {
-      if (detail) addAnnotation(detail);
+      if (detail) addAnnotation(detail, drugId);
       // Keep history filter in sync — show bolus-only when threshold is set
       // and no infusion is running (pure intermittent mode)
       if (drugId === selectedDrug) {
@@ -504,27 +537,30 @@ function boot() {
           t = 0;
           mode.setCeTarget(selectedDrug, canonicalValue);
           model.planTCI(selectedDrug, t, canonicalValue, { tciMode, ceTolerance: settings.getSettings().ceTolerance, ...quantConfig });
-          mode.set(selectedDrug, 'tci', `TCI target Ce=${canonicalValue.toFixed(1)} μg/mL`);
+          mode.set(selectedDrug, 'tci');
+          addAnnotation({ heading: 'TCI Target Set', sub: `Ce ${canonicalValue.toFixed(1)} mcg/mL` }, selectedDrug);
           advancePreStartClock(selectedDrug, 0.01);
         }
       } else if (type === 'rate') {
         if (!isPumpEnabled(selectedDrug)) return; // no pump — rate not available
         // Manual rate — drops out of TCI
-        if (mode.get(selectedDrug) === 'tci') {
+        const rateWasTci = mode.get(selectedDrug) === 'tci';
+        if (rateWasTci) {
           model.clearAfter(selectedDrug, t);
         }
         model.addRate(selectedDrug, t, canonicalValue, `Rate ${displayText}`);
-        mode.set(selectedDrug, 'manual', `Manual rate: ${displayText}`);
+        mode.set(selectedDrug, 'manual');
+        if (rateWasTci) addAnnotation({ heading: 'TCI Ended', sub: 'Manual Rate Set' }, selectedDrug);
         // Rate change is near-instantaneous
         if (!controls.isCaseStarted()) advancePreStartClock(selectedDrug, 0.01);
       } else if (type === 'intermittent') {
         // Redose threshold — independent overlay, does not change mode
         if (canonicalValue <= 0) {
           mode.clearIntermittentThreshold(selectedDrug);
-          addAnnotation('Redose threshold cleared');
+          addAnnotation({ heading: 'Redose Threshold Cleared' }, selectedDrug);
         } else {
           mode.setIntermittentThreshold(selectedDrug, canonicalValue);
-          addAnnotation(`Redose threshold ${displayText}`);
+          addAnnotation({ heading: 'Redose Threshold Set', sub: displayText }, selectedDrug);
         }
         mode.refreshUI(selectedDrug);
         // Update history filter for the new threshold state
@@ -535,12 +571,12 @@ function boot() {
       } else if (type === 'exitCe') {
         if (canonicalValue <= 0) {
           mode.clearExitCe(selectedDrug);
-          addAnnotation('Exit Ce cleared');
+          addAnnotation({ heading: 'Emergence Cleared' }, selectedDrug);
         } else {
           // Extract just the numeric part the user typed (e.g. "1.5" from "1.5 mcg/mL")
           const numLabel = displayText.split(' ')[0];
           mode.setExitCe(selectedDrug, canonicalValue, numLabel);
-          addAnnotation(`Exit Ce set to ${displayText}`);
+          addAnnotation({ heading: 'Emergence Set', sub: `Ce ${displayText}` }, selectedDrug);
         }
         refreshChart();   // updates the exit line with correct yScale
         return;
@@ -549,7 +585,8 @@ function boot() {
         // Bolus — if in TCI, clear forward plan first, then bolus
         if (mode.get(selectedDrug) === 'tci') {
           model.clearAfter(selectedDrug, t);
-          mode.set(selectedDrug, 'manual', 'Dropped out of TCI — manual bolus');
+          mode.set(selectedDrug, 'manual');
+          addAnnotation({ heading: 'TCI Ended', sub: 'Manual Bolus' }, selectedDrug);
         } else if (mode.get(selectedDrug) === 'none' && !NO_TCI_DRUGS.has(selectedDrug) && pumpOn) {
           // TCI-capable drug with pump: bolus from 'none' implies manual mode
           mode.set(selectedDrug, 'manual');
@@ -630,6 +667,8 @@ function boot() {
     getPatient: () => model ? model.getPatient() : { weight: 70 },
     getWallClockStart: () => timer.getWallClockStart(),
     onEventTap: (evtId) => eventEditor.openEdit(evtId),
+    getAnnotations: () => annotations,
+    onNotationDelete: (id) => deleteAnnotation(id),
   });
 
   const btnHistoryTime = $('btn-history-time');
@@ -647,6 +686,15 @@ function boot() {
     btnHistoryEdit.addEventListener('click', () => {
       const on = history.toggleEditMode();
       btnHistoryEdit.classList.toggle('active', on);
+    });
+  }
+
+  const btnHistoryNotes = $('btn-history-notes');
+  if (btnHistoryNotes) {
+    btnHistoryNotes.classList.toggle('active', history.getNotationsVisible());
+    btnHistoryNotes.addEventListener('click', () => {
+      const on = history.toggleNotations();
+      btnHistoryNotes.classList.toggle('active', on);
     });
   }
 

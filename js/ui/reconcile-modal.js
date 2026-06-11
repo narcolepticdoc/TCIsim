@@ -679,7 +679,7 @@ function _doReconcile(now) {
     if (_model.setReconciliationGhost && ghostPoints) {
       _model.setReconciliationGhost(_drugId, { capturedAt: now, points: ghostPoints });
     }
-    _addAnnotation(`Reconciled ${_drugId}: ${annotMsg}`);
+    _addAnnotation({ heading: 'Dose Reconciled', sub: annotMsg }, _drugId);
     _refreshChart();
     close();
   } catch (e) {
