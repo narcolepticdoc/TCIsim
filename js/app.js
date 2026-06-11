@@ -444,9 +444,11 @@ function boot() {
   // Initialize controls (start case / pause pump)
   controls.init({
     timer,
-    onCaseStart() {
+    onCaseStart(opts = {}) {
       Object.keys(preStartClock).forEach(k => delete preStartClock[k]);
-      addAnnotation('Case Started');
+      // On restore the original "Case Started" is already in the loaded
+      // annotations — don't mint a duplicate (restore adds "Case Restored").
+      if (!opts.restored) addAnnotation('Case Started');
       // Re-evaluate button visibility now that case has started —
       // hides Stop Pump for drugs without a pump.
       mode.refreshUI(selectedDrug);

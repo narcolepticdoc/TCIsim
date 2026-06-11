@@ -222,8 +222,10 @@ export function createSession({
         setAnnotations(saved.annotations);
       }
 
-      // Start the case (timer)
-      controls.ensureStarted();
+      // Start the case (timer). Suppress the "Case Started" annotation —
+      // the original is already in the restored annotations, and we add
+      // "Case Restored" below.
+      controls.ensureStarted({ restored: true });
 
       // Refresh chart
       refreshChart();

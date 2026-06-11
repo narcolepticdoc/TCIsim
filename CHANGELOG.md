@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.38.3] — 2026-06-11
+
+Fix: restoring a case logged a duplicate **"Case Started"** notation. Restore loads the saved annotations (which already include the original "Case Started") and then calls `controls.ensureStarted()`, whose `onCaseStart` callback minted a second "Case Started" — on top of the "Case Restored" marker. `ensureStarted` now forwards an options object to `onCaseStart`, and restore passes `{ restored: true }` so the start annotation is skipped (the normal Start button is unaffected and still logs "Case Started").
+
+- `js/ui/controls.js` — `ensureStarted(opts)` forwards `opts` to `onCaseStart`.
+- `js/app.js` — `onCaseStart(opts)` skips the "Case Started" annotation when `opts.restored`.
+- `js/app/session.js` — restore calls `ensureStarted({ restored: true })`.
+
+---
+
 ## [0.5.38.2] — 2026-06-11
 
 Fix: restoring a TCI-controlled case mis-flagged its rate steps. `session.restore()` re-inserted rate events via `model.addRate(...)` without the source argument, so saved `source:'tci'` rate steps came back as `'manual'` and lost their **TCI** badge in the event log (boluses were already restored with their source). Now the restore passes `{ source: evt.source || 'manual' }`, mirroring the bolus branch — TCI rate steps keep their tag (and any reconcile-sourced rows keep theirs). The save side already serialized `source` and `addRate` already honored `opts.source`; only the restore call was dropping it. Source is metadata only, so concentrations are unaffected.
