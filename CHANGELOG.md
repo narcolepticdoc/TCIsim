@@ -11,6 +11,15 @@
 
 ---
 
+## [0.5.38.2] — 2026-06-11
+
+Fix: restoring a TCI-controlled case mis-flagged its rate steps. `session.restore()` re-inserted rate events via `model.addRate(...)` without the source argument, so saved `source:'tci'` rate steps came back as `'manual'` and lost their **TCI** badge in the event log (boluses were already restored with their source). Now the restore passes `{ source: evt.source || 'manual' }`, mirroring the bolus branch — TCI rate steps keep their tag (and any reconcile-sourced rows keep theirs). The save side already serialized `source` and `addRate` already honored `opts.source`; only the restore call was dropping it. Source is metadata only, so concentrations are unaffected.
+
+- `js/app/session.js` — pass `source` through `model.addRate` in the restore replay loop.
+- `tests/test-tci-bolus-restore.js` — added a save→restore round-trip assertion (re-insert saved events as `restore()` does; verify rate steps come back `source:'tci'`).
+
+---
+
 ## [0.5.38.1] — 2026-06-11
 
 Stop emitting the redundant **"Rate restored after bolus"** (`source:'system'`, dimmed ↩) row after a **TCI** bolus. `planTCI` already inserts explicit rate steps that define post-bolus delivery, so the system restore was pure clutter — and misleading, since it showed the *pre-plan* rate (often 0) immediately before the TCI maintenance rate. It was also a functional no-op: engine replay never changes the active rate across a bolus, so the restore only ever set the rate to the value it already was. Manual boluses are unchanged — they keep the restore marker, which is the only log evidence the pump resumed at its prior rate when there's no plan.

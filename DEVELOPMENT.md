@@ -4,6 +4,14 @@
 
 ## Session History
 
+### Preserve TCI source on case restore (v0.5.38.2) — Interim
+
+Bug: a restored TCI case showed its rate steps un-badged (treated as manual). `js/app/session.js` `save()` serializes `source` for every event, but `restore()`'s replay loop called `model.addRate(drugId, time, value, annotation)` with no `opts`, so `actions.js addRate` defaulted `source` to `'manual'` and the saved `'tci'` tag was lost. Boluses were unaffected — that branch already passed `{ source: evt.source || 'manual' }`.
+
+Fix: pass the same `{ source: evt.source || 'manual' }` to `model.addRate` in the restore loop. The `model.addRate` facade already forwards `opts` (`simulation.js:200`) and `addRate` already honors `opts.source` (`actions.js:96`) — only the restore call was dropping it. `source` is metadata (history badge via `sourceBadge`), not used in replay, so concentrations are untouched. Pause events need no change: `addPause` has no source param and TCI never emits `'pause'`-type events (a TCI hold is a `rate:0` event, handled by the now-fixed rate branch).
+
+Test: extended `tests/test-tci-bolus-restore.js` (real-module) with a save→restore round-trip — serialize a planned TCI case's events, re-insert them into a fresh model exactly as `restore()` does (passing source, skipping system rows), and assert the rate steps return with `source:'tci'`. `session.restore()` itself is DOM-coupled (initSimScreen/showScreen), so the model-level round-trip is the meaningful guard.
+
 ### Suppress rate-restore after TCI boluses (v0.5.38.1) — Interim
 
 User observation: a TCI loading bolus in the event log is followed by the dimmed ↩ "Rate restored after bolus" (`source:'system'`) row, then the TCI plan's own rate steps — cluttered and confusing, especially as the restore shows the pre-plan rate (often 0).

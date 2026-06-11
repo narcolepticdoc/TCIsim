@@ -146,7 +146,9 @@ export function createSession({
             // Skip system events (rate restores after bolus) — addBolus generates these
             if (evt.source === 'system') continue;
             if (evt.type === 'rate') {
-              model.addRate(drugId, evt.time, evt.value, evt.annotation || '');
+              model.addRate(drugId, evt.time, evt.value, evt.annotation || '', {
+                source: evt.source || 'manual', // preserve 'tci' tag so the badge survives restore
+              });
             } else if (evt.type === 'bolus') {
               model.addBolus(drugId, evt.time, evt.value, evt.annotation || '', {
                 deliveryMode: evt.deliveryMode || 'pump', // default for old saved cases
