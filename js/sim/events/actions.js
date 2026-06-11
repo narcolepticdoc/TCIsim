@@ -159,7 +159,8 @@ export function createActions(
         Math.abs(e.time - newEnd) < 0.001
       );
 
-      if (!hasManualAtEnd) {
+      // TCI boluses skip the system rate-restore (see fresh-bolus path below).
+      if (existing.source !== 'tci' && !hasManualAtEnd) {
         const rateEvt = createEvent(drugId, newEnd, 'rate', restoreRate, {
           source: 'system',
           annotation: 'Rate restored after bolus',
@@ -181,12 +182,18 @@ export function createActions(
     });
     insert(bolusEvt);
 
-    const { duration } = getBolusDelivery(bolusEvt);
-    const rateEvt = createEvent(drugId, time + duration, 'rate', priorRate, {
-      source: 'system',
-      annotation: 'Rate restored after bolus',
-    });
-    insert(rateEvt);
+    // TCI boluses don't get a system rate-restore: planTCI inserts explicit
+    // rate steps that define post-bolus delivery, so a restore would be a
+    // redundant, misleading (pre-plan rate) row. It's also a functional no-op —
+    // replay never changes currentRate across a bolus. Manual boluses keep it.
+    if (opts.source !== 'tci') {
+      const { duration } = getBolusDelivery(bolusEvt);
+      const rateEvt = createEvent(drugId, time + duration, 'rate', priorRate, {
+        source: 'system',
+        annotation: 'Rate restored after bolus',
+      });
+      insert(rateEvt);
+    }
 
     replayDrugFrom(drugId, bolusEvt.id);
     return bolusEvt;
