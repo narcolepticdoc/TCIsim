@@ -71,7 +71,13 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal, a
     const qc = quantConfig || getQuantizeConfig(drugId);
     const { scheme } = model.planTCI(drugId, futureTime, ceTarget, { tciMode, ceTolerance, ...qc });
     mode.set(drugId, 'tci');
-    if (addAnnotation) addAnnotation({ heading: 'TCI Target Set', sub: `Ce ${ceTarget.toFixed(1)} mcg/mL` }, drugId);
+    if (addAnnotation) {
+      // Show the target in the drug's display unit (e.g. ng/mL for fentanyl /
+      // ketamine), not the canonical mcg/mL — mirrors the delay modal's Ce text.
+      const ceUnit = getAllowedUnits(drugId, 'ceTarget')[0] || 'mcg/mL';
+      const ceDisp = `${formatValue(fromCanonical(ceTarget, ceUnit, drugId, 'ceTarget', {}), ceUnit)} ${ceUnit}`;
+      addAnnotation({ heading: 'TCI Target Set', sub: `Ce ${ceDisp}` }, drugId);
+    }
     refreshChart();
 
     closeModal('modal-tci-delay');

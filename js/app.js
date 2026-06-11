@@ -538,7 +538,7 @@ function boot() {
           mode.setCeTarget(selectedDrug, canonicalValue);
           model.planTCI(selectedDrug, t, canonicalValue, { tciMode, ceTolerance: settings.getSettings().ceTolerance, ...quantConfig });
           mode.set(selectedDrug, 'tci');
-          addAnnotation({ heading: 'TCI Target Set', sub: `Ce ${canonicalValue.toFixed(1)} mcg/mL` }, selectedDrug);
+          addAnnotation({ heading: 'TCI Target Set', sub: `Ce ${displayText}` }, selectedDrug);
           advancePreStartClock(selectedDrug, 0.01);
         }
       } else if (type === 'rate') {
