@@ -176,6 +176,14 @@
     .pull-patient-status.is-error{color:var(--amber,#d9a23a)}
     .pull-patient-status.is-stale{color:var(--amber,#d9a23a)}
     .pull-patient-status.is-ok{color:var(--text-secondary)}
+    .start-dose-pair{display:flex;gap:4px}
+    .start-dose-pair input[type="text"]{flex:1 1 45%;min-width:0}
+    .start-dose-pair select{flex:1 1 55%;min-width:0}
+    .start-doses-row{display:flex;align-items:center;gap:8px;flex-shrink:0}
+    .start-doses-check{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-secondary);cursor:pointer;flex:1;min-width:0}
+    .btn-template-sync{padding:5px 10px;background:transparent;border:1px dashed var(--border);border-radius:var(--radius-sm);color:var(--text-secondary);font-family:var(--font-display);font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}
+    .btn-template-sync:hover:not(:disabled){background:var(--bg-hover);color:var(--text-primary);border-color:var(--border-focus)}
+    .btn-template-sync:disabled{opacity:.5;cursor:default}
     @media(max-height:380px){.setup-brand{width:160px;min-width:140px;padding:12px 10px;gap:6px}.setup-brand h1{font-size:20px}.setup-form{padding:8px 14px;gap:6px}.input-grid{gap:5px 10px}.form-row input[type="text"],.form-row select{padding:5px 8px;font-size:13px}.form-row label{font-size:10px}.btn-confirm{padding:8px;font-size:13px}.derived-bar{padding:5px 8px}.derived-item .d-value{font-size:12px}}
     @media(min-width:900px){.setup-form{max-width:540px}}
 
@@ -1137,6 +1145,20 @@
               <label for="input-propofol-rate-unit">Default infusion unit</label>
               <select id="input-propofol-rate-unit"></select>
             </div>
+            <div class="form-row">
+              <label for="input-propofol-start-bolus">Starting bolus <span class="unit-hint">(on Start)</span></label>
+              <div class="start-dose-pair">
+                <input type="text" id="input-propofol-start-bolus" inputmode="decimal" placeholder="&mdash;">
+                <select id="input-propofol-start-bolus-unit"></select>
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="input-propofol-start-rate">Starting infusion <span class="unit-hint">(on Start)</span></label>
+              <div class="start-dose-pair">
+                <input type="text" id="input-propofol-start-rate" inputmode="decimal" placeholder="&mdash;">
+                <select id="input-propofol-start-rate-unit"></select>
+              </div>
+            </div>
           </div>
           <div class="rounding-note" id="rounding-note-propofol"></div>
           <div class="pump-derived" id="pump-derived">Max bolus rate: 125.0 mg/min</div>
@@ -1168,6 +1190,20 @@
             <div class="form-row" id="row-fentanyl-rate-unit">
               <label for="input-fentanyl-rate-unit">Default infusion unit</label>
               <select id="input-fentanyl-rate-unit"></select>
+            </div>
+            <div class="form-row">
+              <label for="input-fentanyl-start-bolus">Starting bolus <span class="unit-hint">(on Start)</span></label>
+              <div class="start-dose-pair">
+                <input type="text" id="input-fentanyl-start-bolus" inputmode="decimal" placeholder="&mdash;">
+                <select id="input-fentanyl-start-bolus-unit"></select>
+              </div>
+            </div>
+            <div class="form-row" id="row-fentanyl-start-rate">
+              <label for="input-fentanyl-start-rate">Starting infusion <span class="unit-hint">(on Start)</span></label>
+              <div class="start-dose-pair">
+                <input type="text" id="input-fentanyl-start-rate" inputmode="decimal" placeholder="&mdash;">
+                <select id="input-fentanyl-start-rate-unit"></select>
+              </div>
             </div>
           </div>
           <div class="rounding-note" id="rounding-note-fentanyl"></div>
@@ -1201,13 +1237,36 @@
               <label for="input-ketamine-rate-unit">Default infusion unit</label>
               <select id="input-ketamine-rate-unit"></select>
             </div>
+            <div class="form-row">
+              <label for="input-ketamine-start-bolus">Starting bolus <span class="unit-hint">(on Start)</span></label>
+              <div class="start-dose-pair">
+                <input type="text" id="input-ketamine-start-bolus" inputmode="decimal" placeholder="&mdash;">
+                <select id="input-ketamine-start-bolus-unit"></select>
+              </div>
+            </div>
+            <div class="form-row" id="row-ketamine-start-rate">
+              <label for="input-ketamine-start-rate">Starting infusion <span class="unit-hint">(on Start)</span></label>
+              <div class="start-dose-pair">
+                <input type="text" id="input-ketamine-start-rate" inputmode="decimal" placeholder="&mdash;">
+                <select id="input-ketamine-start-rate-unit"></select>
+              </div>
+            </div>
           </div>
           <div class="rounding-note" id="rounding-note-ketamine"></div>
           <div class="pump-derived" id="pump-derived-ketamine">Max bolus rate: 125.0 mg/min</div>
         </div>
       </div>
+      <div class="start-doses-row">
+        <label class="start-doses-check"><input type="checkbox" id="chk-start-doses"> Give starting doses on Start</label>
+        <button class="btn-template-sync" id="btn-push-template" type="button" title="Push starting doses to the cloud">&#8593; Push</button>
+        <button class="btn-template-sync" id="btn-pull-template" type="button" title="Pull starting doses from the cloud">&#8595; Pull</button>
+      </div>
+      <div class="pull-patient-status" id="template-sync-status" hidden></div>
       <button class="btn-confirm" id="btn-confirm">Confirm Patient</button>
       <button class="btn-restore" id="btn-restore" style="display:none">Restore Last Case</button>
+      <button class="btn-pull-patient" id="btn-pull-case" type="button" title="Pull the last pushed case from the cloud and restore it">&#8595; Pull case from cloud</button>
+      <button class="btn-pull-patient" id="btn-push-case" type="button" title="Push the last saved case to the cloud (kept 24 h)">&#8593; Push last case to cloud</button>
+      <div class="pull-patient-status" id="case-sync-status" hidden></div>
     </div>
   </div>
 
@@ -1912,7 +1971,16 @@
               <div class="settings-sync-status" id="set-sync-code-status">Enter the 6-character code shown in your scratchpad app.</div>
             </div>
             <div class="settings-row">
-              <div class="settings-sync-note">Pairs this simulator with a scratchpad app so you can pull patient demographics (age, sex, height, weight) from the cloud. De-identified / training use only &mdash; do not transfer protected health information.</div>
+              <label>Case transfer</label>
+              <div class="settings-control">
+                <button class="btn-template-sync" id="btn-sync-push-case" type="button" title="Push the last saved case to the cloud (kept 24 h)">&#8593; Push last case to cloud</button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-sync-status" id="sync-transfer-status"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-sync-note">Pairs this simulator with a scratchpad app so you can pull patient demographics (age, sex, height, weight) from the cloud. The same pairing code also moves your last case (kept 24 h) and starting-dose template between devices via the setup screen. De-identified / training use only &mdash; do not transfer protected health information.</div>
             </div>
           </div>
         </div>

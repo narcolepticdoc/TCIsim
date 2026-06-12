@@ -20,7 +20,7 @@ import * as history from './ui/history.js';
 import * as eventEditor from './ui/event-editor.js';
 import * as reconcileModal from './ui/reconcile-modal.js';
 import { createChart } from './ui/chart.js';
-import { bolusDeliveryMinutes, APP_VERSION, DRUG_IDS, DRUG_DEFS, isPumpEnabled } from './util/constants.js';
+import { bolusDeliveryMinutes, APP_VERSION, DRUG_IDS, DRUG_DEFS, isPumpEnabled, getPumpSettings } from './util/constants.js';
 import { hexToRgba } from './util/color.js';
 import { getQuantizeConfig } from './util/units.js';
 import * as persist from './ui/persist.js';
@@ -33,6 +33,8 @@ import { createChartBridge } from './app/chart-bridge.js';
 import { initCompartmentViz } from './ui/compartment-viz.js';
 import { _writeHidden } from './ui/patient-modal.js';
 import * as patientSync from './sync/patient-sync.js';
+import * as cloudSync from './sync/cloud-sync.js';
+import * as doseTemplate from './sync/dose-template.js';
 import './app/sw-register.js';
 
 const $ = id => document.getElementById(id);
@@ -273,6 +275,80 @@ function deleteAnnotation(annotId) {
   if (session) session.save();
 }
 
+// ---- Starting-dose template ----
+
+/**
+ * Apply the armed starting-dose template at t=0. Called from onCaseStart on
+ * a genuinely new case only — the caller's opts.restored flag guards restores
+ * (including cloud-pulled cases), where the event list already contains
+ * whatever was given. Drugs with pre-start planned events (a TCI target or
+ * planned boluses) are skipped so template doses never stack onto a plan.
+ * Failures skip the item and surface in the summary notation — they never
+ * block case start.
+ */
+function applyStartingDoses() {
+  try {
+    if (!doseTemplate.isArmed()) return;
+    const template = doseTemplate.loadTemplate();
+    if (doseTemplate.isTemplateEmpty(template)) return;
+    if (!model || !confirmedPatient) return;
+
+    const pump = {};
+    for (const drugId of DRUG_IDS) pump[drugId] = getPumpSettings(drugId);
+    const items = doseTemplate.buildTemplateDoses(template, {
+      weightKg: confirmedPatient.weight,
+      pump,
+      noTciDrugs: NO_TCI_DRUGS,
+    });
+
+    const skipDrugs = new Set(
+      DRUG_IDS.filter(d => template.drugs[d] && model.getEvents(d).length > 0)
+    );
+
+    const drugName = d => DRUG_DEFS[d]?.name || d;
+    const appliedByDrug = new Map();
+    const skipped = [];
+    for (const d of skipDrugs) skipped.push(`${drugName(d)} — already planned`);
+
+    for (const item of items) {
+      if (skipDrugs.has(item.drugId)) continue;
+      if (item.error) {
+        console.warn(`[TCI Sim] Starting dose skipped (${item.error}): ${item.drugId} ${item.type} ${item.displayText}`);
+        skipped.push(`${drugName(item.drugId)} ${item.type} ${item.displayText}`);
+        continue;
+      }
+      if (item.type === 'rate') {
+        model.addRate(item.drugId, 0, item.canonicalValue, `Rate ${item.displayText}`);
+      } else {
+        const label = item.deliveryMode === 'push' ? 'IV Push' : 'Pump Bolus';
+        model.addBolus(item.drugId, 0, item.canonicalValue, `${label} ${item.displayText}`, {
+          deliveryMode: item.deliveryMode,
+        });
+      }
+      if (item.setManualMode && mode.get(item.drugId) !== 'manual') {
+        mode.set(item.drugId, 'manual');
+      }
+      const parts = appliedByDrug.get(item.drugId) || [];
+      parts.push(item.displayText);
+      appliedByDrug.set(item.drugId, parts);
+    }
+
+    if (appliedByDrug.size || skipped.length) {
+      const given = [...appliedByDrug.entries()]
+        .map(([d, parts]) => `${drugName(d)} ${parts.join(' + ')}`)
+        .join(' · ');
+      const sub = skipped.length
+        ? `${given}${given ? ' · ' : ''}(skipped: ${skipped.join(', ')})`
+        : given;
+      addAnnotation({ heading: 'Starting Doses Given', sub });
+      if (chartBridge) chartBridge.refresh();
+      if (session) session.save();
+    }
+  } catch (err) {
+    console.error('[TCI Sim] applyStartingDoses error:', err);
+  }
+}
+
 // ---- Boot ----
 
 function boot() {
@@ -368,13 +444,30 @@ function boot() {
   // stored pairing code and inject them into the setup pipeline. On-demand;
   // degrades gracefully when /api is unavailable (e.g. local static server).
   const btnPullPatient = $('btn-pull-patient');
-  const pullStatus     = $('pull-patient-status');
-  const setPullStatus  = (text, cls) => {
-    if (!pullStatus) return;
-    pullStatus.textContent = text || '';
-    pullStatus.hidden = !text;
-    pullStatus.classList.remove('is-error', 'is-stale', 'is-ok');
-    if (cls) pullStatus.classList.add(cls);
+  const makeStatusSetter = (el) => (text, cls) => {
+    if (!el) return;
+    el.textContent = text || '';
+    el.hidden = !text;
+    el.classList.remove('is-error', 'is-stale', 'is-ok');
+    if (cls) el.classList.add(cls);
+  };
+  const setPullStatus     = makeStatusSetter($('pull-patient-status'));
+  const setCaseStatus     = makeStatusSetter($('case-sync-status'));
+  const setTemplateStatus = makeStatusSetter($('template-sync-status'));
+  // Map a sync transport failure to a user-facing diagnostic line. Shared by
+  // every cloud pull/push button so misconfiguration reads the same everywhere.
+  // Returns null for "not found" results so callers supply their own message.
+  const describeSyncError = (res) => {
+    if (res.error === 'invalid-code') return 'Invalid pairing code — re-check it in Settings → Sync';
+    if (res.error === 'network') return "Can't reach sync server — check connection";
+    if (res.error === 'http') {
+      if (res.serverError === 'kv-not-configured') return 'Sync backend not configured (KV env vars missing)';
+      if (res.status === 404) return 'Sync endpoint not found (/api not deployed)';
+      if (res.status === 413) return 'Payload too large for the sync server';
+      return `Sync error ${res.status}${res.serverError ? ' — ' + res.serverError : ''}`;
+    }
+    if (res.error === 'bad-payload') return 'Received data was invalid';
+    return null;
   };
   // Open the settings modal directly on the Sync tab — the settings gear lives
   // on the sim screen, so this is the only way to reach pairing from setup.
@@ -411,28 +504,115 @@ function boot() {
         const rel = patientSync.formatRelativeTime(res.patient.updatedAt);
         const ageMin = (Date.now() - res.patient.updatedAt) / 60000;
         setPullStatus(rel ? `Pulled — updated ${rel}` : 'Pulled', ageMin > 10 ? 'is-stale' : 'is-ok');
-      } else if (res.error === 'invalid-code') {
-        setPullStatus('Invalid pairing code — re-check it in Settings → Sync', 'is-error');
-      } else if (res.error === 'network') {
-        setPullStatus("Can't reach sync server — check connection", 'is-error');
-      } else if (res.error === 'http') {
-        // Surface the real cause so misconfiguration is debuggable.
-        if (res.serverError === 'kv-not-configured') {
-          setPullStatus('Sync backend not configured (KV env vars missing)', 'is-error');
-        } else if (res.status === 404) {
-          setPullStatus('Sync endpoint not found (/api not deployed)', 'is-error');
-        } else {
-          setPullStatus(`Sync error ${res.status}${res.serverError ? ' — ' + res.serverError : ''}`, 'is-error');
-        }
-      } else if (res.error === 'bad-payload') {
-        setPullStatus('Received data was invalid', 'is-error');
       } else {
-        setPullStatus('No patient found for that code yet', 'is-error');
+        setPullStatus(describeSyncError(res) || 'No patient found for that code yet', 'is-error');
       }
     });
   }
   document.addEventListener('tci:sync-code-change', refreshPullButton);
   refreshPullButton();
+
+  // Cloud case transfer — manual push/pull of the saved-case blob under the
+  // same pairing code (24 h server TTL) so a case can move to another device.
+  // Push is also reachable mid-case from Settings → Sync; pull is setup-screen
+  // only since restoring would clobber a running case.
+  const pushCase = async (btn, setStatus) => {
+    const code = patientSync.getStoredCode();
+    if (!code) { openSettingsToSync(); return; }
+    // Snapshot the live case first so the push reflects current state.
+    if (confirmedPatient && session) {
+      try { session.save(); } catch (e) {}
+    }
+    const saved = persist.loadCase();
+    if (!saved) { setStatus('No saved case to push yet', 'is-error'); return; }
+    const blob = cloudSync.prepareCaseForPush(saved);
+    if (!blob) { setStatus('Case too large to push', 'is-error'); return; }
+    if (btn) btn.disabled = true;
+    setStatus('Pushing…', 'is-ok');
+    const res = await cloudSync.pushPayload(code, 'case', blob);
+    if (btn) btn.disabled = false;
+    if (res.ok) setStatus('Case pushed — kept in the cloud for 24 h', 'is-ok');
+    else setStatus(describeSyncError(res) || 'Push failed', 'is-error');
+  };
+  const btnPushCase = $('btn-push-case');
+  if (btnPushCase) btnPushCase.addEventListener('click', () => pushCase(btnPushCase, setCaseStatus));
+  const btnSyncPushCase = $('btn-sync-push-case');
+  if (btnSyncPushCase) {
+    const setSyncStatus = makeStatusSetter($('sync-transfer-status'));
+    btnSyncPushCase.addEventListener('click', () => pushCase(btnSyncPushCase, setSyncStatus));
+  }
+
+  const btnPullCase = $('btn-pull-case');
+  if (btnPullCase) {
+    btnPullCase.addEventListener('click', async () => {
+      const code = patientSync.getStoredCode();
+      if (!code) { openSettingsToSync(); return; }
+      btnPullCase.disabled = true;
+      setCaseStatus('Pulling…', 'is-ok');
+      const res = await cloudSync.fetchPayload(code, 'case');
+      btnPullCase.disabled = false;
+      if (!res.found) {
+        setCaseStatus(describeSyncError(res) || 'No case found for that code yet', 'is-error');
+        return;
+      }
+      const valid = cloudSync.validateIncomingCase(res.payload);
+      if (!valid) { setCaseStatus('Received case data was invalid', 'is-error'); return; }
+      if (persist.hasSavedCase() && !window.confirm('Replace the locally saved case with the cloud copy?')) {
+        setCaseStatus('Pull cancelled — local case kept', 'is-ok');
+        return;
+      }
+      // The pulled blob becomes the local saved case, then the normal restore
+      // path replays it (its own v/savedAt survive saveCase's spread).
+      persist.saveCase(valid);
+      const rel = patientSync.formatRelativeTime(res.updatedAt);
+      setCaseStatus(rel ? `Case pulled — pushed ${rel}` : 'Case pulled', 'is-ok');
+      session.restore();
+    });
+  }
+
+  // Starting-dose template transfer — same pairing code, kind 'template'.
+  const btnPushTemplate = $('btn-push-template');
+  if (btnPushTemplate) {
+    btnPushTemplate.addEventListener('click', async () => {
+      const code = patientSync.getStoredCode();
+      if (!code) { openSettingsToSync(); return; }
+      const t = doseTemplate.loadTemplate();
+      if (doseTemplate.isTemplateEmpty(t)) {
+        setTemplateStatus('No starting doses defined yet', 'is-error');
+        return;
+      }
+      btnPushTemplate.disabled = true;
+      setTemplateStatus('Pushing…', 'is-ok');
+      const res = await cloudSync.pushPayload(code, 'template', t);
+      btnPushTemplate.disabled = false;
+      if (res.ok) setTemplateStatus('Starting doses pushed to cloud', 'is-ok');
+      else setTemplateStatus(describeSyncError(res) || 'Push failed', 'is-error');
+    });
+  }
+  const btnPullTemplate = $('btn-pull-template');
+  if (btnPullTemplate) {
+    btnPullTemplate.addEventListener('click', async () => {
+      const code = patientSync.getStoredCode();
+      if (!code) { openSettingsToSync(); return; }
+      btnPullTemplate.disabled = true;
+      setTemplateStatus('Pulling…', 'is-ok');
+      const res = await cloudSync.fetchPayload(code, 'template');
+      btnPullTemplate.disabled = false;
+      if (!res.found) {
+        setTemplateStatus(describeSyncError(res) || 'No starting doses found for that code yet', 'is-error');
+        return;
+      }
+      const t = doseTemplate.normalizeTemplate(res.payload);
+      if (doseTemplate.isTemplateEmpty(t)) {
+        setTemplateStatus('Received starting doses were empty or invalid', 'is-error');
+        return;
+      }
+      doseTemplate.saveTemplate(t);
+      setup.refreshTemplateInputs();
+      const rel = patientSync.formatRelativeTime(res.updatedAt);
+      setTemplateStatus(rel ? `Starting doses pulled — pushed ${rel}` : 'Starting doses pulled', 'is-ok');
+    });
+  }
 
   // Initialize timer
   timer.init({
@@ -448,7 +628,12 @@ function boot() {
       Object.keys(preStartClock).forEach(k => delete preStartClock[k]);
       // On restore the original "Case Started" is already in the loaded
       // annotations — don't mint a duplicate (restore adds "Case Restored").
-      if (!opts.restored) addAnnotation('Case Started');
+      // Starting doses are likewise new-case-only: the restored event list
+      // already contains whatever was given, so re-applying would double-dose.
+      if (!opts.restored) {
+        addAnnotation('Case Started');
+        applyStartingDoses();
+      }
       // Re-evaluate button visibility now that case has started —
       // hides Stop Pump for drugs without a pump.
       mode.refreshUI(selectedDrug);

@@ -11,6 +11,27 @@
 
 ---
 
+## [0.5.39] — 2026-06-12
+
+Extend the cloud scratch area to **case transfer** and a **starting-dose template**, both keyed by the existing pairing code.
+
+**Cloud case transfer.** "↑ Push last case to cloud" / "↓ Pull case from cloud" buttons on the setup screen (push also in Settings → Sync for mid-case handoff) move the saved-case blob between devices. Pushed cases are kept 24 hours; pulling writes the blob into the local saved case and runs the normal restore path, so it also becomes "Restore Last Case". A confirm guard protects an existing local case from being overwritten.
+
+**Starting-dose template.** Each drug's setup tab gains optional "Starting bolus" / "Starting infusion" fields (value + unit, including weight-based units like mcg/kg), and a "Give starting doses on Start" checkbox arms them. When armed, pressing **Start** applies the doses at t=0 — rate before bolus per drug, mirroring the keypad flow — with one "Starting Doses Given" notation summarizing what was given. Restores never re-apply (the restored event list already contains the doses), and drugs with pre-start planned events are skipped so template doses never stack onto a TCI plan. The template lives in localStorage and can be pushed/pulled to the cloud (kept 30 days) via "↑ Push / ↓ Pull" next to the checkbox.
+
+The `/api/sync` function now takes a `kind` discriminator (`case` | `template`; absent → patient). The patient path — the deployed scratchpad app's contract — is byte-for-byte unchanged, including the 1 KB cap and 30-minute TTL. New Redis keys are namespaced (`tcisync:{code}:case`, `tcisync:{code}:template`) with per-kind caps (64 KB / 4 KB). Case/template payloads get light server-side sanity checks; full validation happens client-side on pull.
+
+- `api/sync.js` — `KINDS` table (TTL + size caps), `kind` routing on GET/POST, lazy `@upstash/redis` require (env check first), `__test` export hooks.
+- `js/sync/cloud-sync.js` *(new)* — `pushPayload` / `fetchPayload` transport (never throws, shares patient-sync's error contract), `prepareCaseForPush` (strips cosmetic reconciliation ghosts if oversize), `validateIncomingCase`.
+- `js/sync/dose-template.js` *(new)* — template schema + `normalizeTemplate` / `isTemplateEmpty` / `buildTemplateDoses` (pure planner: unit conversion, pump/push delivery mode, manual-mode flags, `rate-needs-pump` / `conversion-failed` errors), localStorage wrappers (`tci-dose-template`, `tci-dose-template-armed`).
+- `js/app.js` — `applyStartingDoses()` hooked into `onCaseStart` (new-case only); push/pull case + template button wiring; shared `describeSyncError` / `makeStatusSetter` helpers (pull-patient refactored onto them).
+- `js/ui/setup.js` — template editor wiring (`initTemplateControls`, exported `refreshTemplateInputs`), starting-infusion row hidden when a drug's pump is off.
+- `index.html` — per-drug starting-dose rows, arming row + template sync buttons, case push/pull buttons, Settings → Sync case-transfer row.
+- `tests/test-api-sync.js`, `tests/test-cloud-sync.js`, `tests/test-dose-template.js` *(new)* — 110 tests incl. the frozen-patient-contract guards.
+- `js/app/settings-ui.js`, `sw.js` (precache + version), `DEPLOY.md`.
+
+---
+
 ## [0.5.38.3] — 2026-06-11
 
 Fix: restoring a case logged a duplicate **"Case Started"** notation. Restore loads the saved annotations (which already include the original "Case Started") and then calls `controls.ensureStarted()`, whose `onCaseStart` callback minted a second "Case Started" — on top of the "Case Restored" marker. `ensureStarted` now forwards an options object to `onCaseStart`, and restore passes `{ restored: true }` so the start annotation is skipped (the normal Start button is unaffected and still logs "Case Started").

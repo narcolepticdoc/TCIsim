@@ -1,6 +1,6 @@
 # TCI Sim — Claude Code Reference
 
-Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.38** (see `js/version.js`).
+Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.39** (see `js/version.js`).
 
 ## Quick Start
 
@@ -12,7 +12,7 @@ python3 -m http.server 8080
 # or
 npx serve .
 
-# Run the test suite (554 tests, 16 suites)
+# Run the test suite (674 tests, 20 suites)
 node tests/run-tests.js
 ```
 
@@ -65,12 +65,15 @@ js/ui/mode.js             Per-drug mode tracking (none/tci/manual/intermittent) 
 js/ui/keypad.js           Numeric keypad modal (target / rate / bolus / emergence / redose); unit toggle round-trips values through canonical
 js/ui/event-editor.js     Unified event editor modal (rate/pause options hidden when pump off); unit toggle converts buffer
 js/ui/patient-modal.js    Patient Demographics modal with built-in 3×5 numeric keypad, Male/Female toggle, Metric/Imperial toggle (shared with setup.setUnits)
-js/ui/setup.js            Setup screen — clickable patient-summary row opens patient-modal; pump settings; delivery method; rounding controls; exports _convertLength / _convertWeight
+js/ui/setup.js            Setup screen — clickable patient-summary row opens patient-modal; pump settings; delivery method; rounding controls; starting-dose template editor (exports refreshTemplateInputs); exports _convertLength / _convertWeight
 js/ui/history.js          Event history panel — merges pump events + editorial notations (drug-tagged, two-line heading/sub) into one time-sorted list; grid row: time+type on line 1, value centered on line 2; edit-mode via Edit button; ET/RT + Notes toggles
 js/ui/timer.js            Elapsed time / wall clock — single-line [Case start HH:MM | ET H:MM:SS] button with popover
 js/ui/controls.js         Start/pause case controls
 js/ui/persist.js          LocalStorage case save/restore primitives
-js/app.js                 Entry point, wires all modules
+js/sync/patient-sync.js   Cloud patient pull — pairing code, fetchPatient, applyPatientToInputs
+js/sync/cloud-sync.js     Generic cloud push/pull transport (kinds: case, template) + prepareCaseForPush/validateIncomingCase
+js/sync/dose-template.js  Starting-dose template — schema, buildTemplateDoses planner, localStorage + arming
+js/app.js                 Entry point, wires all modules; applyStartingDoses (onCaseStart hook); cloud push/pull button wiring
 js/app/settings-ui.js     Settings modal DOM wiring (sliders, tabs, Appearance tab incl. textSize segmented control)
 js/app/tci-modal.js       TCI delay + first-step countdown modals
 js/app/session.js         Case save / restore / new case (incl. pumpEnabled map)
@@ -149,6 +152,9 @@ Other persisted keys (separate from the warnings blob):
 - `tci-pref-{bolus|rate}Unit-{drug}` — per-drug per-task default display unit.
 - `tci-pump-enabled-{drugId}` — per-drug pump on/off (fentanyl/ketamine only).
 - `tci-pref-history-show-notations` — show/hide notation rows in the history panel (Notes toggle).
+- `tci-sync-code` — 6-char cloud pairing code (shared by patient pull, case transfer, template sync).
+- `tci-dose-template` — starting-dose template JSON (`{v, updatedAt, drugs}`; same shape pushed to the cloud).
+- `tci-dose-template-armed` — "Give starting doses on Start" checkbox state.
 - Pump settings (concentration, bolusRateMlH) and saved cases under their own keys via `js/ui/persist.js`.
 
 ## UI Conventions
@@ -173,7 +179,7 @@ Other persisted keys (separate from the warnings blob):
 node tests/run-tests.js
 ```
 
-Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 554 tests across 16 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
+Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 674 tests across 20 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
 
 ## Versioning Scheme
 
@@ -205,7 +211,7 @@ correct; `0.5.9` → `0.6.0` for a routine patch is not.
 - `TCI-PLANNERS.md` — planner algorithms, validation data, remaining gaps
 - `DEVELOPMENT.md` — complete session log, known issues, roadmap (single source of truth)
 - `CHANGELOG.md` — versioned release notes
-- `DEPLOY.md` — Vercel + Upstash setup for the cloud patient-sync backend (env vars)
+- `DEPLOY.md` — Vercel + Upstash setup for the cloud sync backend (env vars, payload kinds/TTLs)
 - `SCRATCHPAD-SYNC-SPEC.md` — sender-side contract for the scratchpad app (cloud patient sync)
 - `LICENSE-NOTES.md` — clean-room implementation notes, file audit
 - `README.md` — public-facing overview and project structure
