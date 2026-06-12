@@ -73,7 +73,7 @@ js/ui/persist.js          LocalStorage case save/restore primitives
 js/sync/patient-sync.js   Cloud patient pull — pairing code, fetchPatient, applyPatientToInputs
 js/sync/cloud-sync.js     Generic cloud push/pull transport (kinds: case, template) + prepareCaseForPush/validateIncomingCase
 js/sync/dose-template.js  Starting-dose template — schema, buildTemplateDoses planner, localStorage + arming
-js/app.js                 Entry point, wires all modules; applyStartingDoses (onCaseStart hook); cloud push/pull button wiring
+js/app.js                 Entry point, wires all modules; queueStartingDoses (onConfirm hook — queues template as editable pre-start events); cloud push/pull button wiring
 js/app/settings-ui.js     Settings modal DOM wiring (sliders, tabs, Appearance tab incl. textSize segmented control)
 js/app/tci-modal.js       TCI delay + first-step countdown modals
 js/app/session.js         Case save / restore / new case (incl. pumpEnabled map)

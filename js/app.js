@@ -278,15 +278,20 @@ function deleteAnnotation(annotId) {
 // ---- Starting-dose template ----
 
 /**
- * Apply the armed starting-dose template at t=0. Called from onCaseStart on
- * a genuinely new case only — the caller's opts.restored flag guards restores
- * (including cloud-pulled cases), where the event list already contains
- * whatever was given. Drugs with pre-start planned events (a TCI target or
- * planned boluses) are skipped so template doses never stack onto a plan.
- * Failures skip the item and surface in the summary notation — they never
- * block case start.
+ * Queue the armed starting-dose template as ordinary pre-start events.
+ * Called once from setup's onConfirm, right after the sim screen loads on a
+ * NEW case — never on restore (restore doesn't go through onConfirm; the
+ * restored event list already contains whatever was given).
+ *
+ * The doses are inserted exactly as if the user had keyed them in before
+ * pressing Start: per drug, rate at the pre-start clock then bolus after it
+ * (advancing the clock by the bolus delivery time, mirroring the keypad
+ * flow), so they're visible in the event history immediately, editable via
+ * Edit mode, and delivered when Start runs the case. A "Starting Doses
+ * Queued" notation summarizes what's pending; failures skip the item and
+ * surface there — they never block confirm.
  */
-function applyStartingDoses() {
+function queueStartingDoses() {
   try {
     if (!doseTemplate.isArmed()) return;
     const template = doseTemplate.loadTemplate();
@@ -301,12 +306,14 @@ function applyStartingDoses() {
       noTciDrugs: NO_TCI_DRUGS,
     });
 
+    // Safety net: never double-queue onto a drug that somehow already has
+    // events (onConfirm only fires on a fresh model, but this is cheap).
     const skipDrugs = new Set(
       DRUG_IDS.filter(d => template.drugs[d] && model.getEvents(d).length > 0)
     );
 
     const drugName = d => DRUG_DEFS[d]?.name || d;
-    const appliedByDrug = new Map();
+    const queuedByDrug = new Map();
     const skipped = [];
     for (const d of skipDrugs) skipped.push(`${drugName(d)} — already planned`);
 
@@ -317,35 +324,42 @@ function applyStartingDoses() {
         skipped.push(`${drugName(item.drugId)} ${item.type} ${item.displayText}`);
         continue;
       }
+      const t = getPreStartClock(item.drugId);
       if (item.type === 'rate') {
-        model.addRate(item.drugId, 0, item.canonicalValue, `Rate ${item.displayText}`);
+        model.addRate(item.drugId, t, item.canonicalValue, `Rate ${item.displayText}`);
+        advancePreStartClock(item.drugId, 0.01);
       } else {
         const label = item.deliveryMode === 'push' ? 'IV Push' : 'Pump Bolus';
-        model.addBolus(item.drugId, 0, item.canonicalValue, `${label} ${item.displayText}`, {
+        model.addBolus(item.drugId, t, item.canonicalValue, `${label} ${item.displayText}`, {
           deliveryMode: item.deliveryMode,
         });
+        const deliveryMin = item.deliveryMode === 'push'
+          ? 10 / 60  // 10 seconds
+          : bolusDeliveryMinutes(item.canonicalValue, item.drugId);
+        advancePreStartClock(item.drugId, deliveryMin);
       }
       if (item.setManualMode && mode.get(item.drugId) !== 'manual') {
         mode.set(item.drugId, 'manual');
       }
-      const parts = appliedByDrug.get(item.drugId) || [];
+      const parts = queuedByDrug.get(item.drugId) || [];
       parts.push(item.displayText);
-      appliedByDrug.set(item.drugId, parts);
+      queuedByDrug.set(item.drugId, parts);
     }
 
-    if (appliedByDrug.size || skipped.length) {
-      const given = [...appliedByDrug.entries()]
+    if (queuedByDrug.size || skipped.length) {
+      const queued = [...queuedByDrug.entries()]
         .map(([d, parts]) => `${drugName(d)} ${parts.join(' + ')}`)
         .join(' · ');
       const sub = skipped.length
-        ? `${given}${given ? ' · ' : ''}(skipped: ${skipped.join(', ')})`
-        : given;
-      addAnnotation({ heading: 'Starting Doses Given', sub });
+        ? `${queued}${queued ? ' · ' : ''}(skipped: ${skipped.join(', ')})`
+        : queued;
+      addAnnotation({ heading: 'Starting Doses Queued', sub });
+      mode.refreshUI(selectedDrug);
       if (chartBridge) chartBridge.refresh();
       if (session) session.save();
     }
   } catch (err) {
-    console.error('[TCI Sim] applyStartingDoses error:', err);
+    console.error('[TCI Sim] queueStartingDoses error:', err);
   }
 }
 
@@ -437,6 +451,9 @@ function boot() {
         console.error('[TCI Sim] onConfirm error:', err);
       }
       showScreen('sim-screen');
+      // Queue armed starting doses as visible pre-start events so the user
+      // sees exactly what Start will deliver (and can edit/delete it first).
+      queueStartingDoses();
     },
   });
 
@@ -628,12 +645,9 @@ function boot() {
       Object.keys(preStartClock).forEach(k => delete preStartClock[k]);
       // On restore the original "Case Started" is already in the loaded
       // annotations — don't mint a duplicate (restore adds "Case Restored").
-      // Starting doses are likewise new-case-only: the restored event list
-      // already contains whatever was given, so re-applying would double-dose.
-      if (!opts.restored) {
-        addAnnotation('Case Started');
-        applyStartingDoses();
-      }
+      // Starting doses need no handling here — they were queued as ordinary
+      // pre-start events at confirm time and deliver as the clock runs.
+      if (!opts.restored) addAnnotation('Case Started');
       // Re-evaluate button visibility now that case has started —
       // hides Stop Pump for drugs without a pump.
       mode.refreshUI(selectedDrug);

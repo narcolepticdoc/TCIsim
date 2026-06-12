@@ -3,8 +3,9 @@
  *
  * A template holds an optional starting bolus and/or infusion rate per drug,
  * stored in display units (so "100 mcg/kg" scales with the patient). When the
- * arming checkbox is on, app.js applies the template at t=0 the moment the
- * Start button is pressed — never on case restore.
+ * arming checkbox is on, app.js queues the template as ordinary pre-start
+ * events the moment the patient is confirmed — visible and editable in the
+ * event history before Start delivers them. Never queued on case restore.
  *
  * Lives in localStorage; the same JSON shape is pushed/pulled to the cloud
  * scratch area (kind 'template' in cloud-sync.js) so a second device can
