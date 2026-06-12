@@ -235,14 +235,18 @@ function initSimScreen(patient) {
 /**
  * Record a notation in the editorial log.
  *
- * @param {string|{heading:string, sub?:string}} text - plain heading, or a
- *   two-line `{ heading, sub }` notation.
+ * @param {string|{heading:string, sub?:string, pre?:boolean}} text - plain
+ *   heading, or a two-line `{ heading, sub }` notation. `pre: true` makes the
+ *   note rank BEFORE same-timestamp events in the history (an announcement of
+ *   what follows, e.g. "Starting Doses Queued") instead of the default
+ *   caption-after-the-event ordering.
  * @param {string|null} [drugId] - drug this notation belongs to. Drug-tagged
  *   notations show only in that drug's history; `null` = global (all drugs).
  */
 function addAnnotation(text, drugId = null) {
   const heading = (text && typeof text === 'object') ? (text.heading || '') : text;
   const sub = (text && typeof text === 'object') ? (text.sub || '') : '';
+  const pre = !!(text && typeof text === 'object' && text.pre);
   if (!heading) return;
 
   const timeMin = timer.getElapsedMs() / 60000;
@@ -259,6 +263,7 @@ function addAnnotation(text, drugId = null) {
     heading,
     sub,
     drug: drugId,
+    pre,
   });
 
   // Repaint via the unified history renderer so the notation interleaves
@@ -353,7 +358,9 @@ function queueStartingDoses() {
       const sub = skipped.length
         ? `${queued}${queued ? ' · ' : ''}(skipped: ${skipped.join(', ')})`
         : queued;
-      addAnnotation({ heading: 'Starting Doses Queued', sub });
+      // pre:true — the note announces the queued events, so it must render
+      // ABOVE the t=0 rows rather than as a caption under them.
+      addAnnotation({ heading: 'Starting Doses Queued', sub, pre: true });
       mode.refreshUI(selectedDrug);
       if (chartBridge) chartBridge.refresh();
       if (session) session.save();
