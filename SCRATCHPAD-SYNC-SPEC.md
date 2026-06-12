@@ -11,6 +11,10 @@ backed by Upstash Redis) keyed by a shared pairing code.
 > etc.) through this channel. The endpoint is unauthenticated — the pairing code
 > is the only secret — and entries auto-expire after 30 minutes.
 
+> **Note:** the same endpoint also serves `kind=case|template` payloads for
+> TCI Sim's own device-to-device transfer (see `DEPLOY.md`). The scratchpad
+> contract below is the no-`kind` default and is unaffected.
+
 ---
 
 ## 1. Pairing code

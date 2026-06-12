@@ -407,13 +407,15 @@ export function render(drugId) {
 
   // Merge into a single time-sorted list. Events rank before notations at the
   // same timestamp so a notation reads as a caption under the event it narrates.
+  // Notations flagged `pre` invert that — they announce what follows (e.g.
+  // "Starting Doses Queued") and rank before same-timestamp events instead.
   // Array.sort is stable, so same-(time,rank) items keep insertion order.
   const items = [];
   for (let i = 0; i < events.length; i++) {
     items.push({ time: events[i].time, rank: 0, html: buildEventRow(events[i], now) });
   }
   for (let i = 0; i < notes.length; i++) {
-    items.push({ time: notes[i].timeMin || 0, rank: 1, html: buildNoteRow(notes[i], now) });
+    items.push({ time: notes[i].timeMin || 0, rank: notes[i].pre ? -1 : 1, html: buildNoteRow(notes[i], now) });
   }
   items.sort((x, y) => (x.time - y.time) || (x.rank - y.rank));
 

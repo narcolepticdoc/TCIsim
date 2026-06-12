@@ -28,6 +28,7 @@ import {
 } from '../pk/ketamine.js';
 import { setPumpSettings, getPumpSettings, isPumpEnabled } from '../util/constants.js';
 import { getAllowedUnits, getDefaultUnit, getPrefKey, getQuantStep } from '../util/units.js';
+import { loadTemplate, saveTemplate, isArmed, setArmed } from '../sync/dose-template.js';
 
 // Drugs that have a tabbed setup panel. Remifentanil has no PK model yet.
 const SETUP_DRUGS = ['propofol', 'fentanyl', 'ketamine'];
@@ -148,6 +149,9 @@ export function init(opts = {}) {
   populateModelInfo();
   populateUnitSelectors();
 
+  // Starting-dose template editor (per-drug bolus/rate + arming checkbox)
+  initTemplateControls();
+
   // Wire the "round in display units" checkbox + per-drug rounding-note line
   populateRoundingControls();
 
@@ -210,6 +214,79 @@ function populateUnitSelectors() {
       if (current && allowed.includes(current)) sel.value = current;
     }
   }
+}
+
+// ---- Starting-dose template ----
+
+/**
+ * Wire the per-drug "Starting bolus / Starting infusion" inputs and the
+ * "Give starting doses on Start" arming checkbox. The template persists to
+ * localStorage on every edit (dose-template.js); app.js applies it at t=0
+ * when the Start button is pressed.
+ */
+function initTemplateControls() {
+  for (const drugId of SETUP_DRUGS) {
+    for (const task of ['bolus', 'rate']) {
+      const sel = $(`input-${drugId}-start-${task}-unit`);
+      if (!sel) continue;
+      sel.innerHTML = '';
+      for (const unit of getAllowedUnits(drugId, task)) {
+        const opt = document.createElement('option');
+        opt.value = unit;
+        opt.textContent = unit;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener('change', saveTemplateFromInputs);
+      const val = $(`input-${drugId}-start-${task}`);
+      if (val) val.addEventListener('input', saveTemplateFromInputs);
+    }
+  }
+
+  const chk = $('chk-start-doses');
+  if (chk) {
+    chk.checked = isArmed();
+    chk.addEventListener('change', () => setArmed(chk.checked));
+  }
+
+  refreshTemplateInputs();
+}
+
+/** Read all starting-dose inputs into a template object and persist it. */
+function saveTemplateFromInputs() {
+  const drugs = {};
+  for (const drugId of SETUP_DRUGS) {
+    const entry = {};
+    for (const task of ['bolus', 'rate']) {
+      const value = parseFloat($(`input-${drugId}-start-${task}`)?.value);
+      const unit = $(`input-${drugId}-start-${task}-unit`)?.value;
+      if (isFinite(value) && value > 0 && unit) entry[task] = { value, unit };
+    }
+    if (entry.bolus || entry.rate) drugs[drugId] = entry;
+  }
+  saveTemplate({ v: 1, updatedAt: Date.now(), drugs });
+}
+
+/**
+ * Repaint the starting-dose inputs from the persisted template. Exported so
+ * app.js can refresh after a cloud template pull. Unit selects fall back to
+ * the drug/task default unit when the template has no entry.
+ */
+export function refreshTemplateInputs() {
+  const template = loadTemplate();
+  for (const drugId of SETUP_DRUGS) {
+    const entry = template.drugs[drugId] || {};
+    for (const task of ['bolus', 'rate']) {
+      const valEl = $(`input-${drugId}-start-${task}`);
+      const sel = $(`input-${drugId}-start-${task}-unit`);
+      if (!valEl || !sel) continue;
+      const d = entry[task];
+      valEl.value = d ? String(d.value) : '';
+      const unit = d ? d.unit : getDefaultUnit(drugId, task);
+      if (unit && [...sel.options].some(o => o.value === unit)) sel.value = unit;
+    }
+  }
+  const chk = $('chk-start-doses');
+  if (chk) chk.checked = isArmed();
 }
 
 // ---- Round TCI plan in display units (opt-in) ----
@@ -662,9 +739,11 @@ function updatePumpToggleVisibility(drugId) {
   const pumpOn = toggleEl.value === 'true';
 
   const rateRow = $(`row-${drugId}-rate-unit`);
+  const startRateRow = $(`row-${drugId}-start-rate`);
   const derived = $(`pump-derived-${drugId}`);
 
   if (rateRow) rateRow.style.display = pumpOn ? '' : 'none';
+  if (startRateRow) startRateRow.style.display = pumpOn ? '' : 'none';
   if (derived) derived.style.display = pumpOn ? '' : 'none';
 }
 

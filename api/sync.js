@@ -1,26 +1,51 @@
 /**
- * api/sync.js — Cloud patient "scratch area" (de-identified, training only).
+ * api/sync.js — Cloud scratch area (de-identified, training only).
  *
- * A separate scratchpad PWA POSTs patient demographics here keyed by a shared
- * pairing code; TCIsim GETs the latest for that code on demand. Only age, sex,
- * height (cm), weight (kg) are stored. Entries expire after 30 minutes so a
- * reused code never serves stale demographics.
+ * One serverless function, three payload kinds, all keyed by a shared
+ * 6-character pairing code:
+ *
+ *   patient  (default, no `kind`) — demographics pushed by the separate
+ *            scratchpad PWA and pulled by TCIsim on demand. Contract is
+ *            frozen: the scratchpad app is deployed separately, so the
+ *            no-kind GET/POST shapes must never change.
+ *   case     — TCIsim's saved-case blob, pushed/pulled manually so a case
+ *            can be moved to another device.
+ *   template — TCIsim's starting-dose template (a user preference).
+ *
+ *   GET  /api/sync?code=ABC234[&kind=case|template]
+ *   POST /api/sync   body { code, patient }                  (patient)
+ *   POST /api/sync   body { code, kind, payload }            (case/template)
+ *
+ * Per-kind TTL and size caps live in KINDS below. Case/template payloads get
+ * light sanity checks only — full schema validation happens client-side in
+ * js/sync/ (the case blob is the app's own save format).
  *
  * Storage: Upstash Redis via REST (env: UPSTASH_REDIS_REST_URL /
  * UPSTASH_REDIS_REST_TOKEN). CORS allow-list via SYNC_ALLOWED_ORIGINS
- * (comma-separated). Runs only on Vercel — the static site (python http.server)
- * never executes this file, and the front-end Pull button degrades gracefully
- * when /api is unavailable.
+ * (comma-separated). Runs only on Vercel — the static site (python
+ * http.server) never executes this file, and the front-end buttons degrade
+ * gracefully when /api is unavailable.
  *
  * This endpoint is intentionally unauthenticated (the pairing code is the only
  * secret) and last-writer-wins. Acceptable for de-identified training data;
  * do NOT push PHI through it.
  */
 
-const { Redis } = require('@upstash/redis');
+// Per-kind retention and payload caps. Patient values are the original
+// constants — the scratchpad contract depends on them. The case blob is the
+// whole saved case (events + annotations), typically 2–20 KB; 64 KB bounds
+// abuse on an unauthenticated endpoint while leaving headroom. The template
+// is a small preference with low churn, so it outlives a code rotation.
+const KINDS = {
+  patient:  { ttl: 30 * 60,           maxBytes: 1024 },
+  case:     { ttl: 24 * 60 * 60,      maxBytes: 64 * 1024 },
+  template: { ttl: 30 * 24 * 60 * 60, maxBytes: 4 * 1024 },
+};
 
-const TTL_SECONDS = 30 * 60; // 30 min
-const MAX_BODY_BYTES = 1024; // 1 KB cap
+// Raw-body stream cap: largest kind plus envelope slack. Per-kind caps are
+// enforced after parse so the patient 1 KB → 413 contract is preserved.
+const MAX_STREAM_BYTES = 70 * 1024;
+
 const CODE_RE = /^[A-HJ-NP-Z2-9]{6}$/;
 
 let _redis = null;
@@ -32,6 +57,9 @@ function getRedis() {
   const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
   if (!url || !token) throw new Error('KV not configured');
+  // Lazy require (after the env check) so the module loads — and is
+  // unit-testable — without node_modules installed.
+  const { Redis } = require('@upstash/redis');
   _redis = new Redis({ url, token });
   return _redis;
 }
@@ -72,11 +100,28 @@ function validatePatient(p) {
   return { age, sex, heightCm, weightKg };
 }
 
-function keyFor(code) {
-  return `tcisync:${code}`;
+/**
+ * Light sanity check for case/template payloads. The blob is the app's own
+ * save format — full validation happens client-side on pull.
+ */
+function validateKindPayload(kind, payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  if (!isNum(payload.v)) return false;
+  if (kind === 'case') {
+    return !!(payload.patient && typeof payload.patient === 'object'
+           && payload.events && typeof payload.events === 'object');
+  }
+  if (kind === 'template') {
+    return !!(payload.drugs && typeof payload.drugs === 'object');
+  }
+  return false;
 }
 
-module.exports = async function handler(req, res) {
+function keyFor(code, kind) {
+  return kind === 'patient' || !kind ? `tcisync:${code}` : `tcisync:${code}:${kind}`;
+}
+
+async function handler(req, res) {
   applyCors(req, res);
 
   if (req.method === 'OPTIONS') {
@@ -91,19 +136,28 @@ module.exports = async function handler(req, res) {
         res.status(400).json({ error: 'invalid-code' });
         return;
       }
-      const stored = await getRedis().get(keyFor(code));
+      const kind = (req.query && req.query.kind) || 'patient';
+      if (!KINDS[kind]) {
+        res.status(400).json({ error: 'invalid-kind' });
+        return;
+      }
+      const stored = await getRedis().get(keyFor(code, kind));
       if (!stored) {
         res.status(200).json({ found: false });
         return;
       }
       // Upstash returns parsed JSON for object values.
-      const patient = typeof stored === 'string' ? JSON.parse(stored) : stored;
-      res.status(200).json({ found: true, patient });
+      const rec = typeof stored === 'string' ? JSON.parse(stored) : stored;
+      if (kind === 'patient') {
+        res.status(200).json({ found: true, patient: rec });
+      } else {
+        res.status(200).json({ found: true, payload: rec.payload, updatedAt: rec.updatedAt });
+      }
       return;
     }
 
     if (req.method === 'POST') {
-      const body = await readJsonBody(req);
+      const body = await readJsonBody(req, MAX_STREAM_BYTES);
       if (body === TOO_LARGE) {
         res.status(413).json({ error: 'payload-too-large' });
         return;
@@ -117,14 +171,43 @@ module.exports = async function handler(req, res) {
         res.status(400).json({ error: 'invalid-code' });
         return;
       }
-      const patient = validatePatient(body.patient);
-      if (!patient) {
-        res.status(400).json({ error: 'invalid-patient' });
+      const kind = body.kind || 'patient';
+      if (!KINDS[kind]) {
+        res.status(400).json({ error: 'invalid-kind' });
         return;
       }
       const updatedAt = Date.now();
-      const value = { ...patient, updatedAt };
-      await getRedis().set(keyFor(code), JSON.stringify(value), { ex: TTL_SECONDS });
+
+      if (kind === 'patient') {
+        // Original contract: whole body capped at 1 KB, strict field validation.
+        if (Buffer.byteLength(JSON.stringify(body)) > KINDS.patient.maxBytes) {
+          res.status(413).json({ error: 'payload-too-large' });
+          return;
+        }
+        const patient = validatePatient(body.patient);
+        if (!patient) {
+          res.status(400).json({ error: 'invalid-patient' });
+          return;
+        }
+        const value = { ...patient, updatedAt };
+        await getRedis().set(keyFor(code, kind), JSON.stringify(value), { ex: KINDS.patient.ttl });
+        res.status(200).json({ ok: true, updatedAt });
+        return;
+      }
+
+      if (!validateKindPayload(kind, body.payload)) {
+        res.status(400).json({ error: 'invalid-payload' });
+        return;
+      }
+      if (Buffer.byteLength(JSON.stringify(body.payload)) > KINDS[kind].maxBytes) {
+        res.status(413).json({ error: 'payload-too-large' });
+        return;
+      }
+      await getRedis().set(
+        keyFor(code, kind),
+        JSON.stringify({ payload: body.payload, updatedAt }),
+        { ex: KINDS[kind].ttl }
+      );
       res.status(200).json({ ok: true, updatedAt });
       return;
     }
@@ -144,22 +227,26 @@ const TOO_LARGE = Symbol('too-large');
  * object, TOO_LARGE if the cap is exceeded, or null on parse failure. Handles
  * both Vercel's pre-parsed req.body and a raw stream.
  */
-async function readJsonBody(req) {
+async function readJsonBody(req, maxBytes) {
   if (req.body != null && typeof req.body === 'object') {
-    if (Buffer.byteLength(JSON.stringify(req.body)) > MAX_BODY_BYTES) return TOO_LARGE;
+    if (Buffer.byteLength(JSON.stringify(req.body)) > maxBytes) return TOO_LARGE;
     return req.body;
   }
   if (typeof req.body === 'string') {
-    if (Buffer.byteLength(req.body) > MAX_BODY_BYTES) return TOO_LARGE;
+    if (Buffer.byteLength(req.body) > maxBytes) return TOO_LARGE;
     try { return JSON.parse(req.body); } catch (e) { return null; }
   }
   let size = 0;
   const chunks = [];
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) return TOO_LARGE;
+    if (size > maxBytes) return TOO_LARGE;
     chunks.push(chunk);
   }
   if (!chunks.length) return null;
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch (e) { return null; }
 }
+
+module.exports = handler;
+// Internals exposed for the CommonJS test suite only — not part of the API.
+module.exports.__test = { KINDS, keyFor, validatePatient, validateKindPayload };

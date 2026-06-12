@@ -1,6 +1,6 @@
 # TCI Sim — Claude Code Reference
 
-Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.38** (see `js/version.js`).
+Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.39** (see `js/version.js`).
 
 ## Quick Start
 
@@ -12,7 +12,7 @@ python3 -m http.server 8080
 # or
 npx serve .
 
-# Run the test suite (554 tests, 16 suites)
+# Run the test suite (674 tests, 20 suites)
 node tests/run-tests.js
 ```
 
@@ -65,12 +65,15 @@ js/ui/mode.js             Per-drug mode tracking (none/tci/manual/intermittent) 
 js/ui/keypad.js           Numeric keypad modal (target / rate / bolus / emergence / redose); unit toggle round-trips values through canonical
 js/ui/event-editor.js     Unified event editor modal (rate/pause options hidden when pump off); unit toggle converts buffer
 js/ui/patient-modal.js    Patient Demographics modal with built-in 3×5 numeric keypad, Male/Female toggle, Metric/Imperial toggle (shared with setup.setUnits)
-js/ui/setup.js            Setup screen — clickable patient-summary row opens patient-modal; pump settings; delivery method; rounding controls; exports _convertLength / _convertWeight
+js/ui/setup.js            Setup screen — clickable patient-summary row opens patient-modal; pump settings; delivery method; rounding controls; starting-dose template editor (exports refreshTemplateInputs); exports _convertLength / _convertWeight
 js/ui/history.js          Event history panel — merges pump events + editorial notations (drug-tagged, two-line heading/sub) into one time-sorted list; grid row: time+type on line 1, value centered on line 2; edit-mode via Edit button; ET/RT + Notes toggles
 js/ui/timer.js            Elapsed time / wall clock — single-line [Case start HH:MM | ET H:MM:SS] button with popover
 js/ui/controls.js         Start/pause case controls
 js/ui/persist.js          LocalStorage case save/restore primitives
-js/app.js                 Entry point, wires all modules
+js/sync/patient-sync.js   Cloud patient pull — pairing code, fetchPatient, applyPatientToInputs
+js/sync/cloud-sync.js     Generic cloud push/pull transport (kinds: case, template) + prepareCaseForPush/validateIncomingCase
+js/sync/dose-template.js  Starting-dose template — schema, buildTemplateDoses planner, localStorage + arming
+js/app.js                 Entry point, wires all modules; queueStartingDoses (onConfirm hook — queues template as editable pre-start events); cloud push/pull button wiring
 js/app/settings-ui.js     Settings modal DOM wiring (sliders, tabs, Appearance tab incl. textSize segmented control)
 js/app/tci-modal.js       TCI delay + first-step countdown modals
 js/app/session.js         Case save / restore / new case (incl. pumpEnabled map)
@@ -149,6 +152,9 @@ Other persisted keys (separate from the warnings blob):
 - `tci-pref-{bolus|rate}Unit-{drug}` — per-drug per-task default display unit.
 - `tci-pump-enabled-{drugId}` — per-drug pump on/off (fentanyl/ketamine only).
 - `tci-pref-history-show-notations` — show/hide notation rows in the history panel (Notes toggle).
+- `tci-sync-code` — 6-char cloud pairing code (shared by patient pull, case transfer, template sync).
+- `tci-dose-template` — starting-dose template JSON (`{v, updatedAt, drugs}`; same shape pushed to the cloud).
+- `tci-dose-template-armed` — "Give starting doses on Start" checkbox state.
 - Pump settings (concentration, bolusRateMlH) and saved cases under their own keys via `js/ui/persist.js`.
 
 ## UI Conventions
@@ -160,7 +166,7 @@ Other persisted keys (separate from the warnings blob):
 - **Keypad prefilled → replace on first keypress**: `js/ui/keypad.js`, `js/ui/event-editor.js`, `js/ui/patient-modal.js` all flag pre-populated buffers as `prefilled`. First digit/decimal/backspace clears instead of appending. Tapping into a different field re-arms the flag.
 - **Active drug card** (`.drug-card.active`): background brightens + `border-left: 6px solid var(--drug-color)` + `inset 0 0 0 2px var(--drug-color)` crisp frame. Clinical look, no halos or transforms. eBIS value shows right-justified in the card header row (`.drug-bis-header`), label muted + small, value colored via `bisColor()`.
 - **History panel** (`js/ui/history.js`): grid row layout — `[time | type]` on line 1, `[value centered]` on line 2. Bottom bar: `[ET / RT]` time-format toggle, `+ Add Event`, `Notes` (show/hide notations, persisted under `tci-pref-history-show-notations`), `Edit`. Edit toggles `body.edit-history-mode` which dims/blurs non-history surface and highlights rows amber; tapping a row opens the event editor. Click-outside (on the dimmed area) exits edit mode. Modal backdrop is transparent while in edit mode so the selected row stays visible.
-- **Notations / event log** (`js/ui/history.js` + `addAnnotation`/`deleteAnnotation` in `js/app.js`): editorial notes live in the `annotations[]` array (NOT the PK event list) as `{ id, timeMin, time, heading, sub, drug }`. `history.render()` merges them with pump events, time-sorted, with events ranked before a same-timestamp notation so the note reads as a caption. Drug-tagged notes (`drug: <id>`) show only in that drug's history; `drug: null` shows everywhere. Notation rows render two-line (`.h-note-head` / `.h-note-sub`), get a ✕ delete affordance in edit mode, and are emitted from the four TCI-lifecycle call sites (target set; TCI-ended via manual bolus/rate/pump-stop) plus redose/emergence/reconcile and the global Case Started/Restored. `addAnnotation(text, drugId)` accepts a plain string (heading-only) or `{ heading, sub }`.
+- **Notations / event log** (`js/ui/history.js` + `addAnnotation`/`deleteAnnotation` in `js/app.js`): editorial notes live in the `annotations[]` array (NOT the PK event list) as `{ id, timeMin, time, heading, sub, drug, pre }`. `history.render()` merges them with pump events, time-sorted, with events ranked before a same-timestamp notation so the note reads as a caption — unless the note has `pre: true`, which ranks it BEFORE same-timestamp events (announcement notes: "Starting Doses Queued", "Case Started"). Drug-tagged notes (`drug: <id>`) show only in that drug's history; `drug: null` shows everywhere. Notation rows render two-line (`.h-note-head` / `.h-note-sub`), get a ✕ delete affordance in edit mode, and are emitted from the four TCI-lifecycle call sites (target set; TCI-ended via manual bolus/rate/pump-stop) plus redose/emergence/reconcile and the global Case Started/Restored. `addAnnotation(text, drugId)` accepts a plain string (heading-only) or `{ heading, sub, pre? }`.
 - **Per-frame chart updates** (`js/app/chart-bridge.js onFrame`): cursor throttled 500 ms, history dimming 2 s. All settings-driven setters (`setCpOpacity`, `setNomogramOpacity`, `setOverlayOpacity`, `setEventMarkerSize`, `setFontScale`) are idempotent inside the chart — bridge calls them every frame unconditionally. Chart recreation on new case self-heals.
 - **Cursor dots**: a custom `cursorDots` Chart.js plugin draws filled Ce/Cp circles where the current-time cursor crosses each curve (binary search + linear interp on dataset points).
 - **Draggable inspect cursor** (`js/ui/chart/plugins/inspect-handle.js`): when inspect mode is on and a cursor is set, a horizontal pill with `<` `>` chevrons renders at `chartArea.bottom - 14`. `gestures.js` binds handle-drag listeners on `canvas.parentElement` in capture phase so they run before Chart.js's hammer listeners on the canvas target; during an active handle drag, `chart.options.plugins.zoom.pan.enabled = false` to prevent pan hijacking on iPad. `touch-action: none` on the canvas belt-and-suspenders.
@@ -173,7 +179,7 @@ Other persisted keys (separate from the warnings blob):
 node tests/run-tests.js
 ```
 
-Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 554 tests across 16 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
+Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 674 tests across 20 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
 
 ## Versioning Scheme
 
@@ -205,7 +211,7 @@ correct; `0.5.9` → `0.6.0` for a routine patch is not.
 - `TCI-PLANNERS.md` — planner algorithms, validation data, remaining gaps
 - `DEVELOPMENT.md` — complete session log, known issues, roadmap (single source of truth)
 - `CHANGELOG.md` — versioned release notes
-- `DEPLOY.md` — Vercel + Upstash setup for the cloud patient-sync backend (env vars)
+- `DEPLOY.md` — Vercel + Upstash setup for the cloud sync backend (env vars, payload kinds/TTLs)
 - `SCRATCHPAD-SYNC-SPEC.md` — sender-side contract for the scratchpad app (cloud patient sync)
 - `LICENSE-NOTES.md` — clean-room implementation notes, file audit
 - `README.md` — public-facing overview and project structure

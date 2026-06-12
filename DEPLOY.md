@@ -2,13 +2,30 @@
 
 The TCI Sim PWA itself is **build-step-free static files** — Vercel serves the
 repo root as-is, and any static host works. The only piece that needs
-configuration is the **cloud patient sync** backend (`api/sync.js`), which runs
+configuration is the **cloud sync** backend (`api/sync.js`), which runs
 as a Vercel serverless function backed by Upstash Redis. This document covers
 its environment variables and setup.
 
 > Sync is **optional**. Without it configured, the app runs normally; the
-> "Pull patient from cloud" button simply reports "Sync unavailable". See
+> cloud pull/push buttons simply report "Sync unavailable". See
 > `SCRATCHPAD-SYNC-SPEC.md` for the sender (scratchpad) side of the contract.
+
+## Payload kinds
+
+One function serves three payload kinds, all keyed by the shared 6-character
+pairing code and dispatched by a `kind` parameter (`?kind=` on GET, `body.kind`
+on POST; **absent = `patient`**, which keeps the deployed scratchpad app's
+contract unchanged):
+
+| Kind | Purpose | Redis key | TTL | Size cap |
+|---|---|---|---|---|
+| `patient` (default) | Demographics from the scratchpad app | `tcisync:{code}` | 30 min | 1 KB |
+| `case` | TCIsim saved-case blob, for moving a case to another device | `tcisync:{code}:case` | 24 h | 64 KB |
+| `template` | TCIsim starting-dose template | `tcisync:{code}:template` | 30 days | 4 KB |
+
+Case and template payloads get light sanity checks server-side (shape + size);
+full validation happens in the TCIsim client on pull. All kinds share the same
+env vars, CORS allow-list, and unauthenticated last-writer-wins model.
 
 ## Environment variables
 
@@ -103,10 +120,12 @@ curl 'https://<tcisim-host>/api/sync?code=ABC234'
 
 ## Notes
 
-- **TTL:** entries expire 30 minutes after the last write (`TTL_SECONDS` in
-  `api/sync.js`), refreshed on each POST.
-- **Validation / privacy:** the function validates ranges, caps the body at
-  1 KB, and stores only age/sex/height/weight + a server-set `updatedAt`. It is
+- **TTL:** per-kind, refreshed on each POST — see the table above (`KINDS` in
+  `api/sync.js`).
+- **Validation / privacy:** the patient kind validates ranges, caps the body at
+  1 KB, and stores only age/sex/height/weight + a server-set `updatedAt`. Case
+  and template kinds carry TCIsim's own JSON (still de-identified — patient
+  demographics plus dosing events / dose preferences). The endpoint is
   unauthenticated (the pairing code is the only secret) and last-writer-wins —
   de-identified / training data only.
 - **Runtime:** the Node version is pinned via `engines.node` (`20.x`) in
