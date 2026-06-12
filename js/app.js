@@ -654,7 +654,8 @@ function boot() {
       // annotations — don't mint a duplicate (restore adds "Case Restored").
       // Starting doses need no handling here — they were queued as ordinary
       // pre-start events at confirm time and deliver as the clock runs.
-      if (!opts.restored) addAnnotation('Case Started');
+      // pre:true — announcement note, ranks above the t=0 delivery rows.
+      if (!opts.restored) addAnnotation({ heading: 'Case Started', pre: true });
       // Re-evaluate button visibility now that case has started —
       // hides Stop Pump for drugs without a pump.
       mode.refreshUI(selectedDrug);
