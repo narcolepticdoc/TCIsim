@@ -182,6 +182,12 @@
     .start-doses-row{display:flex;align-items:center;gap:8px;flex-shrink:0}
     .start-doses-check{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-secondary);cursor:pointer;flex:1;min-width:0}
     .start-doses-fields{display:flex;flex-direction:column;gap:6px;padding:8px 0 2px;flex-shrink:0}
+    /* The class above sets display:flex, which would otherwise beat the UA
+       [hidden]{display:none} rule (same specificity, author wins) — re-assert. */
+    .start-doses-fields[hidden]{display:none}
+    /* Stronger divider than the default .pump-settings border to separate the
+       starting-dose section from the drug-configuration card above it. */
+    .start-doses-section{margin-top:10px;padding-top:12px;border-top:2px solid var(--border)}
     .start-dose-drug{display:flex;flex-direction:column;gap:3px}
     .start-dose-drug-label{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted)}
     .btn-template-sync{padding:5px 10px;background:transparent;border:1px dashed var(--border);border-radius:var(--radius-sm);color:var(--text-secondary);font-family:var(--font-display);font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}
@@ -1217,12 +1223,14 @@
           <div class="pump-derived" id="pump-derived-ketamine">Max bolus rate: 125.0 mg/min</div>
         </div>
       </div>
-      <div class="start-doses-row">
-        <label class="start-doses-check"><input type="checkbox" id="chk-start-doses"> Give starting doses on Start</label>
-        <button class="btn-template-sync" id="btn-push-template" type="button" title="Push starting doses to the cloud">&#8593; Push</button>
-        <button class="btn-template-sync" id="btn-pull-template" type="button" title="Pull starting doses from the cloud">&#8595; Pull</button>
-      </div>
-      <div class="start-doses-fields" id="start-doses-fields" hidden>
+      <div class="pump-settings start-doses-section">
+        <span class="card-title">Starting Doses</span>
+        <div class="start-doses-row">
+          <label class="start-doses-check"><input type="checkbox" id="chk-start-doses"> Apply Starting Doses to New Case</label>
+          <button class="btn-template-sync" id="btn-push-template" type="button" title="Push starting doses to the cloud">&#8593; Push</button>
+          <button class="btn-template-sync" id="btn-pull-template" type="button" title="Pull starting doses from the cloud">&#8595; Pull</button>
+        </div>
+        <div class="start-doses-fields" id="start-doses-fields" hidden>
         <div class="start-dose-drug">
           <span class="start-dose-drug-label">Propofol</span>
           <div class="input-grid">
@@ -1280,8 +1288,9 @@
             </div>
           </div>
         </div>
+        </div>
+        <div class="pull-patient-status" id="template-sync-status" hidden></div>
       </div>
-      <div class="pull-patient-status" id="template-sync-status" hidden></div>
       <button class="btn-confirm" id="btn-confirm">Confirm Patient</button>
       <button class="btn-restore" id="btn-restore" style="display:none">Restore Last Case</button>
       <button class="btn-pull-patient" id="btn-pull-case" type="button" title="Pull the last pushed case from the cloud and restore it">&#8595; Pull case from cloud</button>

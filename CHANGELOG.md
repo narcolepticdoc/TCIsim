@@ -11,6 +11,19 @@
 
 ---
 
+## [0.5.39.2] — 2026-06-15
+
+Three fixes to the starting-dose setup section:
+
+- **The fields now actually hide when the box is unchecked.** The `.start-doses-fields{display:flex}` rule was overriding the `hidden` attribute's `display:none` (equal specificity, author sheet wins over the UA sheet), so the inputs stayed visible regardless of the checkbox. Added `.start-doses-fields[hidden]{display:none}` to re-assert it.
+- **Clearer visual division.** The checkbox, sync buttons, and per-drug fields are now wrapped in their own titled "Starting Doses" card with a 2px top border, matching the "Pump Configuration" / "Drug Configuration" cards above it.
+- **Renamed the control** from "Give starting doses on Start" to "Apply Starting Doses to New Case".
+
+- `index.html` — `[hidden]` CSS fix, `.start-doses-section` divider, titled wrapper card, control rename.
+- `js/version.js`, `sw.js` — `0.5.39.1` → `0.5.39.2`.
+
+---
+
 ## [0.5.39.1] — 2026-06-15
 
 Move the starting-dose template fields out of the per-drug config tabs into a dedicated section directly below the "Give starting doses on Start" checkbox, grouped per drug and hidden until the box is checked (`updateStartDosesVisibility` in `js/ui/setup.js`). No field IDs changed, so the save/load/queue wiring is untouched.

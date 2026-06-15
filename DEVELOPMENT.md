@@ -4,6 +4,10 @@
 
 ## Session History
 
+### Starting-dose section: gate fix, divider, rename (v0.5.39.2) — Interim
+
+Three follow-ups to the relocated starting-dose section. (1) Gating bug: the fields stayed visible when the checkbox was unchecked because `.start-doses-fields{display:flex}` (a class rule) overrode the UA `[hidden]{display:none}` — equal specificity, and author styles beat the UA sheet, so the `hidden` attribute had no effect. `updateStartDosesVisibility()` was setting `.hidden` correctly; the CSS just ignored it. Fix: `.start-doses-fields[hidden]{display:none}` (class+attribute specificity beats the bare class). (2) Visual division: wrapped the checkbox row + fields in a `.pump-settings.start-doses-section` card with a "Starting Doses" `card-title` and a 2px top border, so it reads as a distinct section from the Drug Configuration card, consistent with the other titled config cards. (3) Renamed the control "Give starting doses on Start" → "Apply Starting Doses to New Case" (user pick from offered options). Asset change → lockstep version bump to `0.5.39.2`.
+
 ### Starting-dose fields below the checkbox + cache-bust bump (v0.5.39.1) — Interim
 
 User request: move the starting-dose entry fields out of the per-drug config tabs to directly below the "Give starting doses on Start" checkbox, and hide them until it's checked. Done in `index.html` (new `#start-doses-fields` section, per-drug groups) + `js/ui/setup.js` (`updateStartDosesVisibility`, called on init / checkbox change / cloud-pull refresh). Field IDs were preserved, so the template save/load/queue paths are untouched; pump-off drugs still hide their infusion row via `updatePumpToggleVisibility`.
