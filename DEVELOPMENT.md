@@ -4,6 +4,12 @@
 
 ## Session History
 
+### Starting-dose fields below the checkbox + cache-bust bump (v0.5.39.1) — Interim
+
+User request: move the starting-dose entry fields out of the per-drug config tabs to directly below the "Give starting doses on Start" checkbox, and hide them until it's checked. Done in `index.html` (new `#start-doses-fields` section, per-drug groups) + `js/ui/setup.js` (`updateStartDosesVisibility`, called on init / checkbox change / cloud-pull refresh). Field IDs were preserved, so the template save/load/queue paths are untouched; pump-off drugs still hide their infusion row via `updatePumpToggleVisibility`.
+
+Then user reported "does not appear to be working." Root cause was NOT the relocation code — it was a missing version bump. The three follow-up commits after the merged 0.5.39 base (queue-at-confirm, `pre` note ranking, field relocation) all changed `index.html`/`setup.js`/`app.js` but left `js/version.js` and `sw.js` at `0.5.39`. The service worker detects updates by byte-diff of `sw.js` and re-precaches assets only on a new `VERSION`; an unchanged `sw.js` meant the installed PWA never reinstalled the worker and kept serving the old cached layout. Fix: bump both files in lockstep to `0.5.39.1` (tweak level per the scheme), which changes `sw.js` bytes → SW reinstalls → re-caches the new `index.html`/`setup.js` → version-aware reload. Lesson reinforced: any asset change shipped to the PWA needs the lockstep version bump, even mid-feature follow-ups.
+
 ### Cloud case transfer + starting-dose template (v0.5.39) — Interim
 
 User request: reuse the Vercel/Upstash scratchpad space for (a) keeping the last case in the cloud so it can move to another device, and (b) saved default starting doses (a bolus per drug + a propofol rate) applied when Start is pressed. Decisions confirmed up front: single default template (not a named-template library), local-first template with manual cloud push/pull, manual case push (no auto-push), 24 h case TTL.

@@ -11,6 +11,17 @@
 
 ---
 
+## [0.5.39.1] — 2026-06-15
+
+Move the starting-dose template fields out of the per-drug config tabs into a dedicated section directly below the "Give starting doses on Start" checkbox, grouped per drug and hidden until the box is checked (`updateStartDosesVisibility` in `js/ui/setup.js`). No field IDs changed, so the save/load/queue wiring is untouched.
+
+Version bump is required for this to take effect on installed PWAs: the service worker caches assets by `VERSION`, and the preceding starting-dose UI commits changed `index.html`/`setup.js` without bumping it — so a byte-identical `sw.js` meant the browser never reinstalled the worker and kept serving the old cached layout. Bumping `js/version.js` + `sw.js` in lockstep busts the cache and triggers the version-aware reload.
+
+- `js/version.js`, `sw.js` — `0.5.39` → `0.5.39.1`.
+- `index.html`, `js/ui/setup.js` — relocated/collapsible starting-dose section.
+
+---
+
 ## [0.5.39] — 2026-06-12
 
 Extend the cloud scratch area to **case transfer** and a **starting-dose template**, both keyed by the existing pairing code.
