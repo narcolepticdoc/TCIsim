@@ -11,6 +11,20 @@
 
 ---
 
+## [0.5.39.3] — 2026-06-15
+
+Cleaner dose numbers in the event log.
+
+- **Trailing zeros stripped.** `formatValue` (the shared formatter for every rate/bolus/dose/volume display) now rounds to each unit's precision and then drops trailing zeros: `25.0 mcg` → `25 mcg`, `0.10 mg/min` → `0.1 mg/min`, while a real fractional part is kept (`25.5 mcg`). This applies everywhere the formatter is used — event rows, notations, keypad, step bar, chart labels — for consistency.
+- **Number no longer wraps away from its unit.** The starting-dose notation and event-row values now join value and unit with a non-breaking space via a new `formatValueUnit(value, unit)` helper, so `140 mcg/kg/min` never breaks across lines.
+
+- `js/util/units.js` — `formatValue` strips trailing zeros (`UNIT_DECIMALS` cap + `parseFloat().toString()`); new `formatValueUnit`.
+- `js/sync/dose-template.js`, `js/ui/history.js` (`fmtRate` / `fmtBolusDose`) — use `formatValueUnit`.
+- `tests/test-dose-template.js` — assertions updated to the stripped + non-breaking form.
+- `js/version.js`, `sw.js` — `0.5.39.2` → `0.5.39.3`.
+
+---
+
 ## [0.5.39.2] — 2026-06-15
 
 Three fixes to the starting-dose setup section:

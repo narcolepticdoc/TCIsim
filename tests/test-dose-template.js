@@ -100,8 +100,9 @@ function summary() {
     near(items[1].canonicalValue, 100, 1e-9, 'bolus 100 mg → 100 mg canonical');
     ok(items[1].deliveryMode === 'pump', 'pump-on bolus delivered via pump');
     ok(items[1].setManualMode === true, 'pump bolus on TCI-capable drug sets manual mode');
-    ok(items[0].displayText === '30.0 mL/h', 'rate displayText formatted');
-    ok(items[1].displayText === '100.0 mg', 'bolus displayText formatted');
+    // displayText strips trailing zeros and joins value+unit with a non-breaking space
+    ok(items[0].displayText === '30\u00A0mL/h', 'rate displayText formatted (no .0, nbsp)');
+    ok(items[1].displayText === '100\u00A0mg', 'bolus displayText formatted (no .0, nbsp)');
   }
   {
     const t = normalizeTemplate({ drugs: { fentanyl: { bolus: { value: 100, unit: 'mcg' } } } });

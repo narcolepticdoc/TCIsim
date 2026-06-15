@@ -216,20 +216,27 @@ export function getRoundingNoteText(drugId, enabled, opts = {}) {
  * @param {string} unit
  * @returns {string}
  */
+// Display precision cap per unit. Trailing zeros are stripped after rounding
+// (25.0 → 25, 0.10 → 0.1) so the cap bounds noise without forcing decimals.
+const UNIT_DECIMALS = {
+  'mL/h': 1, 'mcg/kg/min': 1, 'mcg/kg': 1, 'mg/min': 2, 'mg': 1, 'mcg': 1,
+  'mL': 1, 'mcg/mL': 2, 'ng/mL': 1, 'mcg/h': 1, 'mg/kg': 2, 'mg/kg/h': 1,
+};
+
 export function formatValue(value, unit) {
-  if (unit === 'mL/h') return value.toFixed(1);
-  if (unit === 'mcg/kg/min') return value.toFixed(1);
-  if (unit === 'mcg/kg') return value.toFixed(1);
-  if (unit === 'mg/min') return value.toFixed(2);
-  if (unit === 'mg') return value.toFixed(1);
-  if (unit === 'mcg') return value.toFixed(1);
-  if (unit === 'mL') return value.toFixed(1);
-  if (unit === 'mcg/mL') return value.toFixed(2);
-  if (unit === 'ng/mL') return value.toFixed(1);
-  if (unit === 'mcg/h') return value.toFixed(1);
-  if (unit === 'mg/kg') return value.toFixed(2);
-  if (unit === 'mg/kg/h') return value.toFixed(1);
-  return value.toFixed(2);
+  const dp = UNIT_DECIMALS[unit] ?? 2;
+  // Round to the unit's precision, then drop trailing zeros: 25.0 → 25,
+  // 0.10 → 0.1, 25.50 → 25.5. parseFloat→String is the codebase idiom.
+  return parseFloat(value.toFixed(dp)).toString();
+}
+
+/**
+ * Format a value with its unit as a single token that never wraps between the
+ * number and the unit (non-breaking space). Use anywhere a "value unit" pair
+ * is displayed in flowing text — e.g. the event-log notations.
+ */
+export function formatValueUnit(value, unit) {
+  return `${formatValue(value, unit)}\u00A0${unit}`;
 }
 
 // ---- Internal ----
