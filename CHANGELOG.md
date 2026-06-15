@@ -11,13 +11,37 @@
 
 ---
 
+## [0.5.39.2] — 2026-06-15
+
+Three fixes to the starting-dose setup section:
+
+- **The fields now actually hide when the box is unchecked.** The `.start-doses-fields{display:flex}` rule was overriding the `hidden` attribute's `display:none` (equal specificity, author sheet wins over the UA sheet), so the inputs stayed visible regardless of the checkbox. Added `.start-doses-fields[hidden]{display:none}` to re-assert it.
+- **Clearer visual division.** The checkbox, sync buttons, and per-drug fields are now wrapped in their own titled "Starting Doses" card with a 2px top border, matching the "Pump Configuration" / "Drug Configuration" cards above it.
+- **Renamed the control** from "Give starting doses on Start" to "Apply Starting Doses to New Case".
+
+- `index.html` — `[hidden]` CSS fix, `.start-doses-section` divider, titled wrapper card, control rename.
+- `js/version.js`, `sw.js` — `0.5.39.1` → `0.5.39.2`.
+
+---
+
+## [0.5.39.1] — 2026-06-15
+
+Move the starting-dose template fields out of the per-drug config tabs into a dedicated section directly below the "Give starting doses on Start" checkbox, grouped per drug and hidden until the box is checked (`updateStartDosesVisibility` in `js/ui/setup.js`). No field IDs changed, so the save/load/queue wiring is untouched.
+
+Version bump is required for this to take effect on installed PWAs: the service worker caches assets by `VERSION`, and the preceding starting-dose UI commits changed `index.html`/`setup.js` without bumping it — so a byte-identical `sw.js` meant the browser never reinstalled the worker and kept serving the old cached layout. Bumping `js/version.js` + `sw.js` in lockstep busts the cache and triggers the version-aware reload.
+
+- `js/version.js`, `sw.js` — `0.5.39` → `0.5.39.1`.
+- `index.html`, `js/ui/setup.js` — relocated/collapsible starting-dose section.
+
+---
+
 ## [0.5.39] — 2026-06-12
 
 Extend the cloud scratch area to **case transfer** and a **starting-dose template**, both keyed by the existing pairing code.
 
 **Cloud case transfer.** "↑ Push last case to cloud" / "↓ Pull case from cloud" buttons on the setup screen (push also in Settings → Sync for mid-case handoff) move the saved-case blob between devices. Pushed cases are kept 24 hours; pulling writes the blob into the local saved case and runs the normal restore path, so it also becomes "Restore Last Case". A confirm guard protects an existing local case from being overwritten.
 
-**Starting-dose template.** Each drug's setup tab gains optional "Starting bolus" / "Starting infusion" fields (value + unit, including weight-based units like mcg/kg), and a "Give starting doses on Start" checkbox arms them. When armed, **confirming the patient queues the doses as ordinary pre-start events** — they appear in the event history immediately under a "Starting Doses Queued" notation (flagged `pre` so it renders above the t=0 rows it announces, not as a caption below them — "Case Started" carries the same flag, so the log reads Queued → Started → delivery), can be edited or deleted via Edit mode like any planned event, and deliver when **Start** runs the case, exactly as if they had been keyed in manually (per drug: rate at the pre-start clock, then bolus, advancing the clock by the delivery time). Restores never re-queue (restore doesn't pass through patient confirm). The template lives in localStorage and can be pushed/pulled to the cloud (kept 30 days) via "↑ Push / ↓ Pull" next to the checkbox.
+**Starting-dose template.** A "Give starting doses on Start" checkbox on the setup screen reveals a per-drug section of optional "Starting bolus" / "Starting infusion" fields (value + unit, including weight-based units like mcg/kg) directly below it — hidden until the box is checked. When armed, **confirming the patient queues the doses as ordinary pre-start events** — they appear in the event history immediately under a "Starting Doses Queued" notation (flagged `pre` so it renders above the t=0 rows it announces, not as a caption below them — "Case Started" carries the same flag, so the log reads Queued → Started → delivery), can be edited or deleted via Edit mode like any planned event, and deliver when **Start** runs the case, exactly as if they had been keyed in manually (per drug: rate at the pre-start clock, then bolus, advancing the clock by the delivery time). Restores never re-queue (restore doesn't pass through patient confirm). The template lives in localStorage and can be pushed/pulled to the cloud (kept 30 days) via "↑ Push / ↓ Pull" next to the checkbox.
 
 The `/api/sync` function now takes a `kind` discriminator (`case` | `template`; absent → patient). The patient path — the deployed scratchpad app's contract — is byte-for-byte unchanged, including the 1 KB cap and 30-minute TTL. New Redis keys are namespaced (`tcisync:{code}:case`, `tcisync:{code}:template`) with per-kind caps (64 KB / 4 KB). Case/template payloads get light server-side sanity checks; full validation happens client-side on pull.
 
@@ -25,8 +49,8 @@ The `/api/sync` function now takes a `kind` discriminator (`case` | `template`; 
 - `js/sync/cloud-sync.js` *(new)* — `pushPayload` / `fetchPayload` transport (never throws, shares patient-sync's error contract), `prepareCaseForPush` (strips cosmetic reconciliation ghosts if oversize), `validateIncomingCase`.
 - `js/sync/dose-template.js` *(new)* — template schema + `normalizeTemplate` / `isTemplateEmpty` / `buildTemplateDoses` (pure planner: unit conversion, pump/push delivery mode, manual-mode flags, `rate-needs-pump` / `conversion-failed` errors), localStorage wrappers (`tci-dose-template`, `tci-dose-template-armed`).
 - `js/app.js` — `queueStartingDoses()` called from setup's `onConfirm` (new-case only); push/pull case + template button wiring; shared `describeSyncError` / `makeStatusSetter` helpers (pull-patient refactored onto them).
-- `js/ui/setup.js` — template editor wiring (`initTemplateControls`, exported `refreshTemplateInputs`), starting-infusion row hidden when a drug's pump is off.
-- `index.html` — per-drug starting-dose rows, arming row + template sync buttons, case push/pull buttons, Settings → Sync case-transfer row.
+- `js/ui/setup.js` — template editor wiring (`initTemplateControls`, exported `refreshTemplateInputs`), starting-dose section shown only when armed, starting-infusion row hidden when a drug's pump is off.
+- `index.html` — arming row + template sync buttons, collapsible per-drug starting-dose section below it, case push/pull buttons, Settings → Sync case-transfer row.
 - `tests/test-api-sync.js`, `tests/test-cloud-sync.js`, `tests/test-dose-template.js` *(new)* — 110 tests incl. the frozen-patient-contract guards.
 - `js/app/settings-ui.js`, `sw.js` (precache + version), `DEPLOY.md`.
 
