@@ -4,6 +4,16 @@
 
 ## Session History
 
+### Event-log dose number formatting (v0.5.39.3) — Interim
+
+User report: the "Starting Doses Queued" notation showed `140.0 mcg/kg/min` etc. and wrapped between the number and its unit (`Propofol 140.0` / `mcg/kg/min`). Two asks: strip trailing `.0` (but keep real fractions like `25.5`), and keep the number attached to its unit — made consistent.
+
+`formatValue(value, unit)` in `js/util/units.js` was the right single point: it's the shared formatter every rate/bolus/dose/volume display funnels through (event rows via `fmtRate`/`fmtBolusDose`, keypad, step bar, chart labels, dose-template, TCI/redose/emergence annotations). Refactored it from a per-unit `toFixed(N)` if-chain to a `UNIT_DECIMALS` precision cap followed by `parseFloat(value.toFixed(dp)).toString()` — the codebase's existing trailing-zero-strip idiom (`session.js:213`, `units.js getRoundingNoteText`). This keeps the precision caps (no `140.333`) while dropping cosmetic zeros, and is safe: the agent sweep found no caller depends on fixed-width output and no test pinned `formatValue` strings except the two dose-template `displayText` assertions (updated).
+
+For the wrapping, added `formatValueUnit(value, unit)` which joins the stripped value and unit with a non-breaking space (` `, written as the escape for source clarity; survives history's `esc()` since that only escapes `&<>"`). Used it in `dose-template.js buildTemplateDoses` (the reported notation) and in history's `fmtRate`/`fmtBolusDose` so event rows match. The ` + ` / ` · ` separators in `queueStartingDoses` stay ordinary spaces — sensible wrap points.
+
+Scope: the independent live Ce readouts (`fmtCe`/`fmtCeSmart`/`fmtCeHTML`/`smartDecimal` in drug-panel) were left alone — they're fixed-decimal live readouts where stripping would cause width jitter, and weren't the complaint. The trailing-zero change does reach the short single-value annotations (TCI/redose/emergence) automatically via `formatValue`; their value+unit nbsp wasn't added (they rarely wrap) but `formatValueUnit` is available if wanted. Lockstep version bump to `0.5.39.3`.
+
 ### Starting-dose section: gate fix, divider, rename (v0.5.39.2) — Interim
 
 Three follow-ups to the relocated starting-dose section. (1) Gating bug: the fields stayed visible when the checkbox was unchecked because `.start-doses-fields{display:flex}` (a class rule) overrode the UA `[hidden]{display:none}` — equal specificity, and author styles beat the UA sheet, so the `hidden` attribute had no effect. `updateStartDosesVisibility()` was setting `.hidden` correctly; the CSS just ignored it. Fix: `.start-doses-fields[hidden]{display:none}` (class+attribute specificity beats the bare class). (2) Visual division: wrapped the checkbox row + fields in a `.pump-settings.start-doses-section` card with a "Starting Doses" `card-title` and a 2px top border, so it reads as a distinct section from the Drug Configuration card, consistent with the other titled config cards. (3) Renamed the control "Give starting doses on Start" → "Apply Starting Doses to New Case" (user pick from offered options). Asset change → lockstep version bump to `0.5.39.2`.

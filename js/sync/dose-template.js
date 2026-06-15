@@ -20,7 +20,7 @@
  */
 
 import { DRUG_IDS } from '../util/constants.js';
-import { toCanonical, getAllowedUnits, formatValue } from '../util/units.js';
+import { toCanonical, getAllowedUnits, formatValueUnit } from '../util/units.js';
 
 export const TEMPLATE_STORAGE_KEY = 'tci-dose-template';
 export const TEMPLATE_ARMED_KEY = 'tci-dose-template-armed';
@@ -100,7 +100,7 @@ export function buildTemplateDoses(template, ctx = {}) {
     for (const task of ['rate', 'bolus']) {
       const d = entry[task];
       if (!d) continue;
-      const displayText = `${formatValue(d.value, d.unit)} ${d.unit}`;
+      const displayText = formatValueUnit(d.value, d.unit);
       if (task === 'rate' && !pumpOn) {
         items.push({ drugId, type: 'rate', displayText, setManualMode: false, error: 'rate-needs-pump' });
         continue;

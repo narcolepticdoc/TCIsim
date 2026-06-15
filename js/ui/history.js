@@ -13,7 +13,7 @@
 import {
   DRUG_DEFS, getPumpSettings,
 } from '../util/constants.js';
-import { fromCanonical, getPrefKey, getDefaultUnit, formatValue }
+import { fromCanonical, getPrefKey, getDefaultUnit, formatValueUnit }
   from '../util/units.js';
 import { getCumulativeDose } from '../sim/events/query.js';
 
@@ -229,7 +229,7 @@ function fmtRate(mgPerMin, drugId) {
   const ctx = { weightKg: patient?.weight || 70 };
   try {
     const val = fromCanonical(mgPerMin, unit, drugId, 'rate', ctx);
-    return formatValue(val, unit) + ' ' + unit;
+    return formatValueUnit(val, unit);
   } catch (e) {
     return mgPerMin.toFixed(1) + ' mg/min';
   }
@@ -241,7 +241,7 @@ function fmtBolusDose(mg, drugId) {
   const ctx = { weightKg: patient?.weight || 70 };
   try {
     const val = fromCanonical(mg, unit, drugId, 'bolus', ctx);
-    return formatValue(val, unit) + ' ' + unit;
+    return formatValueUnit(val, unit);
   } catch (e) {
     return mg.toFixed(1) + ' mg';
   }
