@@ -220,9 +220,10 @@ function populateUnitSelectors() {
 
 /**
  * Wire the per-drug "Starting bolus / Starting infusion" inputs and the
- * "Give starting doses on Start" arming checkbox. The template persists to
- * localStorage on every edit (dose-template.js); app.js applies it at t=0
- * when the Start button is pressed.
+ * "Give starting doses on Start" arming checkbox. The fields live in a section
+ * below the checkbox and are hidden until it's checked. The template persists
+ * to localStorage on every edit (dose-template.js); app.js queues it as
+ * pre-start events when the patient is confirmed.
  */
 function initTemplateControls() {
   for (const drugId of SETUP_DRUGS) {
@@ -245,10 +246,19 @@ function initTemplateControls() {
   const chk = $('chk-start-doses');
   if (chk) {
     chk.checked = isArmed();
-    chk.addEventListener('change', () => setArmed(chk.checked));
+    chk.addEventListener('change', () => {
+      setArmed(chk.checked);
+      updateStartDosesVisibility();
+    });
   }
 
   refreshTemplateInputs();
+}
+
+/** Show the starting-dose fields only when the arming checkbox is checked. */
+function updateStartDosesVisibility() {
+  const fields = $('start-doses-fields');
+  if (fields) fields.hidden = !$('chk-start-doses')?.checked;
 }
 
 /** Read all starting-dose inputs into a template object and persist it. */
@@ -287,6 +297,7 @@ export function refreshTemplateInputs() {
   }
   const chk = $('chk-start-doses');
   if (chk) chk.checked = isArmed();
+  updateStartDosesVisibility();
 }
 
 // ---- Round TCI plan in display units (opt-in) ----
