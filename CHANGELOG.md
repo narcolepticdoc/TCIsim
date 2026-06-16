@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.39.4] — 2026-06-16
+
+History keeps its place when you swap drugs.
+
+- **Auto-scroll to current time on drug swap.** Switching the active drug rebuilds the event-history list (`render()` sets `innerHTML`, which resets the scroll container to the top). In TCI mode the past-event list is long, so the user was stranded at the top and had to scroll down to find the current time and upcoming events. After a swap the list now lands at the "now" boundary — the most recent past event and the upcoming future events in view. Drugs whose events are all in the past land at the bottom (latest event visible).
+- New `scrollToNow()` export in `js/ui/history.js`, called once from the drug-card click handler in `js/app.js` after the swap re-renders. Deliberately NOT wired into the render cadence, so the scroll is never yanked while the user is reading.
+
+- `js/ui/history.js` — new `scrollToNow()`; `js/app.js` — call after `refreshChart()` in the drug-card handler.
+- `js/version.js`, `sw.js` — `0.5.39.3` → `0.5.39.4`.
+
 ## [0.5.39.3] — 2026-06-15
 
 Cleaner dose numbers in the event log.

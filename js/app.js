@@ -839,6 +839,9 @@ function boot() {
         chart.switchDrug(drugId, cfg.yLabel, cfg.yDefault, cfg.yScale);
       }
       refreshChart();
+      // Land the history at the "now" boundary so the swap doesn't strand the
+      // user at the top of a long past-event list (render() resets scrollTop).
+      history.scrollToNow();
       document.querySelectorAll('.drug-card').forEach(c => c.classList.remove('active'));
       card.classList.add('active');
     });
