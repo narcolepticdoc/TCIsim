@@ -444,3 +444,38 @@ export function updateDimming() {
   // need to refresh on the same 2s cadence the bridge uses for dimming.
   renderTotals(_selectedDrug);
 }
+
+/**
+ * Scroll the history list to the "now" boundary so the most recent past event
+ * and the upcoming future events are in view. Call after a drug swap — NOT from
+ * the render cadence, so the scroll is never yanked while the user is reading.
+ */
+export function scrollToNow() {
+  const list = $('history-list');
+  const area = list && list.parentElement; // .history-area (overflow-y:auto)
+  if (!list || !area || list.children.length === 0) return;
+
+  const now = _getElapsedMinutes ? _getElapsedMinutes() : Infinity;
+  const rows = list.children;
+  let target = null;
+  for (let i = 0; i < rows.length; i++) {
+    const raw = rows[i].dataset.evtTime !== undefined
+      ? rows[i].dataset.evtTime
+      : rows[i].dataset.annotTime;
+    const t = parseFloat(raw);
+    if (!isNaN(t) && t > now) { target = rows[i]; break; }
+  }
+
+  if (target) {
+    // Land the first future row just below the top, keeping the last past
+    // row(s) visible above for context. Rect-based so it's independent of
+    // offsetParent.
+    const areaRect = area.getBoundingClientRect();
+    const rowRect = target.getBoundingClientRect();
+    const lead = Math.min(48, area.clientHeight * 0.25);
+    area.scrollTop += (rowRect.top - areaRect.top) - lead;
+  } else {
+    // All events are in the past — show the latest at the bottom.
+    area.scrollTop = area.scrollHeight;
+  }
+}

@@ -4,6 +4,14 @@
 
 ## Session History
 
+### History auto-scroll to current time on drug swap (v0.5.39.4) — Interim
+
+User report: swapping between drugs resets the event-history scroll to the top, so in TCI mode you have to scroll down to see the current time and future events. Root cause: `history.render()` rebuilds the list via `list.innerHTML = ...` (`js/ui/history.js`), and the browser resets the scroll container's `scrollTop` to 0 on innerHTML replacement. No scroll preservation existed.
+
+Chosen behavior (user pick): auto-scroll to the "now" boundary rather than preserve the previous scrollTop — positions don't line up across drugs with different event counts, and the stated goal is to see current/future events. Added `scrollToNow()` to `history.js`: finds the first row with time `> now` (reusing the same `dataset.evtTime`/`dataset.annotTime` + `_getElapsedMinutes` conventions `updateDimming()` uses), then sets the `.history-area` (`list.parentElement`) scrollTop via a rect-based offset with a small lead so the last past row stays visible for context. All-past lists scroll to the bottom; empty lists early-return.
+
+Called once from the drug-card click handler in `js/app.js`, after `refreshChart()` — both synchronous re-renders (the direct `history.render()` and the one inside `chart-bridge.refresh()`) have completed by then, so the scroll isn't undone. Deliberately kept out of the `render()` cadence so the scroll is never yanked while the user reads. DOM/scroll-only change, no PK impact; test suite stays green. Lockstep version bump to `0.5.39.4`.
+
 ### Event-log dose number formatting (v0.5.39.3) — Interim
 
 User report: the "Starting Doses Queued" notation showed `140.0 mcg/kg/min` etc. and wrapped between the number and its unit (`Propofol 140.0` / `mcg/kg/min`). Two asks: strip trailing `.0` (but keep real fractions like `25.5`), and keep the number attached to its unit — made consistent.
