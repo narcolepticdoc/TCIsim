@@ -21,6 +21,10 @@ export function createState(cfg) {
     // Used by setGhostCurve to short-circuit when nothing has changed,
     // since the bridge calls it every frame.
     ghostCurveSig: '',
+    // Signature of the last emergence-trajectory payload pushed to the chart.
+    // Mirrors ghostCurveSig — the bridge calls setEmergenceTrajectory every
+    // frame, so the setter short-circuits when nothing has changed.
+    emergenceTrajSig: '',
     // Per-drug ghost trace signatures (multi-drug peripheral-awareness
     // ghosts). Distinct from `ghostCurveSig` (the single pre-reconcile
     // ghost) — keyed by drugId.

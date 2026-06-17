@@ -173,6 +173,28 @@ export function createChart(canvas, config = {}) {
     order: 0, // draw on top of the live Ce so the comparison is legible
   });
 
+  // Emergence trajectory dataset — red dashed projection of how Ce would
+  // decay if the running infusion were stopped right now, descending until
+  // it meets the horizontal emergence threshold line. Appearance is synced
+  // to that threshold annotation (same red, same dash, same overlay alpha).
+  // Empty by default; the bridge pushes data only while an emergence
+  // threshold is set AND an infusion is running for the selected drug.
+  const emergenceTrajDsIdx = datasets.length;
+  datasets.push({
+    label: 'Ce (if stopped)',
+    role: 'emergence-traj',
+    data: [],
+    borderColor: COLORS.cp + s.overlayAlpha,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderDash: [5, 4],
+    pointRadius: 0,
+    tension: 0.1,
+    fill: false,
+    spanGaps: false,
+    order: 0,
+  });
+
   // Per-drug ghost Ce datasets — peripheral-awareness traces for every
   // non-selected drug that has events. Each runs against its own hidden
   // Y-axis (yGhost_<drugId>) so the line height matches the user's
@@ -478,6 +500,30 @@ export function createChart(canvas, config = {}) {
     if (sig === s.ghostCurveSig) return;
     s.ghostCurveSig = sig;
     const ds = datasets[ghostDsIdx];
+    ds.data = (points && points.length > 0)
+      ? points.map(p => ({ x: p.time, y: p.Ce }))
+      : [];
+    chart.update('none');
+  }
+
+  /**
+   * Update the emergence trajectory line (red dashed Ce projection assuming
+   * the infusion stops now). Pass null/empty to clear. Signature-cache
+   * guarded — the bridge calls this every frame. Re-tints borderColor from
+   * the live `--red` CSS variable + current overlay alpha each call so it
+   * stays in lockstep with the horizontal emergence threshold annotation
+   * (theme switches + overlay-opacity changes).
+   */
+  function setEmergenceTrajectory(points) {
+    const sig = points && points.length > 0
+      ? `${points.length}|${points[0].time}|${points[points.length - 1].time}|${points[points.length - 1].Ce.toFixed(4)}|${s.overlayAlpha}`
+      : '';
+    if (sig === s.emergenceTrajSig) return;
+    s.emergenceTrajSig = sig;
+    const ds = datasets[emergenceTrajDsIdx];
+    const red = (getComputedStyle(document.documentElement)
+      .getPropertyValue('--red').trim() || COLORS.cp);
+    ds.borderColor = red + s.overlayAlpha;
     ds.data = (points && points.length > 0)
       ? points.map(p => ({ x: p.time, y: p.Ce }))
       : [];
@@ -856,6 +902,7 @@ export function createChart(canvas, config = {}) {
     setPlateauRegion,
     setReconciliationRegion,
     setGhostCurve,
+    setEmergenceTrajectory,
     setSteadyStateLine,
     setExitLine,
     setViewRange,

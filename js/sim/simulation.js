@@ -510,6 +510,44 @@ export function createModel(config = {}) {
   }
 
   /**
+   * Sample the Ce decay trajectory if the infusion were stopped right now
+   * (rate forced to 0). Used to draw the live "emergence trajectory" line on
+   * the chart — a projection from the current time down to where Ce meets the
+   * emergence threshold.
+   *
+   * Sibling of predictDecayTo: same "stop the pump now" simulation, but
+   * returns the full sampled curve instead of just the crossing time.
+   *
+   * Returns an array of { time, Ce } points (first point anchored at the
+   * current Ce so the line connects to the live curve), or null if no engine.
+   * Sampling stops at the first point where Ce ≤ targetCe (the threshold
+   * crossing) or at maxLookahead as a safety cap.
+   */
+  function computeDecayTrajectory(drugId, time, targetCe, opts = {}) {
+    const engine = eventList.getEngine(drugId);
+    if (!engine) return null;
+
+    const step = opts.step ?? 0.25;            // minutes between samples
+    const maxLook = opts.maxLookahead ?? 480;   // safety cap (8 h)
+
+    const state = eventList.getStateAtTime(drugId, time); // sets engine state
+    engine.setState(state);
+
+    const pts = [{ time, Ce: engine.getConcentrations().Ce }];
+    let t = time;
+    while (t - time < maxLook) {
+      engine.advance(step, 0);                 // rate 0 = infusion stopped
+      t += step;
+      const ce = engine.getConcentrations().Ce;
+      pts.push({ time: t, Ce: ce });
+      if (ce <= targetCe) break;               // stop at the threshold crossing
+    }
+
+    eventList.replayDrug(drugId);              // restore real engine state
+    return pts;
+  }
+
+  /**
    * Predict analytical steady-state Ce and time to reach 95% of it
    * under a constant infusion rate.
    *
@@ -678,7 +716,8 @@ export function createModel(config = {}) {
     // Queries
     getConcentrationsAt, computeCurve, predictBIS,
     getRateAtTime, getEvents, getPDModel, getModelName,
-    getEventList, predictTrough, predictDecayTo, predictSteadyState, predictPlateau,
+    getEventList, predictTrough, predictDecayTo, computeDecayTrajectory,
+    predictSteadyState, predictPlateau,
 
     // Dose reconciliation
     setReconciliationWindow, getActiveReconciliationWindow,

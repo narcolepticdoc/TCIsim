@@ -4,6 +4,22 @@
 
 ## Session History
 
+### Emergence trajectory line (v0.5.40) — Interim
+
+User request: when an emergence threshold is set AND an infusion is currently running, draw a continuously-updated emergence trajectory line on the chart showing the Ce concentration trajectory as it would proceed if the infusion were stopped — a dimmed red dashed line synced in appearance to the horizontal emergence threshold line.
+
+The "emergence" concept is internally `exitCe` (the horizontal red dashed threshold line, drawn as an annotation in `js/ui/chart/annotations.js` at `c.red + s.overlayAlpha`, dash `[5,4]`, and the per-drug "Emerge → X in Y" countdown in `js/ui/drug-panel/exit-readout.js`). The countdown already predicts the rate-0 decay crossing via `simulation.js::predictDecayTo` → `predictTroughTime(engine, state, time, targetCe, /*rate*/0)` (`js/pk/decay-predictor.js`), restoring engine state with `replayDrug`. This change adds the *visual* counterpart.
+
+Reused the **ghost reconciliation curve** as the template for a derived dashed dataset: a separate Chart.js dataset whose data is pushed each frame by the bridge through an idempotent, signature-cache-guarded setter, scaled by `yScale` for ng/mL drugs (`setGhostCurve` / `chart-bridge.js onFrame`).
+
+Implementation:
+- `js/sim/simulation.js` — `computeDecayTrajectory(drugId, time, targetCe, opts)`, a sibling of `predictDecayTo`. `getStateAtTime` → `engine.setState` → sample `engine.advance(step, 0)` (default 0.25 min) collecting `{time, Ce}`, anchored at the current Ce, stopping at the first `Ce ≤ targetCe` crossing or a 480-min safety cap → `replayDrug` to restore real state. Exported on the facade.
+- `js/ui/chart/state.js` — `emergenceTrajSig` signature field (mirrors `ghostCurveSig`; includes `overlayAlpha` so the trace re-tints when overlay opacity changes).
+- `js/ui/chart/index.js` — new `emergence-traj` dataset (red, dash `[5,4]`, width 1.5, `order:0`) + `setEmergenceTrajectory(points)` setter. Re-reads the live `--red` CSS var + `s.overlayAlpha` each call so it stays in lockstep with the threshold annotation across theme/opacity changes. Exported in the API object.
+- `js/app/chart-bridge.js` — `onFrame` gate: `exitCe > 0 && t > 0 && getConcentrationsAt(...).rate > 0`. Computes the trajectory, scales by `ys`, pushes via the setter (cache prevents redundant `chart.update`); clears to null otherwise. Self-heals on New Case like the other idempotent setters.
+
+No persistence (purely derived/live). 676 tests green (additive; engine state restored via `replayDrug`). Lockstep version bump to `0.5.40`.
+
 ### Additional drug concentrations (v0.5.39.7) — Interim
 
 User request: add Propofol 8.33 mg/mL and Ketamine 100 mg/mL (10%) to the concentration pickers. Both are static `<select>` options in `index.html` (`#input-concentration`, `#input-ketamine-concentration`); `setup.js`/`app.js` read `.value` directly and there's no concentration allowlist, so adding `<option>`s is sufficient. Pump-derived `maxRate` and all mL↔mg conversions already flow from the selected concentration (`getPumpSettings`, `units.js`), so the new values are fully wired with no JS changes. Propofol option placed first (ascending: 8.33, 10, 20); ketamine appended (10, 50, 100). Lockstep version bump to `0.5.39.7`.
