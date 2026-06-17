@@ -11,6 +11,24 @@
 
 ---
 
+## [0.5.39.6] — 2026-06-17
+
+Reconcile spread mode shows the rate in the drug's native unit.
+
+- **Fixed: spread-mode rate was always labeled `mg/min`.** In Reconcile → Spread, the magnitude uses each drug's native mass unit (`fmtTotalMass`: mg for propofol/ketamine, mcg for fentanyl) but the rate beside it was hardcoded to canonical `mg/min`. For fentanyl that read e.g. `+50 mcg ... (0.001 mg/min for 60m)` — wrong unit and an awkward tiny number the code papered over with a `toExponential` fallback. The summary text and the post-confirm history notation now print the rate in the drug's native rate unit (`mcg/min` for fentanyl) with sensible precision; propofol/ketamine still read `mg/min`.
+- `js/ui/reconcile-modal.js` — new `_fmtRatePerMin()` helper (reuses `mgToNative`/`nativeUnit` + shared `formatValue`); used in `_renderSummary()` and `_doReconcile()`; dropped the `rateStr`/`toExponential` workaround.
+- `js/version.js`, `sw.js` — `0.5.39.5` → `0.5.39.6`.
+
+## [0.5.39.5] — 2026-06-17
+
+Reconcile Totals no longer overshoots the entered actual.
+
+- **Fixed: dose reconciliation overshot the value you typed.** The reconcile modal sampled the simulated total *once* when it opened, but the case clock keeps running in real time while the modal is open. The correction (`delta = actual − simulated`) was therefore measured against a stale baseline yet applied against the live clock, so the post-reconcile total landed at `actual + (rate × time-the-dialog-was-open)` instead of `actual`. The overshoot scaled with infusion rate and time spent entering the number, and was zero only when the pump was paused — hence the intermittent "sometimes it's off" feel. Affected both single-bolus and spread modes.
+- **Fix:** `_confirm()` now captures `now` up-front and re-samples the simulated total against that same `now` before computing the delta, so the whole confirm path is clock-consistent and `getCumulativeDose(now) == entered actual` exactly. `_render()` also re-samples the baseline each pass so the on-screen "Simulated total" and delta track the live clock and match what confirm will apply.
+- `js/ui/reconcile-modal.js` — `_computeSimTotal(now)` parameterized; `_render()` and `_confirm()` re-sample against the live/apply-time clock.
+- `tests/test-reconcile.js` — added two regression tests (676 total) pinning the "baseline must match apply-time clock" invariant for single-bolus and spread.
+- `js/version.js`, `sw.js` — `0.5.39.4` → `0.5.39.5`.
+
 ## [0.5.39.4] — 2026-06-16
 
 History keeps its place when you swap drugs.
