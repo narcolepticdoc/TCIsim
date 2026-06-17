@@ -11,6 +11,14 @@
 
 ---
 
+## [0.5.40.1] — 2026-06-17
+
+Emergence trajectory continues past the threshold crossing.
+
+- **The emergence trajectory line no longer ends abruptly on the threshold.** It now continues for a short period (default 5 min) past the point where Ce crosses below the emergence threshold, so the dip below the line is clearly visible instead of terminating exactly on it.
+- `js/sim/simulation.js` — `computeDecayTrajectory` takes a new `overshootMin` option; instead of breaking at the first `Ce ≤ targetCe`, it records the crossing time and keeps sampling until `overshootMin` minutes past it (still capped by `maxLookahead`).
+- `js/version.js`, `sw.js` — `0.5.40` → `0.5.40.1`.
+
 ## [0.5.40] — 2026-06-17
 
 Live emergence trajectory line on the chart.

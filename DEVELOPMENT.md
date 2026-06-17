@@ -4,6 +4,10 @@
 
 ## Session History
 
+### Emergence trajectory continues past crossing (v0.5.40.1) — Interim
+
+Follow-up to v0.5.40: the trajectory line ended exactly on the emergence threshold, which read as the line "stopping at" the line rather than passing through it. Added an `overshootMin` option to `computeDecayTrajectory` (`js/sim/simulation.js`, default 5 min) — instead of breaking at the first `Ce ≤ targetCe`, it records the crossing time and keeps sampling rate-0 decay until `overshootMin` minutes past it (still bounded by `maxLookahead`). The bridge gate is unchanged. Lockstep version bump to `0.5.40.1`.
+
 ### Emergence trajectory line (v0.5.40) — Interim
 
 User request: when an emergence threshold is set AND an infusion is currently running, draw a continuously-updated emergence trajectory line on the chart showing the Ce concentration trajectory as it would proceed if the infusion were stopped — a dimmed red dashed line synced in appearance to the horizontal emergence threshold line.
