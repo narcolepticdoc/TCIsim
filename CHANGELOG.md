@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.40] — 2026-06-17
+
+Live emergence trajectory line on the chart.
+
+- **Added a red dashed emergence trajectory line.** When an emergence threshold ("Emerge → X") is set for the selected drug AND an infusion is currently running, the chart now draws a dimmed-red dashed curve projecting forward from the current time, showing how Ce would decay *if the infusion were stopped right now* — descending until it meets the horizontal emergence threshold line. It updates continuously as the live Ce drifts, giving an immediate visual read of the shape and time-to-emergence. Hidden when no threshold is set, when the pump is already off (the real Ce curve is already decaying), or on drugs other than the selected one. Appearance (red, `[5,4]` dash, overlay alpha) is synced to the horizontal emergence threshold annotation so the two dim together.
+- `js/sim/simulation.js` — new `computeDecayTrajectory(drugId, time, targetCe, opts)` facade method: a sibling of `predictDecayTo` that samples the rate-0 decay curve from the current engine state and restores state via `replayDrug`.
+- `js/ui/chart/index.js`, `js/ui/chart/state.js` — new `emergence-traj` dataset + idempotent `setEmergenceTrajectory(points)` setter (signature-cache guarded, re-tints from the live `--red` CSS var + overlay alpha each call).
+- `js/app/chart-bridge.js` — `onFrame` computes + pushes the trajectory each frame, gated on threshold-set + infusion-running, scaled to the drug's chart units.
+- `js/version.js`, `sw.js` — `0.5.39.7` → `0.5.40`.
+
 ## [0.5.39.7] — 2026-06-17
 
 More drug concentration options.

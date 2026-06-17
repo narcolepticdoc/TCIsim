@@ -324,6 +324,26 @@ export function createChartBridge({
         }
       }
 
+      // Emergence trajectory — red dashed projection of how Ce would decay if
+      // the running infusion were stopped now, descending to the emergence
+      // threshold. Shown only when a threshold is set AND an infusion is
+      // currently running for the selected drug; otherwise cleared. Scaled to
+      // match the live Ce dataset units.
+      if (model && chart.setEmergenceTrajectory) {
+        const exitCe = mode.getExitCe(selectedDrug);
+        const running = exitCe > 0 && t > 0 &&
+          model.getConcentrationsAt(selectedDrug, t).rate > 0;
+        if (running) {
+          const traj = model.computeDecayTrajectory(selectedDrug, t, exitCe);
+          const scaled = (traj && ys !== 1)
+            ? traj.map(p => ({ time: p.time, Ce: p.Ce * ys }))
+            : traj;
+          chart.setEmergenceTrajectory(scaled && scaled.length ? scaled : null);
+        } else {
+          chart.setEmergenceTrajectory(null);
+        }
+      }
+
       // Future-event markers — only when the overlay is enabled.
       // Gated to TCI mode (manual mode rarely has pre-scheduled future events).
       if (chart.eventAnnotationsEnabled) {
