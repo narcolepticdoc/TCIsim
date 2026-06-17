@@ -11,6 +11,14 @@
 
 ---
 
+## [0.5.39.6] — 2026-06-17
+
+Reconcile spread mode shows the rate in the drug's native unit.
+
+- **Fixed: spread-mode rate was always labeled `mg/min`.** In Reconcile → Spread, the magnitude uses each drug's native mass unit (`fmtTotalMass`: mg for propofol/ketamine, mcg for fentanyl) but the rate beside it was hardcoded to canonical `mg/min`. For fentanyl that read e.g. `+50 mcg ... (0.001 mg/min for 60m)` — wrong unit and an awkward tiny number the code papered over with a `toExponential` fallback. The summary text and the post-confirm history notation now print the rate in the drug's native rate unit (`mcg/min` for fentanyl) with sensible precision; propofol/ketamine still read `mg/min`.
+- `js/ui/reconcile-modal.js` — new `_fmtRatePerMin()` helper (reuses `mgToNative`/`nativeUnit` + shared `formatValue`); used in `_renderSummary()` and `_doReconcile()`; dropped the `rateStr`/`toExponential` workaround.
+- `js/version.js`, `sw.js` — `0.5.39.5` → `0.5.39.6`.
+
 ## [0.5.39.5] — 2026-06-17
 
 Reconcile Totals no longer overshoots the entered actual.

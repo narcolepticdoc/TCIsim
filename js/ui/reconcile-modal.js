@@ -22,6 +22,7 @@ import { DRUG_DEFS, DRUG_IDS, getPumpSettings, isPumpEnabled } from '../util/con
 import { getCumulativeDose } from '../sim/events/query.js';
 import { getConvergenceWindow } from '../pk/eigenvalues.js';
 import { fmtTotalMass } from './history.js';
+import { formatValue } from '../util/units.js';
 import { showTciWarning } from './event-editor.js';
 import { set as setMode } from './mode.js';
 
@@ -63,6 +64,14 @@ function mgToNative(mg, drugId) {
 }
 function nativeToMg(val, drugId) {
   return nativeUnit(drugId) === 'mcg' ? val / 1000 : val;
+}
+
+// Canonical mg/min → native rate string, e.g. "0.83 mg/min" (propofol/ketamine)
+// or "1.50 mcg/min" (fentanyl). Keeps the rate unit consistent with the native
+// mass unit used for the magnitude in the same sentence.
+function _fmtRatePerMin(mgPerMin) {
+  const unit = `${nativeUnit(_drugId)}/min`;
+  return `${formatValue(mgToNative(mgPerMin, _drugId), unit)} ${unit}`;
 }
 
 // ---- Display-unit helpers (dose vs. volume) ----
@@ -550,11 +559,10 @@ function _renderSummary() {
 
   if (_mode === 'spread') {
     const ratePerMin = _deltaMg / Math.max(now, 1e-6);
-    const rateStr = (Math.abs(ratePerMin) >= 0.01 ? ratePerMin.toFixed(3) : ratePerMin.toExponential(2));
     const direction = _deltaMg > 0 ? 'higher' : 'lower';
     el.textContent =
       `A ${sign}${mag} correction will be spread evenly across the case ` +
-      `(${rateStr} mg/min for ${fmtMin(now)}). ` +
+      `(${_fmtRatePerMin(ratePerMin)} for ${fmtMin(now)}). ` +
       `Reconstructs sustained rate errors exactly — no convergence wait. ` +
       `Past curves will shift to reflect the corrected dose history. ` +
       `Note: forward of NOW the sim returns to the un-augmented rate. ` +
@@ -676,7 +684,7 @@ function _doReconcile(now) {
       _model.applyRateAugmentation(_drugId, 0, now, ratePerMin);
       windowStart = 0;
       windowEnd = now + SPREAD_FORWARD_TAIL_MIN;
-      annotMsg = `Reconciliation ${sign}${magStr} spread across case (${ratePerMin.toFixed(3)} mg/min × ${now.toFixed(0)} min)`;
+      annotMsg = `Reconciliation ${sign}${magStr} spread across case (${_fmtRatePerMin(ratePerMin)} × ${now.toFixed(0)} min)`;
     } else {
       let insertMin = _currentCaseMinutes();
       insertMin = Math.max(0, Math.min(now, insertMin));

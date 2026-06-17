@@ -4,6 +4,12 @@
 
 ## Session History
 
+### Reconcile spread-mode rate units (v0.5.39.6) — Interim
+
+Follow-up to the overshoot fix (the unit issue noted out-of-scope in v0.5.39.5). In Reconcile → Spread, the rate was hardcoded to canonical `mg/min` for every drug while the magnitude beside it used the drug's native mass unit (`fmtTotalMass`). For fentanyl (native mcg) this read `+50 mcg ... (0.001 mg/min for 60m)` — wrong unit and a tiny number the code worked around with a `toExponential` fallback.
+
+Fix is display-only, `js/ui/reconcile-modal.js`. Added `_fmtRatePerMin(mgPerMin)` that converts a canonical mg/min rate to the drug's native rate unit via the modal's existing `mgToNative`/`nativeUnit` helpers and formats with the shared `formatValue` from `js/util/units.js` (`UNIT_DECIMALS` gives `mg/min` → 2 dp; `mcg/min` falls back to 2 dp, fine for small fentanyl rates). Used it in `_renderSummary()` (dropping the `rateStr`/`toExponential` hack) and in `_doReconcile()`'s history notation. Deliberately not `chart/rate-format.js::formatRateForDisplay` — that's chart-state-coupled and uses the user's *preferred* rate unit (could be `mcg/kg/min`), which would clash with the native-mass magnitude shown in the same sentence. No tests assert the annotation/summary strings (reconcile tests cover only pure dose math); 676 tests stay green. Lockstep version bump to `0.5.39.6`.
+
 ### Reconcile Totals overshoot fix — stale baseline (v0.5.39.5) — Interim
 
 User report: dose reconciliation "felt like it was not working properly" in a recent case. Investigation (event-history edit → `Reconcile Totals`): the dose math itself is sound — `getCumulativeDose` (`js/sim/events/query.js`) is correct and unit-tested, `applyRateAugmentation` (`js/sim/simulation.js`) is correct for the infusion-only case, and the retrospective single-bolus rate-restore is benign (push delivery is seconds long; the restored rate equals the surrounding rate).
