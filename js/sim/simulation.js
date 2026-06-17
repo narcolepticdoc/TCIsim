@@ -520,27 +520,32 @@ export function createModel(config = {}) {
    *
    * Returns an array of { time, Ce } points (first point anchored at the
    * current Ce so the line connects to the live curve), or null if no engine.
-   * Sampling stops at the first point where Ce ≤ targetCe (the threshold
-   * crossing) or at maxLookahead as a safety cap.
+   * Sampling continues for `overshootMin` minutes past the first point where
+   * Ce ≤ targetCe (so the line visibly dips below the threshold rather than
+   * ending abruptly on it), capped at maxLookahead as a safety bound.
    */
   function computeDecayTrajectory(drugId, time, targetCe, opts = {}) {
     const engine = eventList.getEngine(drugId);
     if (!engine) return null;
 
-    const step = opts.step ?? 0.25;            // minutes between samples
-    const maxLook = opts.maxLookahead ?? 480;   // safety cap (8 h)
+    const step = opts.step ?? 0.25;             // minutes between samples
+    const maxLook = opts.maxLookahead ?? 480;    // safety cap (8 h)
+    const overshootMin = opts.overshootMin ?? 15; // continue past the crossing
 
     const state = eventList.getStateAtTime(drugId, time); // sets engine state
     engine.setState(state);
 
     const pts = [{ time, Ce: engine.getConcentrations().Ce }];
     let t = time;
+    let crossedAt = null;                      // time of first Ce ≤ targetCe
     while (t - time < maxLook) {
       engine.advance(step, 0);                 // rate 0 = infusion stopped
       t += step;
       const ce = engine.getConcentrations().Ce;
       pts.push({ time: t, Ce: ce });
-      if (ce <= targetCe) break;               // stop at the threshold crossing
+      if (crossedAt === null && ce <= targetCe) crossedAt = t;
+      // Keep going a short while past the crossing, then stop.
+      if (crossedAt !== null && t - crossedAt >= overshootMin) break;
     }
 
     eventList.replayDrug(drugId);              // restore real engine state
