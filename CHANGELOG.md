@@ -11,6 +11,14 @@
 
 ---
 
+## [0.5.39.7] — 2026-06-17
+
+More drug concentration options.
+
+- **Added Propofol 8.33 mg/mL and Ketamine 100 mg/mL (10%)** to the per-drug concentration pickers on the setup screen. No other changes — pump math (`maxRate`, mL conversions) already derives from the selected concentration, so the new values work end-to-end with no code changes.
+- `index.html` — new `<option>`s in `#input-concentration` and `#input-ketamine-concentration`.
+- `js/version.js`, `sw.js` — `0.5.39.6` → `0.5.39.7`.
+
 ## [0.5.39.6] — 2026-06-17
 
 Reconcile spread mode shows the rate in the drug's native unit.
