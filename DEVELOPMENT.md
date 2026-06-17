@@ -4,6 +4,10 @@
 
 ## Session History
 
+### Additional drug concentrations (v0.5.39.7) — Interim
+
+User request: add Propofol 8.33 mg/mL and Ketamine 100 mg/mL (10%) to the concentration pickers. Both are static `<select>` options in `index.html` (`#input-concentration`, `#input-ketamine-concentration`); `setup.js`/`app.js` read `.value` directly and there's no concentration allowlist, so adding `<option>`s is sufficient. Pump-derived `maxRate` and all mL↔mg conversions already flow from the selected concentration (`getPumpSettings`, `units.js`), so the new values are fully wired with no JS changes. Propofol option placed first (ascending: 8.33, 10, 20); ketamine appended (10, 50, 100). Lockstep version bump to `0.5.39.7`.
+
 ### Reconcile spread-mode rate units (v0.5.39.6) — Interim
 
 Follow-up to the overshoot fix (the unit issue noted out-of-scope in v0.5.39.5). In Reconcile → Spread, the rate was hardcoded to canonical `mg/min` for every drug while the magnitude beside it used the drug's native mass unit (`fmtTotalMass`). For fentanyl (native mcg) this read `+50 mcg ... (0.001 mg/min for 60m)` — wrong unit and a tiny number the code worked around with a `toExponential` fallback.
