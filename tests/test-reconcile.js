@@ -157,6 +157,48 @@ t('empty events returns zero', () => {
   approx(totalMg, 0, 1e-12);
 });
 
+console.log('\n--- Reconcile: baseline must match apply-time clock ---');
+
+// The modal opens at t0, the user enters the actual total, and confirm fires
+// at t1 > t0 (the case clock keeps running). The correction must be measured
+// against the baseline at t1 — the same clock the mutation is applied at —
+// so the post-reconcile total lands exactly on the entered actual.
+t('single-bolus delta sampled at apply-time lands on actual exactly', () => {
+  const events = [{ type: 'rate', time: 0, value: 10 }]; // 10 mg/min infusion
+  const t0 = 30;   // modal open
+  const t1 = 31.5; // confirm 90s later
+  const actual = 400;
+
+  // BUG repro: baseline sampled at open (t0) overshoots at apply-time.
+  const baseAtOpen = getCumulativeDose(events, 'propofol', t0).totalMg; // 300
+  const deltaStale = actual - baseAtOpen;
+  const withStale = [...events, { type: 'bolus', time: t1, value: deltaStale }];
+  const totalStale = getCumulativeDose(withStale, 'propofol', t1).totalMg;
+  if (Math.abs(totalStale - actual) < 1e-6) {
+    throw new Error('expected stale-baseline path to overshoot, but it matched');
+  }
+
+  // FIX: baseline sampled at apply-time (t1) lands exactly.
+  const baseAtApply = getCumulativeDose(events, 'propofol', t1).totalMg; // 315
+  const deltaFresh = actual - baseAtApply;
+  const withFresh = [...events, { type: 'bolus', time: t1, value: deltaFresh }];
+  const totalFresh = getCumulativeDose(withFresh, 'propofol', t1).totalMg;
+  approx(totalFresh, actual, 1e-9, `expected total ${actual}, got ${totalFresh}`);
+});
+
+t('spread offset over [0,t1] sampled at apply-time lands on actual exactly', () => {
+  const events = [{ type: 'rate', time: 0, value: 10 }];
+  const t1 = 31.5;
+  const actual = 400;
+  const baseAtApply = getCumulativeDose(events, 'propofol', t1).totalMg; // 315
+  const delta = actual - baseAtApply;
+  const ratePerMin = delta / t1; // spread evenly across [0, t1]
+  // Augment the single rate segment by the offset.
+  const augmented = [{ type: 'rate', time: 0, value: 10 + ratePerMin }];
+  const total = getCumulativeDose(augmented, 'propofol', t1).totalMg;
+  approx(total, actual, 1e-9, `expected total ${actual}, got ${total}`);
+});
+
 console.log('\n--- Reconcile: negative bolus replay ---');
 
 t('+50mg then -50mg returns drug content toward zero long-term', () => {

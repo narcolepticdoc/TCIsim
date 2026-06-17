@@ -200,8 +200,12 @@ function _activeDrugs() {
   return out;
 }
 
-function _computeSimTotal() {
-  const now = _timer.getElapsedMinutes();
+// Sample the simulated total at `now` (defaults to the live case clock).
+// The case clock keeps advancing while the modal is open, so the baseline
+// must be re-sampled against the same `now` the correction will be applied
+// at — otherwise the delta is measured against a stale baseline and the
+// post-reconcile total overshoots the entered actual by rate × elapsed.
+function _computeSimTotal(now = _timer.getElapsedMinutes()) {
   const events = _model.getEvents(_drugId);
   _simTotalMg = getCumulativeDose(events, _drugId, now).totalMg;
 }
@@ -460,6 +464,12 @@ function _updateTimeConversion() {
 // ---- Rendering ----
 
 function _render() {
+  // Re-sample the simulated total against the live clock so the on-screen
+  // "Simulated total" and delta track real time and match what confirm will
+  // apply. _render runs on every keypress / mode toggle, which is live enough
+  // for the few-second granularity that matters here.
+  _computeSimTotal();
+
   // Input-mode toggle visibility (only for pump-enabled drugs)
   const inputToggle = document.querySelector('.rm-input-mode-toggle');
   if (inputToggle) {
@@ -596,14 +606,19 @@ function _confirm() {
     if (err) err.textContent = 'Enter the actual total delivered.';
     return;
   }
-  _computeDelta();
-  if (Math.abs(_deltaMg) < 1e-6) {
-    if (err) err.textContent = 'Totals match — nothing to reconcile.';
-    return;
-  }
+  // Capture `now` once, up-front, and measure the delta against the baseline
+  // at that same `now` — the clock kept moving while the modal was open, so
+  // a baseline sampled at open would overshoot. _doReconcile is handed this
+  // same `now` so the whole confirm path is clock-consistent.
   const now = _timer.getElapsedMinutes();
   if (!(now > 0)) {
     if (err) err.textContent = 'Case has not started yet.';
+    return;
+  }
+  _computeSimTotal(now);
+  _computeDelta();
+  if (Math.abs(_deltaMg) < 1e-6) {
+    if (err) err.textContent = 'Totals match — nothing to reconcile.';
     return;
   }
 
