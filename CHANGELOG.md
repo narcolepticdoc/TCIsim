@@ -11,6 +11,10 @@
 
 ---
 
+## [0.5.40.2] — 2026-06-25
+
+- Drug panel infusion rate: numeric value now displays larger (1.45em) and colored in the drug's accent color for at-a-glance readability.
+
 ## [0.5.40.1] — 2026-06-17
 
 Emergence trajectory continues past the threshold crossing.
