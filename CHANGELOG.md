@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.40.3] — 2026-06-25
+
+- TCI alert popups (`warn-popup`): drug name now 15px bold for instant drug identification at a glance.
+- Both popup systems (`warn-popup` and `modal-tci-firststep`): countdown shows `now (HH:MM RT)` when it reaches zero, providing a wall-clock timestamp for chart review and documentation.
+- Both popup systems: added "Missed it — Recalculate" button with an inline confirmation panel. Confirming clears TCI events from the missed step forward and replans the same target from the current time; cancelling returns to the popup.
+
 ## [0.5.40.2] — 2026-06-25
 
 - Drug panel infusion rate: numeric value now displays larger (1.45em) and colored in the drug's accent color for at-a-glance readability.

@@ -938,6 +938,23 @@ function boot() {
     model,
     getDrugIds: () => DRUG_IDS,
     getPatient:  () => model ? model.getPatient() : null,
+    timer,
+    onMissedRecalculate: (drugId, missedEventTime) => {
+      const ceTarget = mode.getCeTarget(drugId);
+      if (!ceTarget) return;
+      const tciMode     = setup.getTciMode ? setup.getTciMode() : 'stepped';
+      const quantConfig = getQuantizeConfig(drugId);
+      const { ceTolerance } = settings.getSettings();
+      model.clearFrom(drugId, missedEventTime);
+      const currentTime = timer.getElapsedMinutes();
+      const { scheme } = model.planTCI(drugId, currentTime, ceTarget, { tciMode, ceTolerance, ...quantConfig });
+      mode.set(drugId, 'tci');
+      mode.setCeTarget(drugId, ceTarget);
+      addAnnotation({ heading: 'TCI Recalculated', sub: 'Missed step — restarted from now' }, drugId);
+      refreshChart();
+      settings.dismissForDrug(drugId);
+      if (scheme && scheme.length) tciModal.showFirstStepImmediate(scheme, drugId, { ceTarget, tciMode, ceTolerance, quantConfig });
+    },
   });
 
   // Wire settings modal (sliders, checkboxes, tabs, open/close)

@@ -7,7 +7,7 @@
  */
 
 import { getAllowedUnits, getDefaultUnit, getPrefKey, fromCanonical, formatValue, getQuantizeConfig } from '../util/units.js';
-import { getPumpSettings } from '../util/constants.js';
+import { getPumpSettings, DRUG_DEFS } from '../util/constants.js';
 import { playAlert } from '../ui/alert-sound.js';
 import { getSettings } from '../ui/settings.js';
 
@@ -29,9 +29,11 @@ const TCI_DELAY_OPTIONS = [5, 10, 15, 20, 30]; // seconds
  */
 export function createTciModal({ model, timer, mode, refreshChart, closeModal, addAnnotation }) {
   // Internal state — previously module-scope vars in app.js
-  let pendingTCI = null;          // { drugId, ceTarget, tciMode }
-  let tciDelaySeconds = 10;       // last-selected delay, persists within session
+  let pendingTCI           = null;  // { drugId, ceTarget, tciMode }
+  let tciDelaySeconds      = 10;    // last-selected delay, persists within session
   let tciCountdownInterval = null;
+  let activeStep           = null;  // { drugId, ceTarget, tciMode, ceTolerance, quantConfig, firstStepTime }
+  let _autoCloseTimeout    = null;  // ref so "Missed it" can cancel the auto-close
 
   function showDelay(ceTarget, drugId) {
     const allowed = getAllowedUnits(drugId || 'propofol', 'ceTarget');
@@ -70,6 +72,7 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal, a
     // entry points that haven't been updated yet).
     const qc = quantConfig || getQuantizeConfig(drugId);
     const { scheme } = model.planTCI(drugId, futureTime, ceTarget, { tciMode, ceTolerance, ...qc });
+    activeStep = { drugId, ceTarget, tciMode, ceTolerance, quantConfig: qc, firstStepTime: futureTime };
     mode.set(drugId, 'tci');
     if (addAnnotation) {
       // Show the target in the drug's display unit (e.g. ng/mL for fentanyl /
@@ -87,6 +90,19 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal, a
   function showFirstStep(scheme, drugId, delaySeconds) {
     const firstStep = scheme && scheme[0];
     if (!firstStep) return;
+
+    // Inject drug name and color into the modal title
+    const drugDef  = DRUG_DEFS[drugId] || {};
+    const drugName = drugDef.name || drugId;
+    const titleEl  = $('tci-fs-title');
+    if (titleEl) titleEl.innerHTML =
+      `<span class="tci-fs-drug-name">${drugName}</span>` +
+      `<span class="tci-fs-step-label">First Step</span>`;
+    const modalEl = $('modal-tci-firststep');
+    if (modalEl && drugDef.color) modalEl.style.setProperty('--drug-color', drugDef.color);
+
+    // Cancel any leftover auto-close from a previous showing
+    if (_autoCloseTimeout) { clearTimeout(_autoCloseTimeout); _autoCloseTimeout = null; }
 
     const patient = model.getPatient();
     const ps = getPumpSettings(drugId);
@@ -141,7 +157,12 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal, a
     let _zeroChimeFired = false;
     function tick() {
       const secs = remainingMs / 1000;
-      $('tci-fs-countdown').textContent = secs > 0 ? `in ${secs.toFixed(1)}s` : 'Now!';
+      if (secs > 0) {
+        $('tci-fs-countdown').textContent = `in ${secs.toFixed(1)}s`;
+      } else {
+        const wc = timer.getWallClock();
+        $('tci-fs-countdown').textContent = wc ? `Now (${timer.formatWallClock()} RT)` : 'Now!';
+      }
       if (remainingMs <= 0) {
         if (!_zeroChimeFired) {
           _zeroChimeFired = true;
@@ -149,7 +170,7 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal, a
         }
         clearInterval(tciCountdownInterval);
         tciCountdownInterval = null;
-        setTimeout(() => closeModal('modal-tci-firststep'), 1500);
+        _autoCloseTimeout = setTimeout(() => closeModal('modal-tci-firststep'), 1500);
       }
       remainingMs -= intervalMs;
     }
@@ -163,15 +184,18 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal, a
   /** Clear pending state (cancel / overlay / Escape). */
   function cleanupDelay() { pendingTCI = null; }
 
-  /** Clear countdown interval (dismiss / overlay / Escape). */
+  /** Clear countdown interval, auto-close timeout, and confirm panel state. */
   function cleanupFirstStep() {
-    if (tciCountdownInterval) {
-      clearInterval(tciCountdownInterval);
-      tciCountdownInterval = null;
-    }
+    if (tciCountdownInterval) { clearInterval(tciCountdownInterval); tciCountdownInterval = null; }
+    if (_autoCloseTimeout)    { clearTimeout(_autoCloseTimeout);    _autoCloseTimeout = null;    }
+    activeStep = null;
+    const panel = $('tci-fs-confirm-panel');
+    const main  = $('tci-fs-main-actions');
+    if (panel) panel.style.display = 'none';
+    if (main)  main.style.display  = '';
   }
 
-  /** Wire the three modal buttons. */
+  /** Wire all modal buttons. */
   function initListeners() {
     const btnConfirm = $('tci-delay-confirm');
     if (btnConfirm) btnConfirm.addEventListener('click', () => commit());
@@ -185,6 +209,62 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal, a
       cleanupFirstStep();
       closeModal('modal-tci-firststep');
     });
+
+    // "Missed it — Recalculate" → show inline confirmation
+    $('tci-fs-missed')?.addEventListener('click', () => {
+      if (!activeStep) return;
+      if (_autoCloseTimeout) { clearTimeout(_autoCloseTimeout); _autoCloseTimeout = null; }
+      const drugName = (DRUG_DEFS[activeStep.drugId] || {}).name || activeStep.drugId;
+      const ceUnit   = getAllowedUnits(activeStep.drugId, 'ceTarget')[0] || 'mcg/mL';
+      const ceDisp   = `${formatValue(fromCanonical(activeStep.ceTarget, ceUnit, activeStep.drugId, 'ceTarget', {}), ceUnit)} ${ceUnit}`;
+      $('tci-fs-confirm-text').innerHTML =
+        `TCI events from the missed <b>${drugName}</b> step will be cleared ` +
+        `and the target (Ce ${ceDisp}) will be recalculated from now.`;
+      $('tci-fs-main-actions').style.display = 'none';
+      $('tci-fs-confirm-panel').style.display = '';
+    });
+
+    // "No — Go back" → restore main buttons
+    $('tci-fs-confirm-no')?.addEventListener('click', () => {
+      $('tci-fs-confirm-panel').style.display = 'none';
+      $('tci-fs-main-actions').style.display  = '';
+    });
+
+    // "Yes, Recalculate" → clear missed events, replan, show new first step
+    $('tci-fs-confirm-yes')?.addEventListener('click', () => {
+      if (!activeStep) return;
+      const { drugId, ceTarget, tciMode, ceTolerance, quantConfig, firstStepTime } = activeStep;
+      model.clearFrom(drugId, firstStepTime);
+      const currentTime = timer.getElapsedMinutes();
+      const qc = quantConfig || getQuantizeConfig(drugId);
+      const { scheme: newScheme } = model.planTCI(drugId, currentTime, ceTarget, { tciMode, ceTolerance, ...qc });
+      mode.set(drugId, 'tci');
+      mode.setCeTarget(drugId, ceTarget);
+      if (addAnnotation) addAnnotation({ heading: 'TCI Recalculated', sub: 'Missed step — restarted from now' }, drugId);
+      refreshChart();
+      cleanupFirstStep();
+      closeModal('modal-tci-firststep');
+      if (newScheme && newScheme.length) {
+        activeStep = { drugId, ceTarget, tciMode, ceTolerance, quantConfig: qc, firstStepTime: currentTime };
+        showFirstStep(newScheme, drugId, 0);
+      }
+    });
+  }
+
+  /**
+   * Called by app.js after a warn-popup recalculate to show the new first step.
+   * stepCtx = { ceTarget, tciMode, ceTolerance, quantConfig }
+   */
+  function showFirstStepImmediate(scheme, drugId, stepCtx) {
+    activeStep = {
+      drugId,
+      firstStepTime: timer.getElapsedMinutes(),
+      ceTarget:    stepCtx.ceTarget,
+      tciMode:     stepCtx.tciMode,
+      ceTolerance: stepCtx.ceTolerance,
+      quantConfig: stepCtx.quantConfig,
+    };
+    showFirstStep(scheme, drugId, 0);
   }
 
   return {
@@ -194,5 +274,6 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal, a
     initListeners,
     cleanupDelay,
     cleanupFirstStep,
+    showFirstStepImmediate,
   };
 }
