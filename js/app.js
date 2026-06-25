@@ -947,13 +947,15 @@ function boot() {
       const { ceTolerance } = settings.getSettings();
       model.clearFrom(drugId, missedEventTime);
       const currentTime = timer.getElapsedMinutes();
-      const { scheme } = model.planTCI(drugId, currentTime, ceTarget, { tciMode, ceTolerance, ...quantConfig });
+      const lastDelay   = tciModal.getLastDelay();
+      const futureTime  = currentTime + lastDelay / 60;
+      const { scheme } = model.planTCI(drugId, futureTime, ceTarget, { tciMode, ceTolerance, ...quantConfig });
       mode.set(drugId, 'tci');
       mode.setCeTarget(drugId, ceTarget);
       addAnnotation({ heading: 'TCI Recalculated', sub: 'Missed step — restarted from now' }, drugId);
       refreshChart();
       settings.dismissForDrug(drugId);
-      if (scheme && scheme.length) tciModal.showFirstStepImmediate(scheme, drugId, { ceTarget, tciMode, ceTolerance, quantConfig });
+      if (scheme && scheme.length) tciModal.showFirstStepImmediate(scheme, drugId, { ceTarget, tciMode, ceTolerance, quantConfig }, lastDelay);
     },
   });
 

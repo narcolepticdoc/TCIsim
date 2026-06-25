@@ -236,8 +236,9 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal, a
       const { drugId, ceTarget, tciMode, ceTolerance, quantConfig, firstStepTime } = activeStep;
       model.clearFrom(drugId, firstStepTime);
       const currentTime = timer.getElapsedMinutes();
+      const futureTime  = currentTime + tciDelaySeconds / 60;
       const qc = quantConfig || getQuantizeConfig(drugId);
-      const { scheme: newScheme } = model.planTCI(drugId, currentTime, ceTarget, { tciMode, ceTolerance, ...qc });
+      const { scheme: newScheme } = model.planTCI(drugId, futureTime, ceTarget, { tciMode, ceTolerance, ...qc });
       mode.set(drugId, 'tci');
       mode.setCeTarget(drugId, ceTarget);
       if (addAnnotation) addAnnotation({ heading: 'TCI Recalculated', sub: 'Missed step — restarted from now' }, drugId);
@@ -245,8 +246,8 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal, a
       cleanupFirstStep();
       closeModal('modal-tci-firststep');
       if (newScheme && newScheme.length) {
-        activeStep = { drugId, ceTarget, tciMode, ceTolerance, quantConfig: qc, firstStepTime: currentTime };
-        showFirstStep(newScheme, drugId, 0);
+        activeStep = { drugId, ceTarget, tciMode, ceTolerance, quantConfig: qc, firstStepTime: futureTime };
+        showFirstStep(newScheme, drugId, tciDelaySeconds);
       }
     });
   }
@@ -254,18 +255,23 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal, a
   /**
    * Called by app.js after a warn-popup recalculate to show the new first step.
    * stepCtx = { ceTarget, tciMode, ceTolerance, quantConfig }
+   * delaySeconds defaults to 0 (immediate) when not supplied.
    */
-  function showFirstStepImmediate(scheme, drugId, stepCtx) {
+  function showFirstStepImmediate(scheme, drugId, stepCtx, delaySeconds = 0) {
+    const futureTime = timer.getElapsedMinutes() + delaySeconds / 60;
     activeStep = {
       drugId,
-      firstStepTime: timer.getElapsedMinutes(),
+      firstStepTime: futureTime,
       ceTarget:    stepCtx.ceTarget,
       tciMode:     stepCtx.tciMode,
       ceTolerance: stepCtx.ceTolerance,
       quantConfig: stepCtx.quantConfig,
     };
-    showFirstStep(scheme, drugId, 0);
+    showFirstStep(scheme, drugId, delaySeconds);
   }
+
+  /** Returns the last-selected TCI delay (seconds), used by app.js on recalculate. */
+  function getLastDelay() { return tciDelaySeconds; }
 
   return {
     showDelay,
@@ -275,5 +281,6 @@ export function createTciModal({ model, timer, mode, refreshChart, closeModal, a
     cleanupDelay,
     cleanupFirstStep,
     showFirstStepImmediate,
+    getLastDelay,
   };
 }

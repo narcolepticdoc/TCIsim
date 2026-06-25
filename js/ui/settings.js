@@ -340,6 +340,8 @@ function _showPopup(drugId, evt, t) {
   const desc     = _fmtEventDesc(evt, drugId);
   const remSec   = displayedSecToEvent(evt, t, getSettings().reactionDelaySec);
 
+  const isTci = evt.source === 'tci';
+
   const el = document.createElement('div');
   el.className = 'warn-popup';
   el.dataset.evtId    = evt.id;
@@ -355,33 +357,37 @@ function _showPopup(drugId, evt, t) {
     `<div class="warn-desc">${_esc(desc)}</div>` +
     `<div class="warn-countdown" id="wc-${_esc(evt.id)}">${initCountdown}</div>` +
     `<div class="warn-buttons">` +
-      `<button class="warn-missed">Missed it — Recalculate</button>` +
+      (isTci ? `<button class="warn-missed">Missed it — Recalculate</button>` : '') +
       `<button class="warn-dismiss">Got it</button>` +
     `</div>` +
-    `<div class="warn-confirm" style="display:none">` +
-      `<p class="warn-confirm-text">` +
-        `TCI events from the missed <b>${_esc(drugName)}</b> step will be cleared ` +
-        `and the target will be recalculated from now.` +
-      `</p>` +
-      `<div class="warn-confirm-buttons">` +
-        `<button class="warn-confirm-no">No — Go back</button>` +
-        `<button class="warn-confirm-yes">Yes, Recalculate</button>` +
-      `</div>` +
-    `</div>`;
+    (isTci
+      ? `<div class="warn-confirm" style="display:none">` +
+          `<p class="warn-confirm-text">` +
+            `TCI events from the missed <b>${_esc(drugName)}</b> step will be cleared ` +
+            `and the target will be recalculated from now.` +
+          `</p>` +
+          `<div class="warn-confirm-buttons">` +
+            `<button class="warn-confirm-no">No — Go back</button>` +
+            `<button class="warn-confirm-yes">Yes, Recalculate</button>` +
+          `</div>` +
+        `</div>`
+      : '');
 
   el.querySelector('.warn-dismiss').addEventListener('click', () => dismiss(evt.id));
-  el.querySelector('.warn-missed').addEventListener('click', () => {
-    el.querySelector('.warn-buttons').style.display = 'none';
-    el.querySelector('.warn-confirm').style.display = '';
-  });
-  el.querySelector('.warn-confirm-no').addEventListener('click', () => {
-    el.querySelector('.warn-confirm').style.display = 'none';
-    el.querySelector('.warn-buttons').style.display = '';
-  });
-  el.querySelector('.warn-confirm-yes').addEventListener('click', () => {
-    dismiss(evt.id);
-    if (_onMissedRecalculate) _onMissedRecalculate(drugId, evt.time);
-  });
+  if (isTci) {
+    el.querySelector('.warn-missed').addEventListener('click', () => {
+      el.querySelector('.warn-buttons').style.display = 'none';
+      el.querySelector('.warn-confirm').style.display = '';
+    });
+    el.querySelector('.warn-confirm-no').addEventListener('click', () => {
+      el.querySelector('.warn-confirm').style.display = 'none';
+      el.querySelector('.warn-buttons').style.display = '';
+    });
+    el.querySelector('.warn-confirm-yes').addEventListener('click', () => {
+      dismiss(evt.id);
+      if (_onMissedRecalculate) _onMissedRecalculate(drugId, evt.time);
+    });
+  }
   container.appendChild(el);
   _activePopups.set(evt.id, el);
 }
