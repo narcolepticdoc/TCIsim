@@ -16,7 +16,7 @@
 
 import * as settings from '../settings.js';
 import { isPumpEnabled } from '../../util/constants.js';
-import { fmtCe, fmtCeHTML, fmtCeSmart, fmtRateInline, bisColor, isInBolusPhase, fmtCountdown,
+import { fmtCe, fmtCeHTML, fmtCeSmart, fmtRateInline, fmtRateInlineHTML, bisColor, isInBolusPhase, fmtCountdown,
          TCI_FRACTION_DEFAULT, SS_SLOPE_DEFAULT, EXIT_BAND_DEFAULT } from './formatters.js';
 import { setCurveData, updateApproachLine, _getApproachCache,
          getPlateauRegion, getSteadyStateCe, invalidateAll,
@@ -156,8 +156,8 @@ function update() {
       // same bolus-detection heuristic as the status label above.
       const showingBolus = caseStarted && rate > 0
         && (isInBolusPhase(ctx, dId, t) || rate > 50);
-      rateEl.textContent = (caseStarted && rate > 0)
-        ? fmtRateInline(ctx, dId, rate, { bolusOverride: showingBolus })
+      rateEl.innerHTML = (caseStarted && rate > 0)
+        ? fmtRateInlineHTML(ctx, dId, rate, { bolusOverride: showingBolus })
         : '';
     }
 

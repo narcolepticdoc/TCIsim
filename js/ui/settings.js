@@ -49,9 +49,11 @@ const DRUG_NAMES = {
   remifentanil: 'Remifentanil',
 };
 
-let _model      = null;
-let _getDrugIds = null;
-let _getPatient = null;
+let _model                = null;
+let _getDrugIds           = null;
+let _getPatient           = null;
+let _timer                = null;
+let _onMissedRecalculate  = null;
 
 // One-shot guards — sets of event IDs that have already fired
 const _prepSoundFired = new Set();
@@ -181,9 +183,11 @@ export function displayedSecToEvent(evt, currentMin, reactionDelaySec = 0) {
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 export function init(opts = {}) {
-  _model      = opts.model;
-  _getDrugIds = opts.getDrugIds || (() => ['propofol', 'fentanyl', 'ketamine']);
-  _getPatient = opts.getPatient || (() => null);
+  _model               = opts.model;
+  _getDrugIds          = opts.getDrugIds || (() => ['propofol', 'fentanyl', 'ketamine']);
+  _getPatient          = opts.getPatient || (() => null);
+  _timer               = opts.timer || null;
+  _onMissedRecalculate = opts.onMissedRecalculate || null;
   _ensureContainer();
   // Unlock AudioContext on first user gesture anywhere in the document
   document.addEventListener('click', unlockAudio, { once: true });
@@ -269,7 +273,12 @@ export function check(t) {
         const cntEl = document.getElementById('wc-' + nextEvt.id);
         if (cntEl) {
           const remSec2 = displayedSecToEvent(nextEvt, t, reactionDelaySec);
-          cntEl.textContent = remSec2 > 0 ? 'in ' + _fmtCountdown(remSec2 / 60) : 'now';
+          if (remSec2 > 0) {
+            cntEl.textContent = 'in ' + _fmtCountdown(remSec2 / 60);
+          } else {
+            const wc = _timer && _timer.getWallClock();
+            cntEl.textContent = wc ? `now (${_fmtWallClock(wc)} RT)` : 'now';
+          }
         }
       }
     } catch (e) {}
@@ -285,7 +294,10 @@ export function check(t) {
     if (t >= evtTime - offsetMin && !_zeroChimeFired.has(evtId)) {
       _zeroChimeFired.add(evtId);
       const cntEl = document.getElementById('wc-' + evtId);
-      if (cntEl) cntEl.textContent = 'now';
+      if (cntEl) {
+        const wc = _timer && _timer.getWallClock();
+        cntEl.textContent = wc ? `now (${_fmtWallClock(wc)} RT)` : 'now';
+      }
       playAlert('info');
     }
   }
@@ -300,6 +312,13 @@ export function check(t) {
 export function dismiss(evtId) {
   const el = _activePopups.get(evtId);
   if (el) { el.remove(); _activePopups.delete(evtId); }
+}
+
+/** Dismiss all active popups for a specific drug (call after recalculate). */
+export function dismissForDrug(drugId) {
+  for (const [evtId, el] of _activePopups) {
+    if (el.dataset.evtDrug === drugId) dismiss(evtId);
+  }
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -321,18 +340,54 @@ function _showPopup(drugId, evt, t) {
   const desc     = _fmtEventDesc(evt, drugId);
   const remSec   = displayedSecToEvent(evt, t, getSettings().reactionDelaySec);
 
+  const isTci = evt.source === 'tci';
+
   const el = document.createElement('div');
   el.className = 'warn-popup';
-  el.dataset.evtId = evt.id;
-  el.dataset.evtTime = evt.time;
+  el.dataset.evtId    = evt.id;
+  el.dataset.evtTime  = evt.time;
   el.dataset.evtSource = evt.source || '';
+  el.dataset.evtDrug  = drugId;
+  const initCountdown = remSec > 0 ? 'in ' + _fmtCountdown(remSec / 60) : (() => {
+    const wc = _timer && _timer.getWallClock();
+    return wc ? `now (${_fmtWallClock(wc)} RT)` : 'now';
+  })();
   el.innerHTML =
     `<div class="warn-drug">${_esc(drugName)}</div>` +
     `<div class="warn-desc">${_esc(desc)}</div>` +
-    `<div class="warn-countdown" id="wc-${_esc(evt.id)}">${remSec > 0 ? 'in ' + _fmtCountdown(remSec / 60) : 'now'}</div>` +
-    `<button class="warn-dismiss">Got it</button>`;
+    `<div class="warn-countdown" id="wc-${_esc(evt.id)}">${initCountdown}</div>` +
+    `<div class="warn-buttons">` +
+      (isTci ? `<button class="warn-missed">Missed it — Recalculate</button>` : '') +
+      `<button class="warn-dismiss">Got it</button>` +
+    `</div>` +
+    (isTci
+      ? `<div class="warn-confirm" style="display:none">` +
+          `<p class="warn-confirm-text">` +
+            `TCI events from the missed <b>${_esc(drugName)}</b> step will be cleared ` +
+            `and the target will be recalculated from now.` +
+          `</p>` +
+          `<div class="warn-confirm-buttons">` +
+            `<button class="warn-confirm-no">No — Go back</button>` +
+            `<button class="warn-confirm-yes">Yes, Recalculate</button>` +
+          `</div>` +
+        `</div>`
+      : '');
 
   el.querySelector('.warn-dismiss').addEventListener('click', () => dismiss(evt.id));
+  if (isTci) {
+    el.querySelector('.warn-missed').addEventListener('click', () => {
+      el.querySelector('.warn-buttons').style.display = 'none';
+      el.querySelector('.warn-confirm').style.display = '';
+    });
+    el.querySelector('.warn-confirm-no').addEventListener('click', () => {
+      el.querySelector('.warn-confirm').style.display = 'none';
+      el.querySelector('.warn-buttons').style.display = '';
+    });
+    el.querySelector('.warn-confirm-yes').addEventListener('click', () => {
+      dismiss(evt.id);
+      if (_onMissedRecalculate) _onMissedRecalculate(drugId, evt.time);
+    });
+  }
   container.appendChild(el);
   _activePopups.set(evt.id, el);
 }
@@ -382,6 +437,10 @@ function _fmtCountdown(minutes) {
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function _fmtWallClock(d) {
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
 
 /** Minimal HTML escaping for dynamic content inserted via innerHTML. */

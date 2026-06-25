@@ -115,31 +115,47 @@ export function fmtCeHTML(ceMcgMl, drugId) {
  * mismatch trainees would otherwise see between the sim's preferred unit
  * (e.g. mcg/kg/min) and the pump's mL/h readout.
  */
+function _rateDisplayParts(ctx, drugId, rate, opts = {}) {
+  const weight = ctx.model.getPatient().weight;
+  let displayUnit;
+  let concentration;
+  if (opts.bolusOverride) {
+    displayUnit = 'mL/h';
+    try { concentration = getPumpSettings(drugId).concentration; } catch (e) {}
+  } else {
+    const prefKey = getPrefKey(drugId, 'rate');
+    displayUnit = getDefaultUnit(drugId, 'rate');
+    if (prefKey) {
+      try {
+        const saved = localStorage.getItem(prefKey);
+        const allowed = getAllowedUnits(drugId, 'rate');
+        if (saved && allowed.includes(saved)) displayUnit = saved;
+      } catch (e) {}
+    }
+  }
+  const conv = { weightKg: weight };
+  if (concentration) conv.concentration = concentration;
+  const displayVal = fromCanonical(rate, displayUnit, drugId, 'rate', conv);
+  return { numStr: formatValue(displayVal, displayUnit), displayUnit };
+}
+
 export function fmtRateInline(ctx, drugId, rate, opts = {}) {
   if (!rate || rate <= 0) return '';
   try {
-    const weight = ctx.model.getPatient().weight;
-    let displayUnit;
-    let concentration;
-    if (opts.bolusOverride) {
-      displayUnit = 'mL/h';
-      try { concentration = getPumpSettings(drugId).concentration; } catch (e) {}
-    } else {
-      const prefKey = getPrefKey(drugId, 'rate');
-      displayUnit = getDefaultUnit(drugId, 'rate');
-      if (prefKey) {
-        try {
-          const saved = localStorage.getItem(prefKey);
-          const allowed = getAllowedUnits(drugId, 'rate');
-          if (saved && allowed.includes(saved)) displayUnit = saved;
-        } catch (e) {}
-      }
-    }
-    const conv = { weightKg: weight };
-    if (concentration) conv.concentration = concentration;
-    const displayVal = fromCanonical(rate, displayUnit, drugId, 'rate', conv);
-    return `${formatValue(displayVal, displayUnit)} ${displayUnit}`;
+    const { numStr, displayUnit } = _rateDisplayParts(ctx, drugId, rate, opts);
+    return `${numStr} ${displayUnit}`;
   } catch (e) {
     return `${rate.toFixed(2)} mg/min`;
+  }
+}
+
+/** HTML version — wraps the numeric portion in `.drug-rate-num` for larger colored display. */
+export function fmtRateInlineHTML(ctx, drugId, rate, opts = {}) {
+  if (!rate || rate <= 0) return '';
+  try {
+    const { numStr, displayUnit } = _rateDisplayParts(ctx, drugId, rate, opts);
+    return `<span class="drug-rate-num">${numStr}</span> ${displayUnit}`;
+  } catch (e) {
+    return `<span class="drug-rate-num">${rate.toFixed(2)}</span> mg/min`;
   }
 }
