@@ -156,6 +156,7 @@ export function createEventList() {
     editEvent: actions.editEvent,
     deleteEvent: actions.deleteEvent,
     deleteEventAndAfter: actions.deleteEventAndAfter,
+    reanchorBolusDeliveries: actions.reanchorBolusDeliveries,
 
     // Debug
     get length() { return state.events.length; },

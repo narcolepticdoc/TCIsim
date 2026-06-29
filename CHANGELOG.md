@@ -11,6 +11,13 @@
 
 ---
 
+## [0.5.40.5] — 2026-06-29
+
+- Fixed a propofol Ce discrepancy where the drug-card value and the chart/inspect readout disagreed after the global pump max rate was changed mid-case. Root cause: a bolus's delivery duration is derived from the global pump rate and a TCI plan anchors its first rate step to the bolus-end; changing the rate left a rate step stranded inside a bolus window, which the point query (card) and the curve sampler (graph) resolved differently.
+- `computeCurve` now splits every engine advance at the bolus-end boundary, so the chart curve is bit-identical to `getConcentrationsAt`/`replayDrug` for any event arrangement (the matrix exponential is exact across the split, so no accuracy is lost). `replayDrug`/`replayDrugFrom` no longer move time backwards for an in-window event.
+- A mid-case pump max-rate change is now treated as a whole-timeline **correction**: the engine's bolus-delivery config is synced (`refreshDrugConfig`) and every existing bolus's following step is re-anchored to its recomputed bolus-end (`reanchorBolusDeliveries`). Bolus dose (mg) is preserved — only delivery timing moves.
+- Case save now records the pump bolus rate; restore re-anchors bolus deliveries if the global rate changed since the save, so reloaded cases stay internally consistent.
+
 ## [0.5.40.3] — 2026-06-25
 
 - TCI alert popups (`warn-popup`): drug name now 15px bold for instant drug identification at a glance.

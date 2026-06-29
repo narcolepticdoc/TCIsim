@@ -55,7 +55,10 @@ export function createReplay(state, { getBolusDelivery, advanceBolus }) {
 
       const dt = evt.time - currentTime;
       if (dt > 0) engine.advance(dt, currentRate);
-      currentTime = evt.time;
+      // Never move time backwards: an event whose time lands inside a still-
+      // delivering bolus window is deferred to the bolus end (its effect
+      // applies from there), matching computeCurve and addRate/addPause.
+      currentTime = Math.max(currentTime, evt.time);
 
       if (evt.type === 'bolus') {
         currentTime += advanceBolus(engine, evt);
@@ -117,7 +120,8 @@ export function createReplay(state, { getBolusDelivery, advanceBolus }) {
       const evt = allDrugEvts[i].evt;
       const dt = evt.time - currentTime;
       if (dt > 0) engine.advance(dt, currentRate);
-      currentTime = evt.time;
+      // Defer in-window events to the bolus end (see replayDrug).
+      currentTime = Math.max(currentTime, evt.time);
 
       if (evt.type === 'bolus') {
         currentTime += advanceBolus(engine, evt);

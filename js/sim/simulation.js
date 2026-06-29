@@ -368,6 +368,15 @@ export function createModel(config = {}) {
   }
 
   /**
+   * Re-anchor every bolus's following rate step to its recomputed bolus-end
+   * after a global pump bolus-rate correction. Bolus dose (mg) is preserved;
+   * only delivery timing and step anchors move. See the event-list method.
+   */
+  function reanchorBolusDeliveries(drugId, oldRateMlH, newRateMlH) {
+    return eventList.reanchorBolusDeliveries(drugId, oldRateMlH, newRateMlH);
+  }
+
+  /**
    * Delete a single event.
    */
   function deleteEvent(id) {
@@ -716,7 +725,7 @@ export function createModel(config = {}) {
     addRate, addBolus, addPause, planTCI,
     editEvent, deleteEvent, deleteEventAndAfter,
     clearAfter, clearFrom, reset, refreshDrugConfig,
-    applyRateAugmentation,
+    applyRateAugmentation, reanchorBolusDeliveries,
 
     // Queries
     getConcentrationsAt, computeCurve, predictBIS,
