@@ -5,7 +5,7 @@
  * full application state to localStorage via the persist module.
  */
 
-import { setPumpSettings, isPumpEnabled, DRUG_IDS } from '../util/constants.js';
+import { setPumpSettings, getPumpSettings, isPumpEnabled, DRUG_IDS } from '../util/constants.js';
 import { fromCanonical, getDefaultUnit, formatValue } from '../util/units.js';
 import * as persist from '../ui/persist.js';
 
@@ -78,6 +78,10 @@ export function createSession({
     persist.saveCase({
       patient: confirmedPatient,
       events: eventsByDrug,
+      // Global pump bolus rate the events were planned/anchored under. On
+      // restore, if the live global rate differs (a mid-case correction made
+      // after this save), bolus deliveries are re-anchored to the new rate.
+      bolusRateMlH: getPumpSettings('propofol').bolusRateMlH,
       wallClockStart: timer.getWallClock() ? new Date(timer.getWallClock().getTime() - timer.getElapsedMs()).toISOString() : null,
       modes,
       ceTargets,
@@ -158,6 +162,19 @@ export function createSession({
               model.addPause(drugId, evt.time, evt.annotation || '');
             }
           }
+        }
+      }
+
+      // Whole-timeline re-anchor: the rebuild above delivered every bolus at
+      // the current global pump rate. If this case was saved under a different
+      // rate (a correction happened after the save), move each bolus's
+      // following step from the saved-rate bolus-end to the current one so the
+      // restored plan is internally consistent. Bolus dose (mg) is unchanged.
+      const savedRate = saved.bolusRateMlH;
+      const curRate = getPumpSettings('propofol').bolusRateMlH;
+      if (savedRate > 0 && curRate > 0 && Math.abs(savedRate - curRate) > 1e-9) {
+        for (const drugId of DRUG_IDS) {
+          model.reanchorBolusDeliveries(drugId, savedRate, curRate);
         }
       }
 

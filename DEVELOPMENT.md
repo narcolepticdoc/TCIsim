@@ -4,6 +4,23 @@
 
 ## Session History
 
+### Propofol Ce card-vs-graph divergence after a pump max-rate correction (v0.5.40.5) — Interim
+
+User reported the propofol drug card reading Ce ≈ 3.45 while the chart/inspect readout read ≈ 3.81 at the same instant. Reproduced in node: the trigger is a non-default concentration (8.33 mg/mL) plus a **mid-case change of the global pump max rate** (750 → 1000 mL/h) made before a target change (re-plan). The user clarified the rate change is almost always a *correction* of a setup value, so the right semantics is whole-timeline retroactive (the rate "was always" the corrected value); bolus dose in mg is invariant under re-rating (only the delivery duration/profile changes), which the user accepted.
+
+Root cause (two layers):
+- **Structural:** a bolus's delivery duration is recomputed live from the mutable global pump rate, and a TCI plan anchors its first rate step to the bolus-end time. `setGlobalMaxPumpRate` updated `getPumpSettings`/localStorage but never `model.refreshDrugConfig`, so the re-plan's planner (live `getPumpSettings` = 1000) placed the first rate step at the 1000 bolus-end while the engine (`state.drugConfigs` = 750) delivered to the 750 bolus-end — leaving a rate step **strictly inside** the active bolus window.
+- **Divergence:** `computeCurve` only broke an advance at events and sample points, never at the bolus end, so the bolus rate bled past the end whenever it fell between samples (over-delivery, +0.21 µg/mL). `replayDrug` had a smaller mirror bug (moved `currentTime` backwards for an in-window event, over-integrating by the overhang, −0.02). An independent micro-step brute reference confirmed the card was ≈ correct and the graph was the large outlier.
+
+Fixes:
+- `js/sim/events/query.js` — `computeCurve` now advances via a helper that splits every step at the bolus-end boundary; a rate/pause event landing inside a bolus window defers to the bolus end (mirrors replay + `addRate`/`addPause`). Bit-identical to `getConcentrationsAt` at sample times.
+- `js/sim/events/replay.js` — `replayDrug`/`replayDrugFrom` use `currentTime = Math.max(currentTime, evt.time)` so in-window events don't over-integrate.
+- `js/sim/events/actions.js` — new `reanchorBolusDeliveries(drugId, oldRateMlH, newRateMlH)`: for every pump-mode bolus (whole timeline), recompute its delivery window and move the following rate/pause step from the old bolus-end to the new one. Dose (mg) untouched. Exposed via `events/index.js` and `simulation.js`.
+- `js/app/settings-ui.js` + `js/app.js` — the mid-case Max Pump Rate control now reports old→new; app wires `refreshDrugConfig` + `reanchorBolusDeliveries` for each drug, then `refreshChart`.
+- `js/app/session.js` — `save` records `bolusRateMlH`; `restore` re-anchors deliveries when the live global rate differs from the saved one, so reloaded cases (incl. those saved before this fix, via Fix 1) stay consistent.
+
+Verification: new `tests/test-pump-rate-correction.js` (11 assertions) — clean plans and the corrected/reloaded cases show card == graph to ~1e-9 at sample times; the raw-collision graph no longer overshoots the brute reference; dose is preserved; steps land exactly on recomputed bolus-ends. Full suite 687 green. Lockstep version bump to `0.5.40.5`.
+
 ### Emergence trajectory continues past crossing (v0.5.40.1) — Interim
 
 Follow-up to v0.5.40: the trajectory line ended exactly on the emergence threshold, which read as the line "stopping at" the line rather than passing through it. Added an `overshootMin` option to `computeDecayTrajectory` (`js/sim/simulation.js`, default 15 min) — instead of breaking at the first `Ce ≤ targetCe`, it records the crossing time and keeps sampling rate-0 decay until `overshootMin` minutes past it (still bounded by `maxLookahead`). The bridge gate is unchanged. Lockstep version bump to `0.5.40.1`.

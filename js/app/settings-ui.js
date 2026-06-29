@@ -65,7 +65,7 @@ function applyTheme(theme) {
  *
  * @param {{ getSettings: Function, setSettings: Function }} opts
  */
-export function initSettingsUI({ getSettings, setSettings }) {
+export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }) {
   const savedSettings     = getSettings();
   const prepSlider        = $('set-prep');
   const alertSlider       = $('set-alert');
@@ -260,7 +260,16 @@ export function initSettingsUI({ getSettings, setSettings }) {
   };
   syncMaxPumpRateSelect();
   if (maxPumpRateEl) {
-    maxPumpRateEl.addEventListener('change', () => setGlobalMaxPumpRate(maxPumpRateEl.value));
+    maxPumpRateEl.addEventListener('change', () => {
+      // Capture the rate in effect BEFORE the change so the model can
+      // re-anchor existing bolus deliveries from the old bolus-ends to the
+      // corrected ones (whole-timeline). A pump max-rate change is treated
+      // as a correction that applies across the whole case.
+      const oldRate = getGlobalMaxPumpRate();
+      setGlobalMaxPumpRate(maxPumpRateEl.value);
+      const newRate = getGlobalMaxPumpRate();
+      if (onMaxPumpRateChange) onMaxPumpRateChange(oldRate, newRate);
+    });
   }
 
   // Tab switching + info panel

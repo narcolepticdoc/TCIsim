@@ -317,6 +317,55 @@ export function createActions(
   }
 
   /**
+   * Re-anchor bolus deliveries across the whole timeline after a global
+   * pump bolus-rate change (a "correction" of the pump max rate).
+   *
+   * A bolus's delivery duration depends on the pump bolus rate (mL/h), and a
+   * plan anchors its following rate/pause step to the bolus-end time. When
+   * the pump rate is corrected, every bolus's delivery window shifts, so the
+   * step that sat at the old bolus-end must move to the new bolus-end —
+   * otherwise it strands inside/after the new delivery window (the exact
+   * boundary collision behind the card-vs-graph divergence).
+   *
+   * Applies to every pump-mode bolus for the drug (past and future). The
+   * bolus DOSE (mg, `evt.value`) is never changed — only delivery timing and
+   * its step anchor. Push-mode boluses use a fixed rate and are skipped.
+   * Returns the number of anchors moved.
+   *
+   * @param {string} drugId
+   * @param {number} oldRateMlH - pump bolus rate before the change
+   * @param {number} newRateMlH - pump bolus rate after the change
+   */
+  function reanchorBolusDeliveries(drugId, oldRateMlH, newRateMlH) {
+    if (!(oldRateMlH > 0) || !(newRateMlH > 0) ||
+        Math.abs(oldRateMlH - newRateMlH) < 1e-9) return 0;
+    const cfg = state.drugConfigs[drugId];
+    const conc = (cfg && cfg.concentration) || 10;
+    const boluses = state.events.filter(e =>
+      e.drug === drugId && e.type === 'bolus' && e.deliveryMode !== 'push');
+    let moved = 0;
+    for (const b of boluses) {
+      const volMl = b.value / conc;
+      const oldEnd = b.time + Math.max(0.05, volMl / oldRateMlH * 60);
+      const newEnd = b.time + Math.max(0.05, volMl / newRateMlH * 60);
+      if (Math.abs(oldEnd - newEnd) < 1e-9) continue;
+      // The step anchored to this bolus end: the first rate/pause event
+      // sitting at the old bolus-end (TCI first step or system rate-restore).
+      const anchor = state.events.find(e =>
+        e.drug === drugId && (e.type === 'rate' || e.type === 'pause') &&
+        Math.abs(e.time - oldEnd) < 0.001);
+      if (!anchor) continue;
+      const idx = state.events.indexOf(anchor);
+      if (idx !== -1) state.events.splice(idx, 1);
+      anchor.time = newEnd;
+      insert(anchor);
+      moved++;
+    }
+    if (moved > 0) replayDrug(drugId);
+    return moved;
+  }
+
+  /**
    * Delete a single event.
    * Does NOT clear future events — the caller decides.
    */
@@ -355,5 +404,6 @@ export function createActions(
     editEvent,
     deleteEvent,
     deleteEventAndAfter,
+    reanchorBolusDeliveries,
   };
 }

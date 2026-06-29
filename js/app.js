@@ -960,7 +960,23 @@ function boot() {
   });
 
   // Wire settings modal (sliders, checkboxes, tabs, open/close)
-  initSettingsUI({ getSettings: () => settings.getSettings(), setSettings: s => settings.setSettings(s) });
+  initSettingsUI({
+    getSettings: () => settings.getSettings(),
+    setSettings: s => settings.setSettings(s),
+    // Mid-case pump max-rate change = a correction applied across the whole
+    // case: sync the engine's bolus-delivery config to the new rate and
+    // re-anchor every existing bolus's following step to its recomputed
+    // bolus-end, then redraw. Dose (mg) is preserved; only delivery timing
+    // moves. See js/sim/events/actions.js reanchorBolusDeliveries.
+    onMaxPumpRateChange: (oldRate, newRate) => {
+      if (!model || !(oldRate > 0) || !(newRate > 0) || oldRate === newRate) return;
+      for (const drugId of DRUG_IDS) {
+        model.refreshDrugConfig(drugId);
+        model.reanchorBolusDeliveries(drugId, oldRate, newRate);
+      }
+      refreshChart();
+    },
+  });
 
   // Wire new case dialog
   const btnNewCase = $('btn-new-case');

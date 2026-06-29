@@ -179,8 +179,18 @@ export function createQuery(
   /**
    * Compute a concentration curve for a drug.
    * Replays from t=0 and samples at regular intervals.
-   * Boluses are delivered incrementally at sample resolution so
-   * the curve shows the concentration profile during delivery.
+   *
+   * Boluses are delivered as an atomic infusion segment over
+   * `[evt.time, evt.time + duration]` at the bolus rate. Crucially, every
+   * engine advance is split at the bolus-end boundary so the bolus rate
+   * never bleeds past the moment delivery finishes — even when the bolus
+   * end falls between sample points and no event coincides with it. This
+   * makes the curve bit-identical to `replayDrug` / `getConcentrationsAt`
+   * (the matrix exponential is exact for a constant rate over any
+   * sub-interval, so splitting introduces no error). A rate/pause event
+   * whose time lands inside an active bolus window sets the post-bolus
+   * rate but takes effect at the bolus end (deferred), mirroring replay
+   * and the `addRate`/`addPause` "defer to bolus end" rule.
    */
   function computeCurve(drugId, startTime, endTime, step = 10 / 60) {
     const engine = state.engines[drugId];
@@ -197,62 +207,57 @@ export function createQuery(
     // Track active bolus delivery
     let bolusEnd = -1;    // time when current bolus delivery finishes
     let bolusRate = 0;    // mg/min during bolus delivery
-    let preBolusRate = 0; // rate to restore after bolus
 
     /**
-     * Get the effective rate at the current moment.
-     * During bolus delivery, the pump is running at bolusRate.
+     * Get the effective rate at the current instant (used for the sample's
+     * `rate` field). During bolus delivery the pump runs at bolusRate.
      */
     function effectiveRate() {
       return (currentTime < bolusEnd) ? bolusRate : currentRate;
     }
 
     /**
-     * Process a single event at currentTime.
+     * Advance the engine to `target`, splitting at the bolus-end boundary
+     * so the bolus rate is applied only over the true delivery window.
+     */
+    function advanceEngineTo(target) {
+      while (currentTime < target - 1e-12) {
+        if (bolusEnd > currentTime) {
+          const stepEnd = Math.min(target, bolusEnd);
+          engine.advance(stepEnd - currentTime, bolusRate);
+          currentTime = stepEnd;
+          if (currentTime >= bolusEnd - 1e-12) { bolusEnd = -1; bolusRate = 0; }
+        } else {
+          engine.advance(target - currentTime, currentRate);
+          currentTime = target;
+        }
+      }
+    }
+
+    /**
+     * Apply an event's effect. Boluses arm the delivery window; rate/pause
+     * events set the (possibly deferred) background rate. Does not advance.
      */
     function processEvent(evt) {
       if (evt.type === 'bolus') {
         const delivery = getBolusDelivery(evt);
-        preBolusRate = currentRate;
         bolusRate = delivery.rate;
         bolusEnd = evt.time + delivery.duration;
-        // Don't advance engine here — the sample loop will step through it
       } else if (evt.type === 'rate') {
         currentRate = evt.value;
-        // If this is a rate-restore after bolus, clear bolus state
-        if (currentTime >= bolusEnd) {
-          bolusEnd = -1;
-          bolusRate = 0;
-        }
       } else if (evt.type === 'pause') {
         currentRate = 0;
       }
     }
 
-    // Process events up to startTime (advance engine through them)
+    // Process events up to startTime, then land exactly on startTime
     while (evtPtr < drugEvents.length && drugEvents[evtPtr].time <= startTime) {
       const evt = drugEvents[evtPtr];
-      const targetTime = evt.time;
-
-      // Advance to event time
-      while (currentTime < targetTime) {
-        const stepTo = Math.min(targetTime, currentTime + step);
-        const dt = stepTo - currentTime;
-        if (dt > 0) engine.advance(dt, effectiveRate());
-        currentTime = stepTo;
-      }
-
+      advanceEngineTo(evt.time);
       processEvent(evt);
       evtPtr++;
     }
-
-    // Advance to startTime
-    while (currentTime < startTime) {
-      const stepTo = Math.min(startTime, currentTime + step);
-      const dt = stepTo - currentTime;
-      if (dt > 0) engine.advance(dt, effectiveRate());
-      currentTime = stepTo;
-    }
+    advanceEngineTo(startTime);
 
     // Sample forward
     let sampleTime = startTime;
@@ -260,19 +265,12 @@ export function createQuery(
       // Process events up to sample time
       while (evtPtr < drugEvents.length && drugEvents[evtPtr].time <= sampleTime) {
         const evt = drugEvents[evtPtr];
-
-        // Advance to event time first
-        const dt = evt.time - currentTime;
-        if (dt > 0) engine.advance(dt, effectiveRate());
-        currentTime = evt.time;
-
+        advanceEngineTo(evt.time);
         processEvent(evt);
         evtPtr++;
       }
 
-      // Advance to sample time
-      const dt = sampleTime - currentTime;
-      if (dt > 0) { engine.advance(dt, effectiveRate()); currentTime = sampleTime; }
+      advanceEngineTo(sampleTime);
 
       const conc = engine.getConcentrations();
       curve.push({
