@@ -54,6 +54,22 @@ export const DRUG_IDS = ['propofol', 'fentanyl', 'ketamine'];
 // intermittent bolus-only mode with IV Push delivery.
 const PUMP_MANDATORY = new Set(['propofol']);
 
+// Nonstandard, site-specific propofol concentrations that must NOT persist as
+// the new-case setup default. They still apply to the running case and are
+// saved with the case (so restore is faithful), but the setup screen never
+// pre-populates with them — they must be re-entered deliberately each case.
+const NONSTICKY_PROPOFOL_CONCS = [8.33];
+
+/**
+ * True when a propofol concentration is "sticky" — i.e. safe to persist as the
+ * setup-screen default. Returns false for the nonstandard values above.
+ */
+export function isStickyPropofolConc(conc) {
+  const v = parseFloat(conc);
+  if (!Number.isFinite(v)) return false;
+  return !NONSTICKY_PROPOFOL_CONCS.some(nc => Math.abs(v - nc) < 0.005);
+}
+
 // ---- Runtime pump settings (user-configurable) ----
 // Falls back to DRUG_DEFS defaults. Updated from setup screen.
 

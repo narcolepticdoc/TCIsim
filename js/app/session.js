@@ -6,7 +6,7 @@
  */
 
 import { setPumpSettings, getPumpSettings, isPumpEnabled, DRUG_IDS } from '../util/constants.js';
-import { fromCanonical, getDefaultUnit, formatValue } from '../util/units.js';
+import { fromCanonical, getDefaultUnit, formatValue, getPrefKey, getSetupDefaultUnit } from '../util/units.js';
 import * as persist from '../ui/persist.js';
 
 const $ = id => document.getElementById(id);
@@ -67,12 +67,14 @@ export function createSession({
     const intermittentThresholds = {};
     const exitCeTargets = {};
     const pumpEnabled = {};
+    const pumpConcentrations = {};
     for (const drugId of DRUG_IDS) {
       modes[drugId] = mode.get(drugId);
       ceTargets[drugId] = mode.getCeTarget(drugId);
       intermittentThresholds[drugId] = mode.getIntermittentThreshold(drugId);
       exitCeTargets[drugId] = mode.getExitCe(drugId);
       pumpEnabled[drugId] = isPumpEnabled(drugId);
+      pumpConcentrations[drugId] = getPumpSettings(drugId).concentration;
     }
 
     persist.saveCase({
@@ -82,6 +84,11 @@ export function createSession({
       // restore, if the live global rate differs (a mid-case correction made
       // after this save), bolus deliveries are re-anchored to the new rate.
       bolusRateMlH: getPumpSettings('propofol').bolusRateMlH,
+      // Per-drug pump concentration the case was planned under. Restored in
+      // preference to the live global setting so an old case replays with its
+      // original delivery volumes even if the global concentration changed
+      // (and so a nonstandard concentration like 8.33 survives restore).
+      pumpConcentrations,
       wallClockStart: timer.getWallClock() ? new Date(timer.getWallClock().getTime() - timer.getElapsedMs()).toISOString() : null,
       modes,
       ceTargets,
@@ -110,21 +117,25 @@ export function createSession({
         const savedRate = localStorage.getItem('tci-pump-max-rate')
                        ?? localStorage.getItem('tci-pump-rate');
         const bolusRateMlH = parseFloat(savedRate) || 750;
+        // Prefer the concentration stored in the case snapshot (the value the
+        // case was actually planned under); fall back to the live global for
+        // old saves that predate `pumpConcentrations`.
+        const caseConc = saved.pumpConcentrations || {};
         setPumpSettings('propofol', {
-          concentration: parseFloat(savedConc) || 10,
+          concentration: caseConc.propofol ?? (parseFloat(savedConc) || 10),
           bolusRateMlH,
         });
         const savedFentConc = localStorage.getItem('tci-pump-concentration-fentanyl');
         const savedFentPump = localStorage.getItem('tci-pump-enabled-fentanyl');
         setPumpSettings('fentanyl', {
-          concentration: parseFloat(savedFentConc) || 0.05,
+          concentration: caseConc.fentanyl ?? (parseFloat(savedFentConc) || 0.05),
           bolusRateMlH,
           pumpEnabled: savedFentPump === 'true',
         });
         const savedKetConc = localStorage.getItem('tci-pump-concentration-ketamine');
         const savedKetPump = localStorage.getItem('tci-pump-enabled-ketamine');
         setPumpSettings('ketamine', {
-          concentration: parseFloat(savedKetConc) || 10,
+          concentration: caseConc.ketamine ?? (parseFloat(savedKetConc) || 10),
           bolusRateMlH,
           pumpEnabled: savedKetPump === 'true',
         });
@@ -258,6 +269,19 @@ export function createSession({
     const model = getModel();
     // Reset model
     if (model) model.reset();
+
+    // Reseed each drug/task's working display-unit preference from the
+    // persistent setup default, so a mid-case unit swap in the previous case
+    // does not leak into this fresh case. Mid-case swaps still stick and
+    // survive save/restore (restore() deliberately leaves working keys alone).
+    for (const drugId of DRUG_IDS) {
+      for (const task of ['bolus', 'rate']) {
+        const workKey = getPrefKey(drugId, task);
+        if (!workKey) continue;
+        try { localStorage.setItem(workKey, getSetupDefaultUnit(drugId, task)); } catch (e) {}
+      }
+    }
+
     setConfirmedPatient(null);
     setAnnotations([]);
     settings.reset();
