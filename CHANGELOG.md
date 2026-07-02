@@ -11,6 +11,10 @@
 
 ---
 
+## [0.5.40.6] — 2026-07-02
+
+- Event acknowledgment popups now lay the **[Missed it — Recalculate]** and **[Got it]** buttons out side-by-side (left/right) with larger tap targets and a wider gap between them, instead of two thin bars stacked one over the other. Reduces the chance of tapping the wrong (destructive) action on a touch device. Non-TCI popups still show a single full-width **[Got it]**.
+
 ## [0.5.40.5] — 2026-06-29
 
 - Fixed a propofol Ce discrepancy where the drug-card value and the chart/inspect readout disagreed after the global pump max rate was changed mid-case. Root cause: a bolus's delivery duration is derived from the global pump rate and a TCI plan anchors its first rate step to the bolus-end; changing the rate left a rate step stranded inside a bolus window, which the point query (card) and the curve sampler (graph) resolved differently.

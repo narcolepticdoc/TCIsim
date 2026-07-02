@@ -4,6 +4,12 @@
 
 ## Session History
 
+### Side-by-side event acknowledgment buttons (v0.5.40.6) — Interim
+
+User reported the "Got it" / "Missed it" buttons on the event-acknowledgment popup were too close together and easy to fat-finger. The warning popup (`js/ui/settings.js`, styled by `.warn-buttons` in `index.html`) rendered both as full-width thin bars stacked vertically with a 6 px gap — a small vertical miss hit the wrong action, and "Missed it — Recalculate" is destructive (clears TCI events and replans).
+
+Fix (CSS only, `index.html`): `.warn-buttons` switched from `flex-direction:column` to `row` with the gap widened to 14 px; `.warn-dismiss` ("Got it") and `.warn-missed` ("Missed it") switched from `width:100%` to `flex:1` with padding bumped to `14px 12px` and `line-height:1.2` so the long label wraps rather than overflows. Result: two equal-width, taller buttons side-by-side — "Missed it" left, "Got it" right (matching the existing TCI modal convention; DOM order already produced this so no JS change). Non-TCI popups still show a single full-width "Got it". No logic changes.
+
 ### Propofol Ce card-vs-graph divergence after a pump max-rate correction (v0.5.40.5) — Interim
 
 User reported the propofol drug card reading Ce ≈ 3.45 while the chart/inspect readout read ≈ 3.81 at the same instant. Reproduced in node: the trigger is a non-default concentration (8.33 mg/mL) plus a **mid-case change of the global pump max rate** (750 → 1000 mL/h) made before a target change (re-plan). The user clarified the rate change is almost always a *correction* of a setup value, so the right semantics is whole-timeline retroactive (the rate "was always" the corrected value); bolus dose in mg is invariant under re-rating (only the delivery duration/profile changes), which the user accepted.
