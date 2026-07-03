@@ -23,9 +23,13 @@ import { bolusDeliveryMinutes, pushDeliveryMinutes } from '../../util/constants.
  * @param {Array} events - events already filtered to a single drug, sorted by time
  * @param {string} drugId
  * @param {number} now - minutes since case start
+ * @param {function} [getDeliveryMinutes] - (evt) => delivery duration in minutes.
+ *   Pass the event list's snapshot-based getBolusDelivery so totals use the
+ *   same per-case concentration the curve replay uses. Defaults to the live
+ *   global pump settings (constants.js) for back-compat.
  * @returns {{ bolusMg: number, rateMg: number, totalMg: number }}
  */
-export function getCumulativeDose(events, drugId, now) {
+export function getCumulativeDose(events, drugId, now, getDeliveryMinutes) {
   if (!events || !events.length || !(now > 0)) {
     return { bolusMg: 0, rateMg: 0, totalMg: 0 };
   }
@@ -42,9 +46,11 @@ export function getCumulativeDose(events, drugId, now) {
       currentTime = evt.time;
     }
     if (evt.type === 'bolus') {
-      const duration = evt.deliveryMode === 'push'
-        ? pushDeliveryMinutes(evt.value, drugId)
-        : bolusDeliveryMinutes(evt.value, drugId);
+      const duration = getDeliveryMinutes
+        ? getDeliveryMinutes(evt)
+        : (evt.deliveryMode === 'push'
+            ? pushDeliveryMinutes(evt.value, drugId)
+            : bolusDeliveryMinutes(evt.value, drugId));
       const endTime = evt.time + duration;
       if (endTime <= now) {
         bolusMg += evt.value;

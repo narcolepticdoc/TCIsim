@@ -450,9 +450,8 @@ function boot() {
       try {
         confirmedPatient = patient;
         model.setPatient(patient);
-        // Refresh drug configs for secondary drugs (pump settings may have changed)
-        model.refreshDrugConfig('fentanyl');
-        model.refreshDrugConfig('ketamine');
+        // Refresh every drug's config (pump settings may have changed)
+        for (const drugId of DRUG_IDS) model.refreshDrugConfig(drugId);
         initSimScreen(patient);
       } catch (err) {
         console.error('[TCI Sim] onConfirm error:', err);
@@ -484,6 +483,7 @@ function boot() {
   const describeSyncError = (res) => {
     if (res.error === 'invalid-code') return 'Invalid pairing code — re-check it in Settings → Sync';
     if (res.error === 'network') return "Can't reach sync server — check connection";
+    if (res.error === 'timeout') return 'Sync request timed out — check connection and retry';
     if (res.error === 'http') {
       if (res.serverError === 'kv-not-configured') return 'Sync backend not configured (KV env vars missing)';
       if (res.status === 404) return 'Sync endpoint not found (/api not deployed)';

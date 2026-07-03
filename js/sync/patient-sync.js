@@ -128,6 +128,29 @@ export function setStoredCode(raw) {
 
 // ---- Impure: network ----
 
+// A stalled connection (captive portal, dropped Wi-Fi) may never reject the
+// fetch — without a deadline the sync buttons stay disabled and the status
+// line reads "Pulling…" forever. 15 s is generous for a <64 KB payload.
+export const SYNC_TIMEOUT_MS = 15000;
+
+/**
+ * fetch with an AbortController deadline. Shared by every sync transport.
+ * Throws like fetch does; on timeout the error has name 'AbortError' —
+ * callers map that to error: 'timeout'.
+ */
+export async function fetchWithTimeout(fetchImpl, url, opts = {}, timeoutMs = SYNC_TIMEOUT_MS) {
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  try {
+    return await fetchImpl(url, ctrl ? { ...opts, signal: ctrl.signal } : opts);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+const timeoutOrNetwork = (e) => (e && e.name === 'AbortError' ? 'timeout' : 'network');
+export { timeoutOrNetwork as _timeoutOrNetwork };
+
 /**
  * Fetch the latest patient for `code`. Never throws — any failure resolves to
  * { found:false, patient:null, error }. On an HTTP error the response status
@@ -140,7 +163,7 @@ export async function fetchPatient(code, { endpoint = SYNC_ENDPOINT, fetchImpl =
   const c = normalizeCode(code);
   if (!isValidCode(c)) return { found: false, patient: null, error: 'invalid-code' };
   try {
-    const res = await fetchImpl(`${endpoint}?code=${encodeURIComponent(c)}`, {
+    const res = await fetchWithTimeout(fetchImpl, `${endpoint}?code=${encodeURIComponent(c)}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       cache: 'no-store',
@@ -156,7 +179,7 @@ export async function fetchPatient(code, { endpoint = SYNC_ENDPOINT, fetchImpl =
     if (!patient) return { found: false, patient: null, error: 'bad-payload' };
     return { found: true, patient };
   } catch (e) {
-    return { found: false, patient: null, error: 'network' };
+    return { found: false, patient: null, error: timeoutOrNetwork(e) };
   }
 }
 

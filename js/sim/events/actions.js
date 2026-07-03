@@ -18,6 +18,8 @@
  *     'Rate restored after bolus' that the history view keys off of.
  */
 
+import { DRUG_DEFS } from '../../util/constants.js';
+
 export function createActions(
   state,
   {
@@ -340,7 +342,12 @@ export function createActions(
     if (!(oldRateMlH > 0) || !(newRateMlH > 0) ||
         Math.abs(oldRateMlH - newRateMlH) < 1e-9) return 0;
     const cfg = state.drugConfigs[drugId];
-    const conc = (cfg && cfg.concentration) || 10;
+    // Same fallback chain as delivery.js — never assume 10 mg/mL.
+    const conc = cfg?.concentration ?? DRUG_DEFS[drugId]?.concentration;
+    if (!conc) {
+      console.warn(`[events] No concentration for drug '${drugId}' — skipping bolus re-anchor`);
+      return 0;
+    }
     const boluses = state.events.filter(e =>
       e.drug === drugId && e.type === 'bolus' && e.deliveryMode !== 'push');
     let moved = 0;

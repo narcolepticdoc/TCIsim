@@ -251,7 +251,12 @@ function fmtBolusDose(mg, drugId) {
 
 function computeTotalsForDrug(drugId, now) {
   if (!_model) return { bolusMg: 0, rateMg: 0, totalMg: 0 };
-  return getCumulativeDose(_model.getEvents(drugId), drugId, now);
+  // Use the event list's snapshot-based delivery duration so totals agree
+  // with the curve replay when a restored case runs at a concentration
+  // different from the live global pump settings.
+  const getBolusDelivery = _model.getEventList().getBolusDelivery;
+  return getCumulativeDose(_model.getEvents(drugId), drugId, now,
+    (evt) => getBolusDelivery(evt).duration);
 }
 
 // Total-delivered is always shown in absolute mass units and mL —

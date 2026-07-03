@@ -137,7 +137,9 @@ async function handler(req, res) {
         return;
       }
       const kind = (req.query && req.query.kind) || 'patient';
-      if (!KINDS[kind]) {
+      // Object.hasOwn: a plain [kind] lookup resolves prototype properties
+      // ('constructor', 'toString', …) and would pass the allowlist check.
+      if (!Object.hasOwn(KINDS, kind)) {
         res.status(400).json({ error: 'invalid-kind' });
         return;
       }
@@ -172,7 +174,7 @@ async function handler(req, res) {
         return;
       }
       const kind = body.kind || 'patient';
-      if (!KINDS[kind]) {
+      if (!Object.hasOwn(KINDS, kind)) {
         res.status(400).json({ error: 'invalid-kind' });
         return;
       }

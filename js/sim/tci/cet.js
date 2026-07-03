@@ -170,7 +170,8 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
       stepCount++;
     } else if (rateChange < cfg.rateStablePct) {
       const lastEmitted = scheme[scheme.length - 1];
-      if (Math.abs(optimalNow - lastEmitted.value) / lastEmitted.value > 0.005) {
+      // Denominator floor — see shared.js relDiff.
+      if (Math.abs(optimalNow - lastEmitted.value) / Math.max(Math.abs(lastEmitted.value), 1e-9) > 0.005) {
         scheme.push({ type: 'rate', time: simTime, value: optimalNow });
       }
       break;

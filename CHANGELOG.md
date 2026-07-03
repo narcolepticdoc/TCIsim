@@ -11,6 +11,24 @@
 
 ---
 
+## [0.5.40.8] — 2026-07-03
+
+Full-codebase audit round: correctness fixes, robustness hardening, dead-code removal.
+
+- **Fixed a latent NaN in the SimTIVA eigenvalue solver.** `cube()` in `simtiva-reference.js` lacked the acos-argument clamp its twin (`eigenvalues.js cubeRoots()`) already had; near-degenerate eigenvalues could round the ratio past ±1 and silently produce a NaN loading bolus in CET-Conservative / CET-Emulation plans.
+- **Fixed a chart listener leak on New Case.** Two anonymous handlers (double-tap recenter, multi-touch guard) attached to the persistent chart canvas on every chart creation and were never removed; repeated New Cases stacked stale handlers that threw on double-tap. They are now named and detached with the rest.
+- **Removed hardcoded 10 mg/mL fallbacks** in bolus delivery math (`delivery.js`, `actions.js`). The fallback now uses the drug's own `DRUG_DEFS` concentration; a truly unknown drug logs a warning instead of silently assuming propofol concentration (200× wrong for fentanyl).
+- **History totals now use the case's own pump concentration.** `getCumulativeDose` accepts the event list's snapshot-based delivery duration, so "Total delivered" and reconciliation agree with the curve replay when a restored case runs at a different concentration than the live global.
+- **Cloud sync requests now time out after 15 s** instead of hanging forever on a stalled connection (which left the push/pull buttons permanently disabled). Timeouts surface as their own status message.
+- **Case restore no longer hardcodes the three drug ids.** The pump-settings restore block iterates `DRUG_IDS` (as `save()` already did), so future drugs can't silently lose their saved concentration; failures now log instead of being swallowed. Patient-confirm drug-config refresh loops `DRUG_IDS` too.
+- **The active drug card is restored with the case** (previously saved as `primaryDrug` but never read back — restore always landed on propofol).
+- **Pulled cloud cases are validated event-by-event** (type/time/value shape) before restore, and the sync API's `kind` allowlist check no longer resolves prototype properties (`Object.hasOwn`).
+- **Test runner:** now runs `.mjs` test files (two suites — 13 tests — were silently excluded; total 704 → 717), treats a non-zero exit after a printed summary as a failure, and flags test files that produce no summary instead of reporting them green.
+- **PWA icons added.** `manifest.json` pointed at `/icons/*.png` that didn't exist — home-screen installs got a blank icon. Added programmatically generated placeholder icons (192/512 + apple-touch-icon; generator in `tools/gen-icons.js`), linked them in `index.html`, and precached them in `sw.js`.
+- Perf: the engine caches `inv4(A)` (constant per engine) instead of recomputing it on every infused `advance()`, and computes only the needed column of the particular solution — planners call `advance()` tens of thousands of times per plan.
+- Robustness: planner terminal-rate comparisons use a denominator floor so a 0-rate last step can't NaN-skip the steady-state rate; `decay-predictor` opts use `??` so an explicit 0 isn't replaced by the default.
+- Dead code removed: `keypad.setOneShotConfirm`, `persist.clearSavedCase`, `constants.getAllPumpSettings`/`restorePumpSettings`, unused `add4` import, orphaned `ee-value-label` lookup, redundant assignments, dead `|| 175` fallback in the emulation planner.
+
 ## [0.5.40.7] — 2026-07-02
 
 - **Preferred display units no longer leak between cases.** A mid-case unit swap (e.g. mcg/kg/min → mL/h) still sticks for the rest of the case and survives save/restore, but starting a **New Case** now resets each drug's bolus/rate units to the default chosen on the setup screen. The setup default is stored under a key (`tci-pref-{bolus|rate}Unit-{drug}-default`) separate from the in-case working key, so mid-case swaps can no longer overwrite it.

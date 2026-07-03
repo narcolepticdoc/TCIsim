@@ -75,8 +75,7 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
       // 4. Iterate until converged
       // 5. Apply rate correction factor
 
-      const { e_udf, e_coef, lambda: lam } = computeUDFs(pkParams, 1);
-      const peakTime0 = e_udf.findIndex((v, i) => i > 1 && v < e_udf[i - 1]) - 1 || 175;
+      const { e_udf, e_coef, lambda: lam, peak_time: peakTime0 } = computeUDFs(pkParams, 1);
 
       // Decompose Ce eigenstate via 4x4 Gaussian elimination
       const saved2 = engine.getState();
@@ -557,7 +556,10 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   const ssRate = ssRateRaw != null ? qRate(ssRateRaw) : null;
   if (ssRate != null && scheme.length > 0) {
     const lastRateEvt = [...scheme].reverse().find(s => s.type === 'rate');
-    if (lastRateEvt && Math.abs(ssRate - lastRateEvt.value) / lastRateEvt.value > 0.005) {
+    // Denominator floor: a 0-rate last step must not become 0/0 → NaN and
+    // silently drop the terminal SS rate (matches shared.js relDiff).
+    if (lastRateEvt &&
+        Math.abs(ssRate - lastRateEvt.value) / Math.max(Math.abs(lastRateEvt.value), 1e-9) > 0.005) {
       scheme.push({ type: 'rate', time: lastRateEvt.time + 15, value: ssRate });
     }
   }

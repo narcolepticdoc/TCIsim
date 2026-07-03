@@ -38,7 +38,11 @@ function cube(k10, k12, k21, k13, k31) {
   const p = a1 - (a2 * a2 / 3.0);
   const q = (2.0 * a2 * a2 * a2 / 27.0) - (a1 * a2 / 3.0) + a0;
   const r1 = Math.sqrt(-(p * p * p) / 27.0);
-  const phi = Math.acos((-q / 2.0) / r1) / 3.0;
+  // Clamp: float error can push the ratio past ±1 when two eigenvalues are
+  // near-degenerate, and acos(>1) is NaN. Same guard as cubeRoots() in
+  // js/pk/eigenvalues.js — the two solvers must stay in lockstep.
+  const cosArg = Math.max(-1, Math.min(1, (-q / 2.0) / r1));
+  const phi = Math.acos(cosArg) / 3.0;
   const rc = Math.pow(r1, 1.0 / 3.0);
   return [
     0,

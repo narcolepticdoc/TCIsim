@@ -58,13 +58,17 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
   let lastTap = 0;
   let wasMultiTouch = false;
 
-  canvas.addEventListener('touchstart', (e) => {
+  // Named (not anonymous) so detach() can remove them — the canvas element
+  // outlives the chart, and unremovable handlers stack up on every chart
+  // recreation (New Case), with stale closures throwing on double-tap.
+  function handleMultiTouchGuard(e) {
     if (e.touches.length >= 2) wasMultiTouch = true;
-  }, { passive: true });
-
-  canvas.addEventListener('dblclick', () => {
+  }
+  function handleDblClick() {
     recenter();
-  });
+  }
+  canvas.addEventListener('touchstart', handleMultiTouchGuard, { passive: true });
+  canvas.addEventListener('dblclick', handleDblClick);
 
   function handleTouchEnd(e) {
     if (yDragActive) return;
@@ -205,6 +209,8 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
     canvas.removeEventListener('touchmove', handleYTouchMove);
     canvas.removeEventListener('touchend', handleYTouchEnd);
     canvas.removeEventListener('touchend', handleTouchEnd);
+    canvas.removeEventListener('touchstart', handleMultiTouchGuard);
+    canvas.removeEventListener('dblclick', handleDblClick);
     captureTarget.removeEventListener('touchstart', handleInspectTouchStart, { capture: true });
     captureTarget.removeEventListener('touchmove',  handleInspectTouchMove,  { capture: true });
     captureTarget.removeEventListener('touchend',   handleInspectTouchEnd,   { capture: true });

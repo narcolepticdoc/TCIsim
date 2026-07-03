@@ -114,7 +114,11 @@ export function appendTerminalRates(engine, ceTarget, simTime, scheme, cfg) {
   engine.setState(finalState);
   const longTermRate = qRate((lo + hi) / 2);
 
-  if (Math.abs(longTermRate - lastRate.value) / lastRate.value > 0.005) {
+  // Relative-difference test with a denominator floor: a 0-value last step
+  // (e.g. a target-decrease pause tail) must not make this 0/0 → NaN and
+  // silently drop the terminal rate.
+  const relDiff = (a, b) => Math.abs(a - b) / Math.max(Math.abs(b), 1e-9);
+  if (relDiff(longTermRate, lastRate.value) > 0.005) {
     scheme.push({ type: 'rate', time: simTime, value: longTermRate });
   }
 
@@ -122,7 +126,7 @@ export function appendTerminalRates(engine, ceTarget, simTime, scheme, cfg) {
   const ssRateRaw = computeSteadyStateRate(engine, ceTarget);
   const ssRate = ssRateRaw != null ? qRate(ssRateRaw) : null;
   const currentLast = scheme[scheme.length - 1];
-  if (ssRate != null && Math.abs(ssRate - currentLast.value) / currentLast.value > 0.005) {
+  if (ssRate != null && relDiff(ssRate, currentLast.value) > 0.005) {
     scheme.push({ type: 'rate', time: simTime + LONG_LA, value: ssRate });
   }
 }

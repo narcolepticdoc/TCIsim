@@ -20,7 +20,6 @@ let currentType = 'ceTarget';  // 'ceTarget' | 'rate' | 'bolus' | 'intermittent'
 let currentDrug = 'propofol';
 let currentUnit = 'mcg/mL';
 let onConfirm = null;          // (type, canonicalValue, displayText, deliveryMode) => void
-let oneShotConfirm = null;     // one-shot callback for edit mode — overrides onConfirm
 let getPatient = null;         // () => { weight, ... }
 let getMode = null;            // () => mode string
 let getCeTarget = null;        // () => current Ce target
@@ -257,7 +256,6 @@ export function show(type) {
 
 function close() {
   $('modal-keypad').classList.remove('open');
-  oneShotConfirm = null; // clear one-shot if user cancels
 }
 
 function handleKey(k) {
@@ -441,32 +439,17 @@ function confirm(deliveryMode) {
       try { localStorage.setItem(`tci_lastRate_${currentDrug}`, String(canonical.value)); } catch (e) {}
     }
 
-    // Capture one-shot callback before close() clears it
-    const oneShot = oneShotConfirm;
-    oneShotConfirm = null;
-
     const extras = {
       roundOverride: currentType === 'ceTarget' ? currentRoundOverride : null,
     };
 
     close();
-    if (oneShot) {
-      oneShot(currentType, canonical.value, displayText, deliveryMode, extras);
-    } else if (onConfirm) {
+    if (onConfirm) {
       onConfirm(currentType, canonical.value, displayText, deliveryMode, extras);
     }
   } catch (e) {
     console.error('[TCI Sim] Keypad confirm error:', e);
   }
-}
-
-/**
- * Set a one-shot confirm callback for edit mode.
- * Overrides the normal onConfirm for the next confirm only.
- * Cleared on close if not used.
- */
-export function setOneShotConfirm(cb) {
-  oneShotConfirm = cb;
 }
 
 /**

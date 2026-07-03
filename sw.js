@@ -13,13 +13,16 @@
  * caches, and the page reloads onto the new version.
  */
 
-const VERSION = '0.5.40.7';
+const VERSION = '0.5.40.8';
 const CACHE_NAME = `tcisim-v${VERSION}`;
 
 const PRECACHE_URLS = [
   './',
   'index.html',
   'manifest.json',
+  'icons/icon-192.png',
+  'icons/icon-512.png',
+  'icons/apple-touch-icon.png',
 
   'js/version.js',
   'js/app.js',
