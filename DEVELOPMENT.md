@@ -4,6 +4,18 @@
 
 ## Session History
 
+### Setting-persistence fixes: unit defaults, case concentration, non-sticky 8.33 (v0.5.40.7) — Interim
+
+Three related persistence issues in how settings carry (or fail to carry) across cases.
+
+**1. Preferred display units leaked from case to case.** The per-drug unit toggle wrote `tci-pref-{bolus|rate}Unit-{drug}` — by design the *same* key the setup screen read/wrote, so a mid-case swap overwrote the setup default and the next New Case inherited the swap. Fix: introduce a separate persistent **default** key (`…-default`) that the setup screen owns. New helpers in `js/util/units.js` — `getDefaultPrefKey()` (working key + `-default`) and `getSetupDefaultUnit()` (reads the default key, validates against `getAllowedUnits`, falls back to the static default). `setup.js populateUnitSelectors()` now preselects from the default key; `applyPumpSettings()` writes both the default key and the working key (so a setup change applies immediately); `setup.reset()` re-runs the selectors so New Case reflects persisted defaults rather than the previous case's DOM state. `session.js newCase()` reseeds each working key from the default. In-case consumers (keypad, event-editor, drug-panel, `getQuantizeConfig`) are unchanged, so mid-case swaps still stick and survive restore (restore deliberately leaves working keys alone).
+
+**2. Pump concentration was not saved with a case.** It lived only in the global `tci-pump-concentration`; `session.js restore()` read that live global, so a case planned at 8.33 mg/mL replayed at whatever the global currently was (silently changing bolus volumes, since delivery math depends on concentration). Fix: `save()` records a per-drug `pumpConcentrations` map; `restore()` prefers it (`saved.pumpConcentrations?.<drug> ?? (parseFloat(global) || default)`), falling back to the global for old saves. `cloud-sync.js prepareCaseForPush()` only trims size, so the field flows through automatically.
+
+**3. 8.33 mg/mL propofol must be non-sticky.** 8.33 is a nonstandard, site-specific value that must never become the persistent setup default. Fix: `js/util/constants.js` adds `NONSTICKY_PROPOFOL_CONCS = [8.33]` and `isStickyPropofolConc(v)` (tolerant compare, `< 0.005`). `applyPumpSettings()` skips persisting `tci-pump-concentration` when the value is non-sticky (it still applies to the live case via `setPumpSettings` and is saved with the case per fix #2); `restorePumpSettingsUI()` refuses to populate the setup select with a non-sticky value (belt-and-suspenders against a stale 8.33 from an older build), leaving the standard default. Net: setup never defaults to 8.33, but a case run at 8.33 applies and restores it faithfully.
+
+Tests: `tests/test-setting-persistence.js` (17 assertions) covers `isStickyPropofolConc`, `getDefaultPrefKey`, and `getSetupDefaultUnit` including the key-decoupling invariant. Full suite green (704 tests).
+
 ### Side-by-side event acknowledgment buttons (v0.5.40.6) — Interim
 
 User reported the "Got it" / "Missed it" buttons on the event-acknowledgment popup were too close together and easy to fat-finger. The warning popup (`js/ui/settings.js`, styled by `.warn-buttons` in `index.html`) rendered both as full-width thin bars stacked vertically with a 6 px gap — a small vertical miss hit the wrong action, and "Missed it — Recalculate" is destructive (clears TCI events and replans).

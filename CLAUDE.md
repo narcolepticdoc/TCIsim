@@ -1,6 +1,6 @@
 # TCI Sim — Claude Code Reference
 
-Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.39** (see `js/version.js`).
+Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.40.7** (see `js/version.js`).
 
 ## Quick Start
 
@@ -12,7 +12,7 @@ python3 -m http.server 8080
 # or
 npx serve .
 
-# Run the test suite (674 tests, 20 suites)
+# Run the test suite (704 tests, 22 suites)
 node tests/run-tests.js
 ```
 
@@ -121,6 +121,8 @@ isPumpEnabled('fentanyl')     // false by default (opt-in via setup screen)
 
 `maxRate` is auto-derived as `bolusRateMlH * concentration / 60` mg/min. Persisted to localStorage. Always read pump settings from `getPumpSettings` — never hardcode 750 or 10.
 
+**Concentration is saved per-case.** `session.js save()` records a `pumpConcentrations` map; `restore()` prefers it over the live global so an old case replays at the concentration it was planned under (falls back to the global for pre-0.5.40.7 saves). **8.33 mg/mL propofol is non-sticky** (`isStickyPropofolConc` / `NONSTICKY_PROPOFOL_CONCS` in `constants.js`): it applies to the live case and is saved with it, but `setup.js` never persists or pre-populates it as the setup default — it must be re-entered each case.
+
 The global max pump rate (`bolusRateMlH`, shared across drugs) is set on the setup screen (`#input-max-pump-rate`) and **also in Settings → Simulation (`#set-max-pump-rate`) so it can be changed mid-case**. Both route through `setup.js` `setGlobalMaxPumpRate(mlh)` / `getGlobalMaxPumpRate()`, which apply to all `SETUP_DRUGS`, persist `tci-pump-max-rate`, and keep the two controls in lockstep. Changes affect subsequent plans/boluses only (no automatic replan).
 
 `pumpEnabled` controls per-drug delivery method. Propofol is always pump-mandatory (`PUMP_MANDATORY` set). Fentanyl and ketamine default to manual (bolus only) — when pump is OFF, `updateModeUI()` in `mode.js` hides Set Rate / Stop Pump buttons and the UI locks to intermittent bolus mode with IV Push delivery. The toggle lives on the setup screen per-drug tab and is persisted to `tci-pump-enabled-{drugId}` in localStorage and in case save/restore.
@@ -149,7 +151,8 @@ Settings live in `js/ui/settings.js` (`getSettings()` / `setSettings()`); UI wir
 Other persisted keys (separate from the warnings blob):
 
 - `tci-pref-quantizeInDisplay` — opt-in "Round TCI plan in display units" flag.
-- `tci-pref-{bolus|rate}Unit-{drug}` — per-drug per-task default display unit.
+- `tci-pref-{bolus|rate}Unit-{drug}` — per-drug per-task **working** (in-case) display unit. Mutated by mid-case keypad/editor swaps; reseeded from the default key on New Case (`session.js newCase`).
+- `tci-pref-{bolus|rate}Unit-{drug}-default` — per-drug per-task **setup default** display unit, owned by the setup screen (`getSetupDefaultUnit` in `units.js`). Decoupled from the working key so mid-case swaps don't overwrite the setup default.
 - `tci-pump-enabled-{drugId}` — per-drug pump on/off (fentanyl/ketamine only).
 - `tci-pref-history-show-notations` — show/hide notation rows in the history panel (Notes toggle).
 - `tci-sync-code` — 6-char cloud pairing code (shared by patient pull, case transfer, template sync).
@@ -179,7 +182,7 @@ Other persisted keys (separate from the warnings blob):
 node tests/run-tests.js
 ```
 
-Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 674 tests across 20 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
+Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 704 tests across 22 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
 
 ## Versioning Scheme
 

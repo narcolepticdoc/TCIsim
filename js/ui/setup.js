@@ -26,8 +26,8 @@ import {
   MODEL_NAME as KETAMINE_MODEL_NAME,
   MODEL_DESCRIPTION as KETAMINE_MODEL_DESCRIPTION,
 } from '../pk/ketamine.js';
-import { setPumpSettings, getPumpSettings, isPumpEnabled } from '../util/constants.js';
-import { getAllowedUnits, getDefaultUnit, getPrefKey, getQuantStep } from '../util/units.js';
+import { setPumpSettings, getPumpSettings, isPumpEnabled, isStickyPropofolConc } from '../util/constants.js';
+import { getAllowedUnits, getDefaultUnit, getPrefKey, getDefaultPrefKey, getSetupDefaultUnit, getQuantStep } from '../util/units.js';
 import { loadTemplate, saveTemplate, isArmed, setArmed } from '../sync/dose-template.js';
 
 // Drugs that have a tabbed setup panel. Remifentanil has no PK model yet.
@@ -183,9 +183,10 @@ function populateModelInfo() {
  * Build the bolus/rate unit <select> options for each drug panel and
  * preselect the saved preference (or the hardcoded default).
  *
- * Reads from the same `prefKey` localStorage keys that drug-panel.js and
- * the keypad use at runtime, so mid-case overrides and setup defaults
- * share a single source of truth.
+ * Reads from the persistent setup *default* keys (`getSetupDefaultUnit`),
+ * which are separate from the working keys that drug-panel.js and the keypad
+ * mutate at runtime. This keeps mid-case unit swaps from overwriting the
+ * setup default; New Case reseeds the working key from the default.
  */
 function populateUnitSelectors() {
   for (const drugId of SETUP_DRUGS) {
@@ -202,15 +203,10 @@ function populateUnitSelectors() {
         sel.appendChild(opt);
       }
 
-      // Preselect from localStorage prefKey, falling back to the static default.
-      let current = getDefaultUnit(drugId, task);
-      const key = getPrefKey(drugId, task);
-      if (key) {
-        try {
-          const saved = localStorage.getItem(key);
-          if (saved && allowed.includes(saved)) current = saved;
-        } catch (e) {}
-      }
+      // Preselect from the persistent setup *default* key (not the working
+      // in-case key), falling back to the static default. Keeping these
+      // separate means a mid-case unit swap never overwrites the setup default.
+      const current = getSetupDefaultUnit(drugId, task);
       if (current && allowed.includes(current)) sel.value = current;
     }
   }
@@ -660,26 +656,36 @@ function applyPumpSettings() {
     } catch (e) {}
   }
 
-  // Save propofol concentration + global pump rate + mode/opioid to localStorage
+  // Save propofol concentration + global pump rate + mode/opioid to localStorage.
+  // Nonstandard concentrations (e.g. 8.33) are still applied to the live case
+  // above and saved with the case, but are NOT persisted as the setup default —
+  // the last standard value stays the default so it must be re-entered.
   try {
-    localStorage.setItem('tci-pump-concentration', String(concentration));
+    if (isStickyPropofolConc(concentration)) {
+      localStorage.setItem('tci-pump-concentration', String(concentration));
+    }
     localStorage.setItem('tci-pump-max-rate', String(bolusRateMlH));
     if (tciModeEl) localStorage.setItem('tci-mode', tciModeEl.value);
     if (opioidEl) localStorage.setItem('tci-opioid', opioidEl.value);
   } catch (e) {}
 
-  // Persist default-unit selections to the same prefKey localStorage keys
-  // that drug-panel.js and the keypad read at runtime. Skip silently on
-  // invalid values so the existing runtime preference survives.
+  // Persist unit selections to BOTH the setup *default* key and the working
+  // in-case key. The default key is what the setup screen reloads next case;
+  // writing the working key too means this selection takes effect immediately
+  // for the case about to start. Skip silently on invalid values so the
+  // existing preference survives.
   for (const drugId of SETUP_DRUGS) {
     for (const task of ['bolus', 'rate']) {
       const el = $(`input-${drugId}-${task}-unit`);
       if (!el || !el.value) continue;
       const allowed = getAllowedUnits(drugId, task) || [];
       if (!allowed.includes(el.value)) continue;
-      const key = getPrefKey(drugId, task);
-      if (!key) continue;
-      try { localStorage.setItem(key, el.value); } catch (e) {}
+      const workKey = getPrefKey(drugId, task);
+      const defKey = getDefaultPrefKey(drugId, task);
+      try {
+        if (workKey) localStorage.setItem(workKey, el.value);
+        if (defKey) localStorage.setItem(defKey, el.value);
+      } catch (e) {}
     }
   }
 
@@ -705,7 +711,11 @@ function restorePumpSettingsUI() {
     const savedMode = localStorage.getItem('tci-mode');
     const savedOpioid = localStorage.getItem('tci-opioid');
 
-    if (savedConc) { const el = $('input-concentration'); if (el) el.value = savedConc; }
+    // Never populate the setup screen with a nonstandard concentration (e.g. a
+    // stale 8.33 persisted by an older build) — fall back to the standard default.
+    if (savedConc && isStickyPropofolConc(savedConc)) {
+      const el = $('input-concentration'); if (el) el.value = savedConc;
+    }
     if (savedRate) { const el = $('input-max-pump-rate'); if (el) el.value = savedRate; }
     if (savedMode) { const el = $('input-tci-mode'); if (el) el.value = savedMode; }
     if (savedOpioid) { const el = $('input-opioid'); if (el) el.value = savedOpioid; }
@@ -860,6 +870,13 @@ export function reset() {
   ['err-age', 'err-height', 'err-weight'].forEach(id => {
     $(id).textContent = '';
   });
+  // Re-seed the pump/unit selectors from persisted settings so a New Case
+  // reflects the setup defaults rather than the previous case's DOM state:
+  // the concentration select drops any nonstandard value (e.g. 8.33) back to
+  // the standard default, and the unit selects re-read the setup-default keys.
+  populateUnitSelectors();
+  restorePumpSettingsUI();
+  updateAllPumpDerived();
   updatePreviews();
   updateSummary();
 }

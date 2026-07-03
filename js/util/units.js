@@ -94,9 +94,40 @@ export function getDefaultUnit(drugId, task) {
 
 /**
  * Get the localStorage preference key for a drug/task's unit selection.
+ *
+ * This is the *working* (in-case) key: the keypad/event-editor/drug-panel
+ * read and write it, so mid-case unit swaps stick for the rest of the case
+ * and survive save/restore. It is reseeded from the setup default on New Case.
  */
 export function getPrefKey(drugId, task) {
   return DRUG_TASK_UNITS[drugId]?.[task]?.prefKey || null;
+}
+
+/**
+ * Get the localStorage preference key for a drug/task's *setup default* unit.
+ *
+ * Distinct from the working key (`getPrefKey`) so the new-case setup screen
+ * owns a persistent default that mid-case swaps can't overwrite. Returns null
+ * when the drug/task has no persisted preference.
+ */
+export function getDefaultPrefKey(drugId, task) {
+  const base = getPrefKey(drugId, task);
+  return base ? `${base}-default` : null;
+}
+
+/**
+ * Resolve the setup-screen default display unit for a drug/task: the value
+ * stored under the default key if valid, otherwise the static default.
+ */
+export function getSetupDefaultUnit(drugId, task) {
+  const key = getDefaultPrefKey(drugId, task);
+  if (key) {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved && getAllowedUnits(drugId, task).includes(saved)) return saved;
+    } catch (e) {}
+  }
+  return getDefaultUnit(drugId, task);
 }
 
 /**

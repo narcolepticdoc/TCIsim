@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.40.7] — 2026-07-02
+
+- **Preferred display units no longer leak between cases.** A mid-case unit swap (e.g. mcg/kg/min → mL/h) still sticks for the rest of the case and survives save/restore, but starting a **New Case** now resets each drug's bolus/rate units to the default chosen on the setup screen. The setup default is stored under a key (`tci-pref-{bolus|rate}Unit-{drug}-default`) separate from the in-case working key, so mid-case swaps can no longer overwrite it.
+- **Pump concentration is now saved with the case.** Restoring an old case reapplies the concentration it was planned under (per drug) instead of the current global setting, so delivery volumes/durations stay faithful. Old saves without the field fall back to the global value.
+- **The nonstandard 8.33 mg/mL propofol concentration is now non-sticky.** It still applies to the running case and is saved/restored with it, but it never becomes the setup-screen default — the setup screen always populates with a standard concentration, so 8.33 must be selected deliberately for each case.
+
 ## [0.5.40.6] — 2026-07-02
 
 - Event acknowledgment popups now lay the **[Missed it — Recalculate]** and **[Got it]** buttons out side-by-side (left/right) with larger tap targets and a wider gap between them, instead of two thin bars stacked one over the other. Reduces the chance of tapping the wrong (destructive) action on a touch device. Non-TCI popups still show a single full-width **[Got it]**.
