@@ -78,6 +78,82 @@ export function plannerBolusDelivery(doseMg, cfg) {
 }
 
 /**
+ * Binary-search the loading bolus whose PEAK Ce (delivery at pump rate,
+ * then zero-rate scan) matches the target. One body serves both the
+ * Stepped and CET planners — they differ only in these tuning constants:
+ *
+ *   Stepped: { upperMult: 3, scanHorizon: 15, scanStep: 0.25, tol: 0.01 }
+ *   CET:     { upperMult: 8, scanHorizon: 20, scanStep: 0.1,  tol: 0.005 }
+ *
+ * Quantization-free by design: callers apply qBolus (cet-conservative.js
+ * needs the raw unquantized value). Restores engine state before returning.
+ */
+export function searchPeakBolus(engine, ceTarget, cfg, { upperMult, scanHorizon, scanStep, tol }) {
+  const saved = engine.getState();
+
+  let lo = 0;
+  let hi = ceTarget * engine.params.V1 * upperMult; // generous upper bound
+
+  for (let i = 0; i < cfg.rateSearchIter; i++) {
+    const mid = (lo + hi) / 2;
+
+    // Deliver bolus at pump rate
+    engine.setState(saved);
+    const { duration, rate } = plannerBolusDelivery(mid, cfg);
+    engine.advance(duration, rate);
+
+    // Scan forward with zero rate to find peak Ce
+    let peakCe = 0;
+    for (let t = 0; t < scanHorizon; t += scanStep) {
+      engine.advance(scanStep, 0);
+      const ce = engine.getConcentrations().Ce;
+      if (ce > peakCe) peakCe = ce;
+      else if (ce < peakCe - 0.001) break; // past peak
+    }
+
+    if (Math.abs(peakCe - ceTarget) < tol) {
+      engine.setState(saved);
+      return mid;
+    }
+
+    if (peakCe < ceTarget) lo = mid;
+    else hi = mid;
+  }
+
+  engine.setState(saved);
+  return (lo + hi) / 2;
+}
+
+/**
+ * Target-decrease decay wait: emit a rate-0 step and advance at zero rate
+ * until Ce falls to `upperBound` (or the plan horizon runs out). Pushes the
+ * pause step into `scheme` and returns the updated simTime. Shared by the
+ * Stepped, CET, and Emulation planners.
+ */
+export function waitForDecay(engine, upperBound, simTime, startTime, scheme, cfg) {
+  scheme.push({ type: 'rate', time: simTime, value: 0 });
+  const maxWait = startTime + cfg.maxPlanTime;
+  while (simTime < maxWait) {
+    engine.advance(cfg.simStep, 0);
+    simTime += cfg.simStep;
+    if (engine.getConcentrations().Ce <= upperBound) break;
+  }
+  return simTime;
+}
+
+/**
+ * Maintenance rate floor: the rate search may return ~0 while Ce is still
+ * substantial (redistribution covering the target for now) — but maintenance
+ * should never pause. Use a minimal rate and let the next step correct.
+ */
+export function floorMaintenanceRate(rate, engine, ceTarget, qRate) {
+  if (rate < 0.001 && engine.getConcentrations().Ce > ceTarget * 0.5) {
+    return qRate(0.001);
+  }
+  return rate;
+}
+
+/**
  * Append terminal rate events to account for V3 equilibration beyond
  * the maintenance loop's planning window.
  *

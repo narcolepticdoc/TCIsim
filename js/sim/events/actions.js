@@ -18,7 +18,7 @@
  *     'Rate restored after bolus' that the history view keys off of.
  */
 
-import { DRUG_DEFS } from '../../util/constants.js';
+import { DRUG_DEFS, TIME_EPS_CLINICAL, TIME_EPS_IDENTITY } from '../../util/constants.js';
 
 export function createActions(
   state,
@@ -49,7 +49,7 @@ export function createActions(
           const r = state.events[j];
           if (r.drug === drugId && r.type === 'rate' &&
               r.source === 'system' && r.annotation === 'Rate restored after bolus' &&
-              Math.abs(r.time - bolusEnd) < 0.001) {
+              Math.abs(r.time - bolusEnd) < TIME_EPS_CLINICAL) {
             restoreIdx = j;
             break;
           }
@@ -88,7 +88,7 @@ export function createActions(
     for (let i = state.events.length - 1; i >= 0; i--) {
       const e = state.events[i];
       if (e.drug === drugId && e.type === 'rate' && e.source === 'system' &&
-          Math.abs(e.time - eventTime) < 0.001) {
+          Math.abs(e.time - eventTime) < TIME_EPS_CLINICAL) {
         state.events.splice(i, 1);
         break;
       }
@@ -158,7 +158,7 @@ export function createActions(
       const hasManualAtEnd = state.events.some(e =>
         e.drug === drugId && e.source !== 'system' &&
         (e.type === 'rate' || e.type === 'pause') &&
-        Math.abs(e.time - newEnd) < 0.001
+        Math.abs(e.time - newEnd) < TIME_EPS_CLINICAL
       );
 
       // TCI boluses skip the system rate-restore (see fresh-bolus path below).
@@ -219,7 +219,7 @@ export function createActions(
     for (let i = state.events.length - 1; i >= 0; i--) {
       const e = state.events[i];
       if (e.drug === drugId && e.type === 'rate' && e.source === 'system' &&
-          Math.abs(e.time - eventTime) < 0.001) {
+          Math.abs(e.time - eventTime) < TIME_EPS_CLINICAL) {
         state.events.splice(i, 1);
         break;
       }
@@ -297,13 +297,13 @@ export function createActions(
     // If this was (and remains) a bolus, sync the associated rate-restore event
     if (wasBolus && evt.type === 'bolus') {
       const newBolusEnd = evt.time + getBolusDelivery(evt).duration;
-      if (Math.abs(newBolusEnd - oldBolusEnd) > 1e-9) {
+      if (Math.abs(newBolusEnd - oldBolusEnd) > TIME_EPS_IDENTITY) {
         const restoreEvt = state.events.find(e =>
           e.drug === drugId &&
           e.type === 'rate' &&
           e.source === 'system' &&
           e.annotation === 'Rate restored after bolus' &&
-          Math.abs(e.time - oldBolusEnd) < 0.001
+          Math.abs(e.time - oldBolusEnd) < TIME_EPS_CLINICAL
         );
         if (restoreEvt) {
           const ri = state.events.indexOf(restoreEvt);
@@ -355,12 +355,12 @@ export function createActions(
       const volMl = b.value / conc;
       const oldEnd = b.time + Math.max(0.05, volMl / oldRateMlH * 60);
       const newEnd = b.time + Math.max(0.05, volMl / newRateMlH * 60);
-      if (Math.abs(oldEnd - newEnd) < 1e-9) continue;
+      if (Math.abs(oldEnd - newEnd) < TIME_EPS_IDENTITY) continue;
       // The step anchored to this bolus end: the first rate/pause event
       // sitting at the old bolus-end (TCI first step or system rate-restore).
       const anchor = state.events.find(e =>
         e.drug === drugId && (e.type === 'rate' || e.type === 'pause') &&
-        Math.abs(e.time - oldEnd) < 0.001);
+        Math.abs(e.time - oldEnd) < TIME_EPS_CLINICAL);
       if (!anchor) continue;
       const idx = state.events.indexOf(anchor);
       if (idx !== -1) state.events.splice(idx, 1);

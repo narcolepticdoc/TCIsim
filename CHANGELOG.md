@@ -11,6 +11,17 @@
 
 ---
 
+## [0.5.40.9] — 2026-07-03
+
+Refactor round: the improvement-grade items deferred from the 0.5.40.8 audit, executed tests-first. Golden plan fingerprints (9 patient/target cases × 4 planners, 6-decimal times / 9-decimal values) are **bit-identical** before and after every phase; suite grew 717 → 782 tests.
+
+- **Session/persist round-trip tests** (`tests/test-session-roundtrip.js`, 31 tests): the previously untested save/restore path — full field round-trip, bolus re-anchor under a changed pump rate, system-event skip/regeneration, `newCase()` unit-key reseeding, malformed-blob rejection, `DRUG_IDS`-generalized concentration restore — now runs in CI against the real `createSession` + `createModel` with stubbed `localStorage`/`document`.
+- **Time-epsilon constants**: `TIME_EPS_CLINICAL` (0.001 min — "same clinical instant", event/bolus-end anchors) and `TIME_EPS_IDENTITY` (1e-9 — "did a recomputed time move") in `constants.js`; 11 literal sites in `events/actions.js`/`simulation.js` migrated. The 1e-12 loop terminators in `events/query.js` deliberately stay literal (commented).
+- **Planner dedup** (`tci/shared.js`): the peak-matched bolus binary search (`searchPeakBolus` — stepped and CET differed only in four tuning constants, now passed as config), the target-decrease decay-wait loop (`waitForDecay`, was copied 3×), and the maintenance rate floor (`floorMaintenanceRate`, 2×) are single implementations. `calculateCETBolus` remains exported as a thin wrapper for `cet-conservative.js`.
+- **One cubic solver** (`js/pk/cubic.js`): `eigenvalues.js cubeRoots()` and `simtiva-reference.js cube()` are now thin adapters (0-indexed per-minute vs SimTIVA's 1-indexed per-second API) over a single `solveCubicRoots` core — the "two solvers must stay in lockstep" hazard behind the 0.5.40.8 NaN bug is structurally gone. New `tests/test-cubic-parity.js` pins unit-scaling parity and the near-degenerate clamp.
+- **Emulation rate grid derives from concentration**: `rf = 3600 / concentration` replaces the literal 360, which encoded "1 mL/h at 10 mg/mL" and rounded to the wrong grid at 8.33/20 mg/mL. Identical at the default 10 mg/mL.
+- **Modal logic dedup**: new `js/ui/keypad-buffer.js` (the prefilled-buffer keypress reducer, the unit-toggle canonical round-trip, `fmtDeliveryTime`, `bolusTimeText`) and `js/ui/time-picker.js` (the case/real time picker factory) replace ~5 copies across `keypad.js` / `event-editor.js` / `patient-modal.js` / `reconcile-modal.js`. Deliberate divergences are parameters, not forks: RT-label prefix vs suffix, "real"-tab enable source, per-field prefill (patient modal), no prefill at all (reconcile). `tests/test-keypad-buffer.js` (24 tests) pins the CLAUDE.md invariants (first keypress replaces; unit toggles convert, not clear).
+
 ## [0.5.40.8] — 2026-07-03
 
 Full-codebase audit round: correctness fixes, robustness hardening, dead-code removal.

@@ -12,7 +12,13 @@ import {
   plannerBolusDelivery,
   appendTerminalRates,
   findMaintenanceRate,
+  searchPeakBolus,
+  waitForDecay,
+  floorMaintenanceRate,
 } from './shared.js';
+
+// Tuning for the shared peak-matched bolus search (see shared.js).
+const STEPPED_BOLUS_SEARCH = { upperMult: 3, scanHorizon: 15, scanStep: 0.25, tol: 0.01 };
 
 /**
  * Generate a clinician-feasible TCI scheme.
@@ -52,7 +58,7 @@ export function planTCIScheme(engine, startState, startTime, ceTarget, config = 
   // ---- Step 1a: Loading bolus (target increase) ----
   // If current Ce is below the lower bound, calculate a loading dose.
   if (currentCe < lowerBound) {
-    const bolusMg = qBolus(calculateLoadingBolus(engine, ceTarget, cfg));
+    const bolusMg = qBolus(searchPeakBolus(engine, ceTarget, cfg, STEPPED_BOLUS_SEARCH));
 
     if (bolusMg > 0) {
       scheme.push({ type: 'bolus', time: simTime, value: bolusMg });
@@ -68,16 +74,7 @@ export function planTCIScheme(engine, startState, startTime, ceTarget, config = 
   // If current Ce is above the upper bound, pause and wait for Ce
   // to decay down to the upper bound before starting maintenance.
   if (currentCe > upperBound) {
-    scheme.push({ type: 'rate', time: simTime, value: 0 });
-
-    // Advance with rate=0 until Ce drops to upperBound or timeout
-    const maxWait = startTime + cfg.maxPlanTime;
-    while (simTime < maxWait) {
-      engine.advance(cfg.simStep, 0);
-      simTime += cfg.simStep;
-      const ce = engine.getConcentrations().Ce;
-      if (ce <= upperBound) break;
-    }
+    simTime = waitForDecay(engine, upperBound, simTime, startTime, scheme, cfg);
   }
 
   // ---- Step 2: Generate rate steps ----
@@ -90,13 +87,9 @@ export function planTCIScheme(engine, startState, startTime, ceTarget, config = 
     if (simTime >= startTime + cfg.maxPlanTime) break;
 
     // Find the rate that holds Ce at target over the next period
-    let optimalRate = qRate(findMaintenanceRate(engine, ceTarget, cfg, step));
-
-    // Maintenance should never pause — if rate search returns ~0 but Ce
-    // is still substantial, use a minimal rate and let the next step correct
-    if (optimalRate < 0.001 && engine.getConcentrations().Ce > ceTarget * 0.5) {
-      optimalRate = qRate(0.001);
-    }
+    const optimalRate = floorMaintenanceRate(
+      qRate(findMaintenanceRate(engine, ceTarget, cfg, step)),
+      engine, ceTarget, qRate);
 
     // Check if rate has stabilised (converged to maintenance)
     if (prevRate > 0 && Math.abs(optimalRate - prevRate) / prevRate < cfg.rateStablePct) {
@@ -121,50 +114,6 @@ export function planTCIScheme(engine, startState, startTime, ceTarget, config = 
 
   engine.setState(saved);
   return scheme;
-}
-
-/**
- * Calculate the loading bolus dose using binary search.
- * Finds the bolus that, after distribution and equilibration,
- * brings Ce closest to the target.
- *
- * We search for the bolus where the PEAK Ce (which occurs several
- * minutes after the bolus due to ke0 lag) matches the target.
- */
-function calculateLoadingBolus(engine, ceTarget, cfg) {
-  const saved = engine.getState();
-
-  let lo = 0;
-  let hi = ceTarget * engine.params.V1 * 3; // generous upper bound
-
-  for (let i = 0; i < cfg.rateSearchIter; i++) {
-    const mid = (lo + hi) / 2;
-
-    // Give bolus at pump rate and find peak Ce
-    engine.setState(saved);
-    const { duration, rate } = plannerBolusDelivery(mid, cfg);
-    engine.advance(duration, rate);
-
-    // Scan forward to find peak Ce (no further infusion)
-    let peakCe = 0;
-    for (let t = 0; t < 15; t += 0.25) {
-      engine.advance(0.25, 0);
-      const ce = engine.getConcentrations().Ce;
-      if (ce > peakCe) peakCe = ce;
-      else if (ce < peakCe - 0.001) break; // past peak
-    }
-
-    if (Math.abs(peakCe - ceTarget) < 0.01) {
-      engine.setState(saved);
-      return mid;
-    }
-
-    if (peakCe < ceTarget) lo = mid;
-    else hi = mid;
-  }
-
-  engine.setState(saved);
-  return (lo + hi) / 2;
 }
 
 /**

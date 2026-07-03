@@ -16,6 +16,7 @@
  */
 
 import { _convertLength, _convertWeight } from './setup.js';
+import { applyBufferKey } from './keypad-buffer.js';
 
 const $ = id => document.getElementById(id);
 
@@ -215,34 +216,19 @@ function _handleKey(key) {
     }
     return;
   }
+  if (key !== 'clear' && key !== 'back' && key !== '.' && !/^[0-9]$/.test(key)) return;
+  // Per-field wrapper over the shared buffer reducer: each field carries its
+  // own {value, prefilled} pair. Age is integer-only — a '.' is a hard no-op
+  // there (must not disarm the prefill flag).
   const f = _active;
-  let v = _values[f] || '';
-  if (key === 'clear') {
-    v = '';
-    _prefilled[f] = false;
-  } else if (key === 'back') {
-    // If the field is still prefilled, one backspace clears the whole value —
-    // matches the existing keypad.js behavior for pre-populated buffers.
-    if (_prefilled[f]) {
-      v = '';
-      _prefilled[f] = false;
-    } else {
-      v = v.slice(0, -1);
-    }
-  } else if (key === '.') {
-    if (f === 'age') return;
-    if (_prefilled[f]) { v = ''; _prefilled[f] = false; }
-    if (v.includes('.')) return;
-    v = v === '' ? '0.' : v + '.';
-  } else if (/^[0-9]$/.test(key)) {
-    // First digit on a prefilled field replaces rather than appends.
-    if (_prefilled[f]) { v = ''; _prefilled[f] = false; }
-    if (v.length >= 6) return; // guard against runaway input
-    v = v + key;
-  } else {
-    return;
-  }
-  _values[f] = v;
+  if (key === '.' && f === 'age') return;
+  const next = applyBufferKey(
+    { buffer: _values[f] || '', prefilled: !!_prefilled[f] },
+    key,
+    { maxLen: 6 },
+  );
+  _values[f] = next.buffer;
+  _prefilled[f] = next.prefilled;
   _render();
 }
 

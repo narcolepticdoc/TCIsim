@@ -20,7 +20,13 @@ import {
   plannerBolusDelivery,
   appendTerminalRates,
   findMaintenanceRate,
+  searchPeakBolus,
+  waitForDecay,
+  floorMaintenanceRate,
 } from './shared.js';
+
+// Tuning for the shared peak-matched bolus search (see shared.js).
+const CET_BOLUS_SEARCH = { upperMult: 8, scanHorizon: 20, scanStep: 0.1, tol: 0.005 };
 
 /**
  * Output: same format as planTCIScheme — array of {type, time, value} events.
@@ -122,15 +128,7 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
 
   // ---- Target decrease: pause → wait for decay → maintenance ----
   if (currentCe > upperBound) {
-    scheme.push({ type: 'rate', time: simTime, value: 0 });
-
-    const maxWait = startTime + cfg.maxPlanTime;
-    while (simTime < maxWait) {
-      engine.advance(cfg.simStep, 0);
-      simTime += cfg.simStep;
-      const ce = engine.getConcentrations().Ce;
-      if (ce <= upperBound) break;
-    }
+    simTime = waitForDecay(engine, upperBound, simTime, startTime, scheme, cfg);
   }
 
   // ---- Maintenance: rate-change threshold scanning ----
@@ -142,10 +140,9 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
   const checkInterval = 1.0; // check every minute
 
   // Find initial maintenance rate
-  let currentRate = qRate(findMaintenanceRate(engine, ceTarget, cfg, 0));
-  if (currentRate < 0.001 && engine.getConcentrations().Ce > ceTarget * 0.5) {
-    currentRate = qRate(0.001);
-  }
+  let currentRate = floorMaintenanceRate(
+    qRate(findMaintenanceRate(engine, ceTarget, cfg, 0)),
+    engine, ceTarget, qRate);
   scheme.push({ type: 'rate', time: simTime, value: currentRate });
 
   let stepCount = 1;
@@ -197,37 +194,5 @@ export function planTCISchemeCET(engine, startState, startTime, ceTarget, config
  * branch where an analytical formula isn't available.
  */
 export function calculateCETBolus(engine, ceTarget, cfg) {
-  const saved = engine.getState();
-
-  let lo = 0;
-  let hi = ceTarget * engine.params.V1 * 8; // generous upper bound for CET
-
-  for (let i = 0; i < cfg.rateSearchIter; i++) {
-    const mid = (lo + hi) / 2;
-
-    // Deliver bolus at pump rate
-    engine.setState(saved);
-    const { duration, rate } = plannerBolusDelivery(mid, cfg);
-    engine.advance(duration, rate);
-
-    // Scan forward with zero rate to find peak Ce
-    let peakCe = 0;
-    for (let t = 0; t < 20; t += 0.1) {
-      engine.advance(0.1, 0);
-      const ce = engine.getConcentrations().Ce;
-      if (ce > peakCe) peakCe = ce;
-      else if (ce < peakCe - 0.001) break; // past peak
-    }
-
-    if (Math.abs(peakCe - ceTarget) < 0.005) {
-      engine.setState(saved);
-      return mid;
-    }
-
-    if (peakCe < ceTarget) lo = mid;
-    else hi = mid;
-  }
-
-  engine.setState(saved);
-  return (lo + hi) / 2;
+  return searchPeakBolus(engine, ceTarget, cfg, CET_BOLUS_SEARCH);
 }

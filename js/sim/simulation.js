@@ -30,7 +30,7 @@ import { createEventList } from './events.js';
 import { planTCIScheme, planTCISchemeCET, planTCISchemeCETConservative, planTCISchemeEmulation } from './tci-planner.js';
 import { predictTroughTime } from '../pk/decay-predictor.js';
 import { predictTimeToSteadyState as _predictTimeToSS, predictPlateau as _predictPlateau } from '../pk/steady-state-predictor.js';
-import { DRUG_DEFS, getPumpSettings } from '../util/constants.js';
+import { DRUG_DEFS, getPumpSettings, TIME_EPS_CLINICAL, TIME_EPS_IDENTITY } from '../util/constants.js';
 
 /**
  * Drugs that do not support TCI (Ce targeting).
@@ -328,7 +328,7 @@ export function createModel(config = {}) {
     // Bump rate events strictly inside the interval. Skip pauses.
     const all = eventList.getByDrug(drugId);
     const toBump = all.filter(e =>
-      e.type === 'rate' && e.time > t0 + 1e-9 && e.time < t1 - 1e-9,
+      e.type === 'rate' && e.time > t0 + TIME_EPS_IDENTITY && e.time < t1 - TIME_EPS_IDENTITY,
     );
     for (const evt of toBump) {
       eventList.editEvent(evt.id, { value: evt.value + deltaPerMin });
@@ -337,7 +337,7 @@ export function createModel(config = {}) {
     // Start event at t0
     let startEvt = null;
     const existingAtT0 = all.filter(e =>
-      e.type === 'rate' && Math.abs(e.time - t0) < 0.001,
+      e.type === 'rate' && Math.abs(e.time - t0) < TIME_EPS_CLINICAL,
     );
     if (existingAtT0.length > 0) {
       for (const evt of existingAtT0) {
@@ -354,7 +354,7 @@ export function createModel(config = {}) {
     // Restore event at t1 (only if nothing is already scheduled there)
     let restoreEvt = null;
     const existingAtT1 = eventList.getByDrug(drugId).filter(e =>
-      e.type === 'rate' && Math.abs(e.time - t1) < 0.001,
+      e.type === 'rate' && Math.abs(e.time - t1) < TIME_EPS_CLINICAL,
     );
     if (existingAtT1.length === 0) {
       restoreEvt = eventList.addRate(

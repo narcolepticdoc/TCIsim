@@ -48,6 +48,17 @@ export const DRUG_DEFS = {
 // remifentanil is defined in DRUG_DEFS but has no PK model yet.
 export const DRUG_IDS = ['propofol', 'fentanyl', 'ketamine'];
 
+// ---- Time-equality tolerances (engine time is minutes) ----
+// Two deliberately different scales — do not merge them:
+//   CLINICAL: "same clinical instant" (60 ms) — used to match events anchored
+//   at the same timestamp (bolus-end anchors, event identity by time).
+//   IDENTITY: "same float time" — used to detect whether a *recomputed* time
+//   actually moved (e.g. did a bolus-end shift after a pump-rate change).
+// The 1e-12 strict loop terminators in events/query.js intentionally stay
+// tighter than IDENTITY and keep their literal values.
+export const TIME_EPS_CLINICAL = 0.001;
+export const TIME_EPS_IDENTITY = 1e-9;
+
 // ---- Per-drug pump requirement ----
 // Propofol always requires an infusion pump (TCI + manual infusion).
 // Fentanyl/ketamine are optional — when disabled the UI locks to

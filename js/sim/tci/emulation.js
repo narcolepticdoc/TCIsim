@@ -23,7 +23,7 @@
 
 import { computeSimTIVACETBolus, computeUDFs } from '../simtiva-reference.js';
 import { computeSteadyStateRate } from '../../pk/steady-state-predictor.js';
-import { DEFAULT_SCHEME_CONFIG, makeQuantizers, plannerBolusDelivery } from './shared.js';
+import { DEFAULT_SCHEME_CONFIG, makeQuantizers, plannerBolusDelivery, waitForDecay } from './shared.js';
 
 export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, config = {}) {
   const cfg = { ...DEFAULT_SCHEME_CONFIG, ...config };
@@ -202,12 +202,7 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
 
   // ---- Target decrease: pause until Ce decays ----
   if (currentCe > upperBound) {
-    scheme.push({ type: 'rate', time: simTime, value: 0 });
-    while (simTime < startTime + cfg.maxPlanTime) {
-      engine.advance(cfg.simStep, 0);
-      simTime += cfg.simStep;
-      if (engine.getConcentrations().Ce <= upperBound) break;
-    }
+    simTime = waitForDecay(engine, upperBound, simTime, startTime, scheme, cfg);
   }
 
   // ==== Maintenance: SimTIVA deliver_cpt — direct port ====
@@ -359,7 +354,10 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   const stepMagnitude = currentCe > 0 ? (ceTarget - currentCe) / ceTarget : 1;
   const cptThreshold = (earlyRateMlH >= 30 && stepMagnitude > 0.20) ? 0.08 : 0.05;
   const cptAvgFactor = (earlyRateMlH >= 30 && stepMagnitude > 0.20) ? 0.667 : 0.62;
-  const rf = 360; // round mg/sec to nearest 1 mL/h (default assumes 10 mg/mL)
+  // Round mg/sec to the nearest 1 mL/h at the ACTUAL concentration:
+  // 1 mL/h = concentration mg / 3600 s, so the grid is 3600/concentration.
+  // (The old literal 360 was only correct at 10 mg/mL.)
+  const rf = 3600 / concentration;
   // In quantize-in-display mode the rnd function snaps through the clinician's
   // chosen display unit (e.g. mL/h at their actual concentration, or mcg/kg/min).
   // Signature is preserved: mg/sec in → mg/sec out.

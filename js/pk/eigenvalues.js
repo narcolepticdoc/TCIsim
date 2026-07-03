@@ -21,6 +21,7 @@
 import { calcEleveldParams } from './eleveld.js';
 import { calcFentanylParams } from './fentanyl.js';
 import { calcKetamineParams } from './ketamine.js';
+import { solveCubicRoots } from './cubic.js';
 
 // Clamp the convergence window to a sensible clinical range. Upper bound
 // keeps the user-facing "reconciling for N min" message honest — anything
@@ -33,6 +34,7 @@ const MAX_WINDOW_MIN = 120;
 /**
  * Solve the 3-compartment characteristic polynomial.
  * Returns three positive values |λᵢ| (the negative of the eigenvalues of A).
+ * Thin adapter over the shared core in cubic.js — all rates per MINUTE here.
  *
  * @param {number} k10 - elimination rate (per minute)
  * @param {number} k12
@@ -42,20 +44,7 @@ const MAX_WINDOW_MIN = 120;
  * @returns {number[]} [|λ1|, |λ2|, |λ3|]
  */
 function cubeRoots(k10, k12, k21, k13, k31) {
-  const a0 = k10 * k21 * k31;
-  const a1 = k10 * k31 + k21 * k31 + k21 * k13 + k10 * k21 + k31 * k12;
-  const a2 = k10 + k12 + k13 + k21 + k31;
-  const p = a1 - (a2 * a2 / 3.0);
-  const q = (2.0 * a2 * a2 * a2 / 27.0) - (a1 * a2 / 3.0) + a0;
-  const r1 = Math.sqrt(-(p * p * p) / 27.0);
-  const cosArg = Math.max(-1, Math.min(1, (-q / 2.0) / r1));
-  const phi = Math.acos(cosArg) / 3.0;
-  const rc = Math.pow(r1, 1.0 / 3.0);
-  return [
-    -(Math.cos(phi) * 2.0 * rc - a2 / 3.0),
-    -(Math.cos(phi + 2.0 * Math.PI / 3.0) * 2.0 * rc - a2 / 3.0),
-    -(Math.cos(phi + 4.0 * Math.PI / 3.0) * 2.0 * rc - a2 / 3.0),
-  ];
+  return solveCubicRoots(k10, k12, k21, k13, k31);
 }
 
 function eigenvaluesFromPK(pk) {
