@@ -5,7 +5,7 @@
  * full application state to localStorage via the persist module.
  */
 
-import { setPumpSettings, getPumpSettings, isPumpEnabled, DRUG_IDS } from '../util/constants.js';
+import { setPumpSettings, getPumpSettings, isPumpEnabled, DRUG_IDS, DRUG_DEFS } from '../util/constants.js';
 import { fromCanonical, getDefaultUnit, formatValue, getPrefKey, getSetupDefaultUnit } from '../util/units.js';
 import * as persist from '../ui/persist.js';
 
@@ -113,7 +113,6 @@ export function createSession({
       // legacy fallback to the old per-propofol `tci-pump-rate` key. Each drug
       // has its own concentration.
       try {
-        const savedConc = localStorage.getItem('tci-pump-concentration');
         const savedRate = localStorage.getItem('tci-pump-max-rate')
                        ?? localStorage.getItem('tci-pump-rate');
         const bolusRateMlH = parseFloat(savedRate) || 750;
@@ -121,25 +120,23 @@ export function createSession({
         // case was actually planned under); fall back to the live global for
         // old saves that predate `pumpConcentrations`.
         const caseConc = saved.pumpConcentrations || {};
-        setPumpSettings('propofol', {
-          concentration: caseConc.propofol ?? (parseFloat(savedConc) || 10),
-          bolusRateMlH,
-        });
-        const savedFentConc = localStorage.getItem('tci-pump-concentration-fentanyl');
-        const savedFentPump = localStorage.getItem('tci-pump-enabled-fentanyl');
-        setPumpSettings('fentanyl', {
-          concentration: caseConc.fentanyl ?? (parseFloat(savedFentConc) || 0.05),
-          bolusRateMlH,
-          pumpEnabled: savedFentPump === 'true',
-        });
-        const savedKetConc = localStorage.getItem('tci-pump-concentration-ketamine');
-        const savedKetPump = localStorage.getItem('tci-pump-enabled-ketamine');
-        setPumpSettings('ketamine', {
-          concentration: caseConc.ketamine ?? (parseFloat(savedKetConc) || 10),
-          bolusRateMlH,
-          pumpEnabled: savedKetPump === 'true',
-        });
-      } catch (e) {}
+        for (const drugId of DRUG_IDS) {
+          // propofol's concentration key predates the per-drug suffix scheme.
+          const concKey = drugId === 'propofol'
+            ? 'tci-pump-concentration'
+            : `tci-pump-concentration-${drugId}`;
+          const storedConc = parseFloat(localStorage.getItem(concKey));
+          setPumpSettings(drugId, {
+            concentration: caseConc[drugId]
+              ?? (storedConc > 0 ? storedConc : DRUG_DEFS[drugId].concentration),
+            bolusRateMlH,
+            // setPumpSettings ignores pumpEnabled for pump-mandatory drugs.
+            pumpEnabled: localStorage.getItem(`tci-pump-enabled-${drugId}`) === 'true',
+          });
+        }
+      } catch (e) {
+        console.warn('[TCI Sim] Pump-settings restore failed, using defaults:', e);
+      }
 
       // Restore pump-enabled state from saved case (takes precedence over localStorage
       // since it reflects the actual case configuration)
@@ -257,6 +254,13 @@ export function createSession({
 
       // Refresh chart
       refreshChart();
+
+      // Re-select the drug card that was active at save time. Clicking the
+      // card reuses the full selection chain in app.js (keypad, editor,
+      // history, chart axis switch) instead of duplicating it here.
+      if (saved.primaryDrug && DRUG_IDS.includes(saved.primaryDrug)) {
+        $('drug-' + saved.primaryDrug)?.click();
+      }
 
       addAnnotation('Case Restored');
     } catch (err) {

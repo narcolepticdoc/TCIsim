@@ -216,7 +216,11 @@ function _activeDrugs() {
 // post-reconcile total overshoots the entered actual by rate × elapsed.
 function _computeSimTotal(now = _timer.getElapsedMinutes()) {
   const events = _model.getEvents(_drugId);
-  _simTotalMg = getCumulativeDose(events, _drugId, now).totalMg;
+  // Snapshot-based delivery duration — must match the curve replay (see
+  // history.js computeTotalsForDrug).
+  const getBolusDelivery = _model.getEventList().getBolusDelivery;
+  _simTotalMg = getCumulativeDose(events, _drugId, now,
+    (evt) => getBolusDelivery(evt).duration).totalMg;
 }
 
 function _computeDelta() {

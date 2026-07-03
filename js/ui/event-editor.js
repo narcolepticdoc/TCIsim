@@ -155,7 +155,6 @@ export function openEdit(evtId) {
     }
   } else {
     _buffer = ''; _prefilled = false;
-    _prefilled = false;
   }
 
   updateDisplay();
@@ -205,8 +204,6 @@ function setType(type) {
   const pumpOn = isPumpEnabled(_selectedDrug);
   // No pump → boluses are always IV push; hide the separate push button
   $('ee-push-btn').style.display = (type === 'bolus' && pumpOn) ? '' : 'none';
-  const valLabel = $('ee-value-label');
-  if (valLabel) valLabel.textContent = type === 'bolus' ? 'Dose' : 'Rate';
 
   const btn = $('ee-confirm');
   if (type === 'bolus') {

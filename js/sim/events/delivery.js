@@ -6,6 +6,8 @@
  * query, and actions modules.
  */
 
+import { DRUG_DEFS } from '../../util/constants.js';
+
 // PUSH_RATE_MLH: rapid IV push delivery rate (1 mL/s = 3600 mL/h).
 // Push duration is volume-derived with a 1-second minimum.
 // Pump boluses use the drug's configured bolusRateMlH (typically 750 mL/h)
@@ -20,7 +22,15 @@ export function createDelivery(state) {
    */
   function getBolusDelivery(evt) {
     const cfg = state.drugConfigs[evt.drug];
-    const concentration = cfg?.concentration || 10;
+    // Never assume 10 mg/mL — at fentanyl's 0.05 mg/mL that is 200× wrong.
+    // Fall back to the drug's own default; a completely unknown drug gets
+    // the 1-second push minimum rather than an invented concentration.
+    const concentration = cfg?.concentration ?? DRUG_DEFS[evt.drug]?.concentration;
+    if (!concentration) {
+      console.warn(`[delivery] No concentration for drug '${evt.drug}' — using minimum push duration`);
+      const duration = 1 / 60;
+      return { duration, rate: evt.value / duration };
+    }
     const volumeMl = evt.value / concentration;
     if (evt.deliveryMode === 'push') {
       // Rapid IV push: volume-derived at 3600 mL/h (1 mL/s), minimum 1 second

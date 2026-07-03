@@ -22,15 +22,15 @@ import { predictSteadyStateCe } from './steady-state-predictor.js';
  * @param {number} currentRate - Current infusion rate (mg/min), typically 0
  * @param {Object} [opts]     - Options
  * @param {number} [opts.maxLookahead=480] - Max minutes to search ahead
- * @param {number} [opts.coarseStep=1]     - Coarse search step (minutes)
- * @param {number} [opts.tolerance=0.001]  - Bisection tolerance (minutes)
+ * @param {number} [opts.coarseStep=0.5]   - Coarse search step (minutes)
+ * @param {number} [opts.tolerance=0.01]   - Bisection tolerance (minutes)
  * @returns {Object} { time: number|null, ceAtTime: number }
  *   time = elapsed minutes when Ce hits trough, or null if never within lookahead
  */
 export function predictTroughTime(engine, startState, startTime, troughCe, currentRate, opts = {}) {
-  const maxLookahead = opts.maxLookahead || 480;
-  const coarseStep = opts.coarseStep || 0.5;
-  const tolerance = opts.tolerance || 0.01;
+  const maxLookahead = opts.maxLookahead ?? 480;
+  const coarseStep = opts.coarseStep ?? 0.5;
+  const tolerance = opts.tolerance ?? 0.01;
 
   // Save engine state
   const savedState = engine.getState();

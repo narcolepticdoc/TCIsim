@@ -129,21 +129,6 @@ export function resetPumpSettings(drugId) {
 }
 
 /**
- * Get all user-modified pump settings (for persistence).
- */
-export function getAllPumpSettings() {
-  return JSON.parse(JSON.stringify(_pumpSettings));
-}
-
-/**
- * Restore pump settings from saved state (for persistence).
- */
-export function restorePumpSettings(saved) {
-  Object.keys(_pumpSettings).forEach(k => delete _pumpSettings[k]);
-  if (saved) Object.assign(_pumpSettings, saved);
-}
-
-/**
  * Compute bolus delivery duration in minutes.
  * Uses effective pump settings (user overrides or DRUG_DEFS defaults).
  * 

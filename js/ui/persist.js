@@ -71,15 +71,6 @@ export function hasSavedCase() {
 }
 
 /**
- * Clear the saved case.
- */
-export function clearSavedCase() {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch (e) {}
-}
-
-/**
  * Get a brief summary of the saved case for display.
  * @returns {string|null}
  */

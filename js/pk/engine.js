@@ -15,7 +15,7 @@
  *   Cp = A1/V1, C2 = A2/V2, C3 = A3/V3
  */
 
-import { mat4, eye4, mul4, mulVec4, add4, sub4, scale4, inv4, expm4 } from '../util/math.js';
+import { mat4, mulVec4, scale4, inv4, expm4 } from '../util/math.js';
 
 /**
  * Build the 4×4 system matrix A for the PK-PD model.
@@ -132,6 +132,12 @@ export function createEngine(params, opts = {}) {
   
   // Pre-computed matrix exponentials for common time steps (cached)
   const expmCache = new Map();
+
+  // A is constant for the engine's lifetime; its inverse is too. Computed
+  // lazily on the first infused advance() — planners call advance() tens of
+  // thousands of times per plan, so recomputing per call is pure waste.
+  // `undefined` = not yet computed; `null` = singular (Euler fallback).
+  let AinvCached;
   
   /**
    * Get or compute expm(A·dt) for a given dt.
@@ -177,26 +183,22 @@ export function createEngine(params, opts = {}) {
     
     // Particular part: A⁻¹ · (expm(A·dt) - I) · B · R
     // = A⁻¹ · (eAdt - I) · B · R
-    const Ainv = inv4(A);
+    if (AinvCached === undefined) AinvCached = inv4(A);
+    const Ainv = AinvCached;
     if (!Ainv) {
       // Fallback to Euler if A is singular (shouldn't happen)
       advanceEuler(dt, R, 0.01);
       return;
     }
-    
-    const I4 = eye4();
-    const eAdtMinusI = sub4(eAdt, I4);
-    const M = mul4(Ainv, eAdtMinusI); // A⁻¹ · (eAdt - I)
-    
-    // M · B · R — since B = [1,0,0,0], this is just column 0 of M times R
-    const particular = new Float64Array(4);
+
+    // Since B = [1,0,0,0], only column 0 of A⁻¹·(eAdt - I) matters:
+    // particular[i] = Σ_j Ainv[i][j] · (eAdt[j][0] - I[j][0]) · R
     for (let i = 0; i < 4; i++) {
-      particular[i] = M[i * 4 + 0] * R; // Column 0 of M
-    }
-    
-    // Total
-    for (let i = 0; i < 4; i++) {
-      state[i] = xHom[i] + particular[i];
+      let sum = 0;
+      for (let j = 0; j < 4; j++) {
+        sum += Ainv[i * 4 + j] * (eAdt[j * 4 + 0] - (j === 0 ? 1 : 0));
+      }
+      state[i] = xHom[i] + sum * R;
     }
   }
   

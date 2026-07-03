@@ -14,7 +14,7 @@
  * error contract so the UI error mapping is shared.
  */
 
-import { SYNC_ENDPOINT, normalizeCode, isValidCode } from './patient-sync.js';
+import { SYNC_ENDPOINT, normalizeCode, isValidCode, fetchWithTimeout, _timeoutOrNetwork } from './patient-sync.js';
 
 // Mirrors the server-side cap for kind 'case' (api/sync.js KINDS).
 export const CASE_MAX_BYTES = 64 * 1024;
@@ -32,7 +32,7 @@ export async function pushPayload(code, kind, payload, { endpoint = SYNC_ENDPOIN
   const c = normalizeCode(code);
   if (!isValidCode(c)) return { ok: false, error: 'invalid-code' };
   try {
-    const res = await fetchImpl(endpoint, {
+    const res = await fetchWithTimeout(fetchImpl, endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       cache: 'no-store',
@@ -46,7 +46,7 @@ export async function pushPayload(code, kind, payload, { endpoint = SYNC_ENDPOIN
     const body = await res.json();
     return { ok: true, updatedAt: body && body.updatedAt };
   } catch (e) {
-    return { ok: false, error: 'network' };
+    return { ok: false, error: _timeoutOrNetwork(e) };
   }
 }
 
@@ -61,7 +61,7 @@ export async function fetchPayload(code, kind, { endpoint = SYNC_ENDPOINT, fetch
   const c = normalizeCode(code);
   if (!isValidCode(c)) return { found: false, payload: null, error: 'invalid-code' };
   try {
-    const res = await fetchImpl(`${endpoint}?code=${encodeURIComponent(c)}&kind=${encodeURIComponent(kind)}`, {
+    const res = await fetchWithTimeout(fetchImpl, `${endpoint}?code=${encodeURIComponent(c)}&kind=${encodeURIComponent(kind)}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       cache: 'no-store',
@@ -77,7 +77,7 @@ export async function fetchPayload(code, kind, { endpoint = SYNC_ENDPOINT, fetch
     }
     return { found: true, payload: body.payload, updatedAt: body.updatedAt };
   } catch (e) {
-    return { found: false, payload: null, error: 'network' };
+    return { found: false, payload: null, error: _timeoutOrNetwork(e) };
   }
 }
 
@@ -113,5 +113,18 @@ export function validateIncomingCase(payload) {
   const num = v => typeof v === 'number' && isFinite(v);
   if (!num(p.age) || !num(p.weight) || !num(p.height) || typeof p.male !== 'boolean') return null;
   if (!payload.events || typeof payload.events !== 'object' || Array.isArray(payload.events)) return null;
+  // Validate per-drug event shapes so a crafted/truncated payload is rejected
+  // here rather than surfacing as NaN concentrations or a mid-restore throw.
+  const EVENT_TYPES = new Set(['rate', 'bolus', 'pause']);
+  for (const drugEvents of Object.values(payload.events)) {
+    if (!Array.isArray(drugEvents)) return null;
+    for (const evt of drugEvents) {
+      if (!evt || typeof evt !== 'object') return null;
+      if (!EVENT_TYPES.has(evt.type)) return null;
+      if (!num(evt.time) || evt.time < 0) return null;
+      // pause events carry no value; rate/bolus values must be finite ≥ 0
+      if (evt.type !== 'pause' && (!num(evt.value) || evt.value < 0)) return null;
+    }
+  }
   return payload;
 }
