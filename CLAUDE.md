@@ -1,223 +1,119 @@
 # TCI Sim — Claude Code Reference
 
-Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version: **0.5.40.7** (see `js/version.js`).
+Mobile-first PWA for anesthesia training. Simulates propofol (Eleveld 2018), fentanyl (Shafer 1990 + Shibutani 2004), and ketamine (Domino 1982 / Navarrete 2000) pharmacokinetics with Target Controlled Infusion (TCI) planning. Current version lives in `js/version.js` (single source of truth — never state or hardcode it elsewhere except `sw.js`, see Workflows).
 
-## Quick Start
+## Commands
 
-No build step — pure ES modules served as static files.
+No build step — pure ES modules served as static files. `index.html` is the single-page entry point; `js/app.js` boots everything.
 
 ```bash
-# Serve locally (any static server works)
-python3 -m http.server 8080
-# or
-npx serve .
-
-# Run the test suite (704 tests, 22 suites)
-node tests/run-tests.js
-```
-
-`index.html` is the single-page entry point; `<script type="module" src="js/app.js">` boots everything. The PWA `manifest.json` enables home-screen install.
-
-## Key Files
-
-```
-js/version.js             APP_VERSION — single source of truth, edit here to bump the version
-js/pk/eleveld.js          Eleveld 2018 PK-PD parameter calculator (propofol, exports MODEL_NAME)
-js/pk/fentanyl.js         Shafer 1990 + Shibutani 2004 weight correction (TBW≥85 & BMI>30)
-js/pk/ketamine.js         Domino 1982 / Navarrete 2000 micro-constant model
-js/pk/pd.js               PD model — BIS prediction via sigmoid Emax (`ceForBIS(N, params)`)
-js/pk/decay-predictor.js  Trough/redose-time prediction via matrix engine
-js/pk/engine.js           Matrix-exponential PK engine (4×4, arbitrary time steps)
-js/sim/events.js          Thin re-export shim over js/sim/events/
-js/sim/events/index.js    Event list orchestrator — state + facade assembly
-js/sim/events/delivery.js Bolus delivery math (pump rate, push rate)
-js/sim/events/replay.js   Per-drug engine replay, getRateAtTime, getActiveRateForDrug
-js/sim/events/list-ops.js CRUD: insert/remove/getById/getAll/getByDrug/clearAfter/clearFrom/clearAll
-js/sim/events/query.js    getConcentrationsAt, computeCurve, getStateAtLastEvent, getStateAtTime
-js/sim/events/actions.js  findActiveBolus + addRate/addBolus/addPause/editEvent/deleteEvent
-js/sim/simulation.js      Stateless facade: setPatient, planTCI, getConcentrationsAt
-js/sim/tci-planner.js     Thin re-export shim over js/sim/tci/
-js/sim/tci/shared.js      Shared helpers: DEFAULT_SCHEME_CONFIG, makeQuantizers, appendTerminalRates, findMaintenanceRate
-js/sim/tci/stepped.js     planTCIScheme — conservative, binary-search bolus
-js/sim/tci/cet.js         planTCISchemeCET + calculateCETBolus — fast onset, peak-matched
-js/sim/tci/cet-conservative.js  planTCISchemeCETConservative — rate-corrected bolus
-js/sim/tci/emulation.js   planTCISchemeEmulation — SimTIVA deliver_cpt port
-js/sim/tci/index.js       Barrel re-export + planTCIFromEvents convenience wrapper
-js/sim/simtiva-reference.js  SimTIVA eigenvalue math (clean-room, no GPL code)
-js/util/constants.js      DRUG_DEFS, DRUG_IDS, DRUG_TASK_UNITS (incl. quantSteps), pump settings + isPumpEnabled, PUMP_MANDATORY
-js/util/units.js          Bidirectional unit conversion + quantizeInDisplay + getQuantizeConfig
-js/util/math.js           Matrix-exp, eigenvalue utilities (cube solver)
-js/pk/steady-state-predictor.js  Analytical SS + slope-reversal plateau detection
-js/ui/drug-panel.js       Thin re-export shim over js/ui/drug-panel/
-js/ui/drug-panel/index.js Drug panel orchestrator — rAF loop, update(), public getters
-js/ui/drug-panel/approach.js  Approach line: cache (incl. ceAboveTarget), computeApproachData
-js/ui/drug-panel/step-bar.js  Step bar progress + next-event countdown
-js/ui/drug-panel/exit-readout.js  Emergence ("Emerge → X in Y") countdown line
-js/ui/drug-panel/formatters.js   fmtCountdown, bisColor, fmtCe, fmtRateInline
-js/ui/chart.js            Thin re-export shim over js/ui/chart/
-js/ui/chart/index.js      Chart.js wrapper — curves, cursor dots, target/threshold/SS lines, plateau region, BIS bands, opacity + font-scale setters (all idempotent)
-js/ui/chart/annotations.js  Annotation rebuild — bands, target lines, plateau region, inspect cursor
-js/ui/chart/gestures.js   Canvas touch/mouse handlers — Y-axis drag, double-tap recenter, inspect-handle drag (capture-phase on parent + pan-disable while active)
-js/ui/chart/plugins/      afterDraw plugins — target-label, cursor-dots, inspect-dots, inspect-handle (draggable pill), readout-panel, event-markers
-js/ui/settings.js         Event warnings (prep + alert) + persisted user prefs (opacity, redose, plateau bands, textSize, eventMarkerSize)
-js/ui/alert-sound.js      Persistent AudioContext; unlockAudio() + playAlert('info'|'warning'|'urgent'|'redose')
-js/ui/mode.js             Per-drug mode tracking (none/tci/manual/intermittent) + button dim/bright state
-js/ui/keypad.js           Numeric keypad modal (target / rate / bolus / emergence / redose); unit toggle round-trips values through canonical
-js/ui/event-editor.js     Unified event editor modal (rate/pause options hidden when pump off); unit toggle converts buffer
-js/ui/patient-modal.js    Patient Demographics modal with built-in 3×5 numeric keypad, Male/Female toggle, Metric/Imperial toggle (shared with setup.setUnits)
-js/ui/setup.js            Setup screen — clickable patient-summary row opens patient-modal; pump settings; delivery method; rounding controls; starting-dose template editor (exports refreshTemplateInputs); exports _convertLength / _convertWeight
-js/ui/history.js          Event history panel — merges pump events + editorial notations (drug-tagged, two-line heading/sub) into one time-sorted list; grid row: time+type on line 1, value centered on line 2; edit-mode via Edit button; ET/RT + Notes toggles
-js/ui/timer.js            Elapsed time / wall clock — single-line [Case start HH:MM | ET H:MM:SS] button with popover
-js/ui/controls.js         Start/pause case controls
-js/ui/persist.js          LocalStorage case save/restore primitives
-js/sync/patient-sync.js   Cloud patient pull — pairing code, fetchPatient, applyPatientToInputs
-js/sync/cloud-sync.js     Generic cloud push/pull transport (kinds: case, template) + prepareCaseForPush/validateIncomingCase
-js/sync/dose-template.js  Starting-dose template — schema, buildTemplateDoses planner, localStorage + arming
-js/app.js                 Entry point, wires all modules; queueStartingDoses (onConfirm hook — queues template as editable pre-start events); cloud push/pull button wiring
-js/app/settings-ui.js     Settings modal DOM wiring (sliders, tabs, Appearance tab incl. textSize segmented control)
-js/app/tci-modal.js       TCI delay + first-step countdown modals
-js/app/session.js         Case save / restore / new case (incl. pumpEnabled map)
-js/app/chart-bridge.js    Chart refresh, BIS overlay, per-frame updates, settings propagation (calls idempotent setters unconditionally)
-js/app/portrait-layout.js Dynamic grid-row sizing for portrait tablet layout via ResizeObserver + matchMedia
+python3 -m http.server 8080     # serve locally (any static server works)
+node tests/run-tests.js         # full test suite — must be 100% green before any commit
 ```
 
 ## Architecture in One Paragraph
 
-The engine stores compartment amounts as a `Float64Array[5]` and advances via matrix exponential — any step size, no accumulation error. The event list (bolus/rate/pause) is the source of truth; concentrations at any time are computed by replaying events through the engine. `simulation.js` is a pure command/query facade — no internal clock or state machine. The UI owns time display and playback. TCI planners generate arrays of `{type, time, value}` events that get inserted into the event list.
+The engine (`js/pk/engine.js`) stores compartment amounts as a `Float64Array[5]` and advances via matrix exponential — any step size, no accumulation error. The event list (bolus/rate/pause) is the source of truth; concentrations at any time are computed by replaying events through the engine. `js/sim/simulation.js` is a pure command/query facade — no internal clock or state machine. The UI owns time display and playback. TCI planners generate arrays of `{type, time, value}` events that get inserted into the event list.
 
 ## Invariants — Do Not Break
 
-- **Engine time unit is minutes.** `simtiva-reference.js` converts internally to seconds; everything else in the codebase uses minutes. Do not change this.
-- **`findActiveBolus` uses strict less-than boundaries.** Boundary-collision bugs (e.g. a rate change at the exact end of a bolus) require explicit scans in `addRate`/`addPause` — do not rely on `findActiveBolus` alone.
-- **Cramér's rule is the eigenstate pattern.** When syncing SimTIVA eigenstate (`ps1/ps2/ps3`) to engine reality, use the 3-sample Cramér's rule refit (`refitEigenstate()`). Do not use second-by-second replay.
-- **System events must stay visible.** Rate-restore events (`source: 'system'`) are shown in history as dimmed italic rows. Do not filter them from the UI — users need to see and delete them. Note this is about not *hiding* rows that exist: **TCI-sourced boluses deliberately create no rate-restore** (`addBolus` skips it when `source === 'tci'`) because `planTCI`'s own rate steps define post-bolus delivery and the restore is a functional no-op. Only manual boluses generate one.
-- **Quantize inside the planning loop, not after.** When `cfg.quantizeInDisplay` is set, `qBolus`/`qRate` (from `makeQuantizers`) must be applied **before** every `engine.advance()` call. Rounding the planner's output as a final pass introduces stacking error because each iteration of the maintenance loop sees the un-rounded value.
-- **DRUG_IDS is the iteration source of truth.** When adding a drug, update `DRUG_IDS` in `js/util/constants.js` — the multi-drug loops in `app.js`, `session.js`, and `chart-bridge.js` consume it. `remifentanil` is in `DRUG_DEFS` but absent from `DRUG_IDS` because it has no PK model yet.
-- **Chart setters are idempotent, bridge calls them unconditionally.** `setCpOpacity`, `setNomogramOpacity`, `setOverlayOpacity`, `setEventMarkerSize`, `setFontScale` all early-return when the incoming value matches chart state. `chart-bridge.js onFrame` reads settings every frame and pushes without a cache. This makes chart recreation (New Case) self-healing: fresh chart defaults differ from user settings, so the first post-recreate frame applies them. Do not reintroduce bridge-level `last*` caches on these setters — they cause settings to silently not re-apply on new case.
-- **Keypad unit toggles convert, they don't clear.** `keypad.js`, `event-editor.js`, and `patient-modal.js` all round-trip the current buffer through `toCanonical → fromCanonical` on unit change and re-arm `prefilled = true` so the next keypress overwrites. Do not revert to clearing the buffer on unit change.
+- **Engine time unit is minutes.** `simtiva-reference.js` converts internally to seconds; everything else uses minutes.
+- **`findActiveBolus` uses strict less-than boundaries.** Boundary collisions (e.g. a rate change at the exact end of a bolus) require the explicit scans in `addRate`/`addPause` — do not rely on `findActiveBolus` alone.
+- **Cramér's rule is the eigenstate pattern.** When syncing SimTIVA eigenstate (`ps1/ps2/ps3`) to engine reality, use the 3-sample Cramér's rule refit (`refitEigenstate()`), never second-by-second replay.
+- **System events stay visible.** Rate-restore events (`source: 'system'`) render in history as dimmed italic rows — never filter them from the UI. Separately: TCI-sourced boluses deliberately create **no** rate-restore (`addBolus` skips it when `source === 'tci'`) because the plan's own rate steps define post-bolus delivery; only manual boluses generate one.
+- **Quantize inside the planning loop, not after.** When `cfg.quantizeInDisplay` is set, apply `qBolus`/`qRate` (from `makeQuantizers`) **before** every `engine.advance()`. Rounding planner output as a final pass stacks error across maintenance-loop iterations.
+- **`DRUG_IDS` is the iteration source of truth** (`js/util/constants.js`) — multi-drug loops in `app.js`, `session.js`, `chart-bridge.js` consume it. `remifentanil` is in `DRUG_DEFS` but not `DRUG_IDS` (no PK model yet).
+- **Chart setters are idempotent; the bridge calls them unconditionally.** `setCpOpacity`/`setNomogramOpacity`/`setOverlayOpacity`/`setEventMarkerSize`/`setFontScale` early-return on unchanged values, and `chart-bridge.js onFrame` pushes settings every frame with no cache. This makes chart recreation (New Case) self-healing. Do not reintroduce bridge-level `last*` caches on these setters.
+- **Keypad unit toggles convert, they don't clear.** `keypad.js`, `event-editor.js`, `patient-modal.js` round-trip the buffer through `toCanonical → fromCanonical` on unit change and re-arm `prefilled = true`.
 - **`pharmacology.js` is GPL-3.0.** Never import, bundle, or copy code from `/mnt/project/pharmacology.js`. Reference only.
 
-## TCI Planner Quick Reference
+## Code Map
 
-| Mode | Key characteristic | Main file function |
+Explore with Glob/Grep for details; this is orientation, not an index. Four files are thin re-export shims over directories of the same name: `js/sim/events.js`, `js/sim/tci-planner.js`, `js/ui/drug-panel.js`, `js/ui/chart.js` — edit the modules inside the directory, keep the shim's export surface stable.
+
+```
+js/pk/        PK-PD models (eleveld, fentanyl, ketamine, pd), matrix engine,
+              decay + steady-state predictors
+js/sim/       events/  event list: replay, query, CRUD, actions (findActiveBolus)
+              tci/     planners (stepped, cet, cet-conservative, emulation) +
+                       shared.js (DEFAULT_SCHEME_CONFIG, makeQuantizers)
+              simulation.js (facade), simtiva-reference.js (clean-room eigenvalue math)
+js/util/      constants.js (DRUG_DEFS, DRUG_IDS, DRUG_TASK_UNITS, pump settings,
+              PUMP_MANDATORY), units.js (conversion + quantize), math.js
+js/ui/        chart/ (index, annotations, gestures, plugins/), drug-panel/,
+              settings, keypad, event-editor, patient-modal, setup, history,
+              mode, timer, controls, persist, alert-sound
+js/sync/      cloud sync: patient pull, case/template push-pull, dose templates
+js/app.js     entry point + wiring; js/app/ has settings-ui, tci-modal, session,
+              chart-bridge (per-frame updates), portrait-layout
+js/version.js APP_VERSION — bump here (and sw.js) only
+```
+
+## TCI Planners
+
+| Mode | Key characteristic | Function |
 |---|---|---|
-| `stepped` | Conservative, binary search | `planTCIScheme` |
+| `stepped` | Conservative, binary-search bolus | `planTCIScheme` |
 | `cet` | Fast onset, peak-matched bolus | `planTCISchemeCET` |
 | `cet-conservative` | SimTIVA-style, rate-corrected bolus | `planTCISchemeCETConservative` |
 | `cet-emulation` | SimTIVA deliver_cpt port, best accuracy | `planTCISchemeEmulation` |
 
-The emulation planner maintains a parallel SimTIVA eigenstate (`ps1/ps2/ps3`). After any Ce-boost engine advance, call `refitEigenstate()` to keep it in sync before the Cp-targeting pass.
-
-`computeRateCorrFactor` in `simtiva-reference.js` takes `(rawBolusMg, peakTimeSec, maxRateMgSec, e_coef, lambda)` — not pump-rate scalars. It simulates Ce second-by-second to find the mechanistically correct correction duration.
+The emulation planner maintains a parallel SimTIVA eigenstate (`ps1/ps2/ps3`); after any Ce-boost `engine.advance()`, call `refitEigenstate()` before resuming Cp-targeting. `computeRateCorrFactor` in `simtiva-reference.js` takes `(rawBolusMg, peakTimeSec, maxRateMgSec, e_coef, lambda)` — not pump-rate scalars — and simulates Ce second-by-second to find the correction duration. Full algorithms and validation data: `TCI-PLANNERS.md`.
 
 ## Pump Settings
 
-```js
-getPumpSettings('propofol')   // { concentration, bolusRateMlH, maxRate, pumpEnabled }
-setPumpSettings('propofol', { concentration: 10, bolusRateMlH: 750 })
-isPumpEnabled('propofol')     // true (mandatory)
-isPumpEnabled('fentanyl')     // false by default (opt-in via setup screen)
-```
+- Always read via `getPumpSettings(drugId)` — never hardcode 750 ml/h or 10 mg/mL. `maxRate` is auto-derived (`bolusRateMlH * concentration / 60` mg/min).
+- **Concentration is saved per-case**: `session.js save()` records a `pumpConcentrations` map and `restore()` prefers it over the live global, so old cases replay at the concentration they were planned under. **8.33 mg/mL propofol is non-sticky** (`NONSTICKY_PROPOFOL_CONCS`): valid for the live case and its save, but never persisted as the setup default.
+- The global max pump rate has two UI controls (setup screen `#input-max-pump-rate` and Settings → Simulation `#set-max-pump-rate`) kept in lockstep via `setup.js setGlobalMaxPumpRate()`. Changes affect subsequent plans/boluses only — no automatic replan.
+- `pumpEnabled` is per-drug delivery method. Propofol is pump-mandatory (`PUMP_MANDATORY`); fentanyl/ketamine default to manual — when pump is OFF, `mode.js updateModeUI()` hides rate controls and locks the drug to intermittent IV-push boluses.
 
-`maxRate` is auto-derived as `bolusRateMlH * concentration / 60` mg/min. Persisted to localStorage. Always read pump settings from `getPumpSettings` — never hardcode 750 or 10.
+## Settings & LocalStorage
 
-**Concentration is saved per-case.** `session.js save()` records a `pumpConcentrations` map; `restore()` prefers it over the live global so an old case replays at the concentration it was planned under (falls back to the global for pre-0.5.40.7 saves). **8.33 mg/mL propofol is non-sticky** (`isStickyPropofolConc` / `NONSTICKY_PROPOFOL_CONCS` in `constants.js`): it applies to the live case and is saved with it, but `setup.js` never persists or pre-populates it as the setup default — it must be re-entered each case.
+User settings live in `js/ui/settings.js` (`getSettings()`/`setSettings()`, one JSON blob under `'tci-warn-settings'`); the `DEFAULTS` object there is the authoritative key/default/range list. UI wiring is in `js/app/settings-ui.js`. To add a setting: extend `DEFAULTS` + its validator, add the `<input>` to the matching tab in `index.html`, wire it in `settings-ui.js`.
 
-The global max pump rate (`bolusRateMlH`, shared across drugs) is set on the setup screen (`#input-max-pump-rate`) and **also in Settings → Simulation (`#set-max-pump-rate`) so it can be changed mid-case**. Both route through `setup.js` `setGlobalMaxPumpRate(mlh)` / `getGlobalMaxPumpRate()`, which apply to all `SETUP_DRUGS`, persist `tci-pump-max-rate`, and keep the two controls in lockstep. Changes affect subsequent plans/boluses only (no automatic replan).
+Keys persisted outside the blob — note the working-vs-default unit split:
 
-`pumpEnabled` controls per-drug delivery method. Propofol is always pump-mandatory (`PUMP_MANDATORY` set). Fentanyl and ketamine default to manual (bolus only) — when pump is OFF, `updateModeUI()` in `mode.js` hides Set Rate / Stop Pump buttons and the UI locks to intermittent bolus mode with IV Push delivery. The toggle lives on the setup screen per-drug tab and is persisted to `tci-pump-enabled-{drugId}` in localStorage and in case save/restore.
+- `tci-pref-{bolus|rate}Unit-{drug}` — **working** (in-case) display unit, mutated by mid-case keypad/editor swaps; reseeded on New Case.
+- `tci-pref-{bolus|rate}Unit-{drug}-default` — **setup default**, owned by the setup screen (`getSetupDefaultUnit`). Deliberately decoupled so mid-case swaps never overwrite the setup default.
+- `tci-pref-quantizeInDisplay`, `tci-pump-enabled-{drugId}`, `tci-pump-max-rate`, `tci-pref-history-show-notations`, `tci-sync-code`, `tci-dose-template`, `tci-dose-template-armed`; pump settings and saved cases via `js/ui/persist.js`.
 
-## Settings & LocalStorage Keys
+## UI Conventions & Gotchas
 
-Settings live in `js/ui/settings.js` (`getSettings()` / `setSettings()`); UI wiring is `js/app/settings-ui.js` (Warnings, Behavior, Appearance tabs). All keys are stored under `'tci-warn-settings'` as a single JSON blob.
+- **Emergence naming**: the "time until Ce decays to a target" concept is labelled **Emerge → / Emergence** in all user-facing text, but internal symbols (`exitCe`, `setExitLine`, `.btn-ctrl-exit`, `#<drug>-exit`, …) intentionally keep the old `exit` names — do not rename them.
+- **Prefilled keypad buffers replace on first keypress**: pre-populated buffers are flagged `prefilled`; the first digit/decimal/backspace clears instead of appending, and switching fields re-arms the flag.
+- **Notations are not PK events**: editorial notes live in the `annotations[]` array (`addAnnotation`/`deleteAnnotation` in `app.js`), merged time-sorted into history with events ranked before same-timestamp notes — except notes with `pre: true` ("Case Started"-style announcements) which rank first. Drug-tagged notes show only in that drug's history.
+- **Chart gesture handling**: `gestures.js` binds inspect-handle drag listeners on `canvas.parentElement` in **capture phase** so they beat Chart.js's hammer listeners, and disables `plugins.zoom.pan` during an active handle drag (iPad pan hijacking). Keep `touch-action: none` on the canvas.
+- **Portrait layout measures with `getBoundingClientRect()`**, summing children — `scrollHeight` lies when content fits inside a larger container (`js/app/portrait-layout.js`).
+- **Dim/bright buttons** (`mode.js`): controls are muted by default; full color + glow only with `active-mode`. Clinical look — no halos or transforms.
+- New chart overlays get a setter on `js/ui/chart.js` plus a propagation step in `chart-bridge.js onFrame`; user-dimmable overlays plumb through `_overlayAlpha`/`_nomogramOpacity` in chart scope so they survive annotation rebuilds.
 
-| Key | Default | Range | Purpose |
-|---|---|---|---|
-| `prepSec` | 30 | ≥0 | Visual amber pulse lead time |
-| `prepSound` | false | bool | One-shot info chime at prep |
-| `alertSec` | 10 | ≥0 | Persistent popup + warning chime lead time |
-| `alertSound` | true | bool | Three-tone warning chime |
-| `redoseSound` | true | bool | One-shot chime on Ce → below-redose-threshold transition |
-| `statusWarnMinutes` | 2 | ≥0 | Drug card status warning threshold |
-| `tciFraction` | 0.95 | 0.90–0.99 | TCI "time to target" fraction |
-| `ssSlopeTol` | 0.0010 | 0.0001–0.0100 | Plateau detector slope tolerance (per-min relative) |
-| `exitBandPct` | 0.05 | 0.01–0.20 | Plateau exit ±% band |
-| `cpOpacity` | 1.0 | 0.1–1.0 | Cp curve alpha (Appearance tab) |
-| `nomogramOpacity` | 1.0 | 0.1–1.0 | BIS band + label alpha multiplier |
-| `overlayOpacity` | 1.0 | 0.1–1.0 | Threshold/target/SS/exit lines + plateau alpha (pill labels stay full opacity) |
-| `eventMarkerSize` | 7 | 4–16 | Future-event marker radius (px) |
-| `textSize` | `'normal'` | `normal` \| `large` \| `xl` \| `xxl` | Four-position segmented control on Appearance tab. Scales drug-panel, history, topbar, bottom-controls, and chart font-sizes. `body.text-{lg,xl,xxl}` CSS class + chart `fontScale` (1.0 / 1.15 / 1.30 / 1.45). XXL gated to ≥1020px viewports. |
+Detailed UI/UX history and rationale for all of the above: `DEVELOPMENT.md` (session log).
 
-Other persisted keys (separate from the warnings blob):
+## Versioning
 
-- `tci-pref-quantizeInDisplay` — opt-in "Round TCI plan in display units" flag.
-- `tci-pref-{bolus|rate}Unit-{drug}` — per-drug per-task **working** (in-case) display unit. Mutated by mid-case keypad/editor swaps; reseeded from the default key on New Case (`session.js newCase`).
-- `tci-pref-{bolus|rate}Unit-{drug}-default` — per-drug per-task **setup default** display unit, owned by the setup screen (`getSetupDefaultUnit` in `units.js`). Decoupled from the working key so mid-case swaps don't overwrite the setup default.
-- `tci-pump-enabled-{drugId}` — per-drug pump on/off (fentanyl/ketamine only).
-- `tci-pref-history-show-notations` — show/hide notation rows in the history panel (Notes toggle).
-- `tci-sync-code` — 6-char cloud pairing code (shared by patient pull, case transfer, template sync).
-- `tci-dose-template` — starting-dose template JSON (`{v, updatedAt, drugs}`; same shape pushed to the cloud).
-- `tci-dose-template-armed` — "Give starting doses on Start" checkbox state.
-- Pump settings (concentration, bolusRateMlH) and saved cases under their own keys via `js/ui/persist.js`.
+`js/version.js` is the single source of truth; `sw.js` `VERSION` must stay in lockstep (service-worker reload keys off both).
 
-## UI Conventions
+- `1.0` — reserved for release
+- `0.x` — major revisions or feature additions
+- `0.x.x` — minor revisions and feature changes
+- `0.x.x.x` — bug fixes and tweaks
 
-- **Dim/bright control buttons** (`js/ui/mode.js`): Target/threshold, emergence, rate, and bolus buttons use muted translucent backgrounds by default. Full color + glow ring appears only when `active-mode` is set on the button. Stop Pump uses `is-idle` (muted red) when no pump is active and `is-running` (bright red) only during TCI/manual.
-- **Emergence naming** (user-facing, since 0.5.24.3): the "time until Ce decays to a target" concept is labelled **Emerge → / Emergence** everywhere users see it. Drug card reads `Emerge → 3.0 in 3:44`, button toggles between `Set Emergence` / `Change Emergence`, keypad modal title matches, reached state shows `Emergence Reached`. Internal symbols (`exitCe`, `setExitLine`, `getExitCeForDrug`, `.btn-ctrl-exit`, `.exit-readout`, `#<drug>-exit`) kept as-is to avoid churn.
-- **Threshold dialog clear option** (`js/ui/keypad.js`): mirrors emergence — Clear button when value is set, pre-fill current value, title swaps to "Change Redose Threshold".
-- **Rate keypad pre-fill**: opens with the last-used rate per drug for quick post-pause resume (stored in localStorage).
-- **Keypad prefilled → replace on first keypress**: `js/ui/keypad.js`, `js/ui/event-editor.js`, `js/ui/patient-modal.js` all flag pre-populated buffers as `prefilled`. First digit/decimal/backspace clears instead of appending. Tapping into a different field re-arms the flag.
-- **Active drug card** (`.drug-card.active`): background brightens + `border-left: 6px solid var(--drug-color)` + `inset 0 0 0 2px var(--drug-color)` crisp frame. Clinical look, no halos or transforms. eBIS value shows right-justified in the card header row (`.drug-bis-header`), label muted + small, value colored via `bisColor()`.
-- **History panel** (`js/ui/history.js`): grid row layout — `[time | type]` on line 1, `[value centered]` on line 2. Bottom bar: `[ET / RT]` time-format toggle, `+ Add Event`, `Notes` (show/hide notations, persisted under `tci-pref-history-show-notations`), `Edit`. Edit toggles `body.edit-history-mode` which dims/blurs non-history surface and highlights rows amber; tapping a row opens the event editor. Click-outside (on the dimmed area) exits edit mode. Modal backdrop is transparent while in edit mode so the selected row stays visible.
-- **Notations / event log** (`js/ui/history.js` + `addAnnotation`/`deleteAnnotation` in `js/app.js`): editorial notes live in the `annotations[]` array (NOT the PK event list) as `{ id, timeMin, time, heading, sub, drug, pre }`. `history.render()` merges them with pump events, time-sorted, with events ranked before a same-timestamp notation so the note reads as a caption — unless the note has `pre: true`, which ranks it BEFORE same-timestamp events (announcement notes: "Starting Doses Queued", "Case Started"). Drug-tagged notes (`drug: <id>`) show only in that drug's history; `drug: null` shows everywhere. Notation rows render two-line (`.h-note-head` / `.h-note-sub`), get a ✕ delete affordance in edit mode, and are emitted from the four TCI-lifecycle call sites (target set; TCI-ended via manual bolus/rate/pump-stop) plus redose/emergence/reconcile and the global Case Started/Restored. `addAnnotation(text, drugId)` accepts a plain string (heading-only) or `{ heading, sub, pre? }`.
-- **Per-frame chart updates** (`js/app/chart-bridge.js onFrame`): cursor throttled 500 ms, history dimming 2 s. All settings-driven setters (`setCpOpacity`, `setNomogramOpacity`, `setOverlayOpacity`, `setEventMarkerSize`, `setFontScale`) are idempotent inside the chart — bridge calls them every frame unconditionally. Chart recreation on new case self-heals.
-- **Cursor dots**: a custom `cursorDots` Chart.js plugin draws filled Ce/Cp circles where the current-time cursor crosses each curve (binary search + linear interp on dataset points).
-- **Draggable inspect cursor** (`js/ui/chart/plugins/inspect-handle.js`): when inspect mode is on and a cursor is set, a horizontal pill with `<` `>` chevrons renders at `chartArea.bottom - 14`. `gestures.js` binds handle-drag listeners on `canvas.parentElement` in capture phase so they run before Chart.js's hammer listeners on the canvas target; during an active handle drag, `chart.options.plugins.zoom.pan.enabled = false` to prevent pan hijacking on iPad. `touch-action: none` on the canvas belt-and-suspenders.
-- **Patient entry via modal** (`js/ui/patient-modal.js`): the main setup screen shows a single clickable summary row (`[Tap to edit patient demographics ✎]` / `[35y · M · 170 cm · 70 kg ✎]`). Tapping opens a modal with Sex first (Male/Female toggle) then Age/Height/Weight cells, a Metric/Imperial toggle (shares state with `setup.setUnits`), and an in-app 3×5 numeric keypad with a `Next →` key that cycles active through `age → height → weight` (disabled on weight). Flow: toggle sex → type age → Next → type height → Next → type weight → Confirm — no re-tapping of fields. The four original `<input>` elements are kept as `type="hidden"` so `validate()`, `getHeightCm()`, `getWeightKg()`, `updateDerived()`, `confirmPatient()`, and session restore keep working unchanged; the modal writes values and dispatches `input` events. Unit toggle converts values via `_convertLength` / `_convertWeight` instead of clearing.
-- **Portrait tablet dynamic row sizing** (`js/app/portrait-layout.js`): on `@media (orientation:portrait) and (min-width:700px)`, `ResizeObserver` on `.drug-panel` + `matchMedia` gate set `grid-template-rows: 1fr <measured>px` on `.sim-main`. Measures via summing children `getBoundingClientRect().height` (not `scrollHeight`, which lies when content fits inside a larger container). Cap at 55% of window height so chart keeps space. No-ops outside the portrait-tablet media query.
+Patch numbers may go multi-digit (`0.3.14.15` is valid). **Never bump a higher level because a lower level looks "full"** — `0.5.9 → 0.5.10` is correct; `0.5.9 → 0.6.0` for a routine patch is not.
 
-## Running Tests
+## Workflows
 
-```bash
-node tests/run-tests.js
-```
-
-Test files live in `tests/test-*.js`. The runner executes all of them and prints a pass/fail summary. 704 tests across 22 files, all passing. Cross-validation against SimTIVA at 0.0000% Cp deviation.
-
-## Versioning Scheme
-
-`js/version.js` is the single source of truth. The scheme is:
-
-- **`1.0`** — reserved for release.
-- **`0.x`** — major revisions or feature additions.
-- **`0.x.x`** — minor revisions and feature changes.
-- **`0.x.x.x`** — bug fixes and tweaks of existing code.
-
-Patch numbers may go into multiple digits as necessary. `0.3.14.15` is a
-perfectly valid version number. **Never bump a higher-level version
-because a lower level looks "full".** `0.5.9` → `0.5.10` → `0.5.11` is
-correct; `0.5.9` → `0.6.0` for a routine patch is not.
-
-## Common Workflows
-
-- **When committing, open a PR by default.** After pushing the branch, create a pull request on `narcolepticdoc/tcisim` via the GitHub MCP tools unless the user explicitly says not to.
-- **Starting a new round of work on an existing branch? Check the prior PR's state FIRST — before you commit, not after you push.** At the start of any follow-up edit to a branch that already has a PR, run `mcp__github__list_pull_requests` (filter `head: narcolepticdoc:<branch>`) or `pull_request_read` on the known PR number. Then:
-  - PR is **`open`** → the branch is live; keep committing and `git push` updates that PR as normal.
-  - PR is **`merged` or `closed`** → do NOT keep committing to this branch. A `git push` will **not** reopen it; the new commits orphan behind the closed PR. Instead branch off current `HEAD` (`git checkout -b claude/<descriptive-name>`), push the new branch, and open a **new** PR against `main`.
-  - Treat each user request after a merge as a fresh round — re-run this check; don't assume the branch is still live just because you were committing to it earlier in the session.
-- **Adding a feature.** Bump `js/version.js` **and the matching `VERSION` constant in `sw.js`** (they must stay in lockstep — the service worker's version-aware reload keys off both), add an entry at the top of `CHANGELOG.md` and a matching "Interim" block at the top of `DEVELOPMENT.md`. Confirm `node tests/run-tests.js` is green before committing.
-- **Adding a drug.** Implement `js/pk/<drug>.js` with `MODEL_NAME`, `MODEL_DESCRIPTION`, `calc<Drug>Params(patient)` exports; register it in `DRUG_DEFS`, `DRUG_IDS`, and `DRUG_TASK_UNITS` in `js/util/constants.js`; wire model name in `simulation.js modelNames`; add a chart-config entry in `js/app/chart-bridge.js CHART_DRUG_CONFIG`; add the setup tab + drug card markup in `index.html`.
-- **Editing a TCI planner.** Always thread `cfg` through and call `makeQuantizers(cfg)` so the planner participates in display-unit rounding when enabled. After any direct `engine.advance()` in the emulation planner, call `refitEigenstate()` before resuming Cp-targeting.
-- **Touching the chart.** New visual overlays (lines, regions, bands) get a setter on `js/ui/chart.js` and a value-change-guarded propagation step in `chart-bridge.js onFrame`. If the overlay should be user-dimmable, plumb it through `_overlayAlpha`/`_nomogramOpacity` in chart scope so it survives annotation rebuilds (zoom/pan/cursor move).
-- **Adding a setting.** Extend the `DEFAULTS` object + validator in `js/ui/settings.js getSettings()`, add a `<input>` to the matching tab in `index.html`, and wire the slider/checkbox in `js/app/settings-ui.js`.
+- **Every code change** (not docs-only): bump `js/version.js` + `sw.js` per the scheme above, add a `CHANGELOG.md` entry and a matching "Interim" block at the top of `DEVELOPMENT.md`, and confirm `node tests/run-tests.js` is green before committing.
+- **Commits open a PR by default** on `narcolepticdoc/tcisim` via the GitHub MCP tools, unless the user says otherwise.
+- **Before follow-up commits to a branch that already has a PR, check the PR's state first** (`mcp__github__list_pull_requests` with `head: narcolepticdoc:<branch>`, or `pull_request_read`). Open → keep committing, push updates it. Merged/closed → do **not** reuse the branch (push won't reopen it); branch off current `HEAD` (`git checkout -b claude/<descriptive-name>`) and open a new PR. Re-run this check after every merge.
+- **Adding a drug**: implement `js/pk/<drug>.js` exporting `MODEL_NAME`, `MODEL_DESCRIPTION`, `calc<Drug>Params(patient)`; register in `DRUG_DEFS`, `DRUG_IDS`, `DRUG_TASK_UNITS`; wire `simulation.js modelNames`; add `chart-bridge.js CHART_DRUG_CONFIG` entry; add setup tab + drug card markup in `index.html`.
+- **Editing a TCI planner**: thread `cfg` through and call `makeQuantizers(cfg)` so the planner participates in display-unit rounding; in the emulation planner, `refitEigenstate()` after any direct `engine.advance()`.
 
 ## Docs
 
 - `ARCHITECTURE.md` — engine, event system, module responsibilities
 - `TCI-PLANNERS.md` — planner algorithms, validation data, remaining gaps
-- `DEVELOPMENT.md` — complete session log, known issues, roadmap (single source of truth)
+- `DEVELOPMENT.md` — complete session log, known issues, roadmap
 - `CHANGELOG.md` — versioned release notes
-- `DEPLOY.md` — Vercel + Upstash setup for the cloud sync backend (env vars, payload kinds/TTLs)
-- `SCRATCHPAD-SYNC-SPEC.md` — sender-side contract for the scratchpad app (cloud patient sync)
+- `DEPLOY.md` — Vercel + Upstash cloud-sync backend setup
+- `SCRATCHPAD-SYNC-SPEC.md` — sender-side contract for cloud patient sync
 - `LICENSE-NOTES.md` — clean-room implementation notes, file audit
-- `README.md` — public-facing overview and project structure
