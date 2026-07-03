@@ -112,14 +112,31 @@ const PRECACHE_URLS = [
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    // addAll is atomic — one bad URL aborts the whole install. Do it per-URL
-    // so a flaky CDN doesn't take down offline support for the whole app.
+    // Same-origin app files are MANDATORY: a partial app cache mixes module
+    // versions across deploys (e.g. an old units.js beside a new session.js
+    // that imports an export the old file doesn't have), which kills the
+    // whole ES-module graph at link time. If any app file fails, abort the
+    // install — the previous SW and its complete, version-consistent cache
+    // stay active until the next update attempt. Third-party CDN files stay
+    // tolerant: a flaky CDN must not take down offline support.
+    const failures = [];
     await Promise.all(PRECACHE_URLS.map(async (url) => {
+      const sameOrigin = !/^https?:/i.test(url);
       try {
         const res = await fetch(url, { cache: 'reload' });
-        if (res.ok || res.type === 'opaque') await cache.put(url, res);
-      } catch (_) { /* swallow — runtime fetch handler will retry later */ }
+        if (res.ok || res.type === 'opaque') {
+          await cache.put(url, res);
+        } else if (sameOrigin) {
+          failures.push(`${url}: HTTP ${res.status}`);
+        }
+      } catch (err) {
+        if (sameOrigin) failures.push(`${url}: ${err.message}`);
+      }
     }));
+    if (failures.length > 0) {
+      await caches.delete(CACHE_NAME);
+      throw new Error('[TCI Sim SW] Precache incomplete, aborting install: ' + failures.join('; '));
+    }
     self.skipWaiting();
   })());
 });
@@ -169,7 +186,11 @@ self.addEventListener('fetch', (event) => {
     const cached = await caches.match(req);
     if (cached) return cached;
     try {
-      const fresh = await fetch(req);
+      // Same-origin misses revalidate with the server ('no-cache') so a stale
+      // browser HTTP cache can never inject an old module version into the
+      // current versioned cache (the mixed-version poisoning path).
+      const sameOrigin = url.origin === self.location.origin;
+      const fresh = await fetch(req, sameOrigin ? { cache: 'no-cache' } : undefined);
       if (fresh && (fresh.ok || fresh.type === 'opaque')) {
         const cache = await caches.open(CACHE_NAME);
         cache.put(req, fresh.clone());

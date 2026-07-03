@@ -2124,7 +2124,32 @@
             if (missing.length > 0) {
               bar.innerHTML = '<div style="color:#ef4444;font-size:11px;padding:4px">Missing files: ' + missing.map(function(r) { return r.split(':')[0]; }).join(', ') + '. Check deployment.</div>';
             } else {
-              bar.innerHTML = '<div style="color:#ef4444;font-size:11px;padding:4px">All files present but module failed. Check browser console for syntax/runtime errors.</div>';
+              // Most common cause in the field: a mixed-version cache (stale
+              // service-worker/HTTP cache serving an old module beside newer
+              // ones), which breaks the ES-module graph at link time. Offer a
+              // one-tap recovery: drop every SW + cache and reload fresh.
+              bar.innerHTML =
+                '<div style="color:#ef4444;font-size:11px;padding:4px">App failed to load — likely a stale cached version.</div>' +
+                '<button id="btn-cache-reset" style="margin:4px;padding:8px 14px;font-size:12px;border-radius:8px;border:1px solid #ef4444;background:transparent;color:#ef4444">Reset cached app &amp; reload</button>';
+              var btn = document.getElementById('btn-cache-reset');
+              if (btn) btn.addEventListener('click', function() {
+                btn.disabled = true;
+                btn.textContent = 'Resetting…';
+                var ops = [];
+                if ('serviceWorker' in navigator) {
+                  ops.push(navigator.serviceWorker.getRegistrations().then(function(rs) {
+                    return Promise.all(rs.map(function(r) { return r.unregister(); }));
+                  }));
+                }
+                if (window.caches && caches.keys) {
+                  ops.push(caches.keys().then(function(keys) {
+                    return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+                  }));
+                }
+                Promise.all(ops).catch(function() {}).then(function() {
+                  location.reload();
+                });
+              });
             }
           }
         }
