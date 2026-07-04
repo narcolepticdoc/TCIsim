@@ -264,6 +264,9 @@ const PATIENT = { age: 35, weight: 70, height: 170, male: true, opioid: false };
     ok(persist.loadCase() === null, 'loadCase → null on corrupt JSON');
     _store.set('tci-sim-last-case', JSON.stringify({ v: 1, savedAt: 'x', patient: PATIENT, events: {} }));
     ok(persist.loadCase() !== null, 'loadCase accepts a minimal valid blob');
+    _store.set('tci-sim-last-case', JSON.stringify({ v: 2, savedAt: 'x', patient: PATIENT, events: {} }));
+    ok(persist.loadCase() === null, 'loadCase → null for a newer schema version (v:2)');
+    ok(persist.CASE_SCHEMA_VERSION === 1, 'CASE_SCHEMA_VERSION is 1');
   }
 
   // ---- Scenario 6: DRUG_IDS-generalized restore (no hardcoded drug list) ----

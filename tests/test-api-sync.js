@@ -182,6 +182,51 @@ const VALID_TEMPLATE = { v: 1, updatedAt: 1, drugs: { propofol: { bolus: { value
     ok(res.statusCode === 500 && res.body.error === 'kv-not-configured', 'POST valid template passes validation → reaches KV');
   }
 
+  // ---- rate limiter ----
+  // Note: every test above already exercises the FAIL-OPEN path — with KV
+  // unconfigured, checkRateLimit's getRedis() throws and the request proceeds.
+  const { RATE_LIMIT, clientIp, setRedisForTest } = handler.__test;
+  {
+    ok(clientIp(makeReq({ headers: { 'x-forwarded-for': '1.2.3.4, 10.0.0.1' } })) === '1.2.3.4',
+      'clientIp takes first x-forwarded-for entry');
+    ok(clientIp(makeReq()) === 'unknown', 'clientIp falls back to unknown');
+  }
+  {
+    // Fake Redis: in-memory counters with incr/expire/ttl (+ get/set no-ops)
+    const counters = new Map();
+    setRedisForTest({
+      incr: async (k) => { const v = (counters.get(k) || 0) + 1; counters.set(k, v); return v; },
+      expire: async () => 1,
+      ttl: async () => 42,
+      get: async () => null,
+      set: async () => 'OK',
+    });
+
+    const ipReq = { headers: { 'x-forwarded-for': '9.9.9.9' } };
+    let last = null;
+    for (let i = 0; i < RATE_LIMIT; i++) {
+      last = await call({ method: 'GET', query: { code: 'ABC234' }, headers: ipReq.headers });
+    }
+    ok(last.statusCode !== 429, `request #${RATE_LIMIT} from one IP is allowed`);
+    const over = await call({ method: 'GET', query: { code: 'ABC234' }, headers: ipReq.headers });
+    ok(over.statusCode === 429 && over.body.error === 'rate-limited',
+      `request #${RATE_LIMIT + 1} from one IP → 429 rate-limited`);
+    ok(over.headers['Retry-After'] === '42', '429 carries Retry-After from TTL');
+
+    const otherIp = await call({ method: 'GET', query: { code: 'ABC234' }, headers: { 'x-forwarded-for': '8.8.8.8' } });
+    ok(otherIp.statusCode !== 429, 'a different IP has its own counter');
+
+    // Limiter Redis blowing up mid-flight → fail open
+    setRedisForTest({
+      incr: async () => { throw new Error('redis down'); },
+      get: async () => null, set: async () => 'OK', expire: async () => 1, ttl: async () => 0,
+    });
+    const failOpen = await call({ method: 'GET', query: { code: 'ABC234' }, headers: ipReq.headers });
+    ok(failOpen.statusCode !== 429, 'limiter error fails open (request not blocked)');
+
+    setRedisForTest(null); // restore env-driven behavior for any later tests
+  }
+
   summary();
 })().catch(err => {
   console.error(err);

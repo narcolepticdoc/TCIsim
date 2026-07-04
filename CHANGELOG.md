@@ -11,6 +11,13 @@
 
 ---
 
+## [0.5.40.10] — 2026-07-03
+
+Sync hardening (R5 — closes out the 0.5.40.8 audit roadmap).
+
+- **Per-IP rate limit on `/api/sync`**: 60 requests/minute (fixed window, counter in the same Upstash Redis). Bounds pairing-code enumeration and quota burn on the intentionally unauthenticated endpoint while staying generous enough for several trainees behind one hospital NAT. Over-limit requests get `429` + `Retry-After`; the limiter **fails open** on any Redis error so it can never become a new sync outage mode. The app maps the 429 to "Too many sync requests — wait a minute and retry".
+- **Case schema-version gate**: `CASE_SCHEMA_VERSION` (currently 1) is now enforced, not just stamped. `persist.loadCase()` and `validateIncomingCase()` refuse blobs from a **newer** schema, so a future v2 case pulled onto a not-yet-updated device shows "This case was saved by a newer app version — update this device to load it" instead of silently half-restoring with different numbers than the sender intended. Policy: `v` bumps only on breaking format changes; additive fields keep v1 (field-level fallbacks already handle those).
+
 ## [0.5.40.9] — 2026-07-03
 
 Refactor round: the improvement-grade items deferred from the 0.5.40.8 audit, executed tests-first. Golden plan fingerprints (9 patient/target cases × 4 planners, 6-decimal times / 9-decimal values) are **bit-identical** before and after every phase; suite grew 717 → 782 tests.

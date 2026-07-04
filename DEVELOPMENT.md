@@ -4,6 +4,14 @@
 
 ## Session History
 
+### Sync hardening: rate limit + schema gate (v0.5.40.10) — Interim
+
+R5, the last item from the 0.5.40.8 audit — the roadmap from that audit is now fully cleared.
+
+**Per-IP rate limit (`api/sync.js`).** The endpoint stays intentionally unauthenticated (the pairing code is the only secret; documented trade-off for de-identified training data), but is no longer unbounded: a fixed-window counter (`tcisync:rl:{ip}`, INCR + EXPIRE 60 in the same Upstash Redis) rejects past 60 req/min/IP with 429 + Retry-After. Design points: the limit is deliberately generous because trainees can share one hospital NAT IP, and the limiter **fails open** (any Redis error → request proceeds) so it cannot become a new sync outage mode — a property the existing offline test suite exercises implicitly on every request (KV unconfigured → limiter throws → request still routes). IP from the first `x-forwarded-for` entry (Vercel). Test injection via `__test.setRedisForTest`; limiter tests cover the 60/61 boundary, per-IP isolation, Retry-After, and fail-open.
+
+**Schema-version gate (`persist.js` + `cloud-sync.js`).** Saved cases have always carried `v: 1` but nothing checked it — a future breaking v2 blob pulled onto a not-yet-updated device would half-restore (known fields load, new semantics silently drop) and replay with different numbers than the sender intended; cross-device version skew is real (see the mixed-cache incident). Now: `CASE_SCHEMA_VERSION = 1` exported from persist.js; `loadCase()` and `validateIncomingCase()` both refuse `v > CASE_SCHEMA_VERSION`; the pull handler shows a distinct "saved by a newer app version — update this device" message via the new `isNewerSchema()` helper. saveCase's spread order deliberately lets a pulled blob keep its own `v`. Policy (in the persist.js comment): bump `v` only on BREAKING changes; additive fields stay v1 — the field-level fallbacks (`evt.deliveryMode || 'pump'` etc.) are the compatibility mechanism for those.
+
 ### Refactor round: deferred audit items R1–R4 (v0.5.40.9) — Interim
 
 The improvement-grade items deferred from the 0.5.40.8 audit, executed **tests-first** in one PR: session round-trip tests landed before anything moved, then the mechanical epsilon rename, then the two dedup refactors. Equivalence was enforced with golden plan fingerprints (9 patient/target cases × all 4 planners, times to 6 decimals / values to 9) captured before the first change and re-checked after every phase — **bit-identical throughout**. Suite: 717 → 782 tests.
