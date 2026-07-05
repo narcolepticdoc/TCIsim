@@ -13,7 +13,7 @@
  * caches, and the page reloads onto the new version.
  */
 
-const VERSION = '0.5.40.8';
+const VERSION = '0.5.40.10';
 const CACHE_NAME = `tcisim-v${VERSION}`;
 
 const PRECACHE_URLS = [
@@ -34,6 +34,7 @@ const PRECACHE_URLS = [
   'js/app/tci-modal.js',
 
   'js/pk/decay-predictor.js',
+  'js/pk/cubic.js',
   'js/pk/eigenvalues.js',
   'js/pk/eleveld.js',
   'js/pk/engine.js',
@@ -84,6 +85,7 @@ const PRECACHE_URLS = [
   'js/ui/drug-panel/step-bar.js',
   'js/ui/event-editor.js',
   'js/ui/history.js',
+  'js/ui/keypad-buffer.js',
   'js/ui/keypad.js',
   'js/ui/mode.js',
   'js/ui/patient-modal.js',
@@ -91,6 +93,7 @@ const PRECACHE_URLS = [
   'js/ui/reconcile-modal.js',
   'js/ui/settings.js',
   'js/ui/setup.js',
+  'js/ui/time-picker.js',
   'js/ui/timer.js',
 
   'js/sync/cloud-sync.js',

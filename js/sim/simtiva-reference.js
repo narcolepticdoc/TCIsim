@@ -20,9 +20,13 @@
  *   // result = { bolusMg, bolusVolMl, durationSec, peakTime, rawBolusMg, rateCorrFactor, peakCe }
  */
 
+import { solveCubicRoots } from '../pk/cubic.js';
+
 /**
  * Compute eigenvalues of the 3-compartment PK system.
- * Ported from SimTIVA's cube() function.
+ * Matches SimTIVA's cube() API (1-indexed, leading 0); the polynomial math
+ * itself is the shared core in js/pk/cubic.js, so this can never drift from
+ * eigenvalues.js again (the missing-acos-clamp NaN bug fixed in 0.5.40.8).
  *
  * @param {number} k10 - elimination rate (per second)
  * @param {number} k12 - transfer 1→2 (per second)
@@ -32,24 +36,7 @@
  * @returns {number[]} [0, lambda1, lambda2, lambda3] (1-indexed)
  */
 function cube(k10, k12, k21, k13, k31) {
-  const a0 = k10 * k21 * k31;
-  const a1 = k10 * k31 + k21 * k31 + k21 * k13 + k10 * k21 + k31 * k12;
-  const a2 = k10 + k12 + k13 + k21 + k31;
-  const p = a1 - (a2 * a2 / 3.0);
-  const q = (2.0 * a2 * a2 * a2 / 27.0) - (a1 * a2 / 3.0) + a0;
-  const r1 = Math.sqrt(-(p * p * p) / 27.0);
-  // Clamp: float error can push the ratio past ±1 when two eigenvalues are
-  // near-degenerate, and acos(>1) is NaN. Same guard as cubeRoots() in
-  // js/pk/eigenvalues.js — the two solvers must stay in lockstep.
-  const cosArg = Math.max(-1, Math.min(1, (-q / 2.0) / r1));
-  const phi = Math.acos(cosArg) / 3.0;
-  const rc = Math.pow(r1, 1.0 / 3.0);
-  return [
-    0,
-    -(Math.cos(phi) * 2.0 * rc - a2 / 3.0),
-    -(Math.cos(phi + 2.0 * Math.PI / 3.0) * 2.0 * rc - a2 / 3.0),
-    -(Math.cos(phi + 4.0 * Math.PI / 3.0) * 2.0 * rc - a2 / 3.0),
-  ];
+  return [0, ...solveCubicRoots(k10, k12, k21, k13, k31)];
 }
 
 /**

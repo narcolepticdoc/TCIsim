@@ -11,7 +11,8 @@
 
 import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, getRoundingNoteText }
   from '../util/units.js';
-import { DRUG_DEFS, bolusDeliveryMinutes, pushDeliveryMinutes } from '../util/constants.js';
+import { DRUG_DEFS } from '../util/constants.js';
+import { applyBufferKey, convertBufferUnit, bolusTimeText } from './keypad-buffer.js';
 
 const $ = id => document.getElementById(id);
 
@@ -259,13 +260,8 @@ function close() {
 }
 
 function handleKey(k) {
-  if (k === 'C') { buffer = ''; prefilled = false; }
-  else if (k === '⌫') { if (prefilled) { buffer = ''; prefilled = false; } else { buffer = buffer.slice(0, -1); } }
-  else {
-    if (prefilled) { buffer = ''; prefilled = false; }
-    if (k === '.') { if (!buffer.includes('.')) buffer += buffer ? '.' : '0.'; }
-    else { if (buffer.length < 8) buffer += k; }
-  }
+  const key = k === 'C' ? 'clear' : k === '⌫' ? 'back' : k;
+  ({ buffer, prefilled } = applyBufferKey({ buffer, prefilled }, key));
   updateDisplay();
 }
 
@@ -285,16 +281,11 @@ function setUnit(u) {
   // Default behavior: convert the current buffer value from the previous unit
   // to the new unit. Preserves what the user typed (or what was pre-filled) and
   // re-arms `prefilled` so the next keypress overwrites.
-  const v = parseFloat(buffer);
-  if (!isNaN(v) && prev && prev !== u) {
-    try {
-      const patient = getPatient();
-      const ctx = { weightKg: patient?.weight || 70 };
-      const canonical = toCanonical(v, prev, currentDrug, convTask, ctx);
-      const displayVal = fromCanonical(canonical.value, u, currentDrug, convTask, ctx);
-      buffer = formatValue(displayVal, u);
-      prefilled = true;
-    } catch (e) { /* ignore conversion errors — leave buffer alone */ }
+  const patient0 = getPatient();
+  const converted = convertBufferUnit(buffer, prev, u, currentDrug, convTask,
+    { weightKg: patient0?.weight || 70 });
+  if (converted) {
+    ({ buffer, prefilled } = converted);
   } else if (buffer === '' && currentType === 'bolus') {
     // Nothing typed yet: reload the last saved bolus so the default reflects
     // recent drug practice in the new unit.
@@ -377,37 +368,17 @@ function updateDisplay() {
 }
 
 /**
- * Format a delivery duration (minutes) as "Ns" under a minute or "M:SS" above.
- */
-function fmtDeliveryTime(minutes) {
-  const sec = Math.max(1, Math.round(minutes * 60));
-  if (sec < 60) return `${sec}s`;
-  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
-}
-
-/**
  * Populate the bolus-time line with the estimated delivery duration(s).
- * Shows both pump and push times when an infusion pump is available for the
- * dose, or just the push time when the bolus can only be given by hand.
+ * Same push-only condition as show(): no pump, or a redose threshold is set
+ * while not in manual mode → the bolus is always an IV push.
  * @param {number} doseMg - bolus dose in canonical mg
  */
 function updateBolusTime(doseMg) {
   const bt = $('keypad-bolus-time');
   if (!bt) return;
-  if (!(doseMg > 0)) { bt.textContent = ''; return; }
-
-  // Same condition as show(): no pump, or a redose threshold is set while not
-  // in manual mode → the bolus is always an IV push.
-  const isIntermittentBolus =
+  const pushOnly =
     !isPumpEnabled() || (getIntermittentThreshold() > 0 && getMode() !== 'manual');
-
-  const pushT = fmtDeliveryTime(pushDeliveryMinutes(doseMg, currentDrug));
-  if (isIntermittentBolus) {
-    bt.textContent = `Given over ~${pushT}`;
-  } else {
-    const pumpT = fmtDeliveryTime(bolusDeliveryMinutes(doseMg, currentDrug));
-    bt.textContent = `Given over ~${pumpT} pump · ~${pushT} push`;
-  }
+  bt.textContent = bolusTimeText(doseMg, currentDrug, { pushOnly });
 }
 
 function confirm(deliveryMode) {

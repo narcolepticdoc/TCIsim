@@ -133,6 +133,13 @@ const jsonRes = (status, body) => ({ ok: status >= 200 && status < 300, status, 
   ok(validateIncomingCase({ ...CASE, events: undefined }) === null, 'validate: missing events rejected');
   ok(validateIncomingCase({ ...CASE, events: [] }) === null, 'validate: array events rejected');
 
+  // ---- schema-version gate ----
+  const { isNewerSchema } = await import(modUrl);
+  ok(validateIncomingCase({ ...CASE, v: 2 }) === null, 'validate: v:2 (newer schema) rejected');
+  ok(isNewerSchema({ ...CASE, v: 2 }) === true, 'isNewerSchema flags v:2');
+  ok(isNewerSchema(CASE) === false, 'isNewerSchema passes v:1');
+  ok(isNewerSchema(null) === false, 'isNewerSchema tolerates null');
+
   summary();
 })().catch(err => {
   console.error(err);

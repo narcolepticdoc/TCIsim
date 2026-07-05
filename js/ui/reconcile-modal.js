@@ -25,6 +25,8 @@ import { fmtTotalMass } from './history.js';
 import { formatValue } from '../util/units.js';
 import { showTciWarning } from './event-editor.js';
 import { set as setMode } from './mode.js';
+import { applyBufferKey } from './keypad-buffer.js';
+import { makeTimePicker } from './time-picker.js';
 
 const $ = id => document.getElementById(id);
 
@@ -39,7 +41,7 @@ let _drugId = null;        // selected drug
 let _actualBuf = '';       // raw input buffer in display unit (mg or mcg)
 let _simTotalMg = 0;       // simulated total in canonical mg
 let _deltaMg = 0;          // actual_mg - simulated_mg
-let _timeUnit = 'case';    // 'case' | 'real'
+let _picker = null;        // shared case/real time picker (created in init)
 let _defaultInsertMin = 0; // default insert time (sim-now at open)
 let _mode = 'single';      // 'spread' | 'single' (set from open())
 let _inputMode = 'dose';   // 'dose' | 'volume' (set from open() based on pump availability)
@@ -138,7 +140,19 @@ export function init(opts = {}) {
   _addAnnotation = opts.addAnnotation || (() => {});
 
   _wireKeypad();
-  _wireTimePicker();
+  // Time picker (case/real) — shared factory; the RT label is suffixed
+  // (`= h:mm RT`) and the "real" tab enables on wall-clock presence.
+  _picker = makeTimePicker({
+    hoursId: 'rm-hours',
+    minutesId: 'rm-minutes',
+    unitRowSel: '#rm-time-unit .tp-unit',
+    conversionId: 'rm-time-conversion',
+    getWallClockStart: () => (_timer.getWallClockStart && _timer.getWallClockStart()) || null,
+    isRunning: () => !!(_timer.getWallClockStart && _timer.getWallClockStart()),
+    labelStyle: 'suffix',
+    onChange: () => _render(),
+  });
+  _picker.wireUnitButtons();
   _wireDrugPicker();
   _wireModeToggle();
   _wireInputModeToggle();
@@ -180,8 +194,7 @@ export function open(drugId) {
   // Single-bolus default time = case start. Fast forward convergence and
   // ≤1.5 % Ce error at NOW for any sharp event older than 90 min.
   _defaultInsertMin = 0;
-  _timeUnit = 'case';
-  _setInsertTime(_defaultInsertMin);
+  _picker.setCaseMinutes(_defaultInsertMin);
   _syncModeUI();
   _renderDrugPicker(active);
   _computeSimTotal();
@@ -354,125 +367,16 @@ function _wireKeypad() {
 }
 
 function _handleKey(key) {
-  let v = _actualBuf;
-  if (key === 'clear') {
-    v = '';
-  } else if (key === 'back') {
-    v = v.slice(0, -1);
-  } else if (key === '.') {
-    if (v.includes('.')) return;
-    v = v === '' ? '0.' : v + '.';
-  } else if (/^[0-9]$/.test(key)) {
-    if (v.length >= 9) return;
-    v = v + key;
-  } else {
-    return;
-  }
-  _actualBuf = v;
+  if (key !== 'clear' && key !== 'back' && key !== '.' && !/^[0-9]$/.test(key)) return;
+  // No prefill concept here by design — the state's prefilled stays false.
+  ({ buffer: _actualBuf } = applyBufferKey({ buffer: _actualBuf, prefilled: false }, key, { maxLen: 9 }));
   _render();
 }
 
 // ---- Time picker ----
-
-function _setInsertTime(caseMin) {
-  const h = Math.floor(caseMin / 60);
-  const m = Math.round(caseMin % 60);
-  _buildSelect($('rm-hours'), 24, 2, h);
-  _buildSelect($('rm-minutes'), 60, 2, m);
-  _syncTimeUnitButtons();
-  _updateTimeConversion();
-}
-
-function _buildSelect(sel, count, pad, selected) {
-  if (!sel) return;
-  sel.innerHTML = '';
-  for (let i = 0; i < count; i++) {
-    const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = String(i).padStart(pad, '0');
-    if (i === selected) opt.selected = true;
-    sel.appendChild(opt);
-  }
-  sel.onchange = _onTimeChanged;
-}
-
-function _getSelVal(id) {
-  const el = $(id);
-  return el ? parseInt(el.value, 10) || 0 : 0;
-}
-
-function _wireTimePicker() {
-  document.querySelectorAll('#rm-time-unit .tp-unit').forEach(btn => {
-    btn.addEventListener('click', () => _setTimeUnit(btn.dataset.unit));
-  });
-}
-
-function _setTimeUnit(unit) {
-  if (unit === _timeUnit) return;
-  // Round-trip buffer through case-start conversion so the user's
-  // in-progress selection is preserved across the toggle (matches
-  // CLAUDE.md keypad-round-trip invariant for other unit flips).
-  const caseMin = _currentCaseMinutes();
-  _timeUnit = unit;
-  _syncTimeUnitButtons();
-  if (unit === 'case') {
-    _buildSelect($('rm-hours'), 24, 2, Math.floor(caseMin / 60));
-    _buildSelect($('rm-minutes'), 60, 2, Math.round(caseMin % 60));
-  } else {
-    const wallStart = _timer.getWallClockStart && _timer.getWallClockStart();
-    if (wallStart) {
-      const realDate = new Date(wallStart.getTime() + caseMin * 60000);
-      _buildSelect($('rm-hours'), 24, 2, realDate.getHours());
-      _buildSelect($('rm-minutes'), 60, 2, realDate.getMinutes());
-    }
-  }
-  _updateTimeConversion();
-  _render();
-}
-
-function _syncTimeUnitButtons() {
-  const isRunning = !!(_timer.getWallClockStart && _timer.getWallClockStart());
-  document.querySelectorAll('#rm-time-unit .tp-unit').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.unit === _timeUnit);
-    if (btn.dataset.unit === 'real') btn.disabled = !isRunning;
-  });
-}
-
-function _currentCaseMinutes() {
-  if (_timeUnit === 'case') {
-    return _getSelVal('rm-hours') * 60 + _getSelVal('rm-minutes');
-  }
-  const wallStart = _timer.getWallClockStart && _timer.getWallClockStart();
-  if (!wallStart) return _getSelVal('rm-hours') * 60 + _getSelVal('rm-minutes');
-  const target = new Date(wallStart);
-  target.setHours(_getSelVal('rm-hours'), _getSelVal('rm-minutes'), 0, 0);
-  return Math.max(0, (target - wallStart) / 60000);
-}
-
-function _onTimeChanged() {
-  _updateTimeConversion();
-  _render();
-}
-
-function _updateTimeConversion() {
-  const cv = $('rm-time-conversion');
-  if (!cv) return;
-  const wallStart = _timer.getWallClockStart && _timer.getWallClockStart();
-  if (_timeUnit === 'case') {
-    const caseMin = _getSelVal('rm-hours') * 60 + _getSelVal('rm-minutes');
-    if (wallStart) {
-      const rd = new Date(wallStart.getTime() + caseMin * 60000);
-      const h = rd.getHours();
-      const m = String(rd.getMinutes()).padStart(2, '0');
-      cv.textContent = `= ${h}:${m} RT`;
-    } else { cv.textContent = ''; }
-  } else if (wallStart) {
-    const caseMin = _currentCaseMinutes();
-    const h = Math.floor(caseMin / 60);
-    const m = String(Math.round(caseMin % 60)).padStart(2, '0');
-    cv.textContent = `= ${h}:${m} ET`;
-  } else { cv.textContent = ''; }
-}
+// Shared factory (js/ui/time-picker.js), created in init(). The case↔real
+// toggle round-trips the in-progress selection through case minutes
+// (CLAUDE.md keypad-round-trip invariant for other unit flips).
 
 // ---- Rendering ----
 
@@ -576,7 +480,7 @@ function _renderSummary() {
   }
 
   // single-bolus mode
-  const caseMin = _currentCaseMinutes();
+  const caseMin = _picker.getCaseMinutes();
   const patient = _model.getPatient ? _model.getPatient() : { weight: 70, height: 170, age: 40, male: true };
   const windowMin = getConvergenceWindow(_drugId, patient);
   const isPast = caseMin < now - 0.1;
@@ -690,7 +594,7 @@ function _doReconcile(now) {
       windowEnd = now + SPREAD_FORWARD_TAIL_MIN;
       annotMsg = `Reconciliation ${sign}${magStr} spread across case (${_fmtRatePerMin(ratePerMin)} × ${now.toFixed(0)} min)`;
     } else {
-      let insertMin = _currentCaseMinutes();
+      let insertMin = _picker.getCaseMinutes();
       insertMin = Math.max(0, Math.min(now, insertMin));
       const winMin = patient ? getConvergenceWindow(_drugId, patient) : 45;
       _model.addBolus(_drugId, insertMin, _deltaMg, `Dose reconciliation ${sign}${magStr}`,

@@ -48,6 +48,15 @@ const MAX_STREAM_BYTES = 70 * 1024;
 
 const CODE_RE = /^[A-HJ-NP-Z2-9]{6}$/;
 
+// Per-IP fixed-window rate limit. The endpoint is intentionally
+// unauthenticated (pairing code is the only secret), so this bounds
+// pairing-code enumeration and Upstash quota burn. Generous on purpose:
+// several trainees can share one hospital NAT IP, and legitimate use is a
+// handful of requests per minute. The limiter FAILS OPEN — a Redis error
+// here must not become a new sync outage mode.
+const RATE_LIMIT = 60;          // requests per window per IP
+const RATE_WINDOW_SEC = 60;
+
 let _redis = null;
 function getRedis() {
   if (_redis) return _redis;
@@ -121,11 +130,46 @@ function keyFor(code, kind) {
   return kind === 'patient' || !kind ? `tcisync:${code}` : `tcisync:${code}:${kind}`;
 }
 
+function clientIp(req) {
+  // Vercel sets x-forwarded-for; the first entry is the client.
+  const fwd = req.headers && req.headers['x-forwarded-for'];
+  if (typeof fwd === 'string' && fwd.length > 0) return fwd.split(',')[0].trim();
+  return (req.socket && req.socket.remoteAddress) || 'unknown';
+}
+
+/**
+ * Fixed-window per-IP limiter. Returns null when allowed, or the number of
+ * seconds until the window resets when over the limit. Fails open on any
+ * Redis error.
+ */
+async function checkRateLimit(req) {
+  try {
+    const redis = getRedis();
+    const key = `tcisync:rl:${clientIp(req)}`;
+    const count = await redis.incr(key);
+    if (count === 1) await redis.expire(key, RATE_WINDOW_SEC);
+    if (count > RATE_LIMIT) {
+      const ttl = await redis.ttl(key);
+      return ttl > 0 ? ttl : RATE_WINDOW_SEC;
+    }
+    return null;
+  } catch (err) {
+    return null; // fail open — never let the limiter break sync
+  }
+}
+
 async function handler(req, res) {
   applyCors(req, res);
 
   if (req.method === 'OPTIONS') {
     res.status(204).end();
+    return;
+  }
+
+  const retryAfter = await checkRateLimit(req);
+  if (retryAfter !== null) {
+    res.setHeader('Retry-After', String(retryAfter));
+    res.status(429).json({ error: 'rate-limited' });
     return;
   }
 
@@ -251,4 +295,9 @@ async function readJsonBody(req, maxBytes) {
 
 module.exports = handler;
 // Internals exposed for the CommonJS test suite only — not part of the API.
-module.exports.__test = { KINDS, keyFor, validatePatient, validateKindPayload };
+module.exports.__test = {
+  KINDS, keyFor, validatePatient, validateKindPayload,
+  RATE_LIMIT, RATE_WINDOW_SEC, clientIp, checkRateLimit,
+  // Inject a fake Redis for limiter tests (pass null to reset to env-driven).
+  setRedisForTest(r) { _redis = r; },
+};

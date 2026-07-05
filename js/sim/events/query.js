@@ -225,6 +225,9 @@ export function createQuery(
     /**
      * Advance the engine to `target`, splitting at the bolus-end boundary
      * so the bolus rate is applied only over the true delivery window.
+     * The 1e-12 loop terminators are intentionally tighter than
+     * TIME_EPS_IDENTITY (constants.js) — a strict `<` guard where a looser
+     * epsilon could drop a final sub-step. Keep them literal.
      */
     function advanceEngineTo(target) {
       while (currentTime < target - 1e-12) {

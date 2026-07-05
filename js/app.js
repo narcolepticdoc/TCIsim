@@ -485,6 +485,7 @@ function boot() {
     if (res.error === 'network') return "Can't reach sync server — check connection";
     if (res.error === 'timeout') return 'Sync request timed out — check connection and retry';
     if (res.error === 'http') {
+      if (res.serverError === 'rate-limited') return 'Too many sync requests — wait a minute and retry';
       if (res.serverError === 'kv-not-configured') return 'Sync backend not configured (KV env vars missing)';
       if (res.status === 404) return 'Sync endpoint not found (/api not deployed)';
       if (res.status === 413) return 'Payload too large for the sync server';
@@ -577,6 +578,10 @@ function boot() {
       btnPullCase.disabled = false;
       if (!res.found) {
         setCaseStatus(describeSyncError(res) || 'No case found for that code yet', 'is-error');
+        return;
+      }
+      if (cloudSync.isNewerSchema(res.payload)) {
+        setCaseStatus('This case was saved by a newer app version — update this device to load it', 'is-error');
         return;
       }
       const valid = cloudSync.validateIncomingCase(res.payload);

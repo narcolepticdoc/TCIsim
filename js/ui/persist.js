@@ -16,9 +16,19 @@
 const STORAGE_KEY = 'tci-sim-last-case';
 
 /**
+ * Saved-case schema version. Bump ONLY on a BREAKING format change (fields
+ * restructured or reinterpreted). Additive fields keep the version — the
+ * restore path handles those with field-level fallbacks (e.g.
+ * `evt.deliveryMode || 'pump'`). Both loadCase() and cloud-sync's
+ * validateIncomingCase() refuse blobs from a NEWER schema than this build
+ * understands, so a v2 case can never silently half-restore on a v1 app.
+ */
+export const CASE_SCHEMA_VERSION = 1;
+
+/**
  * Save the current case state.
  * Called after every model mutation.
- * 
+ *
  * @param {Object} state
  * @param {Object} state.patient - { age, weight, height, male, opioid }
  * @param {Object} state.events - { drugId: [event, ...] }
@@ -31,8 +41,10 @@ const STORAGE_KEY = 'tci-sim-last-case';
 export function saveCase(state) {
   try {
     const json = JSON.stringify({
-      v: 1, // schema version
+      v: CASE_SCHEMA_VERSION,
       savedAt: new Date().toISOString(),
+      // A pulled cloud blob carries its own v/savedAt, which survive this
+      // spread — a v1 blob stays v1 rather than being re-stamped.
       ...state,
     });
     localStorage.setItem(STORAGE_KEY, json);
@@ -42,7 +54,8 @@ export function saveCase(state) {
 }
 
 /**
- * Load the last saved case, or null if none exists.
+ * Load the last saved case, or null if none exists (or the blob is from a
+ * newer schema than this build understands).
  * @returns {Object|null}
  */
 export function loadCase() {
@@ -51,6 +64,10 @@ export function loadCase() {
     if (!json) return null;
     const data = JSON.parse(json);
     if (!data || !data.patient || !data.events) return null;
+    if (typeof data.v === 'number' && data.v > CASE_SCHEMA_VERSION) {
+      console.warn(`[TCI Sim] Saved case is schema v${data.v}; this build understands v${CASE_SCHEMA_VERSION}. Refusing to half-restore.`);
+      return null;
+    }
     return data;
   } catch (e) {
     console.warn('[TCI Sim] Failed to load case:', e.message);

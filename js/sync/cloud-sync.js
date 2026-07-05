@@ -15,6 +15,7 @@
  */
 
 import { SYNC_ENDPOINT, normalizeCode, isValidCode, fetchWithTimeout, _timeoutOrNetwork } from './patient-sync.js';
+import { CASE_SCHEMA_VERSION } from '../ui/persist.js';
 
 // Mirrors the server-side cap for kind 'case' (api/sync.js KINDS).
 export const CASE_MAX_BYTES = 64 * 1024;
@@ -105,9 +106,21 @@ export function prepareCaseForPush(caseObj, maxBytes = CASE_MAX_BYTES) {
  *
  * @returns {object|null}
  */
+/**
+ * True when a pulled blob was saved by a NEWER app schema than this build
+ * understands — the caller should show an "update this device" message
+ * instead of the generic invalid-data one. validateIncomingCase also
+ * rejects these (defense in depth).
+ */
+export function isNewerSchema(payload) {
+  return !!payload && typeof payload === 'object' &&
+    typeof payload.v === 'number' && payload.v > CASE_SCHEMA_VERSION;
+}
+
 export function validateIncomingCase(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
   if (typeof payload.v !== 'number' || !isFinite(payload.v)) return null;
+  if (payload.v > CASE_SCHEMA_VERSION) return null; // newer schema — never half-restore
   const p = payload.patient;
   if (!p || typeof p !== 'object') return null;
   const num = v => typeof v === 'number' && isFinite(v);

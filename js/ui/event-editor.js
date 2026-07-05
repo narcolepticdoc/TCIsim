@@ -14,7 +14,9 @@
 
 import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, getQuantizeConfig }
   from '../util/units.js';
-import { isPumpEnabled, bolusDeliveryMinutes, pushDeliveryMinutes } from '../util/constants.js';
+import { isPumpEnabled } from '../util/constants.js';
+import { applyBufferKey, convertBufferUnit, bolusTimeText } from './keypad-buffer.js';
+import { makeTimePicker, buildTimeSelect, getSelectInt } from './time-picker.js';
 
 const $ = id => document.getElementById(id);
 
@@ -33,8 +35,8 @@ let _currentType = 'bolus';
 let _buffer = '';
 let _currentUnit = 'mg';
 let _pauseMode = 'until';
-let _timeUnit = 'case';
 let _prefilled = false;
+let _picker = null; // shared case/real time picker (created in init)
 
 // ---- Init ----
 
@@ -54,13 +56,18 @@ export function init(opts) {
     });
   });
 
-  // Time unit toggle
-  document.querySelectorAll('#ee-time-unit .tp-unit').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (btn.disabled) return;
-      setTimeUnit(btn.dataset.unit);
-    });
+  // Time picker (case/real) — shared factory; the RT label is prefixed
+  // (`= RT h:mm`) and the "real" tab enables once the case has started.
+  _picker = makeTimePicker({
+    hoursId: 'ee-hours',
+    minutesId: 'ee-minutes',
+    unitRowSel: '#ee-time-unit .tp-unit',
+    conversionId: 'ee-time-conversion',
+    getWallClockStart: () => (_timer.getWallClockStart ? _timer.getWallClockStart() : null),
+    isRunning: () => _controls.isCaseStarted(),
+    labelStyle: 'prefix',
   });
+  _picker.wireUnitButtons();
 
   // Keypad keys — pointerdown (not click) so rapid taps register reliably;
   // synthesized click events can be coalesced or dropped under fast touch input.
@@ -139,7 +146,7 @@ export function openEdit(evtId) {
   });
 
   setType(evt.type);
-  setTimeFromMinutes(evt.time);
+  _picker.setCaseMinutes(evt.time);
 
   if (evt.type === 'bolus' || evt.type === 'rate') {
     const task = evt.type === 'bolus' ? 'bolus' : 'rate';
@@ -180,7 +187,7 @@ export function openAdd() {
 
   setType('bolus');
   const now = _controls.isCaseStarted() ? _timer.getElapsedMinutes() : 0;
-  setTimeFromMinutes(now);
+  _picker.setCaseMinutes(now);
 
   _buffer = ''; _prefilled = false;
   _pauseMode = 'until';
@@ -256,17 +263,10 @@ function renderUnitToggle(allowed) {
       // Convert the current buffer value from the previous unit to the new
       // unit, preserving the user's entry and re-arming prefilled so the next
       // keypress overwrites. Leave empty buffer empty.
-      const v = parseFloat(_buffer);
-      if (!isNaN(v) && prev && prev !== u) {
-        try {
-          const patient = _getPatient();
-          const ctx = { weightKg: patient?.weight || 70 };
-          const canonical = toCanonical(v, prev, _selectedDrug, task, ctx);
-          const displayVal = fromCanonical(canonical.value, u, _selectedDrug, task, ctx);
-          _buffer = formatValue(displayVal, u);
-          _prefilled = true;
-        } catch (e) { /* leave buffer alone on conversion error */ }
-      }
+      const patient = _getPatient();
+      const converted = convertBufferUnit(_buffer, prev, u, _selectedDrug, task,
+        { weightKg: patient?.weight || 70 });
+      if (converted) ({ buffer: _buffer, prefilled: _prefilled } = converted);
       updateDisplay();
     });
     container.appendChild(btn);
@@ -276,13 +276,8 @@ function renderUnitToggle(allowed) {
 // ---- Keypad ----
 
 function handleKey(k) {
-  if (k === 'C') { _buffer = ''; _prefilled = false; }
-  else if (k === '⌫') { if (_prefilled) { _buffer = ''; _prefilled = false; } else { _buffer = _buffer.slice(0, -1); } }
-  else {
-    if (_prefilled) { _buffer = ''; _prefilled = false; }
-    if (k === '.') { if (!_buffer.includes('.')) _buffer += _buffer ? '.' : '0.'; }
-    else { if (_buffer.length < 8) _buffer += k; }
-  }
+  const key = k === 'C' ? 'clear' : k === '⌫' ? 'back' : k;
+  ({ buffer: _buffer, prefilled: _prefilled } = applyBufferKey({ buffer: _buffer, prefilled: _prefilled }, key));
   updateDisplay();
 }
 
@@ -327,127 +322,14 @@ function updateDisplay() {
 }
 
 /**
- * Format a delivery duration (minutes) as "Ns" under a minute or "M:SS" above.
- */
-function fmtDeliveryTime(minutes) {
-  const sec = Math.max(1, Math.round(minutes * 60));
-  if (sec < 60) return `${sec}s`;
-  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
-}
-
-/**
  * Populate the bolus-time line with the estimated delivery duration(s).
- * Shows both pump and push times when an infusion pump is enabled, or just the
- * push time when the bolus can only be given by hand.
+ * Push-only when the pump is disabled for the drug.
  * @param {number} doseMg - bolus dose in canonical mg
  */
 function updateBolusTime(doseMg) {
   const bt = $('ee-bolus-time');
   if (!bt) return;
-  if (!(doseMg > 0)) { bt.textContent = ''; return; }
-
-  const pushT = fmtDeliveryTime(pushDeliveryMinutes(doseMg, _selectedDrug));
-  if (!isPumpEnabled(_selectedDrug)) {
-    bt.textContent = `Given over ~${pushT}`;
-  } else {
-    const pumpT = fmtDeliveryTime(bolusDeliveryMinutes(doseMg, _selectedDrug));
-    bt.textContent = `Given over ~${pumpT} pump · ~${pushT} push`;
-  }
-}
-
-// ---- Time picker ----
-
-function setTimeFromMinutes(minutes) {
-  _timeUnit = 'case';
-  const h = Math.floor(minutes / 60);
-  const m = Math.round(minutes % 60);
-  buildSelect($('ee-hours'), 24, 2, h);
-  buildSelect($('ee-minutes'), 60, 2, m);
-  const isRunning = _controls.isCaseStarted();
-  document.querySelectorAll('#ee-time-unit .tp-unit').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.unit === 'case');
-    if (btn.dataset.unit === 'real') btn.disabled = !isRunning;
-  });
-  updateTimeConversion();
-}
-
-function getSelectedCaseMinutes() {
-  if (_timeUnit === 'case') {
-    return getSelectVal('ee-hours') * 60 + getSelectVal('ee-minutes');
-  }
-  const realH = getSelectVal('ee-hours');
-  const realM = getSelectVal('ee-minutes');
-  const wallStart = _timer.getWallClockStart ? _timer.getWallClockStart() : null;
-  if (!wallStart) return realH * 60 + realM;
-  const target = new Date(wallStart);
-  target.setHours(realH, realM, 0, 0);
-  return Math.max(0, (target - wallStart) / 60000);
-}
-
-function setTimeUnit(unit) {
-  const caseMin = getSelectedCaseMinutes();
-  _timeUnit = unit;
-  document.querySelectorAll('#ee-time-unit .tp-unit').forEach(btn =>
-    btn.classList.toggle('active', btn.dataset.unit === unit));
-
-  if (unit === 'case') {
-    buildSelect($('ee-hours'), 24, 2, Math.floor(caseMin / 60));
-    buildSelect($('ee-minutes'), 60, 2, Math.round(caseMin % 60));
-  } else {
-    const wallStart = _timer.getWallClockStart ? _timer.getWallClockStart() : null;
-    if (wallStart) {
-      const realDate = new Date(wallStart.getTime() + caseMin * 60000);
-      buildSelect($('ee-hours'), 24, 2, realDate.getHours());
-      buildSelect($('ee-minutes'), 60, 2, realDate.getMinutes());
-    }
-  }
-  updateTimeConversion();
-}
-
-function updateTimeConversion() {
-  const cv = $('ee-time-conversion');
-  if (!cv) return;
-  const isRunning = _controls.isCaseStarted();
-  const wallStart = _timer.getWallClockStart ? _timer.getWallClockStart() : null;
-
-  if (_timeUnit === 'case') {
-    const caseMin = getSelectVal('ee-hours') * 60 + getSelectVal('ee-minutes');
-    if (isRunning && wallStart) {
-      const rd = new Date(wallStart.getTime() + caseMin * 60000);
-      const h = rd.getHours();
-      const m = String(rd.getMinutes()).padStart(2, '0');
-      cv.textContent = `= RT ${h}:${m}`;
-    } else { cv.textContent = ''; }
-  } else {
-    if (wallStart) {
-      const target = new Date(wallStart);
-      target.setHours(getSelectVal('ee-hours'), getSelectVal('ee-minutes'), 0, 0);
-      const caseMin = Math.max(0, (target - wallStart) / 60000);
-      const h = Math.floor(caseMin / 60);
-      const m = String(Math.round(caseMin % 60)).padStart(2, '0');
-      cv.textContent = `= ET ${h}:${m}`;
-    } else { cv.textContent = ''; }
-  }
-}
-
-// ---- Select builder ----
-
-function buildSelect(selectEl, count, padLen, selectedVal) {
-  if (!selectEl) return;
-  selectEl.innerHTML = '';
-  for (let i = 0; i < count; i++) {
-    const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = String(i).padStart(padLen, '0');
-    if (i === selectedVal) opt.selected = true;
-    selectEl.appendChild(opt);
-  }
-  selectEl.onchange = updateTimeConversion;
-}
-
-function getSelectVal(id) {
-  const el = $(id);
-  return el ? parseInt(el.value) || 0 : 0;
+  bt.textContent = bolusTimeText(doseMg, _selectedDrug, { pushOnly: !isPumpEnabled(_selectedDrug) });
 }
 
 /**
@@ -457,14 +339,14 @@ function getSelectVal(id) {
  * treated as "until next event" (no rate-restore).
  */
 function populatePauseDuration() {
-  buildSelect($('ee-pause-hours'), 11, 1, 0);
-  buildSelect($('ee-pause-minutes'), 60, 2, 10);
+  buildTimeSelect($('ee-pause-hours'), 11, 1, 0, _picker.handleSelectChange);
+  buildTimeSelect($('ee-pause-minutes'), 60, 2, 10, _picker.handleSelectChange);
 }
 
 // ---- Confirm ----
 
 function doConfirm(deliveryMode) {
-  const time = getSelectedCaseMinutes();
+  const time = _picker.getCaseMinutes();
   const drug = _selectedDrug;
   // Force IV push when pump is disabled
   if (!isPumpEnabled(drug)) deliveryMode = 'push';
@@ -477,7 +359,7 @@ function doConfirm(deliveryMode) {
       if (_isEditMode && _editEvtId) _model.deleteEvent(_editEvtId);
       _model.addPause(drug, time, 'Pause');
       if (_pauseMode === 'timed') {
-        const dur = getSelectVal('ee-pause-hours') * 60 + getSelectVal('ee-pause-minutes');
+        const dur = getSelectInt('ee-pause-hours') * 60 + getSelectInt('ee-pause-minutes');
         if (dur > 0) {
           // Check if duration reaches or passes the next event
           const events = _model.getEvents(drug);
