@@ -11,6 +11,10 @@
 
 ---
 
+## [0.5.41.2] — 2026-07-06
+
+- **Unpaired sync buttons now relabel like the patient button** (0.5.41.1's dim+hint treatment was too dark and inconsistent). All five buttons use the same "⚙ Pair to enable …" language when no code is stored — case buttons say "⚙ Pair to enable case sync", the compact template buttons say "⚙ Pair" — with a light dim (opacity .7) that keeps the text readable, since the label itself explains the disabled state. The untappable "Not paired — tap to set up" status-line notices are removed, and tapping goes straight to Settings → Sync with no extra message.
+
 ## [0.5.41.1] — 2026-07-06
 
 - **Unpaired sync buttons now read clearly inert** (0.5.41's dim alone was too subtle on already-dashed buttons). Three reinforcing signals, all still tappable: heavier dim with muted text and no hover lift, a ⚙ prefix on the case/template buttons (matching the patient button's "⚙ Pair to enable cloud pull" language), and a persistent "Not paired — tap to set up" hint under each button group that clears on pairing. The tap notice now reads "Not paired — opening Settings → Sync…".

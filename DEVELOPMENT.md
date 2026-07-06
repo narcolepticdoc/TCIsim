@@ -4,6 +4,10 @@
 
 ## Session History
 
+### Unpaired-state: relabel, lighten, drop hints (v0.5.41.2) — Interim
+
+v0.5.41.1 overshot (opacity .4 unreadable; the status-line hints read as untappable dead text; treatment diverged from the patient button). Final form per user direction: all five sync buttons relabel with the patient button's "⚙ Pair to enable …" language via a `SYNC_BUTTON_LABELS` table in `refreshSyncButtons()` (case buttons: "⚙ Pair to enable case sync"; compact template row: "⚙ Pair"), dim lightened to opacity .7 (the label explains the state — readability wins), the persistent hints and `noticeUnpaired`/`wasUnpaired` machinery removed, and the no-code tap is plain `openSettingsToSync()` again — identical to the patient button. The `animation:none` guard from 0.5.41.1 stays: without it the `.setup-form>*` fadeIn (fill-mode `both`) pins the case buttons at the retained final keyframe's opacity:1 and no dim applies at all.
+
 ### Unpaired-state legibility pass (v0.5.41.1) — Interim
 
 Follow-up to v0.5.41: on the already-dashed, transparent sync buttons, `opacity:.55` alone didn't read as a state change. The unpaired treatment is now three reinforcing signals, all keeping the buttons tappable (tap → Settings → Sync): opacity .4 + `--text-muted` with the hover lift suppressed; a CSS `::before` ⚙ prefix on the four case/template buttons (scoped by id for the case pair — they share `.btn-pull-patient` with the patient button, whose relabel already carries its own ⚙); and a persistent "Not paired — tap to set up" hint in `#case-sync-status`/`#template-sync-status` written by `refreshSyncButtons()`. A `wasUnpaired` transition guard clears the hints exactly once on pairing — the sync-code input fires `tci:sync-code-change` per keystroke, and later refreshes must not clobber in-flight push/pull result messages.
