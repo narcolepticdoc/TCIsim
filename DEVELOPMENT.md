@@ -4,6 +4,10 @@
 
 ## Session History
 
+### Unpaired-state legibility pass (v0.5.41.1) — Interim
+
+Follow-up to v0.5.41: on the already-dashed, transparent sync buttons, `opacity:.55` alone didn't read as a state change. The unpaired treatment is now three reinforcing signals, all keeping the buttons tappable (tap → Settings → Sync): opacity .4 + `--text-muted` with the hover lift suppressed; a CSS `::before` ⚙ prefix on the four case/template buttons (scoped by id for the case pair — they share `.btn-pull-patient` with the patient button, whose relabel already carries its own ⚙); and a persistent "Not paired — tap to set up" hint in `#case-sync-status`/`#template-sync-status` written by `refreshSyncButtons()`. A `wasUnpaired` transition guard clears the hints exactly once on pairing — the sync-code input fires `tci:sync-code-change` per keystroke, and later refreshes must not clobber in-flight push/pull result messages.
+
 ### Setup sync UX + keypad standardization + prefs sync (v0.5.41) — Interim
 
 Three user-reported items from live iPad use.

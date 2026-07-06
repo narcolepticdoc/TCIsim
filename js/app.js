@@ -504,13 +504,19 @@ function boot() {
     const codeInput = $('set-sync-code');
     if (codeInput) codeInput.focus();
   };
-  // Unpaired notice — shared by the case/template buttons: surface WHY the
-  // tap is jumping to Settings instead of silently navigating (the patient
-  // button communicates the same state via its relabel in refreshSyncButtons).
+  // Unpaired notice — shared by the case/template buttons. The unpaired state
+  // itself is already on screen (dim + ⚙ prefix + persistent hint), so the
+  // tap message only narrates where the tap is taking the user.
   const noticeUnpaired = (setStatus) => {
-    setStatus('Enter a sync code to pair — opening Settings…', 'is-error');
+    // Keeps naming the unpaired state — if the user closes Settings without
+    // pairing, the line left behind still reads correctly.
+    setStatus('Not paired — opening Settings → Sync…', 'is-error');
     openSettingsToSync();
   };
+  // Tracks the unpaired→paired transition so pairing clears the hint lines
+  // exactly once — later refreshes (the code input fires per keystroke) must
+  // not clobber in-flight push/pull result messages.
+  let wasUnpaired = null;
   const refreshSyncButtons = () => {
     const hasCode = !!patientSync.getStoredCode();
     if (btnPullPatient) {
@@ -523,11 +529,20 @@ function boot() {
       // The button label communicates the unpaired state, so no separate hint.
       if (!hasCode) setPullStatus('');
     }
-    // Case/template buttons keep their labels but dim while unpaired; their
-    // click handlers write a status notice before opening Settings.
+    // Case/template buttons keep their labels but read clearly inert while
+    // unpaired (dim + ⚙ prefix via CSS) with a persistent hint line, so the
+    // state is legible before any tap.
     for (const id of ['btn-push-case', 'btn-pull-case', 'btn-push-template', 'btn-pull-template']) {
       $(id)?.classList.toggle('is-unpaired', !hasCode);
     }
+    if (!hasCode) {
+      setCaseStatus('Not paired — tap to set up');
+      setTemplateStatus('Not paired — tap to set up');
+    } else if (wasUnpaired) {
+      setCaseStatus('');
+      setTemplateStatus('');
+    }
+    wasUnpaired = !hasCode;
   };
   if (btnPullPatient) {
     btnPullPatient.addEventListener('click', async () => {

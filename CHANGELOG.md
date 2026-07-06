@@ -11,6 +11,10 @@
 
 ---
 
+## [0.5.41.1] — 2026-07-06
+
+- **Unpaired sync buttons now read clearly inert** (0.5.41's dim alone was too subtle on already-dashed buttons). Three reinforcing signals, all still tappable: heavier dim with muted text and no hover lift, a ⚙ prefix on the case/template buttons (matching the patient button's "⚙ Pair to enable cloud pull" language), and a persistent "Not paired — tap to set up" hint under each button group that clears on pairing. The tap notice now reads "Not paired — opening Settings → Sync…".
+
 ## [0.5.41] — 2026-07-06
 
 Setup-screen sync UX, keypad standardization, and preferences cloud sync.
