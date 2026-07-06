@@ -11,6 +11,14 @@
 
 ---
 
+## [0.5.41] — 2026-07-06
+
+Setup-screen sync UX, keypad standardization, and preferences cloud sync.
+
+- **Preferences cloud sync** (new kind `prefs`, 30-day TTL): visual appearance, text size, sounds, tolerances, setup-default units, pump configuration, metric/imperial, TCI-mode/opioid defaults, and chart scales now push/pull under the same 6-char pairing code (Settings → Sync → "Push/Pull preferences"). Right after entering a valid code, the app checks the cloud and offers to apply any stored preferences — the fresh-install recovery flow for a wiped PWA. Applying reloads the app. `applyPrefs` is manifest-filtered both ways: a pulled blob can only write the known preference keys (never the sync code, saved case, or dose template), and manifest keys absent from the blob are removed so the device mirrors the pusher.
+- **Starting-dose entry uses the custom keypad**: the six native `<input>`/`<select>` pairs (the app's last iOS-keyboard surface) are replaced by tappable dose displays that open the shared keypad in a one-shot custom session — full unit toggle (converts, not clears), conversion preview, and delivery-time line, with per-kg previews using the live setup weight. Template entries keep their own `{value, unit}`; in-case working unit preferences are untouched. Clear removes an entry.
+- **Unpaired sync buttons are no longer silent**: with no sync code stored, the case/template push/pull buttons dim and a tap writes "Enter a sync code to pair — opening Settings…" to their status line before opening Settings → Sync (the patient-pull button keeps its existing relabel).
+
 ## [0.5.40.10] — 2026-07-03
 
 Sync hardening (R5 — closes out the 0.5.40.8 audit roadmap).

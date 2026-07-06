@@ -504,17 +504,30 @@ function boot() {
     const codeInput = $('set-sync-code');
     if (codeInput) codeInput.focus();
   };
-  const refreshPullButton = () => {
-    if (!btnPullPatient) return;
+  // Unpaired notice — shared by the case/template buttons: surface WHY the
+  // tap is jumping to Settings instead of silently navigating (the patient
+  // button communicates the same state via its relabel in refreshSyncButtons).
+  const noticeUnpaired = (setStatus) => {
+    setStatus('Enter a sync code to pair — opening Settings…', 'is-error');
+    openSettingsToSync();
+  };
+  const refreshSyncButtons = () => {
     const hasCode = !!patientSync.getStoredCode();
-    // Keep the button enabled either way: when unpaired it opens Settings → Sync
-    // so pairing is reachable from the setup screen (the gear is sim-screen only).
-    btnPullPatient.textContent = hasCode
-      ? '↓ Pull patient from cloud'
-      : '⚙ Pair to enable cloud pull';
-    btnPullPatient.classList.toggle('is-unpaired', !hasCode);
-    // The button label communicates the unpaired state, so no separate hint.
-    if (!hasCode) setPullStatus('');
+    if (btnPullPatient) {
+      // Keep the button enabled either way: when unpaired it opens Settings → Sync
+      // so pairing is reachable from the setup screen (the gear is sim-screen only).
+      btnPullPatient.textContent = hasCode
+        ? '↓ Pull patient from cloud'
+        : '⚙ Pair to enable cloud pull';
+      btnPullPatient.classList.toggle('is-unpaired', !hasCode);
+      // The button label communicates the unpaired state, so no separate hint.
+      if (!hasCode) setPullStatus('');
+    }
+    // Case/template buttons keep their labels but dim while unpaired; their
+    // click handlers write a status notice before opening Settings.
+    for (const id of ['btn-push-case', 'btn-pull-case', 'btn-push-template', 'btn-pull-template']) {
+      $(id)?.classList.toggle('is-unpaired', !hasCode);
+    }
   };
   if (btnPullPatient) {
     btnPullPatient.addEventListener('click', async () => {
@@ -534,8 +547,8 @@ function boot() {
       }
     });
   }
-  document.addEventListener('tci:sync-code-change', refreshPullButton);
-  refreshPullButton();
+  document.addEventListener('tci:sync-code-change', refreshSyncButtons);
+  refreshSyncButtons();
 
   // Cloud case transfer — manual push/pull of the saved-case blob under the
   // same pairing code (24 h server TTL) so a case can move to another device.
@@ -543,7 +556,7 @@ function boot() {
   // only since restoring would clobber a running case.
   const pushCase = async (btn, setStatus) => {
     const code = patientSync.getStoredCode();
-    if (!code) { openSettingsToSync(); return; }
+    if (!code) { noticeUnpaired(setStatus); return; }
     // Snapshot the live case first so the push reflects current state.
     if (confirmedPatient && session) {
       try { session.save(); } catch (e) {}
@@ -571,7 +584,7 @@ function boot() {
   if (btnPullCase) {
     btnPullCase.addEventListener('click', async () => {
       const code = patientSync.getStoredCode();
-      if (!code) { openSettingsToSync(); return; }
+      if (!code) { noticeUnpaired(setCaseStatus); return; }
       btnPullCase.disabled = true;
       setCaseStatus('Pulling…', 'is-ok');
       const res = await cloudSync.fetchPayload(code, 'case');
@@ -604,7 +617,7 @@ function boot() {
   if (btnPushTemplate) {
     btnPushTemplate.addEventListener('click', async () => {
       const code = patientSync.getStoredCode();
-      if (!code) { openSettingsToSync(); return; }
+      if (!code) { noticeUnpaired(setTemplateStatus); return; }
       const t = doseTemplate.loadTemplate();
       if (doseTemplate.isTemplateEmpty(t)) {
         setTemplateStatus('No starting doses defined yet', 'is-error');
@@ -622,7 +635,7 @@ function boot() {
   if (btnPullTemplate) {
     btnPullTemplate.addEventListener('click', async () => {
       const code = patientSync.getStoredCode();
-      if (!code) { openSettingsToSync(); return; }
+      if (!code) { noticeUnpaired(setTemplateStatus); return; }
       btnPullTemplate.disabled = true;
       setTemplateStatus('Pulling…', 'is-ok');
       const res = await cloudSync.fetchPayload(code, 'template');

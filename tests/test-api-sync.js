@@ -182,6 +182,31 @@ const VALID_TEMPLATE = { v: 1, updatedAt: 1, drugs: { propofol: { bolus: { value
     ok(res.statusCode === 500 && res.body.error === 'kv-not-configured', 'POST valid template passes validation → reaches KV');
   }
 
+  // ---- prefs kind ----
+  const VALID_PREFS = { v: 1, updatedAt: 1, prefs: { 'tci-warn-settings': '{}', 'tci-sim-units': 'metric' } };
+  {
+    const res = await call({ method: 'POST', body: { code: 'ABC234', kind: 'prefs', payload: VALID_PREFS } });
+    ok(res.statusCode === 500 && res.body.error === 'kv-not-configured', 'POST valid prefs passes validation → reaches KV');
+  }
+  {
+    const res = await call({ method: 'POST', body: { code: 'ABC234', kind: 'prefs', payload: { v: 1, prefs: { k: 42 } } } });
+    ok(res.statusCode === 400 && res.body.error === 'invalid-payload', 'POST prefs with non-string value → 400');
+  }
+  {
+    const big = {};
+    for (let i = 0; i < 65; i++) big[`k${i}`] = 'v';
+    const res = await call({ method: 'POST', body: { code: 'ABC234', kind: 'prefs', payload: { v: 1, prefs: big } } });
+    ok(res.statusCode === 400 && res.body.error === 'invalid-payload', 'POST prefs with >64 keys → 400');
+  }
+  {
+    const res = await call({ method: 'POST', body: { code: 'ABC234', kind: 'prefs', payload: { v: 1, prefs: [1] } } });
+    ok(res.statusCode === 400 && res.body.error === 'invalid-payload', 'POST prefs with array prefs → 400');
+  }
+  {
+    const res = await call({ method: 'GET', query: { code: 'ABC234', kind: 'prefs' } });
+    ok(res.statusCode === 500 && res.body.error === 'kv-not-configured', 'GET prefs kind routes → reaches KV');
+  }
+
   // ---- rate limiter ----
   // Note: every test above already exercises the FAIL-OPEN path — with KV
   // unconfigured, checkRateLimit's getRedis() throws and the request proceeds.

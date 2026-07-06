@@ -76,6 +76,7 @@ Keys persisted outside the blob — note the working-vs-default unit split:
 - `tci-pref-{bolus|rate}Unit-{drug}` — **working** (in-case) display unit, mutated by mid-case keypad/editor swaps; reseeded on New Case.
 - `tci-pref-{bolus|rate}Unit-{drug}-default` — **setup default**, owned by the setup screen (`getSetupDefaultUnit`). Deliberately decoupled so mid-case swaps never overwrite the setup default.
 - `tci-pref-quantizeInDisplay`, `tci-pump-enabled-{drugId}`, `tci-pump-max-rate`, `tci-pref-history-show-notations`, `tci-sync-code`, `tci-dose-template`, `tci-dose-template-armed`; pump settings and saved cases via `js/ui/persist.js`.
+- **Preferences cloud-sync** (`js/sync/prefs-sync.js`): `prefsManifest()` is the single list of keys that push/pull under the pairing code (kind `prefs`). When adding a persisted preference key, add it to the manifest (or deliberately exclude it there with a comment). `applyPrefs` only ever writes manifest keys — never extend it to arbitrary payload keys.
 
 ## UI Conventions & Gotchas
 

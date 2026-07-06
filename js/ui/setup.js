@@ -27,8 +27,9 @@ import {
   MODEL_DESCRIPTION as KETAMINE_MODEL_DESCRIPTION,
 } from '../pk/ketamine.js';
 import { setPumpSettings, getPumpSettings, isPumpEnabled, isStickyPropofolConc } from '../util/constants.js';
-import { getAllowedUnits, getDefaultUnit, getPrefKey, getDefaultPrefKey, getSetupDefaultUnit, getQuantStep } from '../util/units.js';
+import { getAllowedUnits, getDefaultUnit, getPrefKey, getDefaultPrefKey, getSetupDefaultUnit, getQuantStep, formatValue } from '../util/units.js';
 import { loadTemplate, saveTemplate, isArmed, setArmed } from '../sync/dose-template.js';
+import * as keypad from './keypad.js';
 
 // Drugs that have a tabbed setup panel. Remifentanil has no PK model yet.
 const SETUP_DRUGS = ['propofol', 'fentanyl', 'ketamine'];
@@ -224,18 +225,9 @@ function populateUnitSelectors() {
 function initTemplateControls() {
   for (const drugId of SETUP_DRUGS) {
     for (const task of ['bolus', 'rate']) {
-      const sel = $(`input-${drugId}-start-${task}-unit`);
-      if (!sel) continue;
-      sel.innerHTML = '';
-      for (const unit of getAllowedUnits(drugId, task)) {
-        const opt = document.createElement('option');
-        opt.value = unit;
-        opt.textContent = unit;
-        sel.appendChild(opt);
-      }
-      sel.addEventListener('change', saveTemplateFromInputs);
-      const val = $(`input-${drugId}-start-${task}`);
-      if (val) val.addEventListener('input', saveTemplateFromInputs);
+      const btn = $(`btn-${drugId}-start-${task}`);
+      if (!btn) continue;
+      btn.addEventListener('click', () => openTemplateKeypad(drugId, task));
     }
   }
 
@@ -251,44 +243,61 @@ function initTemplateControls() {
   refreshTemplateInputs();
 }
 
+/**
+ * Open the shared keypad in a one-shot custom session for a starting-dose
+ * entry — same entry surface as everywhere else in the app (no iOS keyboard,
+ * no native selects). The keypad's unit toggle converts the typed value and
+ * the entry keeps its own {value, unit}; working unit-pref keys are untouched.
+ */
+function openTemplateKeypad(drugId, task) {
+  const entry = loadTemplate().drugs[drugId]?.[task] || null;
+  const drugName = drugId.charAt(0).toUpperCase() + drugId.slice(1);
+  keypad.showCustom({
+    drugId,
+    task,
+    title: `${drugName} starting ${task === 'bolus' ? 'bolus' : 'infusion'}`,
+    value: entry ? entry.value : null,
+    unit: entry ? entry.unit : getSetupDefaultUnit(drugId, task),
+    // Per-kg previews use the live (unconfirmed) setup weight when present.
+    getWeightKg: () => parseFloat($('input-weight')?.value) || 70,
+    onDone: (d) => saveTemplateEntry(drugId, task, d),
+  });
+}
+
+/** Set or clear one starting-dose entry, persist, and repaint. */
+function saveTemplateEntry(drugId, task, entryOrNull) {
+  const template = loadTemplate();
+  const drugs = { ...template.drugs };
+  const entry = { ...(drugs[drugId] || {}) };
+  if (entryOrNull) entry[task] = entryOrNull;
+  else delete entry[task];
+  if (entry.bolus || entry.rate) drugs[drugId] = entry;
+  else delete drugs[drugId];
+  saveTemplate({ v: 1, updatedAt: Date.now(), drugs });
+  refreshTemplateInputs();
+}
+
 /** Show the starting-dose fields only when the arming checkbox is checked. */
 function updateStartDosesVisibility() {
   const fields = $('start-doses-fields');
   if (fields) fields.hidden = !$('chk-start-doses')?.checked;
 }
 
-/** Read all starting-dose inputs into a template object and persist it. */
-function saveTemplateFromInputs() {
-  const drugs = {};
-  for (const drugId of SETUP_DRUGS) {
-    const entry = {};
-    for (const task of ['bolus', 'rate']) {
-      const value = parseFloat($(`input-${drugId}-start-${task}`)?.value);
-      const unit = $(`input-${drugId}-start-${task}-unit`)?.value;
-      if (isFinite(value) && value > 0 && unit) entry[task] = { value, unit };
-    }
-    if (entry.bolus || entry.rate) drugs[drugId] = entry;
-  }
-  saveTemplate({ v: 1, updatedAt: Date.now(), drugs });
-}
-
 /**
- * Repaint the starting-dose inputs from the persisted template. Exported so
- * app.js can refresh after a cloud template pull. Unit selects fall back to
- * the drug/task default unit when the template has no entry.
+ * Repaint the starting-dose buttons from the persisted template. Exported so
+ * app.js can refresh after a cloud template pull. Empty entries show an
+ * em-dash placeholder; set entries show "value unit".
  */
 export function refreshTemplateInputs() {
   const template = loadTemplate();
   for (const drugId of SETUP_DRUGS) {
     const entry = template.drugs[drugId] || {};
     for (const task of ['bolus', 'rate']) {
-      const valEl = $(`input-${drugId}-start-${task}`);
-      const sel = $(`input-${drugId}-start-${task}-unit`);
-      if (!valEl || !sel) continue;
+      const btn = $(`btn-${drugId}-start-${task}`);
+      if (!btn) continue;
       const d = entry[task];
-      valEl.value = d ? String(d.value) : '';
-      const unit = d ? d.unit : getDefaultUnit(drugId, task);
-      if (unit && [...sel.options].some(o => o.value === unit)) sel.value = unit;
+      btn.textContent = d ? `${formatValue(d.value, d.unit)} ${d.unit}` : '—';
+      btn.classList.toggle('empty', !d);
     }
   }
   const chk = $('chk-start-doses');
