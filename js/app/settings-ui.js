@@ -8,6 +8,8 @@
 
 import { syncPortraitLayout } from './portrait-layout.js';
 import { getStoredCode, setStoredCode, normalizeCode, isValidCode } from '../sync/patient-sync.js';
+import { pushPayload, fetchPayload } from '../sync/cloud-sync.js';
+import { collectPrefs, applyPrefs, isPrefsEmpty, isNewerPrefsSchema } from '../sync/prefs-sync.js';
 import { getGlobalMaxPumpRate, setGlobalMaxPumpRate } from '../ui/setup.js';
 
 const $ = id => document.getElementById(id);
@@ -242,12 +244,82 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   if (syncCodeInput) {
     syncCodeInput.value = getStoredCode();
     renderSyncStatus(syncCodeInput.value);
+    // The code saves on every keystroke; the prefs offer fires only when a
+    // VALID code first appears (and once per distinct code) — the moment a
+    // fresh install becomes recoverable.
+    let lastOfferedCode = isValidCode(getStoredCode()) ? getStoredCode() : null;
     syncCodeInput.addEventListener('input', () => {
       const norm = normalizeCode(syncCodeInput.value);
       if (syncCodeInput.value !== norm) syncCodeInput.value = norm;
       setStoredCode(norm);
       renderSyncStatus(norm);
       document.dispatchEvent(new CustomEvent('tci:sync-code-change', { detail: { code: getStoredCode() } }));
+      if (isValidCode(norm) && norm !== lastOfferedCode) {
+        lastOfferedCode = norm;
+        offerCloudPrefs(norm);
+      }
+    });
+  }
+
+  // ---- Preferences cloud sync (kind 'prefs') ----
+  const setPrefsStatus = (text, cls) => {
+    const el = $('prefs-sync-status');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.remove('is-ok', 'is-error');
+    if (cls) el.classList.add(cls);
+  };
+  const applyPulledPrefs = (payload) => {
+    const applied = applyPrefs(payload);
+    if (applied === null) {
+      setPrefsStatus(isNewerPrefsSchema(payload)
+        ? 'These preferences were saved by a newer app version — update this device first'
+        : 'Received preferences were invalid', 'is-error');
+      return;
+    }
+    setPrefsStatus('Preferences applied — reloading…', 'is-ok');
+    setTimeout(() => location.reload(), 400);
+  };
+  // Right after pairing: if preferences exist in the cloud for this code,
+  // offer to apply them (the fresh-install recovery flow).
+  const offerCloudPrefs = async (code) => {
+    try {
+      const res = await fetchPayload(code, 'prefs');
+      if (!res.found || isPrefsEmpty(res.payload)) return;
+      if (window.confirm('Preferences found in the cloud for this code — apply them to this device?')) {
+        applyPulledPrefs(res.payload);
+      }
+    } catch (e) { /* offer is best-effort — pairing itself already succeeded */ }
+  };
+  const btnPushPrefs = $('btn-sync-push-prefs');
+  if (btnPushPrefs) {
+    btnPushPrefs.addEventListener('click', async () => {
+      const code = getStoredCode();
+      if (!code) { setPrefsStatus('Enter a sync code above first', 'is-error'); return; }
+      const blob = collectPrefs();
+      if (isPrefsEmpty(blob)) { setPrefsStatus('No preferences to push yet', 'is-error'); return; }
+      btnPushPrefs.disabled = true;
+      setPrefsStatus('Pushing…', 'is-ok');
+      const res = await pushPayload(code, 'prefs', blob);
+      btnPushPrefs.disabled = false;
+      if (res.ok) setPrefsStatus('Preferences pushed — kept in the cloud for 30 days', 'is-ok');
+      else setPrefsStatus(res.error === 'invalid-code' ? 'Invalid pairing code' : 'Push failed — check connection', 'is-error');
+    });
+  }
+  const btnPullPrefs = $('btn-sync-pull-prefs');
+  if (btnPullPrefs) {
+    btnPullPrefs.addEventListener('click', async () => {
+      const code = getStoredCode();
+      if (!code) { setPrefsStatus('Enter a sync code above first', 'is-error'); return; }
+      btnPullPrefs.disabled = true;
+      setPrefsStatus('Pulling…', 'is-ok');
+      const res = await fetchPayload(code, 'prefs');
+      btnPullPrefs.disabled = false;
+      if (!res.found) {
+        setPrefsStatus('No preferences found for that code yet', 'is-error');
+        return;
+      }
+      applyPulledPrefs(res.payload);
     });
   }
 

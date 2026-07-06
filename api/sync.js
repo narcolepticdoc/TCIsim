@@ -40,6 +40,7 @@ const KINDS = {
   patient:  { ttl: 30 * 60,           maxBytes: 1024 },
   case:     { ttl: 24 * 60 * 60,      maxBytes: 64 * 1024 },
   template: { ttl: 30 * 24 * 60 * 60, maxBytes: 4 * 1024 },
+  prefs:    { ttl: 30 * 24 * 60 * 60, maxBytes: 8 * 1024 },
 };
 
 // Raw-body stream cap: largest kind plus envelope slack. Per-kind caps are
@@ -122,6 +123,14 @@ function validateKindPayload(kind, payload) {
   }
   if (kind === 'template') {
     return !!(payload.drugs && typeof payload.drugs === 'object');
+  }
+  if (kind === 'prefs') {
+    // Flat {localStorageKey: string} map — bounded and string-valued so a
+    // blob can never smuggle structured data through the prefs channel.
+    if (!payload.prefs || typeof payload.prefs !== 'object' || Array.isArray(payload.prefs)) return false;
+    const entries = Object.entries(payload.prefs);
+    if (entries.length > 64) return false;
+    return entries.every(([, v]) => typeof v === 'string');
   }
   return false;
 }

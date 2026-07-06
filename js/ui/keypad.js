@@ -11,7 +11,7 @@
 
 import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, getRoundingNoteText }
   from '../util/units.js';
-import { DRUG_DEFS } from '../util/constants.js';
+import { DRUG_DEFS, isPumpEnabled as pumpEnabledFor } from '../util/constants.js';
 import { applyBufferKey, convertBufferUnit, bolusTimeText } from './keypad-buffer.js';
 
 const $ = id => document.getElementById(id);
@@ -31,6 +31,14 @@ let isPumpEnabled = null;      // () => bool — is an infusion pump enabled for
 let prefilled = false;         // true when buffer is pre-populated, clears on first keypress
 let currentRoundOverride = null; // bool when ceTarget modal exposes the round-in-display
                                  // override checkbox; null otherwise (= use global setting).
+// One-shot custom session (showCustom) — set while the keypad serves an
+// out-of-case caller (setup-screen starting doses). While set:
+//   - setUnit does NOT persist the working unit-pref key (the entry carries
+//     its own unit; the CLAUDE.md working-key invariant is in-case only)
+//   - weight context comes from customSession.getWeightKg (no confirmed patient)
+//   - confirm/Clear route to customSession.onDone instead of the global onConfirm
+// Cleared by close(), and defensively by show().
+let customSession = null;      // { onDone, getWeightKg }
 
 const TITLES = {
   ceTarget: 'Set Ce Target',
@@ -101,6 +109,12 @@ export function init(opts = {}) {
 
   const btnClear = $('keypad-clear-btn');
   if (btnClear) btnClear.addEventListener('click', () => {
+    if (customSession) {
+      const s = customSession;
+      close();
+      s.onDone(null); // clear the template entry
+      return;
+    }
     close();
     if (onConfirm) onConfirm(currentType, 0, '', 'clear');
   });
@@ -124,6 +138,7 @@ function updateRoundNote() {
  * Show the keypad modal for a given type.
  */
 export function show(type) {
+  customSession = null; // belt and braces — a normal show ends any custom session
   currentType = type;
   buffer = '';
 
@@ -256,7 +271,57 @@ export function show(type) {
 }
 
 function close() {
+  customSession = null;
   $('modal-keypad').classList.remove('open');
+}
+
+/**
+ * One-shot custom keypad session for out-of-case entry (setup-screen starting
+ * doses). Reuses the full modal — unit toggle, conversion preview, delivery
+ * time — but routes the result to `onDone` instead of the global onConfirm.
+ *
+ * @param {Object} opts
+ * @param {string} opts.drugId       - drug the entry belongs to
+ * @param {'bolus'|'rate'} opts.task - dose task (selects allowed units)
+ * @param {string} opts.title        - modal title, e.g. "Propofol starting bolus"
+ * @param {number|null} opts.value   - existing display value to prefill (null = empty)
+ * @param {string|null} opts.unit    - existing entry's unit (falls back to drug/task default)
+ * @param {Function} [opts.getWeightKg] - live weight for per-kg conversion previews (default 70)
+ * @param {Function} opts.onDone     - ({value, unit} | null) => void; null = entry cleared
+ */
+export function showCustom({ drugId, task, title, value, unit, getWeightKg, onDone }) {
+  customSession = { onDone, getWeightKg: getWeightKg || (() => 70) };
+  currentDrug = drugId;
+  currentType = task;
+  currentRoundOverride = null;
+
+  $('keypad-title').textContent = title || 'Enter Value';
+
+  const allowed = getAllowedUnits(drugId, task);
+  currentUnit = (unit && allowed.includes(unit))
+    ? unit
+    : (getDefaultUnit(drugId, task) || allowed[0]);
+  renderUnitToggle(allowed);
+
+  // Prefill from the existing entry; first keypress replaces (shared semantics)
+  const hasValue = isFinite(value) && value > 0;
+  buffer = hasValue ? formatValue(value, currentUnit) : '';
+  prefilled = hasValue;
+
+  // Single confirm; no IV-push split, no per-target rounding override
+  const confirmBtn = $('keypad-confirm-btn');
+  confirmBtn.textContent = 'Set Dose';
+  confirmBtn.className = 'modal-btn-confirm-bolus';
+  const pushBtn = $('keypad-push-btn');
+  if (pushBtn) pushBtn.style.display = 'none';
+  const roundRow = $('keypad-round-row');
+  if (roundRow) roundRow.style.display = 'none';
+  // Clear removes the entry — only offered when one exists
+  const clearBtn = $('keypad-clear-btn');
+  if (clearBtn) clearBtn.style.display = hasValue ? '' : 'none';
+
+  updateDisplay();
+  $('modal-keypad').classList.add('open');
 }
 
 function handleKey(k) {
@@ -265,12 +330,22 @@ function handleKey(k) {
   updateDisplay();
 }
 
+// Weight context for unit conversions: the confirmed patient in normal
+// sessions, the caller-supplied getter in custom (setup-screen) sessions.
+function weightCtx() {
+  if (customSession) return { weightKg: customSession.getWeightKg() || 70 };
+  const patient = getPatient();
+  return { weightKg: patient?.weight || 70 };
+}
+
 function setUnit(u) {
   const prev = currentUnit;
   currentUnit = u;
   const unitTask = (currentType === 'intermittent' || currentType === 'exitCe') ? 'ceTarget' : currentType;
   const convTask = (currentType === 'intermittent' || currentType === 'exitCe') ? 'ceTarget' : currentType;
-  const prefKey = getPrefKey(currentDrug, unitTask);
+  // Custom sessions never touch the in-case working unit-pref keys —
+  // template entries carry their own unit.
+  const prefKey = customSession ? null : getPrefKey(currentDrug, unitTask);
   if (prefKey) {
     try { localStorage.setItem(prefKey, u); } catch (e) {}
   }
@@ -281,12 +356,10 @@ function setUnit(u) {
   // Default behavior: convert the current buffer value from the previous unit
   // to the new unit. Preserves what the user typed (or what was pre-filled) and
   // re-arms `prefilled` so the next keypress overwrites.
-  const patient0 = getPatient();
-  const converted = convertBufferUnit(buffer, prev, u, currentDrug, convTask,
-    { weightKg: patient0?.weight || 70 });
+  const converted = convertBufferUnit(buffer, prev, u, currentDrug, convTask, weightCtx());
   if (converted) {
     ({ buffer, prefilled } = converted);
-  } else if (buffer === '' && currentType === 'bolus') {
+  } else if (buffer === '' && currentType === 'bolus' && !customSession) {
     // Nothing typed yet: reload the last saved bolus so the default reflects
     // recent drug practice in the new unit.
     try {
@@ -335,11 +408,10 @@ function updateDisplay() {
   if (currentType === 'exitCe') { cv.textContent = ''; return; }
 
   const v = parseFloat(buffer);
-  const patient = getPatient();
-  if (isNaN(v) || v <= 0 || !patient) { cv.textContent = ''; return; }
+  if (isNaN(v) || v <= 0 || (!customSession && !getPatient())) { cv.textContent = ''; return; }
 
   try {
-    const ctx = { weightKg: patient.weight };
+    const ctx = weightCtx();
     // 'intermittent' and 'exitCe' use ceTarget units for conversion
     const convTask = (currentType === 'intermittent' || currentType === 'exitCe') ? 'ceTarget' : currentType;
     const canonical = toCanonical(v, currentUnit, currentDrug, convTask, ctx);
@@ -376,12 +448,26 @@ function updateDisplay() {
 function updateBolusTime(doseMg) {
   const bt = $('keypad-bolus-time');
   if (!bt) return;
-  const pushOnly =
-    !isPumpEnabled() || (getIntermittentThreshold() > 0 && getMode() !== 'manual');
+  // Custom sessions have no in-case mode/threshold state — pump availability
+  // for the entry's own drug decides pump-vs-push display.
+  const pushOnly = customSession
+    ? !pumpEnabledFor(currentDrug)
+    : !isPumpEnabled() || (getIntermittentThreshold() > 0 && getMode() !== 'manual');
   bt.textContent = bolusTimeText(doseMg, currentDrug, { pushOnly });
 }
 
 function confirm(deliveryMode) {
+  // Custom session: hand the display value + unit back to the caller.
+  // An emptied buffer (or 0) confirms as "clear this entry" — the buffer
+  // opened prefilled, so empty means the user deliberately cleared it.
+  if (customSession) {
+    const s = customSession;
+    const v = parseFloat(buffer);
+    close();
+    s.onDone(isFinite(v) && v > 0 ? { value: v, unit: currentUnit } : null);
+    return;
+  }
+
   const v = parseFloat(buffer);
   if (isNaN(v) || v < 0) return;
 

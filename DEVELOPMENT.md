@@ -4,6 +4,16 @@
 
 ## Session History
 
+### Setup sync UX + keypad standardization + prefs sync (v0.5.41) — Interim
+
+Three user-reported items from live iPad use.
+
+**Unpaired sync buttons (app.js).** `refreshPullButton` → `refreshSyncButtons`: the four case/template buttons now dim (`is-unpaired`) while no code is stored, and their no-code click path writes "Enter a sync code to pair — opening Settings…" to the adjacent status line via `noticeUnpaired()` before `openSettingsToSync()`. Same `tci:sync-code-change` listener as the patient button (which keeps its relabel treatment). The Settings-modal push button intentionally keeps its plain flow — it sits next to the code field.
+
+**Starting doses on the shared keypad (keypad.js `showCustom`).** The template editor was the app's only native-input surface (iOS keyboard + `<select>`s). New one-shot custom session in keypad.js: `showCustom({drugId, task, title, value, unit, getWeightKg, onDone})` reuses the full modal but (a) never writes the in-case working unit-pref keys (`setUnit` guard — entries carry their own unit), (b) takes weight for per-kg previews from the caller (live setup weight input, unconfirmed patient is fine), (c) routes confirm/Clear to `onDone({value, unit} | null)` and clears itself on `close()`/`show()`. Setup markup: six `input+select` pairs → six `.start-dose-btn` displays; `setup.js saveTemplateEntry`/`refreshTemplateInputs` repaint labels ("50 mg" / "—"). Template schema unchanged.
+
+**Preferences cloud sync (js/sync/prefs-sync.js, kind `prefs`).** Root cause of the loss: an iOS PWA reinstall wipes localStorage — and the sync code lives there too, so automatic recovery is impossible; the flow is re-enter code → pull. `prefsManifest()` is the single authoritative key list (settings blob, `-default` unit keys, quantize flag, pump max-rate/concentrations/enables, history toggle, metric/imperial, tci-mode/opioid, chart-ymax). Deliberate exclusions: sync code (circular), saved case + dose template (own sync kinds), working unit keys and `tci_last*` (transient). `applyPrefs` is manifest-filtered in both directions — non-manifest payload keys are never written (cloud data can't touch arbitrary localStorage), absent manifest keys are removed (mirror semantics) — and refuses newer-schema blobs outright. Apply always ends in `location.reload()`. UI in Settings → Sync (push/pull + status line); after a valid code is first entered, `offerCloudPrefs` checks the cloud and offers to apply (`window.confirm`) — the recovery flow. Server: `KINDS.prefs` (30 d, 8 KB), validation = flat string-valued object ≤ 64 keys.
+
 ### Sync hardening: rate limit + schema gate (v0.5.40.10) — Interim
 
 R5, the last item from the 0.5.40.8 audit — the roadmap from that audit is now fully cleared.

@@ -174,13 +174,19 @@
     .btn-pull-patient{width:100%;padding:8px;background:transparent;border:1px dashed var(--border);border-radius:var(--radius-md);color:var(--text-secondary);font-family:var(--font-display);font-size:11.5px;cursor:pointer;transition:all .15s;flex-shrink:0}
     .btn-pull-patient:hover:not(:disabled){background:var(--bg-hover);color:var(--text-primary);border-color:var(--border-focus)}
     .btn-pull-patient:disabled{opacity:.5;cursor:default}
+    /* Unpaired (no sync code): dimmed but still tappable — the tap surfaces a
+       status notice and opens Settings → Sync so pairing stays reachable. */
+    .btn-pull-patient.is-unpaired,.btn-template-sync.is-unpaired{opacity:.55}
     .pull-patient-status{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:-2px;text-align:center}
     .pull-patient-status.is-error{color:var(--amber,#d9a23a)}
     .pull-patient-status.is-stale{color:var(--amber,#d9a23a)}
     .pull-patient-status.is-ok{color:var(--text-secondary)}
     .start-dose-pair{display:flex;gap:4px}
-    .start-dose-pair input[type="text"]{flex:1 1 45%;min-width:0}
-    .start-dose-pair select{flex:1 1 55%;min-width:0}
+    /* Tappable dose display — opens the custom keypad (replaced the app's
+       last native input+select pair; the iOS keyboard never appears now). */
+    .start-dose-btn{width:100%;padding:6px 10px;background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:13px;text-align:left;cursor:pointer;transition:all .15s}
+    .start-dose-btn:hover{background:var(--bg-hover);border-color:var(--border-focus)}
+    .start-dose-btn.empty{color:var(--text-muted)}
     .start-doses-row{display:flex;align-items:center;gap:8px;flex-shrink:0}
     .start-doses-check{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-secondary);cursor:pointer;flex:1;min-width:0}
     .start-doses-fields{display:flex;flex-direction:column;gap:6px;padding:8px 0 2px;flex-shrink:0}
@@ -1251,17 +1257,15 @@
           <span class="start-dose-drug-label">Propofol</span>
           <div class="input-grid">
             <div class="form-row">
-              <label for="input-propofol-start-bolus">Starting bolus</label>
+              <label for="btn-propofol-start-bolus">Starting bolus</label>
               <div class="start-dose-pair">
-                <input type="text" id="input-propofol-start-bolus" inputmode="decimal" placeholder="&mdash;">
-                <select id="input-propofol-start-bolus-unit"></select>
+                <button type="button" class="start-dose-btn" id="btn-propofol-start-bolus">&mdash;</button>
               </div>
             </div>
             <div class="form-row" id="row-propofol-start-rate">
-              <label for="input-propofol-start-rate">Starting infusion</label>
+              <label for="btn-propofol-start-rate">Starting infusion</label>
               <div class="start-dose-pair">
-                <input type="text" id="input-propofol-start-rate" inputmode="decimal" placeholder="&mdash;">
-                <select id="input-propofol-start-rate-unit"></select>
+                <button type="button" class="start-dose-btn" id="btn-propofol-start-rate">&mdash;</button>
               </div>
             </div>
           </div>
@@ -1270,17 +1274,15 @@
           <span class="start-dose-drug-label">Fentanyl</span>
           <div class="input-grid">
             <div class="form-row">
-              <label for="input-fentanyl-start-bolus">Starting bolus</label>
+              <label for="btn-fentanyl-start-bolus">Starting bolus</label>
               <div class="start-dose-pair">
-                <input type="text" id="input-fentanyl-start-bolus" inputmode="decimal" placeholder="&mdash;">
-                <select id="input-fentanyl-start-bolus-unit"></select>
+                <button type="button" class="start-dose-btn" id="btn-fentanyl-start-bolus">&mdash;</button>
               </div>
             </div>
             <div class="form-row" id="row-fentanyl-start-rate">
-              <label for="input-fentanyl-start-rate">Starting infusion</label>
+              <label for="btn-fentanyl-start-rate">Starting infusion</label>
               <div class="start-dose-pair">
-                <input type="text" id="input-fentanyl-start-rate" inputmode="decimal" placeholder="&mdash;">
-                <select id="input-fentanyl-start-rate-unit"></select>
+                <button type="button" class="start-dose-btn" id="btn-fentanyl-start-rate">&mdash;</button>
               </div>
             </div>
           </div>
@@ -1289,17 +1291,15 @@
           <span class="start-dose-drug-label">Ketamine</span>
           <div class="input-grid">
             <div class="form-row">
-              <label for="input-ketamine-start-bolus">Starting bolus</label>
+              <label for="btn-ketamine-start-bolus">Starting bolus</label>
               <div class="start-dose-pair">
-                <input type="text" id="input-ketamine-start-bolus" inputmode="decimal" placeholder="&mdash;">
-                <select id="input-ketamine-start-bolus-unit"></select>
+                <button type="button" class="start-dose-btn" id="btn-ketamine-start-bolus">&mdash;</button>
               </div>
             </div>
             <div class="form-row" id="row-ketamine-start-rate">
-              <label for="input-ketamine-start-rate">Starting infusion</label>
+              <label for="btn-ketamine-start-rate">Starting infusion</label>
               <div class="start-dose-pair">
-                <input type="text" id="input-ketamine-start-rate" inputmode="decimal" placeholder="&mdash;">
-                <select id="input-ketamine-start-rate-unit"></select>
+                <button type="button" class="start-dose-btn" id="btn-ketamine-start-rate">&mdash;</button>
               </div>
             </div>
           </div>
@@ -2033,7 +2033,17 @@
               <div class="settings-sync-status" id="sync-transfer-status"></div>
             </div>
             <div class="settings-row">
-              <div class="settings-sync-note">Pairs this simulator with a scratchpad app so you can pull patient demographics (age, sex, height, weight) from the cloud. The same pairing code also moves your last case (kept 24 h) and starting-dose template between devices via the setup screen. De-identified / training use only &mdash; do not transfer protected health information.</div>
+              <label>Preferences</label>
+              <div class="settings-control">
+                <button class="btn-template-sync" id="btn-sync-push-prefs" type="button" title="Push this device's preferences to the cloud (kept 30 days)">&#8593; Push preferences</button>
+                <button class="btn-template-sync" id="btn-sync-pull-prefs" type="button" title="Pull preferences from the cloud and apply them (reloads the app)">&#8595; Pull preferences</button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-sync-status" id="prefs-sync-status"></div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-sync-note">Pairs this simulator with a scratchpad app so you can pull patient demographics (age, sex, height, weight) from the cloud. The same pairing code also moves your last case (kept 24 h), starting-dose template, and app preferences (appearance, units, pump configuration &mdash; kept 30 days) between devices. De-identified / training use only &mdash; do not transfer protected health information.</div>
             </div>
           </div>
         </div>
