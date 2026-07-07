@@ -6,115 +6,11 @@
  */
 
 // Inline the config so tests run standalone in Node
-const DRUG_DEFS = {
-  propofol: { concentration: 10 },
-  fentanyl: { concentration: 0.05 },
-  remifentanil: { concentration: 0.05 },
-  ketamine: { concentration: 10 },
-};
 
-const DRUG_TASK_UNITS = {
-  propofol: {
-    bolus: { canonical: 'mg', allowed: ['mg', 'mcg/kg', 'mL'],
-             quantSteps: { 'mg': 1, 'mcg/kg': 10, 'mL': 0.1 } },
-    rate: { canonical: 'mg/min', allowed: ['mL/h', 'mcg/kg/min', 'mg/min'], defaultDisplay: 'mL/h',
-            quantSteps: { 'mL/h': 1, 'mcg/kg/min': 5, 'mg/min': 0.1 } },
-    ceTarget: { canonical: 'mcg/mL', allowed: ['mcg/mL'] },
-  },
-  fentanyl: {
-    bolus: { canonical: 'mg', allowed: ['mcg', 'mcg/kg', 'mL'],
-             quantSteps: { 'mcg': 5, 'mcg/kg': 0.25, 'mL': 0.1 } },
-    rate: { canonical: 'mg/min', allowed: ['mcg/kg/min', 'mcg/h', 'mL/h'], defaultDisplay: 'mcg/kg/min',
-            quantSteps: { 'mcg/kg/min': 0.01, 'mcg/h': 5, 'mL/h': 1 } },
-    ceTarget: { canonical: 'mcg/mL', allowed: ['ng/mL'] },
-  },
-  ketamine: {
-    bolus: { canonical: 'mg', allowed: ['mg', 'mg/kg', 'mL'],
-             quantSteps: { 'mg': 5, 'mg/kg': 0.1, 'mL': 0.1 } },
-    rate: { canonical: 'mg/min', allowed: ['mg/kg/h', 'mL/h', 'mg/min'], defaultDisplay: 'mg/kg/h',
-            quantSteps: { 'mg/kg/h': 0.1, 'mL/h': 1, 'mg/min': 0.1 } },
-  },
-};
+import { toCanonical, fromCanonical, getQuantStep, quantizeInDisplay } from '../js/util/units.js';
+// Real DRUG_DEFS / DRUG_TASK_UNITS come in via units.js → constants.js; the
+// inline config tables and toBase/fromBase internals were removed.
 
-// ---- Inline conversion functions (matching units.js logic) ----
-
-function toBase(value, unit, task, wt, conc) {
-  if (task === 'bolus') {
-    if (unit === 'mg') return value;
-    if (unit === 'mcg') return value / 1000;
-    if (unit === 'mcg/kg') return value * wt / 1000;
-    if (unit === 'mg/kg') return value * wt;
-    if (unit === 'mL') return value * conc;
-  }
-  if (task === 'rate') {
-    if (unit === 'mg/min') return value;
-    if (unit === 'mcg/kg/min') return value * wt / 1000;
-    if (unit === 'mL/h') return value * conc / 60;
-    if (unit === 'mcg/h') return value / 1000 / 60;
-    if (unit === 'mg/kg/h') return value * wt / 60;
-  }
-  if (task === 'ceTarget') {
-    if (unit === 'mcg/mL') return value;
-    if (unit === 'ng/mL') return value / 1000;
-  }
-  throw new Error(`Cannot convert ${unit} for ${task}`);
-}
-
-function fromBase(value, unit, task, wt, conc) {
-  if (task === 'bolus') {
-    if (unit === 'mg') return value;
-    if (unit === 'mcg') return value * 1000;
-    if (unit === 'mcg/kg') return value * 1000 / wt;
-    if (unit === 'mg/kg') return value / wt;
-    if (unit === 'mL') return value / conc;
-  }
-  if (task === 'rate') {
-    if (unit === 'mg/min') return value;
-    if (unit === 'mcg/kg/min') return value * 1000 / wt;
-    if (unit === 'mL/h') return value * 60 / conc;
-    if (unit === 'mcg/h') return value * 1000 * 60;
-    if (unit === 'mg/kg/h') return value * 60 / wt;
-  }
-  if (task === 'ceTarget') {
-    if (unit === 'mcg/mL') return value;
-    if (unit === 'ng/mL') return value * 1000;
-  }
-  throw new Error(`Cannot convert to ${unit} for ${task}`);
-}
-
-function toCanonical(value, displayUnit, drugId, task, ctx) {
-  const config = DRUG_TASK_UNITS[drugId]?.[task];
-  if (!config) throw new Error(`No config for ${drugId}/${task}`);
-  if (!config.allowed.includes(displayUnit)) throw new Error(`Unit '${displayUnit}' not allowed for ${drugId}/${task}`);
-  if (displayUnit === config.canonical) return { value, unit: config.canonical };
-  const conc = ctx.concentration || DRUG_DEFS[drugId]?.concentration;
-  const result = toBase(value, displayUnit, task, ctx.weightKg, conc);
-  return { value: result, unit: config.canonical };
-}
-
-function fromCanonical(value, displayUnit, drugId, task, ctx) {
-  const config = DRUG_TASK_UNITS[drugId]?.[task];
-  if (!config) throw new Error(`No config for ${drugId}/${task}`);
-  if (!config.allowed.includes(displayUnit)) throw new Error(`Unit '${displayUnit}' not allowed`);
-  if (displayUnit === config.canonical) return value;
-  const conc = ctx.concentration || DRUG_DEFS[drugId]?.concentration;
-  return fromBase(value, displayUnit, task, ctx.weightKg, conc);
-}
-
-function getQuantStep(drugId, task, displayUnit) {
-  return DRUG_TASK_UNITS[drugId]?.[task]?.quantSteps?.[displayUnit] ?? null;
-}
-
-function quantizeInDisplay(canonicalValue, displayUnit, drugId, task, ctx = {}) {
-  const step = getQuantStep(drugId, task, displayUnit);
-  if (!step || !Number.isFinite(canonicalValue)) return canonicalValue;
-  const displayVal = fromCanonical(canonicalValue, displayUnit, drugId, task, ctx);
-  const snapped = Math.round(displayVal / step) * step;
-  if (!Number.isFinite(snapped)) return canonicalValue;
-  return toCanonical(snapped, displayUnit, drugId, task, ctx).value;
-}
-
-// ---- Test harness ----
 let passed = 0, failed = 0;
 function ok(c, m) { if (c) { passed++; console.log(`  ✓ ${m}`); } else { failed++; console.error(`  ✗ ${m}`); } }
 function near(a, b, tol, m) { ok(Math.abs(a - b) < tol, `${m} (${a} ≈ ${b})`); }
