@@ -26,18 +26,25 @@ static imports without a 300-line async reindent; the runner already discovers
   Ce_ss 2.857→3.017 at CL 1.79, ketamine Ce_ss 0.9375→0.776 at 63 mL/kg, etc.).
 - New test-meta: version lockstep + precache-vs-disk (previously manual).
 
-FINDING deferred for a decision — **test-tci-scheme**: its inline planner was a
-fast-converging variant that matches NEITHER shipping planner. The production
-`stepped` planner is deliberately conservative (Ce 1.75→2.11→2.99 over 5 h,
-reaching target ~300 min — CLAUDE.md "slow onset, low overshoot"), so its Ce is
-~30% low at 30 min where the test expects ±8%; the CET planner is closer but
-dips to ~8.6% low. Converting requires choosing which planner the test should
-validate and re-baselining its convergence bounds to that planner's real
-behavior. Left on its inline copy pending that call. The real planners are
-already covered by test-pump-rate-correction (imports real simulation) and the
-R2 golden-fingerprint equivalence checks.
+test-tci-scheme: converted to the real **CET planner** (planTCISchemeCET) — the
+only planner used in production (stepped / cet-conservative / cet-emulation were
+development aids, per the maintainer). Its inline copy was a stepped-style
+variant matching neither shipping planner. Convergence bounds re-baselined to
+CET's fast-onset reality (leading pause excluded from the rates-decrease check;
+long-horizon band widened to CET's ~5.3% undershoot). TEST 13 reframed: the
+quantize-in-loop plan is a genuinely different integer-mL/h plan (the loop
+re-selects rates around the grid), so the guard is now "quantized plan still
+converges to target" rather than "quantized ≈ unquantized."
 
-Also deferred (faithful inline copies, low-risk follow-up): test-fentanyl-pk,
+FINDING (flagged, not yet actioned): enabling round-in-display-units on the CET
+planner materially slows onset. The quantized plan runs 12–17% below target for
+the first ~2 h and takes ~4 h (vs ~1 h unquantized) to converge, because the
+maintenance loop settles on a lower integer-mL/h rate (40 vs 49.5 mL/h). This is
+production behavior (simulation.js planTCI passes the same quantize config to
+CET when the user enables display-rounding). Worth reviewing whether display
+rounding should degrade the shipping planner's onset this much.
+
+Deferred (faithful inline copies, low-risk follow-up): test-fentanyl-pk,
 test-ketamine-pk (verified their inline constants match production exactly),
 test-units, and the engine-mechanics files test-model / test-sim-v2 /
 test-t0-edge / test-integration / test-reconcile.
