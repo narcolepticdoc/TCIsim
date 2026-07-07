@@ -4,6 +4,45 @@
 
 ## Session History
 
+### Test-suite audit: exercise real code, not inline copies (v0.5.41.3) — Interim
+
+Audit finding: 14 of 26 test files loaded ZERO production code — they inlined
+copies of the engine / Eleveld / planners / predictors and tested the copies,
+which had silently drifted. Worst measured drift: inline Eleveld was 337% off
+production Q3 for a 70y/55kg opioid patient; `test-vs-simtiva`'s headline
+"0.0000% vs SimTIVA" validated a copy of the engine that never imported
+js/pk/engine.js.
+
+Converted to import real modules (renamed to .mjs where a big file needed
+static imports without a 300-line async reindent; the runner already discovers
+.mjs):
+- test-vs-simtiva: real createEngine + calcEleveldParams; analytical +
+  SimTIVA-tick + SimTIVA-param oracles kept inline (independent references).
+  Verified real Eleveld matches the SimTIVA oracle within 0.1% across 7
+  patients — no hidden production discrepancy.
+- test-unit-safety: real validateParams.
+- test-decay, test-steady-state-predictor: real predictors + engine + drug
+  calculators; exact regression locks re-baselined to real output (propofol
+  Ce_ss 2.857→3.017 at CL 1.79, ketamine Ce_ss 0.9375→0.776 at 63 mL/kg, etc.).
+- New test-meta: version lockstep + precache-vs-disk (previously manual).
+
+FINDING deferred for a decision — **test-tci-scheme**: its inline planner was a
+fast-converging variant that matches NEITHER shipping planner. The production
+`stepped` planner is deliberately conservative (Ce 1.75→2.11→2.99 over 5 h,
+reaching target ~300 min — CLAUDE.md "slow onset, low overshoot"), so its Ce is
+~30% low at 30 min where the test expects ±8%; the CET planner is closer but
+dips to ~8.6% low. Converting requires choosing which planner the test should
+validate and re-baselining its convergence bounds to that planner's real
+behavior. Left on its inline copy pending that call. The real planners are
+already covered by test-pump-rate-correction (imports real simulation) and the
+R2 golden-fingerprint equivalence checks.
+
+Also deferred (faithful inline copies, low-risk follow-up): test-fentanyl-pk,
+test-ketamine-pk (verified their inline constants match production exactly),
+test-units, and the engine-mechanics files test-model / test-sim-v2 /
+test-t0-edge / test-integration / test-reconcile.
+
+
 ### Unpaired-state: relabel, lighten, drop hints (v0.5.41.2) — Interim
 
 v0.5.41.1 overshot (opacity .4 unreadable; the status-line hints read as untappable dead text; treatment diverged from the patient button). Final form per user direction: all five sync buttons relabel with the patient button's "⚙ Pair to enable …" language via a `SYNC_BUTTON_LABELS` table in `refreshSyncButtons()` (case buttons: "⚙ Pair to enable case sync"; compact template row: "⚙ Pair"), dim lightened to opacity .7 (the label explains the state — readability wins), the persistent hints and `noticeUnpaired`/`wasUnpaired` machinery removed, and the no-code tap is plain `openSettingsToSync()` again — identical to the patient button. The `animation:none` guard from 0.5.41.1 stays: without it the `.setup-form>*` fadeIn (fill-mode `both`) pins the case buttons at the retained final keyframe's opacity:1 and no dim applies at all.

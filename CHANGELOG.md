@@ -11,6 +11,15 @@
 
 ---
 
+## [0.5.41.3] — 2026-07-07
+
+Test-suite audit — the test files now exercise the real code they claim to validate (they had drifted into testing inline copies).
+
+- **`test-vs-simtiva`** now imports the real `js/pk/engine.js` and `js/pk/eleveld.js`. Its "0.0000% vs SimTIVA" cross-validation previously ran against an inline *copy* of the engine that never touched production; it now validates the shipping matrix-exp engine and Eleveld calculator against the independent analytical eigenvalue oracle (kept inline by design). Confirmed real Eleveld matches the SimTIVA reference within 0.1% across all 7 patients.
+- **`test-unit-safety`** now imports the real `validateParams` (js/pk/engine.js) instead of an inline copy.
+- **`test-decay`** and **`test-steady-state-predictor`** now import the real predictors + engine + Eleveld/Fentanyl/Ketamine calculators. The inline copies had drifted from production (inline Eleveld used base CL 1.89 vs the real 1.79; inline ketamine was an entirely different volume model). Exact-value regression locks were re-baselined to the real predictors' output.
+- **New `test-meta`**: automated release-hygiene checks that were previously manual — `js/version.js` ↔ `sw.js` version lockstep, and `sw.js` PRECACHE_URLS ↔ the js modules on disk.
+
 ## [0.5.41.2] — 2026-07-06
 
 - **Unpaired sync buttons now relabel like the patient button** (0.5.41.1's dim+hint treatment was too dark and inconsistent). All five buttons use the same "⚙ Pair to enable …" language when no code is stored — case buttons say "⚙ Pair to enable case sync", the compact template buttons say "⚙ Pair" — with a light dim (opacity .7) that keeps the text readable, since the label itself explains the disabled state. The untappable "Not paired — tap to set up" status-line notices are removed, and tapping goes straight to Settings → Sync with no extra message.
