@@ -7,7 +7,11 @@
  * Inline implementation mirrors js/pk/fentanyl.js.
  */
 
-// ── Inline fentanyl.js ────────────────────────────────────────────
+
+import { pkMass, calcFentanylParams } from '../js/pk/fentanyl.js';
+
+// Reference population values (Shafer 1990) used as independent expected
+// values in the assertions below — NOT a second implementation.
 const REF_WEIGHT = 70;
 const REF_V1  =   7.35;
 const REF_V2  =  33.94;
@@ -17,33 +21,6 @@ const REF_Q2  = 207.71 / 60;
 const REF_Q3  =  99.22 / 60;
 const KE0     = 0.1195;
 
-function pkMass(tbw, bmi) {
-  if (tbw >= 85 && bmi > 30) {
-    return 52 / (1 + (196.4 * Math.exp(-0.025 * tbw) - 53.66) / 100);
-  }
-  return tbw;
-}
-
-function calcFentanylParams(patient) {
-  const { weight, height } = patient;
-  const heightM = height / 100;
-  const bmi = weight / (heightM * heightM);
-  const s = pkMass(weight, bmi) / REF_WEIGHT;
-  const V1 = REF_V1 * s;
-  const V2 = REF_V2 * s;
-  const V3 = REF_V3 * s;
-  const CL = REF_CL * s;
-  const Q2 = REF_Q2 * s;
-  const Q3 = REF_Q3 * s;
-  const ke0 = KE0;
-  const k10 = CL / V1;
-  const k12 = Q2 / V1;
-  const k21 = Q2 / V2;
-  const k13 = Q3 / V1;
-  const k31 = Q3 / V3;
-  return { V1, V2, V3, CL, Q2, Q3, ke0, k10, k12, k21, k13, k31 };
-}
-// ─────────────────────────────────────────────────────────────────
 
 let passed = 0;
 let failed = 0;
