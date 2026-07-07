@@ -44,7 +44,19 @@ production behavior (simulation.js planTCI passes the same quantize config to
 CET when the user enables display-rounding). Worth reviewing whether display
 rounding should degrade the shipping planner's onset this much.
 
-Deferred (faithful inline copies, low-risk follow-up): test-fentanyl-pk,
+Follow-up (completed): the remaining inline-copy files now import real code —
+test-fentanyl-pk / test-ketamine-pk (real calculators; population constants kept
+as independent expected values), test-units (real converter), test-t0-edge /
+test-model / test-reconcile (real engine; matrix-exp primitive checks reframed
+through getSystemMatrix), test-sim-v2 / test-integration (real engine + real
+Eleveld, dropping their inline drifted copies). Mini event/sim harnesses kept as
+labelled scaffolding; reconcile's Cardano cubic and vs-simtiva's analytical
+solver kept as deliberate independent oracles. Only test-pk retains a faithful
+inline engine (it already imports the real Eleveld + PD, and its block includes
+generic matrix-exp primitive tests that would be an anti-pattern to reframe).
+The 4×4 matrix engine — previously copy-pasted across 11 files —
+
+Superseded note: test-fentanyl-pk,
 test-ketamine-pk (verified their inline constants match production exactly),
 test-units, and the engine-mechanics files test-model / test-sim-v2 /
 test-t0-edge / test-integration / test-reconcile.

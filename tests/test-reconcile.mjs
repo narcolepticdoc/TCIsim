@@ -9,33 +9,11 @@
  *      mammillary model (matches js/pk/eigenvalues.js logic).
  */
 
-// ---- Minimal 4x4 engine (matches test-model.js pattern, Cp + C2 + C3 + Ce) ----
-
-const N = 4;
-function mat4(){return new Float64Array(16)}
-function eye4(){const m=mat4();m[0]=m[5]=m[10]=m[15]=1;return m}
-function mul4(A,B){const C=mat4();for(let i=0;i<N;i++)for(let j=0;j<N;j++){let s=0;for(let k=0;k<N;k++)s+=A[i*N+k]*B[k*N+j];C[i*N+j]=s}return C}
-function mulVec4(A,x){const y=new Float64Array(4);for(let i=0;i<N;i++){let s=0;for(let j=0;j<N;j++)s+=A[i*N+j]*x[j];y[i]=s}return y}
-function add4(A,B){const C=mat4();for(let i=0;i<16;i++)C[i]=A[i]+B[i];return C}
-function sub4(A,B){const C=mat4();for(let i=0;i<16;i++)C[i]=A[i]-B[i];return C}
-function scale4(A,s){const B=mat4();for(let i=0;i<16;i++)B[i]=A[i]*s;return B}
-function inv4(M){const a=new Float64Array(32);for(let i=0;i<N;i++){for(let j=0;j<N;j++)a[i*8+j]=M[i*N+j];a[i*8+(N+i)]=1}for(let col=0;col<N;col++){let mv=Math.abs(a[col*8+col]),mr=col;for(let r=col+1;r<N;r++){const v=Math.abs(a[r*8+col]);if(v>mv){mv=v;mr=r}}if(mv<1e-15)return null;if(mr!==col)for(let j=0;j<8;j++){const t=a[col*8+j];a[col*8+j]=a[mr*8+j];a[mr*8+j]=t}const p=a[col*8+col];for(let j=0;j<8;j++)a[col*8+j]/=p;for(let r=0;r<N;r++){if(r===col)continue;const f=a[r*8+col];for(let j=0;j<8;j++)a[r*8+j]-=f*a[col*8+j]}}const inv=mat4();for(let i=0;i<N;i++)for(let j=0;j<N;j++)inv[i*N+j]=a[i*8+(N+j)];return inv}
-function expm4(A){const c=[1,1/2,5/44,1/66,1/792,1/15840,1/665280];const nA=(()=>{let mx=0;for(let j=0;j<N;j++){let cs=0;for(let i=0;i<N;i++)cs+=Math.abs(A[i*N+j]);if(cs>mx)mx=cs}return mx})();let s=0;if(nA>0.5){s=Math.ceil(Math.log2(nA/0.5));if(s<0)s=0}const As=(s>0)?scale4(A,1/(1<<s)):A;const As2=mul4(As,As),As3=mul4(As,As2),As4=mul4(As2,As2),As5=mul4(As,As4),As6=mul4(As2,As4);const I=eye4();const powers=[I,As,As2,As3,As4,As5,As6];let Nm=mat4(),Dm=mat4();for(let k=0;k<=6;k++){const sg=(k%2===0)?1:-1;for(let i=0;i<16;i++){Nm[i]+=c[k]*powers[k][i];Dm[i]+=sg*c[k]*powers[k][i]}}const Di=inv4(Dm);if(!Di)return add4(I,A);let result=mul4(Di,Nm);for(let i=0;i<s;i++)result=mul4(result,result);return result}
-
-function createEngine(p){
-  const{V1,V2,V3}=p;
-  const A=mat4();
-  A[0]=-(p.CL+p.Q2+p.Q3)/V1;A[1]=p.Q2/V2;A[2]=p.Q3/V3;
-  A[4]=p.Q2/V1;A[5]=-p.Q2/V2;
-  A[8]=p.Q3/V1;A[10]=-p.Q3/V3;
-  A[12]=p.ke0/V1;A[15]=-p.ke0;
-  let st=new Float64Array(4);
-  return {
-    advance(dt,R){if(dt<=0)return;const e=expm4(scale4(A,dt));const xH=mulVec4(e,st);if(R===0){st=xH;return}const Ai=inv4(A);if(!Ai){st=xH;return}const M=mul4(Ai,sub4(e,eye4()));for(let i=0;i<4;i++)st[i]=xH[i]+M[i*4]*R},
-    getConcentrations(){return{Cp:st[0]/V1,C2:st[1]/V2,C3:st[2]/V3,Ce:st[3]}},
-    reset(){st=new Float64Array(4)},
-  };
-}
+// ---- REAL engine ----
+import { createEngine } from '../js/pk/engine.js';
+// getCumulativeDose (simplified, instant-bolus) and the Cardano cubic below are
+// INDEPENDENT test-side references — the Cardano solver cross-checks the
+// production Viète solver, mirroring the analytical oracle in test-vs-simtiva.
 
 // Sample propofol-ish 3-compartment params (not Eleveld, just plausible)
 const PK = { V1: 6.0, V2: 25.0, V3: 150.0, CL: 1.5, Q2: 1.8, Q3: 0.8, ke0: 0.15 };

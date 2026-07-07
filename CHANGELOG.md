@@ -11,13 +11,14 @@
 
 ---
 
-## [0.5.41.4] — 2026-07-07
+## [0.5.41.5] — 2026-07-07
 
 Test-suite audit — the test files now exercise the real code they claim to validate (they had drifted into testing inline copies).
 
 - **`test-vs-simtiva`** now imports the real `js/pk/engine.js` and `js/pk/eleveld.js`. Its "0.0000% vs SimTIVA" cross-validation previously ran against an inline *copy* of the engine that never touched production; it now validates the shipping matrix-exp engine and Eleveld calculator against the independent analytical eigenvalue oracle (kept inline by design). Confirmed real Eleveld matches the SimTIVA reference within 0.1% across all 7 patients.
 - **`test-unit-safety`** now imports the real `validateParams` (js/pk/engine.js) instead of an inline copy.
 - **`test-decay`** and **`test-steady-state-predictor`** now import the real predictors + engine + Eleveld/Fentanyl/Ketamine calculators. The inline copies had drifted from production (inline Eleveld used base CL 1.89 vs the real 1.79; inline ketamine was an entirely different volume model). Exact-value regression locks were re-baselined to the real predictors' output.
+- **Remaining inline-engine tests converted**: `test-t0-edge`, `test-model`, `test-reconcile`, `test-sim-v2`, `test-integration`, `test-fentanyl-pk`, `test-ketamine-pk`, `test-units` now import the real engine / Eleveld / drug calculators / unit converter instead of copied-and-pasted duplicates (the 4×4 matrix engine was inlined 11×). `test-sim-v2` / `test-integration` also drop their inline *drifted* Eleveld for the real one. Mini event/sim harnesses are kept as labelled scaffolding (the production event/sim layers are covered by `test-session-roundtrip` / `test-pump-rate-correction`); genuinely-independent references (reconcile's Cardano cubic, vs-simtiva's analytical solver) stay inline by design. Matrix-exp primitive checks reframed through the engine's public `getSystemMatrix` + `advance`.
 - **`test-tci-scheme`** now imports the real **CET planner** (`planTCISchemeCET`) — the only planner used in production — instead of an inline copy of a stepped-style planner. Convergence bounds re-baselined to CET's real fast-onset behavior. This surfaced a genuine finding: enabling **round-in-display-units on the CET planner materially slows onset** — the quantized plan runs 12–17% below target for the first ~2 h and takes ~4 h (vs ~1 h) to converge, because the maintenance loop re-selects a lower integer-mL/h rate. Flagged for review; not a stacking error.
 - **New `test-meta`**: automated release-hygiene checks that were previously manual — `js/version.js` ↔ `sw.js` version lockstep, and `sw.js` PRECACHE_URLS ↔ the js modules on disk.
 
