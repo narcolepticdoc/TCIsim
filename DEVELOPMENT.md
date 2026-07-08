@@ -4,6 +4,56 @@
 
 ## Session History
 
+### Test-suite improvement round 2: coverage gaps, de-fossilize, tolerance windows, suite guide (v0.5.44) — Interim
+
+The five follow-up items proposed at the end of the v0.5.43 round (the user
+said "fix them all"), plus a written suite guide. Test-only; 894 → 957 green.
+
+1. **Coverage gaps closed.** `test-util-math.mjs` pins `js/util/math.js`
+   (`mat4/eye4/mul4/mulVec4/add4/sub4/scale4/inv4/expm4`) against INDEPENDENT
+   closed forms — diagonal exp = elementwise exp, nilpotent (N²=0) exp = I+N,
+   A·A⁻¹ = I, singular → null — so the algebra layer under the engine's
+   matrix-exponential advance is caught at the source, not just in aggregate via
+   test-vs-simtiva. Also covers `js/util/color.js` (hexToRgba/alphaToHex/lighten).
+   `test-settings-validation.mjs` drives the REAL `getSettings`/`setSettings`
+   clamp matrix (out-of-range → default, enum rejection, wrong-type → default,
+   reactionDelaySec clamp+0.5-snap, corrupt-JSON → defaults, round-trip) via a
+   localStorage Map shim — settings.js imports cleanly under bare Node because
+   alert-sound.js only touches `window` inside functions.
+2. **De-fossilized test-reaction-delay** (`.js` → `.mjs`): it inlined a copy of
+   `displayedSecToEvent` "kept in lockstep"; now imports the real one. The inline
+   `snapReactionDelay` mirror it also carried moved into test-settings-validation
+   as real-getSettings assertions (net: same coverage, now against production).
+3. **test-integration → real chain.** Was inline event-list + inline planner +
+   inline model + inline PD (all fossils). Rewritten on the production
+   `createModel().planTCI(… cet-emulation)` with production pump config, keeping
+   the curve-SHAPE assertions (Ce lags Cp, redistribution, rate step-down, BIS
+   range, resolution agreement) that test-tci-plan-fidelity (endpoint-only)
+   doesn't cover. One real-behavior correction surfaced: the old fixed-0.05-min
+   bolus window put the rate-restore at t+0.05; the real facade puts it at the
+   realistic delivery end (~t+0.4 for 50 mg), so the old `clearAfter(5.05)` was
+   dropped (it would have deleted the restore).
+4. **Incidental-timing locks → tolerance windows.** This is the deferred audit
+   item #5. In test-steady-state-predictor, the exact-integer-MINUTE locks
+   (timeToSsMin===856, plateau entryMin/exitMin===40/98/60/87) pinned values that
+   are a function of the sampling grid + slope-tolerance knob — incidental, not
+   clinical. They became `nearMin(actual, expected, ±few)` windows: still catch a
+   "detection broke" regression (which moves the minute by tens or to null), but
+   survive benign retuning. Ce_ss VALUE locks (analytic, cross-checked in TEST 1)
+   and `=== 0`/`=== null` CONTRACTS stay exact. The header documents the split.
+5. **Renamed misnomers.** test-sim-v2 → test-event-driven-sim; test-tci-tolerance-
+   diagnostic → test-tci-tolerance-slider. Verified nothing imports them by name
+   (the runner discovers by glob); headers updated with a "formerly" note.
+
+Plus **tests/README.md** — a human-readable suite guide: run instructions, the
+five-kind taxonomy (external baselines / clinical-outcome contracts / behavioral
+invariants / round-trip contracts / engine-mechanics scaffolding), a per-file
+what-it-guards table, the conventions (test-real-code, independent-oracles-stay-
+inline, mini-event-list scaffolding, .mjs-vs-.js, exact-lock-vs-tolerance-window,
+125-not-200 pump config), and a how-to-add checklist. No new js/ modules → sw.js
+precache unchanged; version bumped per the every-code-change workflow.
+
+
 ### Test-suite improvement round: fidelity baseline, retire legacy, de-dupe (v0.5.43) — Interim
 
 Follow-on to the 0.5.41.x/0.5.42 audit. The audit made the tests import real

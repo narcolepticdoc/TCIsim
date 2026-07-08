@@ -11,6 +11,17 @@
 
 ---
 
+## [0.5.44] — 2026-07-08
+
+Test-suite improvement round 2 — the follow-up items from the 0.5.43 review, plus a written suite guide. All green at 957 assertions (was 894). Test-only; no shipped-code delta.
+
+- **New coverage for previously-untested modules.** `test-util-math` pins `js/util/math.js` (the 4×4 `inv4`/`expm4` behind the engine's matrix-exponential advance) against independent closed forms — diagonal exp = elementwise exp, nilpotent exp = I+N, A·A⁻¹ = I — plus `js/util/color.js` hex/alpha helpers. `test-settings-validation` drives the real `js/ui/settings.js` `getSettings`/`setSettings` clamp-and-validate logic (the guard between an arbitrary stored/cloud-pulled JSON blob and the running app) via a localStorage shim.
+- **De-fossilized `test-reaction-delay`** — it inlined a copy of `displayedSecToEvent` "kept in lockstep"; it now imports the real function (renamed `.js` → `.mjs`). Its inline reactionDelaySec clamp mirror moved to `test-settings-validation`, which tests the real `getSettings` clamp instead.
+- **`test-integration` now drives the real chain.** It used to inline its own event list + planner + model + PD and test the copies; it now runs the production `createModel().planTCI(… cet-emulation)` and asserts PK/PD curve *shape* (Ce lags Cp, redistribution, rate step-down, BIS range, resolution agreement) — complementing the endpoint-focused `test-tci-plan-fidelity`.
+- **Downgraded incidental-timing locks to tolerance windows.** In `test-steady-state-predictor`, exact-integer-minute locks (time-to-95%-SS, plateau entry/exit minute) — which depend on the sampling grid and slope threshold — became tight `nearMin(…, ±)` windows that still catch a real regression but survive benign retuning. Ce_ss *value* locks (analytically cross-checked) and `=== 0`/`=== null` contracts stay exact.
+- **Renamed two misnomer files.** `test-sim-v2` → `test-event-driven-sim` (the "v2" rewrite is long gone and the state-machine block was removed in 0.5.43); `test-tci-tolerance-diagnostic` → `test-tci-tolerance-slider` (it's a focused contract test now, not a diagnostic printer).
+- **New `tests/README.md`** — a human-readable guide to the suite: how to run it, the five kinds of test (external baselines / clinical-outcome contracts / behavioral invariants / round-trip contracts / engine-mechanics scaffolding), a per-file table of what each guards, the conventions (test real code, independent oracles stay inline, exact-lock vs tolerance-window, production pump config), and how to add a test.
+
 ## [0.5.43] — 2026-07-08
 
 Test-suite improvement round — a follow-on to the 0.5.41.x/0.5.42 audit that closed the last gaps and streamlined the suite. All green at 894 assertions (was 842).

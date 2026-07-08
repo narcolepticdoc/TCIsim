@@ -1,16 +1,22 @@
 /**
- * test-sim-v2.js — Tests for the event-driven simulation controller
- * 
- * Tests the rewritten simulation.js that uses events.js + tci-planner.js
- * instead of the old tick-based tci.js approach.
+ * test-event-driven-sim.mjs — Event-driven simulation behaviors.
+ *
+ * (Formerly test-sim-v2 — renamed; the "v2" referred to a long-gone rewrite,
+ * and the obsolete READY/RUNNING/PAUSED state-machine assertions have been
+ * removed.) Exercises the event-driven simulation behaviors — manual rate/bolus,
+ * event-log integration, mid-case patient change, event edit/delete, multi-drug
+ * isolation, jump-to-time, and per-tick data fan-out — over a lightweight
+ * createSimulation harness wired to the REAL matrix engine + Eleveld params.
+ * The harness is test scaffolding; the production stateless simulation.js facade
+ * is covered by test-session-roundtrip / test-pump-rate-correction, and the real
+ * planTCI outcome by test-tci-plan-fidelity.
  */
 
 // ============ REAL engine + Eleveld ============
 import { createEngine } from '../js/pk/engine.js';
 import { calcEleveldParams } from '../js/pk/eleveld.js';
-// createEventList + createSimulation below are test scaffolding (the latter is
-// an obsolete state-machine design; production simulation.js is a stateless
-// facade covered by test-session-roundtrip / test-pump-rate-correction).
+// createEventList + createSimulation below are test scaffolding wired to the
+// real engine; the production event/sim layers are covered elsewhere (above).
 
 
 // Mini event system (from events.js)

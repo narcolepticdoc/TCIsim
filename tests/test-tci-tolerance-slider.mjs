@@ -1,5 +1,8 @@
 /**
- * test-tci-tolerance-diagnostic.mjs
+ * test-tci-tolerance-slider.mjs
+ *
+ * (Formerly test-tci-tolerance-diagnostic — renamed to reflect what it is now:
+ * a focused contract test, not the ~200-line diagnostic printer it started as.)
  *
  * Contract test: the "TCI target tolerance" slider (#set-tci-fraction,
  * persisted as tciFraction) is bound to the planner's `ceTolerance` cfg key
@@ -19,7 +22,7 @@
  * maintenance) was documentary only and has been removed; its finding lives
  * in TCI-TOLERANCE-ANALYSIS.md §1.
  *
- * Run with: node tests/test-tci-tolerance-diagnostic.mjs
+ * Run with: node tests/test-tci-tolerance-slider.mjs
  */
 
 import { calcEleveldParams } from '../js/pk/eleveld.js';
