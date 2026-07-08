@@ -36,13 +36,7 @@ quantize-in-loop plan is a genuinely different integer-mL/h plan (the loop
 re-selects rates around the grid), so the guard is now "quantized plan still
 converges to target" rather than "quantized ≈ unquantized."
 
-FINDING (flagged, not yet actioned): enabling round-in-display-units on the CET
-planner materially slows onset. The quantized plan runs 12–17% below target for
-the first ~2 h and takes ~4 h (vs ~1 h unquantized) to converge, because the
-maintenance loop settles on a lower integer-mL/h rate (40 vs 49.5 mL/h). This is
-production behavior (simulation.js planTCI passes the same quantize config to
-CET when the user enables display-rounding). Worth reviewing whether display
-rounding should degrade the shipping planner's onset this much.
+CORRECTION (0.5.41.6): an earlier note here claimed enabling round-in-display-units "materially slows CET onset" (12-17% low for ~2 h). That was WRONG. It came from wiring test-tci-scheme to a DEVELOPMENT planner (planTCISchemeCET) with the wrong maxRate (200 vs the production 125 mg/min from 750 mL/h pump settings). The production planner is cet-emulation (planTCISchemeEmulation, the SimTIVA deliver_cpt port) — verified against the live app (35 y/70 kg, target 3.5, rounding ON): Ce reaches target by ~5 min and HOLDS the band (replay: Ce@5=3.04, @30=2.99, @60=3.01 for target 3.0, quantized). test-tci-scheme now imports planTCISchemeEmulation with the production pump config; step-count bounds re-baselined to emulation's fine cpt-interval step-down (~20 steps, tolerance-independent). Lesson: reproduce against the actual planTCI path / pump config before trusting a standalone planner call — the tell was a bolus mismatch (standalone 2350 vs app 2100 mcg/kg).
 
 Follow-up (completed): the remaining inline-copy files now import real code —
 test-fentanyl-pk / test-ketamine-pk (real calculators; population constants kept

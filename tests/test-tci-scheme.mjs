@@ -1,32 +1,43 @@
 /**
- * test-tci-scheme.js — CET TCI scheme planner (the production planner).
+ * test-tci-scheme.js — CET (Emulation) TCI scheme planner — the production planner.
  *
- * Imports the REAL CET planner (js/sim/tci-planner.js planTCISchemeCET — the
- * only planner used in production; stepped / cet-conservative / cet-emulation
- * were development aids) against the real engine + Eleveld params. Previously
- * inlined a diverged copy of a stepped-style planner.
+ * Imports the REAL cet-emulation planner (js/sim/tci-planner.js
+ * planTCISchemeEmulation — the SimTIVA deliver_cpt port, the planner used in
+ * production; stepped / cet / cet-conservative were development aids). Every
+ * call threads the production pump config (750 mL/h @ 10 mg/mL → maxRate
+ * 125 mg/min) exactly as js/sim/simulation.js planTCI builds it, so the test
+ * exercises what actually ships. Previously this file inlined a diverged
+ * stepped-style planner.
  *
- * Assertions are clinical/behavioral invariants the real CET planner must meet
- * (loading bolus present and within mg/kg bounds, rates decrease, Ce tracked
- * within tolerance after onset, step-down has no bolus, quantized scheme lands
- * on the mL/h grid). Convergence bounds are re-baselined to CET's real,
- * fast-onset behavior.
+ * Assertions are clinical/behavioral invariants the real planner must meet
+ * (loading bolus present and within mg/kg bounds, maintenance rates step down,
+ * Ce reaches and holds target, step-down has no bolus, quantized scheme lands
+ * on the display grid and still holds target). Bounds are baselined to
+ * cet-emulation's real behavior — verified against the live app (35 y/70 kg,
+ * target 3.5, rounding on): Ce hits target by ~5 min and holds it.
  */
 
 import { createEngine } from '../js/pk/engine.js';
 import { calcEleveldParams } from '../js/pk/eleveld.js';
-import { planTCISchemeCET as planTCIScheme } from '../js/sim/tci-planner.js';
+import { planTCISchemeEmulation as _planEmulation } from '../js/sim/tci-planner.js';
 import { computeSteadyStateRate } from '../js/pk/steady-state-predictor.js';
 
 const CONC = 10; // mg/mL propofol
 const params = calcEleveldParams({ age:35, weight:70, height:170, male:true, opioid:false });
 
-// Drives the real CET planner's quantize-in-loop path: snap bolus to whole mg
-// and rate to whole mL/h before each engine.advance (see js/sim/tci/shared.js).
+// Production pump config (js/sim/simulation.js planTCI): 750 mL/h @ 10 mg/mL →
+// maxRate 125 mg/min. Threaded into every plan call so the test matches ship.
+const PROD = { bolusConcentration: CONC, bolusRateMlH: 750, maxRate: 125, drugId: 'propofol', weightKg: 70 };
+
+function planTCIScheme(engine, startState, startTime, ceTarget, config={}) {
+  return _planEmulation(engine, startState, startTime, ceTarget, { ...PROD, ...config });
+}
+
+// Drives the planner's quantize-in-loop path: snap bolus to whole mg and rate
+// to whole mL/h before each engine.advance (see js/sim/tci/shared.js).
 function planTCISchemeQuantized(engine, startState, startTime, ceTarget, config={}) {
   return planTCIScheme(engine, startState, startTime, ceTarget, {
-    quantizeInDisplay:true, bolusDisplayUnit:'mg', rateDisplayUnit:'mL/h',
-    drugId:'propofol', bolusConcentration:CONC, weightKg:70, ...config });
+    quantizeInDisplay:true, bolusDisplayUnit:'mg', rateDisplayUnit:'mL/h', ...config });
 }
 
 let passed=0,failed=0;
@@ -52,7 +63,7 @@ console.log('\n=== TEST 1: Basic Scheme Generation (Ce=3.0, ±5%) ===');
   fmtScheme(scheme,70);
   
   assert(scheme.length>=2,'At least bolus + 1 rate step');
-  assert(scheme.length<=10,'No more than 10 steps (clinician feasible)');
+  assert(scheme.length<=24,'Bounded step count (cet-emulation emits fine cpt-interval steps)');
   assert(scheme[0].type==='bolus','First step is a bolus');
   assert(scheme[0].value>50,'Bolus > 50mg for 70kg patient targeting 3.0');
   assert(scheme[0].value<300,'Bolus < 300mg (reasonable)');
@@ -119,15 +130,19 @@ console.log('\n=== TEST 3: Tight Tolerance (±2%) ===');
   assert(scheme.length>=loosScheme.length,'Tighter tolerance → same or more steps');
 }
 
-console.log('\n=== TEST 4: Loose Tolerance (±10%) ===');
+console.log('\n=== TEST 4: Step count is tolerance-independent (emulation cpt loop) ===');
 {
+  // cet-emulation's step count is set by its 2-min cpt maintenance interval,
+  // not the tolerance band — so a loose tolerance produces the same bounded
+  // fine step-down as a tight one (unlike the old stepped planner).
   const eng=createEngine(params);
-  const scheme=planTCIScheme(eng, eng.getState(), 0, 3.0, {tolerancePct:0.10});
-  
-  console.log(`  Loose scheme: ${scheme.length} steps`);
-  fmtScheme(scheme,70);
-  
-  assert(scheme.length<=8,'Loose tolerance produces few steps');
+  const loose=planTCIScheme(eng, eng.getState(), 0, 3.0, {tolerancePct:0.10});
+  const eng2=createEngine(params);
+  const tight=planTCIScheme(eng2, eng2.getState(), 0, 3.0, {tolerancePct:0.02});
+  console.log(`  Loose: ${loose.length} steps, Tight: ${tight.length} steps`);
+  fmtScheme(loose,70);
+  assert(loose.length===tight.length, 'Emulation step count is independent of tolerance band');
+  assert(loose.length<=24, 'Step count stays bounded');
 }
 
 console.log('\n=== TEST 5: Bolus Dose Is Reasonable ===');
@@ -307,33 +322,34 @@ console.log('\n=== TEST 12: Quantize-In-Loop Stepped — All Rates Snap To Integ
   }
 }
 
-console.log('\n=== TEST 13: Quantized (in-loop) CET plan still converges to target ===');
+console.log('\n=== TEST 13: Quantize-in-loop holds target (no stacking error) ===');
 {
-  // The quantize-in-loop plan is a genuinely DIFFERENT (integer-mL/h) plan than
-  // the unquantized one — the maintenance loop re-selects rates around the
-  // rounded grid — so it is NOT expected to match the unquantized Ce step for
-  // step. What must hold is that the quantized plan is clinically valid: it
-  // converges to target once CET's post-bolus redistribution dip resolves.
-  // (Note: display-rounding slows CET's onset — the quantized plan takes
-  // longer to climb out of the dip than the unquantized one; it is within ~8%
-  // of target by ~4 h. Flagged as a known trade-off, not a stacking error.)
+  // The regression this guards (CLAUDE.md): quantize INSIDE the planning loop
+  // so each engine.advance sees the already-rounded rate. cet-emulation with
+  // rounding on reaches target within ~5 min and HOLDS it — verified against
+  // the live app (35 y/70 kg, target 3.5, rounding on). We check the whole
+  // maintenance window stays tight; a post-hoc-rounding stacking bug would
+  // show up as sustained drift here.
   const ceTarget=3.0;
   const scheme=planTCISchemeQuantized(createEngine(params), createEngine(params).getState(), 0, ceTarget);
 
-  // Replay to t=240 min, delivering the bolus over its true pump duration
-  // (propofol 750 mL/h @ 10 mg/mL) rather than an instantaneous push.
-  const e=createEngine(params); let rate=0, t=0;
-  for (const s of scheme) {
-    if (s.time>240) break;
-    if (s.time>t) { e.advance(s.time-t, rate); t=s.time; }
-    if (s.type==='bolus') { const dur=Math.max(0.05,(s.value/CONC)/750*60); e.advance(dur, s.value/dur); t+=dur; }
-    else rate=s.value;
+  // Replay delivering the bolus over its true pump duration (750 mL/h @ 10 mg/mL).
+  function ceAt(atT) {
+    const e=createEngine(params); let rate=0, t=0;
+    for (const s of scheme) {
+      if (s.time>atT) break;
+      if (s.time>t) { e.advance(s.time-t, rate); t=s.time; }
+      if (s.type==='bolus') { const dur=Math.max(0.05,(s.value/CONC)/750*60); e.advance(dur, s.value/dur); t+=dur; }
+      else rate=s.value;
+    }
+    if (atT>t) e.advance(atT-t, rate);
+    return e.getConcentrations().Ce;
   }
-  if (240>t) e.advance(240-t, rate);
-  const ce240=e.getConcentrations().Ce;
-  const dev=Math.abs(ce240-ceTarget)/ceTarget;
-  console.log(`  Quantized CET Ce at t=240 min: ${ce240.toFixed(4)} (deviation: ${(dev*100).toFixed(2)}%)`);
-  assert(dev < 0.08, `Quantized CET plan converges within ±8% of target by 240 min (actual: ${(dev*100).toFixed(2)}%)`);
+  for (const t of [10, 30, 60, 120]) {
+    const dev = Math.abs(ceAt(t) - ceTarget) / ceTarget;
+    console.log(`  Quantized Ce@${t}min = ${ceAt(t).toFixed(3)} (dev ${(dev*100).toFixed(2)}%)`);
+    assert(dev < 0.05, `Quantized plan holds within ±5% of target at t=${t} min (actual: ${(dev*100).toFixed(2)}%)`);
+  }
 }
 
 console.log('\n=== TEST 14: Quantize-In-Loop — State Is Preserved ===');
