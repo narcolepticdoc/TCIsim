@@ -12,74 +12,10 @@
 
 
 import { createEngine } from '../js/pk/engine.js';
-
-// The mini event-list below is deliberate TEST SCAFFOLDING for exercising
-// event ordering at t=0 against the REAL engine (registered via
-// registerEngine) — it is not a reimplementation of js/sim/events under test.
-
-// ============ MINI EVENT SYSTEM ============
-let _nid=1;
-function createEvt(drug,time,type,value,opts={}){
-  return{id:'e'+(_nid++),drug,time,type,value,status:opts.status||'executed',
-    source:opts.source||'manual',snapshot:null,annotation:opts.annotation||''};
-}
-
-function createEventList(){
-  let events=[];
-  const engines={};
-  function registerEngine(d,e){engines[d]=e}
-  function insert(e){let idx=events.length;for(let i=events.length-1;i>=0;i--){if(events[i].time<=e.time){idx=i+1;break}if(i===0)idx=0}events.splice(idx,0,e);return e}
-  function getActiveRateForDrug(d,beforeIdx){for(let i=beforeIdx;i>=0;i--){if(events[i].drug!==d)continue;if(events[i].type==='rate')return events[i].value;if(events[i].type==='pause')return 0}return 0}
-  function getRateAtTime(d,time){let r=0;for(const e of events){if(e.drug!==d)continue;if(e.time>time)break;if(e.type==='rate')r=e.value;else if(e.type==='pause')r=0}return r}
-
-  function replayDrug(d){
-    const eng=engines[d];if(!eng)return;
-    eng.reset();let ct=0,cr=0;
-    for(const evt of events){
-      if(evt.drug!==d)continue;
-      const dt=evt.time-ct;
-      if(dt>0)eng.advance(dt,cr);
-      ct=evt.time;
-      if(evt.type==='bolus'){eng.advance(0.05,evt.value/0.05);ct+=0.05}
-      else if(evt.type==='rate')cr=evt.value;
-      else if(evt.type==='pause')cr=0;
-      evt.snapshot=eng.getState();
-    }
-  }
-
-  function getConcentrationsAt(d,time){
-    const eng=engines[d];if(!eng)return{Cp:0,Ce:0,C2:0,C3:0,rate:0};
-    let le=null,li=-1;
-    for(let i=events.length-1;i>=0;i--){
-      if(events[i].drug===d&&events[i].time<=time){le=events[i];li=i;break}
-    }
-    if(!le)return{Cp:0,Ce:0,C2:0,C3:0,rate:0};
-    if(!le.snapshot)replayDrug(d);
-    eng.setState(le.snapshot);
-    let ct=le.time;
-    if(le.type==='bolus')ct+=0.05;
-    const cr=getActiveRateForDrug(d,li);
-    const dt=time-ct;
-    if(dt>0)eng.advance(dt,cr);
-    return{...eng.getConcentrations(),rate:cr};
-  }
-
-  function addManualBolus(d,time,mg){
-    const pr=getRateAtTime(d,time);
-    const be=createEvt(d,time,'bolus',mg);insert(be);
-    const re=createEvt(d,time+0.05,'rate',pr,{source:'system'});insert(re);
-    replayDrug(d);return be;
-  }
-
-  function addManualRate(d,time,rate){
-    const e=createEvt(d,time,'rate',rate);insert(e);replayDrug(d);return e;
-  }
-
-  function clearAll(){events=[];_nid=1;for(const d of Object.keys(engines))engines[d].reset()}
-
-  return{registerEngine,insert,replayDrug,getConcentrationsAt,addManualBolus,addManualRate,clearAll,
-    get raw(){return events},get length(){return events.length}};
-}
+// The shared mini event-list is TEST SCAFFOLDING for exercising event ordering
+// at t=0 against the REAL engine (registered via registerEngine) — it is not a
+// reimplementation of js/sim/events under test. See the helper's header.
+import { createEventList } from './helpers/mini-event-list.mjs';
 
 // Reference patient: 35y/70kg/170cm male, no opioid
 const REF = { V1:6.28, V2:25.5, V3:273, CL:1.79, Q2:1.75, Q3:1.11, ke0:0.146 };

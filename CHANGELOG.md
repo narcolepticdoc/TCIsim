@@ -11,6 +11,26 @@
 
 ---
 
+## [0.5.44] — 2026-07-08
+
+Test-suite improvement round 2 — the follow-up items from the 0.5.43 review, plus a written suite guide. All green at 957 assertions (was 894). Test-only; no shipped-code delta.
+
+- **New coverage for previously-untested modules.** `test-util-math` pins `js/util/math.js` (the 4×4 `inv4`/`expm4` behind the engine's matrix-exponential advance) against independent closed forms — diagonal exp = elementwise exp, nilpotent exp = I+N, A·A⁻¹ = I — plus `js/util/color.js` hex/alpha helpers. `test-settings-validation` drives the real `js/ui/settings.js` `getSettings`/`setSettings` clamp-and-validate logic (the guard between an arbitrary stored/cloud-pulled JSON blob and the running app) via a localStorage shim.
+- **De-fossilized `test-reaction-delay`** — it inlined a copy of `displayedSecToEvent` "kept in lockstep"; it now imports the real function (renamed `.js` → `.mjs`). Its inline reactionDelaySec clamp mirror moved to `test-settings-validation`, which tests the real `getSettings` clamp instead.
+- **`test-integration` now drives the real chain.** It used to inline its own event list + planner + model + PD and test the copies; it now runs the production `createModel().planTCI(… cet-emulation)` and asserts PK/PD curve *shape* (Ce lags Cp, redistribution, rate step-down, BIS range, resolution agreement) — complementing the endpoint-focused `test-tci-plan-fidelity`.
+- **Downgraded incidental-timing locks to tolerance windows.** In `test-steady-state-predictor`, exact-integer-minute locks (time-to-95%-SS, plateau entry/exit minute) — which depend on the sampling grid and slope threshold — became tight `nearMin(…, ±)` windows that still catch a real regression but survive benign retuning. Ce_ss *value* locks (analytically cross-checked) and `=== 0`/`=== null` contracts stay exact.
+- **Renamed two misnomer files.** `test-sim-v2` → `test-event-driven-sim` (the "v2" rewrite is long gone and the state-machine block was removed in 0.5.43); `test-tci-tolerance-diagnostic` → `test-tci-tolerance-slider` (it's a focused contract test now, not a diagnostic printer).
+- **New `tests/README.md`** — a human-readable guide to the suite: how to run it, the five kinds of test (external baselines / clinical-outcome contracts / behavioral invariants / round-trip contracts / engine-mechanics scaffolding), a per-file table of what each guards, the conventions (test real code, independent oracles stay inline, exact-lock vs tolerance-window, production pump config), and how to add a test.
+
+## [0.5.43] — 2026-07-08
+
+Test-suite improvement round — a follow-on to the 0.5.41.x/0.5.42 audit that closed the last gaps and streamlined the suite. All green at 894 assertions (was 842).
+
+- **New `test-tci-plan-fidelity`** — a clinical-outcome baseline that drives the *real production entry point* `createModel().planTCI('propofol', 0, target, { tciMode: 'cet-emulation' })` across a 5-patient × 3-target matrix (young / reference / elderly / obese / light; Ce 2.0 / 3.0 / 4.5). Every other planner test calls the planner function directly and replays with a hand-rolled sampler; none drove the facade layer that reads live pump settings, inserts events, and answers `getConcentrationsAt()` — the exact path behind the on-screen Ce card (and the path where the earlier `maxRate` bug lived). Instead of pinning byte-exact plan fingerprints (which change on any legitimate tuning), it asserts the property clinicians care about — the plan reaches ≥95% of target within 6 min and holds ±5% across 10–120 min, never dipping below the 90% clinical floor — so it survives planner refinement and only reddens on a broken therapeutic result.
+- **maxRate faithfulness** — `test-tci-ce-tracking` and `test-tci-tolerance-diagnostic` drove the planner with `maxRate: 200`, but production derives `maxRate = bolusRateMlH × concentration / 60 = 125 mg/min` (the setup screen installs this on every case). Both now use 125.
+- **Legacy retired** — `test-sim-v2` lost its "State Machine" / "State Change Callbacks" blocks (13 assertions over an obsolete READY/RUNNING/PAUSED design the stateless production facade never implemented). `test-tci-tolerance-diagnostic` was trimmed from a ~200-line diagnostic printer to its one real contract assertion (the ceTolerance slider reaches the planner), now with a per-plan reach-target sanity check.
+- **Scaffolding de-duplicated** — `test-model`, `test-integration`, and `test-t0-edge` each carried their own byte-drifted copy of the same ~50-line mini event-list. They now import one documented `tests/helpers/mini-event-list.mjs`; every assertion is preserved (42 / 25 / 40), ~120 lines of triplication removed.
+
 ## [0.5.42] — 2026-07-07
 
 - **CET (Emulation) is now the factory-default TCI planner** and the only one shown to users. The `stepped` / `cet` / `cet-conservative` planners had no clinical advantage over cet-emulation (the SimTIVA deliver_cpt port) and are retired from the UI — their code is retained for development only. The TCI Planning Mode picker on the setup screen is hidden by default; a developer can reveal it by setting `localStorage['tci-dev-planners'] = 'true'` and reloading. Existing users with a legacy saved mode (e.g. `stepped`) are migrated to cet-emulation automatically.

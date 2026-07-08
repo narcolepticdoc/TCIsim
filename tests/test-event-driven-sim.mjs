@@ -1,16 +1,22 @@
 /**
- * test-sim-v2.js — Tests for the event-driven simulation controller
- * 
- * Tests the rewritten simulation.js that uses events.js + tci-planner.js
- * instead of the old tick-based tci.js approach.
+ * test-event-driven-sim.mjs — Event-driven simulation behaviors.
+ *
+ * (Formerly test-sim-v2 — renamed; the "v2" referred to a long-gone rewrite,
+ * and the obsolete READY/RUNNING/PAUSED state-machine assertions have been
+ * removed.) Exercises the event-driven simulation behaviors — manual rate/bolus,
+ * event-log integration, mid-case patient change, event edit/delete, multi-drug
+ * isolation, jump-to-time, and per-tick data fan-out — over a lightweight
+ * createSimulation harness wired to the REAL matrix engine + Eleveld params.
+ * The harness is test scaffolding; the production stateless simulation.js facade
+ * is covered by test-session-roundtrip / test-pump-rate-correction, and the real
+ * planTCI outcome by test-tci-plan-fidelity.
  */
 
 // ============ REAL engine + Eleveld ============
 import { createEngine } from '../js/pk/engine.js';
 import { calcEleveldParams } from '../js/pk/eleveld.js';
-// createEventList + createSimulation below are test scaffolding (the latter is
-// an obsolete state-machine design; production simulation.js is a stateless
-// facade covered by test-session-roundtrip / test-pump-rate-correction).
+// createEventList + createSimulation below are test scaffolding wired to the
+// real engine; the production event/sim layers are covered elsewhere (above).
 
 
 // Mini event system (from events.js)
@@ -135,55 +141,13 @@ let passed=0,failed=0;
 function ok(c,m){if(c){passed++;console.log(`  ✓ ${m}`)}else{failed++;console.error(`  ✗ ${m}`)}}
 function near(a,b,tol,m){const r=Math.abs(b)>1e-9?Math.abs(a-b)/Math.abs(b):Math.abs(a-b);ok(r<tol,`${m} (${a.toFixed(4)} vs ${b.toFixed(4)})`)}
 
-console.log('\n===== 1. State Machine =====\n');
-
-{
-  const sim = createSimulation();
-  ok(sim.getState() === 'READY', 'Initial state is READY');
-
-  sim.start();
-  ok(sim.getState() === 'RUNNING', 'After start: RUNNING');
-
-  sim.pause();
-  ok(sim.getState() === 'PAUSED', 'After pause: PAUSED');
-
-  sim.resume();
-  ok(sim.getState() === 'RUNNING', 'After resume: RUNNING');
-
-  sim.reset();
-  ok(sim.getState() === 'READY', 'After reset: READY');
-  ok(sim.getSimTime() === 0, 'After reset: simTime = 0');
-}
-
-{
-  const sim = createSimulation();
-  sim.start();
-  sim.start(); // double start should be no-op
-  ok(sim.getState() === 'RUNNING', 'Double start stays RUNNING');
-
-  sim.pause();
-  sim.pause(); // double pause
-  ok(sim.getState() === 'PAUSED', 'Double pause stays PAUSED');
-}
-
-console.log('\n===== 2. State Change Callbacks =====\n');
-
-{
-  const sim = createSimulation();
-  const states = [];
-  sim.on('stateChange', d => states.push(d.state));
-
-  sim.start();
-  sim.pause();
-  sim.resume();
-  sim.reset();
-
-  ok(states.length === 4, `4 state changes emitted (got ${states.length})`);
-  ok(states[0] === 'RUNNING', 'First: RUNNING');
-  ok(states[1] === 'PAUSED', 'Second: PAUSED');
-  ok(states[2] === 'RUNNING', 'Third: RUNNING');
-  ok(states[3] === 'READY', 'Fourth: READY');
-}
+// NOTE: The former Sections 1 & 2 ("State Machine" and "State Change
+// Callbacks") were removed — they asserted READY/RUNNING/PAUSED transitions
+// and stateChange events on the inline createSimulation harness, an obsolete
+// design that production's stateless simulation.js facade does not implement.
+// Those semantics no longer exist to protect. The behavioral sections below
+// still exercise the event-list mechanics (manual rate/bolus, editing, jump,
+// multi-drug isolation, tick fan-out) against real createEngine + Eleveld.
 
 console.log('\n===== 3. Manual Mode — Rate + Bolus =====\n');
 

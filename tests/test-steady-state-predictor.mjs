@@ -7,10 +7,21 @@
  * copies (the inline Eleveld used base CL 1.89 vs production 1.79, and the
  * inline ketamine was an entirely different volume model).
  *
- * Exact-value assertions are regression locks pinned to the REAL predictors'
- * output (Ce_ss values, integer plateau entry/exit minutes); the surrounding
- * behavioral assertions (plateau present/absent, entry<exit, band ordering)
- * validate correctness independent of the exact numbers.
+ * Two kinds of numeric assertion, deliberately treated differently:
+ *   - Ce_ss VALUES (steady-state concentration for a rate) are locked exactly
+ *     (±1e-4). Ce_ss = rate·(sum of tissue partition terms) is an analytic
+ *     property of the model, cross-checked in TEST 1 against an independent
+ *     matrix solve — an exact lock here catches a real PK regression.
+ *   - TIMING magnitudes (time-to-95%-SS, plateau entry/exit MINUTE) are checked
+ *     with a tight tolerance window (`nearMin`), NOT exact equality. The minute
+ *     a slope reversal is detected is a function of the sampling grid and the
+ *     slope-tolerance knob, so an exact-integer lock over-specifies incidental
+ *     scheduling and would red-fail on benign predictor retuning. The window is
+ *     small enough (±a few min) to still catch a genuine "detection broke"
+ *     regression (which moves the minute by tens of min or to null).
+ * Contracts stay exact: `=== 0` (already at SS), `=== null` (unreachable / no
+ * plateau / bad input). Surrounding behavioral assertions (plateau
+ * present/absent, entry<exit, band ordering) validate structure independently.
  *
  * A compact inv4 is kept inline ONLY for TEST 1's independent matrix-solve
  * cross-check of Ce_ss vs Cp_ss — that is deliberately not production code.
@@ -58,6 +69,13 @@ let passed = 0, failed = 0;
 function assert(c, m) {
   if (c) { passed++; console.log('  ✓ ' + m); }
   else   { failed++; console.error('  ✗ ' + m); }
+}
+// Tolerance-window check for TIMING magnitudes (minutes). A regression that
+// breaks detection moves the value by tens of minutes or to null; a benign
+// retune shifts it by ≤ a grid step. `tol` is absolute minutes.
+function nearMin(actual, expected, tol, m) {
+  assert(actual !== null && Math.abs(actual - expected) <= tol,
+    `${m} (got ${actual}, expected ${expected} ± ${tol})`);
 }
 
 const patient = { age: 35, weight: 70, height: 170, male: true, opioid: false };
@@ -109,8 +127,8 @@ console.log('\n=== TEST 3: Propofol with extended horizon reaches 95% ===');
   const result = predictTimeToSteadyState(eng, eng.getState(), 5.4, { horizon: 1000 });
   assert(result !== null && result.reachable === true,
     'Reachable within 1000 min');
-  assert(result.timeToSsMin === 856,
-    `Time to 95% = 856 min (got ${result.timeToSsMin})`);
+  nearMin(result.timeToSsMin, 856, 20,
+    'Time to 95% ≈ 856 min');
 }
 
 console.log('\n=== TEST 4: Pre-advanced state (at SS) → timeToSsMin = 0 ===');
@@ -214,10 +232,8 @@ console.log('\n=== TEST 10: Fentanyl bolus + infusion — local plateau with rev
   const result = predictPlateau(eng, state, rate, TOL_LOOSEST);
   assert(result !== null && result.noPlateau === false,
     'Plateau found (slope reversal: falling → rising)');
-  assert(result.entryMin === 40,
-    `Entry at 40 min (got ${result.entryMin})`);
-  assert(result.exitMin === 98,
-    `Exit at 98 min (got ${result.exitMin})`);
+  nearMin(result.entryMin, 40, 5, 'Entry ≈ 40 min');
+  nearMin(result.exitMin, 98, 5, 'Exit ≈ 98 min');
   assert(result.bandLow < result.bandHigh,
     'Non-degenerate band');
 }
@@ -235,8 +251,7 @@ console.log('\n=== TEST 11: Post-bolus propofol → plateau found ===');
   const result = predictPlateau(eng, postBolusState, mainRate, TOL_STD);
   assert(result !== null && result.noPlateau === false,
     'Post-bolus propofol has a local plateau (overshoot → flat → reversal)');
-  assert(result.entryMin === 60,
-    `Entry at 60 min (got ${result.entryMin})`);
+  nearMin(result.entryMin, 60, 5, 'Entry ≈ 60 min');
 }
 
 console.log('\n=== TEST 12: Rate lowered from high — falling → flat → reversal ===');
@@ -253,8 +268,7 @@ console.log('\n=== TEST 12: Rate lowered from high — falling → flat → reve
     'Plateau found after rate lowered');
   assert(result.plateauCe < startCe,
     `plateauCe (${result.plateauCe.toFixed(3)}) < startCe (${startCe.toFixed(3)})`);
-  assert(result.entryMin === 87,
-    `Rate-lowered entry at 87 min (got ${result.entryMin})`);
+  nearMin(result.entryMin, 87, 5, 'Rate-lowered entry ≈ 87 min');
 }
 
 console.log('\n=== TEST 13: Plateau detection — bad input returns null ===');

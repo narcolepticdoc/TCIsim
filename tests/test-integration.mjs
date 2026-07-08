@@ -1,249 +1,90 @@
 /**
- * test-integration.js — End-to-end integration test
- * 
- * Validates the full module chain: setPatient → planTCI → computeCurve
- * → verify concentration curve has realistic pharmacokinetic shape.
- * 
- * This test exercises all modules wired together through createModel(),
- * not in isolation. It serves as a regression anchor before app.js
- * starts layering DOM code on top.
+ * test-integration.mjs — End-to-end PK/PD curve-shape sanity through the REAL
+ * production model.
+ *
+ * Drives the actual `createModel()` facade (js/sim/simulation.js) with the
+ * production cet-emulation planner and real pump settings, then inspects the
+ * concentration + BIS curves for correct pharmacological SHAPE — the property
+ * that `test-tci-plan-fidelity` (which asserts the endpoint: reaches + holds
+ * target) does not check:
+ *   - Ce lags Cp early (effect-site equilibration),
+ *   - Cp redistributes down after the loading bolus,
+ *   - rate steps decrease from loading toward maintenance,
+ *   - BIS tracks Ce into the anaesthetic range,
+ *   - computeCurve agrees across sampling resolutions.
+ *
+ * History: this file used to inline its own event list + planner + model +
+ * PD, and tested those copies. It now imports the real chain — the inline
+ * fossils are gone. The engine-mechanics scaffolding still lives in
+ * tests/helpers/mini-event-list.mjs for the lower-level event-ordering tests
+ * (test-model / test-t0-edge); this file no longer needs it.
  */
 
-// ============ REAL engine + Eleveld ============
-import { createEngine } from '../js/pk/engine.js';
-import { calcEleveldParams } from '../js/pk/eleveld.js';
-// createEventList / planTCIScheme / createModel below are test scaffolding for
-// exercising the full chain against the REAL engine + Eleveld; the production
-// event/sim/planner layers are covered by test-session-roundtrip,
-// test-pump-rate-correction, and test-tci-scheme.
+import { createModel } from '../js/sim/simulation.js';
+import { setPumpSettings, resetPumpSettings } from '../js/util/constants.js';
 
-
-// Inline Eleveld (reference male, corrected PD)
-
-// Inline event list (stateless, matching refactored events.js)
-let _nid=1;
-function genId(){return'evt_'+String(_nid++).padStart(5,'0')}
-function createEvt(drug,time,type,value,opts={}){return{id:genId(),drug,time,type,value,source:opts.source||'manual',annotation:opts.annotation||'',snapshot:null}}
-function createEventList(){
-  let events=[];const engines={};
-  function registerEngine(d,e){engines[d]=e}
-  function getEngine(d){return engines[d]||null}
-  function insert(e){let idx=events.length;for(let i=events.length-1;i>=0;i--){if(events[i].time<=e.time){idx=i+1;break}if(i===0)idx=0}events.splice(idx,0,e);return e}
-  function getAll(){return[...events]}
-  function getByDrug(d){return events.filter(e=>e.drug===d)}
-  function clearAfter(d,t){const b=events.length;events=events.filter(e=>!(e.drug===d&&e.time>t));if(b!==events.length)replayDrug(d);return b-events.length}
-  function clearAll(){events=[];_nid=1;for(const d of Object.keys(engines))engines[d].reset()}
-  function getActiveRateForDrug(d,bi){for(let i=bi;i>=0;i--){if(events[i].drug!==d)continue;if(events[i].type==='rate')return events[i].value;if(events[i].type==='pause')return 0}return 0}
-  function getRateAtTime(d,time){let r=0;for(const e of events){if(e.drug!==d)continue;if(e.time>time)break;if(e.type==='rate')r=e.value;else if(e.type==='pause')r=0}return r}
-  function replayDrug(d){const eng=engines[d];if(!eng)return;eng.reset();let ct=0,cr=0;for(const evt of events){if(evt.drug!==d)continue;const dt=evt.time-ct;if(dt>0)eng.advance(dt,cr);ct=evt.time;if(evt.type==='bolus'){eng.advance(0.05,evt.value/0.05);ct+=0.05}else if(evt.type==='rate')cr=evt.value;else if(evt.type==='pause')cr=0;evt.snapshot=eng.getState()}}
-  function replayAll(){for(const d of Object.keys(engines))replayDrug(d)}
-  function getConcentrationsAt(d,time){const eng=engines[d];if(!eng)return{Cp:0,Ce:0,C2:0,C3:0,rate:0,time};let le=null,li=-1;for(let i=events.length-1;i>=0;i--){if(events[i].drug===d&&events[i].time<=time){le=events[i];li=i;break}}if(!le){eng.reset();if(time>0)eng.advance(time,0);return{...eng.getConcentrations(),rate:0,time}}if(!le.snapshot)replayDrug(d);eng.setState(le.snapshot);let ct=le.time;if(le.type==='bolus')ct+=0.05;const cr=getActiveRateForDrug(d,li);const dt=time-ct;if(dt>0)eng.advance(dt,cr);return{...eng.getConcentrations(),rate:cr,time}}
-  function computeCurve(d,startTime,endTime,step=10/60){const eng=engines[d];if(!eng)return[];const devts=events.filter(e=>e.drug===d);const curve=[];eng.reset();let ct=0,cr=0,ep=0;while(ep<devts.length&&devts[ep].time<=startTime){const e=devts[ep];const dt=e.time-ct;if(dt>0)eng.advance(dt,cr);ct=e.time;if(e.type==='bolus'){eng.advance(0.05,e.value/0.05);ct+=0.05}else if(e.type==='rate')cr=e.value;else if(e.type==='pause')cr=0;ep++}if(startTime>ct){eng.advance(startTime-ct,cr);ct=startTime}let st=startTime;while(st<=endTime){while(ep<devts.length&&devts[ep].time<=st){const e=devts[ep];const dt=e.time-ct;if(dt>0)eng.advance(dt,cr);ct=e.time;if(e.type==='bolus'){eng.advance(0.05,e.value/0.05);ct+=0.05}else if(e.type==='rate')cr=e.value;else if(e.type==='pause')cr=0;ep++}const dt=st-ct;if(dt>0){eng.advance(dt,cr);ct=st}const c=eng.getConcentrations();curve.push({time:st,Cp:c.Cp,Ce:c.Ce,C2:c.C2,C3:c.C3,rate:cr});st+=step}return curve}
-  function getStateAtTime(d,time){getConcentrationsAt(d,time);return engines[d]?engines[d].getState():new Float64Array(4)}
-  function getStateAtLastEvent(d){for(let i=events.length-1;i>=0;i--){if(events[i].drug===d&&events[i].snapshot)return{state:events[i].snapshot,time:events[i].time}}return{state:engines[d]?engines[d].getState():new Float64Array(4),time:0}}
-  function addRate(d,time,rate,ann){const e=createEvt(d,time,'rate',rate,{annotation:ann||''});insert(e);replayDrug(d);return e}
-  function addBolus(d,time,mg,ann){const pr=getRateAtTime(d,time);const be=createEvt(d,time,'bolus',mg,{annotation:ann||''});insert(be);const re=createEvt(d,time+0.05,'rate',pr,{source:'system',annotation:'Rate restored'});insert(re);replayDrug(d);return be}
-  function addRateBatch(d,steps,ann){const created=[];for(const s of steps){const e=createEvt(d,s.time,'rate',s.rate,{source:'tci',annotation:ann||''});insert(e);created.push(e)}if(created.length>0)replayDrug(d);return created}
-  return{registerEngine,getEngine,insert,getAll,getByDrug,clearAfter,clearAll,replayDrug,replayAll,getConcentrationsAt,computeCurve,getRateAtTime,getActiveRateForDrug,getStateAtLastEvent,getStateAtTime,addRate,addBolus,addRateBatch,get length(){return events.length},get raw(){return events}};
+// Production pump config (derives maxRate = 750×10/60 = 125), installed the way
+// the setup screen does on every case. cet-emulation is the production planner.
+function freshModel(patient) {
+  resetPumpSettings();
+  setPumpSettings('propofol', { concentration: 10, bolusRateMlH: 750 });
+  const m = createModel();
+  if (patient) m.setPatient(patient);
+  return m;
 }
+const TCI = { tciMode: 'cet-emulation' };
 
-// Inline TCI planner (simplified — generates bolus + rate steps)
-function planTCIScheme(engine, startState, startTime, ceTarget, config={}) {
-  const cfg = { tolerancePct: 0.05, maxRate: 200, maxSteps: 8, maxPlanTime: 120,
-    simStep: 0.1, rateSearchIter: 35, minStepDuration: 3.0, rateStablePct: 0.05, ...config };
-  const scheme = [];
-  if (ceTarget <= 0) { scheme.push({ type: 'rate', time: startTime, value: 0 }); return scheme; }
-  const saved = engine.getState();
-  engine.setState(startState);
-  const currentCe = engine.getConcentrations().Ce;
-  let simTime = startTime;
-  // Loading bolus if needed
-  if (currentCe < ceTarget * (1 - cfg.tolerancePct)) {
-    // Binary search for bolus dose
-    let lo = 0, hi = 500;
-    for (let i = 0; i < 30; i++) {
-      const mid = (lo + hi) / 2;
-      const sv = engine.getState();
-      engine.advance(0.05, mid / 0.05);
-      // Scan forward for Ce peak
-      let peakCe = 0;
-      for (let t = 0; t < 300; t++) { engine.advance(cfg.simStep, 0); const ce = engine.getConcentrations().Ce; if (ce > peakCe) peakCe = ce; else break; }
-      engine.setState(sv);
-      if (peakCe < ceTarget) lo = mid; else hi = mid;
-    }
-    const bolusMg = Math.round((lo + hi) / 2 * 10) / 10;
-    if (bolusMg > 0) {
-      scheme.push({ type: 'bolus', time: simTime, value: bolusMg });
-      engine.advance(0.05, bolusMg / 0.05);
-      simTime += 0.05;
-    }
-  }
-  // Find maintenance rate by binary search
-  function findRate() {
-    let lo = 0, hi = cfg.maxRate;
-    for (let i = 0; i < cfg.rateSearchIter; i++) {
-      const mid = (lo + hi) / 2;
-      const ce = engine.predictCe ? engine.predictCe(cfg.minStepDuration, mid) : (() => {
-        const sv = engine.getState(); engine.advance(cfg.minStepDuration, mid);
-        const ce = engine.getConcentrations().Ce; engine.setState(sv); return ce;
-      })();
-      if (ce < ceTarget) lo = mid; else hi = mid;
-    }
-    return (lo + hi) / 2;
-  }
-  // Generate a few rate steps
-  let prevRate = -1;
-  for (let step = 0; step < cfg.maxSteps; step++) {
-    if (simTime >= startTime + cfg.maxPlanTime) break;
-    const rate = findRate();
-    if (prevRate > 0 && Math.abs(rate - prevRate) / prevRate < cfg.rateStablePct) {
-      scheme.push({ type: 'rate', time: simTime, value: rate });
-      break;
-    }
-    scheme.push({ type: 'rate', time: simTime, value: rate });
-    prevRate = rate;
-    // Advance at this rate until Ce drifts
-    const sv = engine.getState();
-    let dur = 0;
-    while (dur < cfg.maxPlanTime) {
-      engine.advance(cfg.simStep, rate);
-      dur += cfg.simStep;
-      const ce = engine.getConcentrations().Ce;
-      if (dur >= cfg.minStepDuration && (ce > ceTarget * (1 + cfg.tolerancePct) || ce < ceTarget * (1 - cfg.tolerancePct))) break;
-    }
-    simTime += dur;
-  }
-  engine.setState(saved);
-  return scheme;
-}
-
-// Inline PD
-function predictBIS(Ce, p) {
-  if (Ce <= 0) return p.BIS_baseline;
-  const g = Ce <= p.Ce50 ? p.gamma1 : p.gamma2;
-  const r = Ce / p.Ce50;
-  const rg = Math.pow(r, g);
-  const effect = rg / (1 + rg);
-  return Math.max(0, Math.min(100, p.BIS_baseline * (1 - effect)));
-}
-
-// ============ MINI createModel (matching refactored simulation.js) ============
-function createModel(config = {}) {
-  const cfg = { primaryDrug: 'propofol', ...config };
-  let eventList = createEventList();
-  let pdModels = {};
-  let patient = { age: 35, weight: 70, height: 170, male: true, opioid: false };
-  let params = null;
-
-  function init() {
-    params = calcEleveldParams(patient);
-    eventList.registerEngine(cfg.primaryDrug, createEngine(params));
-    pdModels[cfg.primaryDrug] = { Ce50: params.Ce50, gamma1: params.gamma1, gamma2: params.gamma2, BIS_baseline: params.BIS_baseline };
-  }
-  init();
-
-  function setPatient(p) {
-    patient = { ...patient, ...p };
-    params = calcEleveldParams(patient);
-    const old = eventList.getEngine(cfg.primaryDrug);
-    const sv = old ? old.getState() : null;
-    const ne = createEngine(params);
-    if (sv) ne.setState(sv);
-    eventList.registerEngine(cfg.primaryDrug, ne);
-    pdModels[cfg.primaryDrug] = { Ce50: params.Ce50, gamma1: params.gamma1, gamma2: params.gamma2, BIS_baseline: params.BIS_baseline };
-    eventList.replayAll();
-    return params;
-  }
-
-  function planTCI(drugId, fromTime, ceTarget, tciConfig = {}) {
-    const engine = eventList.getEngine(drugId);
-    if (!engine) return { scheme: [], events: [] };
-    eventList.clearAfter(drugId, fromTime);
-    const startState = eventList.getStateAtTime(drugId, fromTime);
-    const scheme = planTCIScheme(engine, startState, fromTime, ceTarget, tciConfig);
-    const bolus = scheme.find(s => s.type === 'bolus');
-    if (bolus) eventList.addBolus(drugId, bolus.time, bolus.value, `TCI bolus Ce=${ceTarget.toFixed(1)}`);
-    const rateSteps = scheme.filter(s => s.type === 'rate').map(s => ({ time: s.time, rate: s.value }));
-    const inserted = eventList.addRateBatch(drugId, rateSteps, `TCI Ce=${ceTarget.toFixed(1)}`);
-    return { scheme, events: inserted };
-  }
-
-  return {
-    setPatient, getPatient: () => ({ ...patient }), getParams: () => params,
-    addRate: (d, t, r, a) => eventList.addRate(d, t, r, a),
-    addBolus: (d, t, m, a) => eventList.addBolus(d, t, m, a),
-    planTCI, clearAfter: (d, t) => eventList.clearAfter(d, t),
-    getConcentrationsAt: (d, t) => eventList.getConcentrationsAt(d, t),
-    computeCurve: (d, s, e, st) => eventList.computeCurve(d, s, e, st),
-    predictBIS: (d, t) => { const pd = pdModels[d]; if (!pd) return null; const c = eventList.getConcentrationsAt(d, t); return predictBIS(c.Ce, pd); },
-    getEvents: (d) => d ? eventList.getByDrug(d) : eventList.getAll(),
-    get primaryDrug() { return cfg.primaryDrug; },
-    reset() { eventList.clearAll(); pdModels = {}; init(); },
-  };
-}
-
-// ============ TESTS ============
 let passed = 0, failed = 0;
 function ok(c, m) { if (c) { passed++; console.log(`  ✓ ${m}`); } else { failed++; console.error(`  ✗ ${m}`); } }
 
 console.log('\n===== 1. Full Chain: setPatient → planTCI → computeCurve =====\n');
 
 {
-  const model = createModel();
-  model.setPatient({ age: 50, weight: 80, height: 175, male: true, opioid: true });
+  const model = freshModel({ age: 50, weight: 80, height: 175, male: true, opioid: true });
 
   const params = model.getParams();
   ok(params.V1 > 0, `Params computed: V1=${params.V1.toFixed(2)}`);
   ok(params.Ce50 > 0, `Ce50=${params.Ce50.toFixed(3)}`);
 
-  // Plan TCI at Ce=3.0 from t=0
-  const { scheme } = model.planTCI('propofol', 0, 3.0);
+  const { scheme } = model.planTCI('propofol', 0, 3.0, TCI);
   ok(scheme.length >= 2, `TCI scheme has ${scheme.length} steps (bolus + rates)`);
 
   const bolus = scheme.find(s => s.type === 'bolus');
   ok(bolus !== undefined, `Scheme includes a loading bolus`);
   ok(bolus.value > 50 && bolus.value < 300, `Bolus dose reasonable: ${bolus.value.toFixed(1)} mg`);
 
-  // Compute curve for 30 minutes at 10-second resolution
-  const curve = model.computeCurve('propofol', 0, 30, 10/60);
+  const curve = model.computeCurve('propofol', 0, 30, 10 / 60);
   ok(curve.length > 100, `Curve has ${curve.length} points (30 min @ 10s)`);
 }
 
 console.log('\n===== 2. Curve Shape: PK Pharmacology =====\n');
 
 {
-  const model = createModel();
-  // Standard reference patient, no opioid
-  const { scheme } = model.planTCI('propofol', 0, 3.0);
-  const curve = model.computeCurve('propofol', 0, 30, 10/60);
+  const model = freshModel();
+  const { scheme } = model.planTCI('propofol', 0, 3.0, TCI);
+  const curve = model.computeCurve('propofol', 0, 30, 10 / 60);
 
-  // Peak Cp should be near bolus dose / V1
+  // Peak Cp should be a good fraction of the naive dose/V1 estimate.
   const params = model.getParams();
   const bolus = scheme.find(s => s.type === 'bolus');
   const expectedPeakCp = bolus ? bolus.value / params.V1 : 0;
   const actualPeakCp = Math.max(...curve.map(p => p.Cp));
   ok(actualPeakCp > expectedPeakCp * 0.5, `Peak Cp (${actualPeakCp.toFixed(1)}) reasonable vs dose/V1 (${expectedPeakCp.toFixed(1)})`);
 
-  // Ce should lag Cp — at t=0.5 min, Cp > Ce
+  // Ce lags Cp early.
   const early = curve.find(p => p.time >= 0.5);
-  if (early) {
-    ok(early.Cp > early.Ce, `At t=0.5 min: Cp (${early.Cp.toFixed(2)}) > Ce (${early.Ce.toFixed(2)}) — Ce lags`);
-  }
+  ok(early.Cp > early.Ce, `At t=0.5 min: Cp (${early.Cp.toFixed(2)}) > Ce (${early.Ce.toFixed(2)}) — Ce lags`);
 
-  // Ce should approach target by 15 min
+  // Ce reaches target band by 15 min.
   const at15 = curve.find(p => p.time >= 15);
-  if (at15) {
-    ok(Math.abs(at15.Ce - 3.0) < 0.5, `At t=15 min: Ce (${at15.Ce.toFixed(2)}) near target 3.0`);
-  }
+  ok(Math.abs(at15.Ce - 3.0) < 0.5, `At t=15 min: Ce (${at15.Ce.toFixed(2)}) near target 3.0`);
 
-  // Cp should decrease after bolus (redistribution)
+  // Cp redistributes down after the bolus.
   const at1 = curve.find(p => p.time >= 1);
   const at5 = curve.find(p => p.time >= 5);
-  if (at1 && at5) {
-    ok(at5.Cp < at1.Cp, `Cp at 5 min (${at5.Cp.toFixed(2)}) < Cp at 1 min (${at1.Cp.toFixed(2)}) — redistribution`);
-  }
+  ok(at5.Cp < at1.Cp, `Cp at 5 min (${at5.Cp.toFixed(2)}) < Cp at 1 min (${at1.Cp.toFixed(2)}) — redistribution`);
 
-  // Rate should decrease over time (stepped down by TCI scheme)
+  // Rate steps down from loading toward maintenance.
   const significantRates = curve.filter(p => p.rate > 1.0).map(p => p.rate);
   const firstSignificantRate = significantRates[0];
   const lastSignificantRate = significantRates[significantRates.length - 1];
@@ -253,18 +94,15 @@ console.log('\n===== 2. Curve Shape: PK Pharmacology =====\n');
 console.log('\n===== 3. BIS Prediction Along Curve =====\n');
 
 {
-  const model = createModel();
-  model.planTCI('propofol', 0, 3.0);
+  const model = freshModel();
+  model.planTCI('propofol', 0, 3.0, TCI);
 
-  // BIS at t=0 should be baseline (93)
   const bis0 = model.predictBIS('propofol', 0);
   ok(bis0 > 90, `BIS at t=0: ${bis0.toFixed(1)} (near baseline 93)`);
 
-  // BIS at t=10 should be in anaesthetic range (below 60)
   const bis10 = model.predictBIS('propofol', 10);
   ok(bis10 < 60, `BIS at t=10 min: ${bis10.toFixed(1)} (anaesthetic range)`);
 
-  // BIS at t=15 should be near target BIS (~47 at Ce=Ce50, lower at Ce=3.0)
   const bis15 = model.predictBIS('propofol', 15);
   ok(bis15 > 20 && bis15 < 60, `BIS at t=15 min: ${bis15.toFixed(1)} (in clinical range 20-60)`);
 }
@@ -272,19 +110,15 @@ console.log('\n===== 3. BIS Prediction Along Curve =====\n');
 console.log('\n===== 4. Target Change Mid-Case =====\n');
 
 {
-  const model = createModel();
-  model.planTCI('propofol', 0, 3.0);
+  const model = freshModel();
+  model.planTCI('propofol', 0, 3.0, TCI);
 
-  // Get Ce at 10 min
   const c10 = model.getConcentrationsAt('propofol', 10);
 
-  // Change target to 4.0 at t=10
-  model.planTCI('propofol', 10, 4.0);
+  // Raise the target to 4.0 at t=10.
+  model.planTCI('propofol', 10, 4.0, TCI);
 
-  // Get curve from 10 to 30
-  const curve = model.computeCurve('propofol', 10, 30, 10/60);
-
-  // Ce should rise toward 4.0
+  const curve = model.computeCurve('propofol', 10, 30, 10 / 60);
   const at25 = curve.find(p => p.time >= 25);
   ok(at25.Ce > c10.Ce, `After target increase: Ce at 25 min (${at25.Ce.toFixed(2)}) > Ce at 10 min (${c10.Ce.toFixed(2)})`);
   ok(Math.abs(at25.Ce - 4.0) < 1.0, `Ce approaching new target 4.0 (got ${at25.Ce.toFixed(2)})`);
@@ -293,69 +127,64 @@ console.log('\n===== 4. Target Change Mid-Case =====\n');
 console.log('\n===== 5. Manual Bolus During TCI =====\n');
 
 {
-  const model = createModel();
-  model.planTCI('propofol', 0, 3.0);
+  const model = freshModel();
+  model.planTCI('propofol', 0, 3.0, TCI);
 
   const ceBefore = model.getConcentrationsAt('propofol', 5).Ce;
 
-  // Give manual bolus at t=5, then clear future TCI events
-  model.addBolus('propofol', 5, 50, 'Manual rescue bolus');
-  model.clearAfter('propofol', 5.05); // keep bolus + rate restore, clear TCI future
+  // Manual rescue bolus at t=5 on top of the running TCI plan. A manual bolus
+  // generates a rate-restore at its (realistic) delivery end that resumes the
+  // active TCI rate; a TCI-sourced bolus deliberately would not (CLAUDE.md).
+  model.addBolus('propofol', 5, 50, 'Manual rescue bolus', { deliveryMode: 'pump', source: 'manual' });
 
-  const ceAfter = model.getConcentrationsAt('propofol', 5.1).Ce;
-  ok(ceAfter > ceBefore, `Bolus at t=5 raises Ce: before=${ceBefore.toFixed(2)}, after=${ceAfter.toFixed(2)}`);
+  const ceAfter = model.getConcentrationsAt('propofol', 6).Ce;
+  ok(ceAfter > ceBefore, `Manual bolus at t=5 raises Ce: before=${ceBefore.toFixed(2)} (t=5), after=${ceAfter.toFixed(2)} (t=6)`);
 
-  // Rate should be restored to what it was before bolus
   const events = model.getEvents('propofol');
   const restore = events.find(e => e.source === 'system' && e.time > 5);
-  ok(restore !== undefined, 'Rate-restore event exists after bolus');
-  ok(restore.value > 0, `Restored rate is ${restore.value.toFixed(2)} mg/min (not zero)`);
+  ok(restore !== undefined, 'Rate-restore event exists after manual bolus');
+  ok(restore && restore.value > 0, `Restored rate resumes the active TCI rate: ${restore ? restore.value.toFixed(2) : 'n/a'} mg/min (not zero)`);
 }
 
 console.log('\n===== 6. Elderly Patient — Age-Adjusted PD =====\n');
 
 {
-  const model = createModel();
-  model.setPatient({ age: 75, weight: 60, height: 165, male: false, opioid: true });
+  const model = freshModel({ age: 75, weight: 60, height: 165, male: false, opioid: true });
 
   const params = model.getParams();
-
-  // Ce50 decreases with age (elderly = ~2.39 for 75y). Opioid correction off by default (SimTIVA mode).
+  // Ce50 decreases with age (elderly ≈ 2.39 for 75y).
   ok(params.Ce50 < 2.6, `Elderly Ce50=${params.Ce50.toFixed(3)} (should be <2.6 due to aging)`);
 
-  // Plan TCI at Ce=2.0 (appropriate for elderly)
-  model.planTCI('propofol', 0, 2.0);
+  model.planTCI('propofol', 0, 2.0, TCI);
 
-  // BIS at 15 min should be in anaesthetic range
   const bis = model.predictBIS('propofol', 15);
   ok(bis > 20 && bis < 60, `Elderly BIS at t=15: ${bis.toFixed(1)} (anaesthetic range)`);
 
-  // Bolus dose should be smaller than for reference patient
   const events = model.getEvents('propofol');
   const bolus = events.find(e => e.type === 'bolus');
-  ok(bolus.value < 150, `Elderly bolus dose: ${bolus.value.toFixed(1)} mg (should be modest)`);
+  ok(bolus.value < 150, `Elderly bolus dose: ${bolus.value.toFixed(1)} mg (should be modest for a 60 kg elderly patient)`);
 }
 
 console.log('\n===== 7. computeCurve Resolution Check =====\n');
 
 {
-  const model = createModel();
-  model.planTCI('propofol', 0, 3.0);
+  const model = freshModel();
+  model.planTCI('propofol', 0, 3.0, TCI);
 
-  // Default 10-second step for 30 min → 181 points
-  const curve10s = model.computeCurve('propofol', 0, 30, 10/60);
+  const curve10s = model.computeCurve('propofol', 0, 30, 10 / 60);
   ok(curve10s.length >= 180, `10s step: ${curve10s.length} points for 30 min`);
 
-  // 1-minute step → 31 points
   const curve1m = model.computeCurve('propofol', 0, 30, 1.0);
   ok(curve1m.length === 31, `1 min step: ${curve1m.length} points for 30 min`);
 
-  // Both should give similar Ce at t=15
+  // Both resolutions sample the same underlying replay → agree at t=15.
   const ce10s = curve10s.find(p => Math.abs(p.time - 15) < 0.1);
   const ce1m = curve1m.find(p => p.time === 15);
   const diff = Math.abs(ce10s.Ce - ce1m.Ce);
   ok(diff < 0.05, `Ce at t=15 agrees between resolutions: diff=${diff.toFixed(4)}`);
 }
+
+resetPumpSettings();
 
 // ===== SUMMARY =====
 console.log(`\n${'='.repeat(50)}`);

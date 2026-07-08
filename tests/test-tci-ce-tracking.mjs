@@ -32,7 +32,10 @@ import { calcEleveldParams } from '../js/pk/eleveld.js';
 import { createEngine } from '../js/pk/engine.js';
 import { planTCISchemeEmulation } from '../js/sim/tci/emulation.js';
 
-const PUMP = { bolusConcentration: 10, bolusRateMlH: 750, maxRate: 200 };
+// Production pump config: maxRate is auto-derived bolusRateMlH×concentration/60
+// = 750×10/60 = 125 mg/min (see getPumpSettings in js/util/constants.js). The
+// planner must be driven with the same 125 ceiling production uses, not 200.
+const PUMP = { bolusConcentration: 10, bolusRateMlH: 750, maxRate: 125 };
 const CE_TOL = 0.015;
 // TRANSIENT_MARGIN: max acceptable excursion beyond CE_TOL during the
 // ke0-lag / V3-filling transient between bolus-pause end and the first
