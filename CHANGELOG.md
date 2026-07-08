@@ -11,6 +11,15 @@
 
 ---
 
+## [0.5.43] — 2026-07-08
+
+Test-suite improvement round — a follow-on to the 0.5.41.x/0.5.42 audit that closed the last gaps and streamlined the suite. All green at 894 assertions (was 842).
+
+- **New `test-tci-plan-fidelity`** — a clinical-outcome baseline that drives the *real production entry point* `createModel().planTCI('propofol', 0, target, { tciMode: 'cet-emulation' })` across a 5-patient × 3-target matrix (young / reference / elderly / obese / light; Ce 2.0 / 3.0 / 4.5). Every other planner test calls the planner function directly and replays with a hand-rolled sampler; none drove the facade layer that reads live pump settings, inserts events, and answers `getConcentrationsAt()` — the exact path behind the on-screen Ce card (and the path where the earlier `maxRate` bug lived). Instead of pinning byte-exact plan fingerprints (which change on any legitimate tuning), it asserts the property clinicians care about — the plan reaches ≥95% of target within 6 min and holds ±5% across 10–120 min, never dipping below the 90% clinical floor — so it survives planner refinement and only reddens on a broken therapeutic result.
+- **maxRate faithfulness** — `test-tci-ce-tracking` and `test-tci-tolerance-diagnostic` drove the planner with `maxRate: 200`, but production derives `maxRate = bolusRateMlH × concentration / 60 = 125 mg/min` (the setup screen installs this on every case). Both now use 125.
+- **Legacy retired** — `test-sim-v2` lost its "State Machine" / "State Change Callbacks" blocks (13 assertions over an obsolete READY/RUNNING/PAUSED design the stateless production facade never implemented). `test-tci-tolerance-diagnostic` was trimmed from a ~200-line diagnostic printer to its one real contract assertion (the ceTolerance slider reaches the planner), now with a per-plan reach-target sanity check.
+- **Scaffolding de-duplicated** — `test-model`, `test-integration`, and `test-t0-edge` each carried their own byte-drifted copy of the same ~50-line mini event-list. They now import one documented `tests/helpers/mini-event-list.mjs`; every assertion is preserved (42 / 25 / 40), ~120 lines of triplication removed.
+
 ## [0.5.42] — 2026-07-07
 
 - **CET (Emulation) is now the factory-default TCI planner** and the only one shown to users. The `stepped` / `cet` / `cet-conservative` planners had no clinical advantage over cet-emulation (the SimTIVA deliver_cpt port) and are retired from the UI — their code is retained for development only. The TCI Planning Mode picker on the setup screen is hidden by default; a developer can reveal it by setting `localStorage['tci-dev-planners'] = 'true'` and reloading. Existing users with a legacy saved mode (e.g. `stepped`) are migrated to cet-emulation automatically.

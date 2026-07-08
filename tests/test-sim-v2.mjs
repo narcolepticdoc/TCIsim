@@ -135,55 +135,13 @@ let passed=0,failed=0;
 function ok(c,m){if(c){passed++;console.log(`  ✓ ${m}`)}else{failed++;console.error(`  ✗ ${m}`)}}
 function near(a,b,tol,m){const r=Math.abs(b)>1e-9?Math.abs(a-b)/Math.abs(b):Math.abs(a-b);ok(r<tol,`${m} (${a.toFixed(4)} vs ${b.toFixed(4)})`)}
 
-console.log('\n===== 1. State Machine =====\n');
-
-{
-  const sim = createSimulation();
-  ok(sim.getState() === 'READY', 'Initial state is READY');
-
-  sim.start();
-  ok(sim.getState() === 'RUNNING', 'After start: RUNNING');
-
-  sim.pause();
-  ok(sim.getState() === 'PAUSED', 'After pause: PAUSED');
-
-  sim.resume();
-  ok(sim.getState() === 'RUNNING', 'After resume: RUNNING');
-
-  sim.reset();
-  ok(sim.getState() === 'READY', 'After reset: READY');
-  ok(sim.getSimTime() === 0, 'After reset: simTime = 0');
-}
-
-{
-  const sim = createSimulation();
-  sim.start();
-  sim.start(); // double start should be no-op
-  ok(sim.getState() === 'RUNNING', 'Double start stays RUNNING');
-
-  sim.pause();
-  sim.pause(); // double pause
-  ok(sim.getState() === 'PAUSED', 'Double pause stays PAUSED');
-}
-
-console.log('\n===== 2. State Change Callbacks =====\n');
-
-{
-  const sim = createSimulation();
-  const states = [];
-  sim.on('stateChange', d => states.push(d.state));
-
-  sim.start();
-  sim.pause();
-  sim.resume();
-  sim.reset();
-
-  ok(states.length === 4, `4 state changes emitted (got ${states.length})`);
-  ok(states[0] === 'RUNNING', 'First: RUNNING');
-  ok(states[1] === 'PAUSED', 'Second: PAUSED');
-  ok(states[2] === 'RUNNING', 'Third: RUNNING');
-  ok(states[3] === 'READY', 'Fourth: READY');
-}
+// NOTE: The former Sections 1 & 2 ("State Machine" and "State Change
+// Callbacks") were removed — they asserted READY/RUNNING/PAUSED transitions
+// and stateChange events on the inline createSimulation harness, an obsolete
+// design that production's stateless simulation.js facade does not implement.
+// Those semantics no longer exist to protect. The behavioral sections below
+// still exercise the event-list mechanics (manual rate/bolus, editing, jump,
+// multi-drug isolation, tick fan-out) against real createEngine + Eleveld.
 
 console.log('\n===== 3. Manual Mode — Rate + Bolus =====\n');
 

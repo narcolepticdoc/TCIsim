@@ -9,43 +9,15 @@
  * starts layering DOM code on top.
  */
 
-// ============ REAL engine + Eleveld ============
+// ============ REAL engine + Eleveld + SHARED SCAFFOLDING ============
 import { createEngine } from '../js/pk/engine.js';
 import { calcEleveldParams } from '../js/pk/eleveld.js';
-// createEventList / planTCIScheme / createModel below are test scaffolding for
-// exercising the full chain against the REAL engine + Eleveld; the production
-// event/sim/planner layers are covered by test-session-roundtrip,
-// test-pump-rate-correction, and test-tci-scheme.
-
-
-// Inline Eleveld (reference male, corrected PD)
-
-// Inline event list (stateless, matching refactored events.js)
-let _nid=1;
-function genId(){return'evt_'+String(_nid++).padStart(5,'0')}
-function createEvt(drug,time,type,value,opts={}){return{id:genId(),drug,time,type,value,source:opts.source||'manual',annotation:opts.annotation||'',snapshot:null}}
-function createEventList(){
-  let events=[];const engines={};
-  function registerEngine(d,e){engines[d]=e}
-  function getEngine(d){return engines[d]||null}
-  function insert(e){let idx=events.length;for(let i=events.length-1;i>=0;i--){if(events[i].time<=e.time){idx=i+1;break}if(i===0)idx=0}events.splice(idx,0,e);return e}
-  function getAll(){return[...events]}
-  function getByDrug(d){return events.filter(e=>e.drug===d)}
-  function clearAfter(d,t){const b=events.length;events=events.filter(e=>!(e.drug===d&&e.time>t));if(b!==events.length)replayDrug(d);return b-events.length}
-  function clearAll(){events=[];_nid=1;for(const d of Object.keys(engines))engines[d].reset()}
-  function getActiveRateForDrug(d,bi){for(let i=bi;i>=0;i--){if(events[i].drug!==d)continue;if(events[i].type==='rate')return events[i].value;if(events[i].type==='pause')return 0}return 0}
-  function getRateAtTime(d,time){let r=0;for(const e of events){if(e.drug!==d)continue;if(e.time>time)break;if(e.type==='rate')r=e.value;else if(e.type==='pause')r=0}return r}
-  function replayDrug(d){const eng=engines[d];if(!eng)return;eng.reset();let ct=0,cr=0;for(const evt of events){if(evt.drug!==d)continue;const dt=evt.time-ct;if(dt>0)eng.advance(dt,cr);ct=evt.time;if(evt.type==='bolus'){eng.advance(0.05,evt.value/0.05);ct+=0.05}else if(evt.type==='rate')cr=evt.value;else if(evt.type==='pause')cr=0;evt.snapshot=eng.getState()}}
-  function replayAll(){for(const d of Object.keys(engines))replayDrug(d)}
-  function getConcentrationsAt(d,time){const eng=engines[d];if(!eng)return{Cp:0,Ce:0,C2:0,C3:0,rate:0,time};let le=null,li=-1;for(let i=events.length-1;i>=0;i--){if(events[i].drug===d&&events[i].time<=time){le=events[i];li=i;break}}if(!le){eng.reset();if(time>0)eng.advance(time,0);return{...eng.getConcentrations(),rate:0,time}}if(!le.snapshot)replayDrug(d);eng.setState(le.snapshot);let ct=le.time;if(le.type==='bolus')ct+=0.05;const cr=getActiveRateForDrug(d,li);const dt=time-ct;if(dt>0)eng.advance(dt,cr);return{...eng.getConcentrations(),rate:cr,time}}
-  function computeCurve(d,startTime,endTime,step=10/60){const eng=engines[d];if(!eng)return[];const devts=events.filter(e=>e.drug===d);const curve=[];eng.reset();let ct=0,cr=0,ep=0;while(ep<devts.length&&devts[ep].time<=startTime){const e=devts[ep];const dt=e.time-ct;if(dt>0)eng.advance(dt,cr);ct=e.time;if(e.type==='bolus'){eng.advance(0.05,e.value/0.05);ct+=0.05}else if(e.type==='rate')cr=e.value;else if(e.type==='pause')cr=0;ep++}if(startTime>ct){eng.advance(startTime-ct,cr);ct=startTime}let st=startTime;while(st<=endTime){while(ep<devts.length&&devts[ep].time<=st){const e=devts[ep];const dt=e.time-ct;if(dt>0)eng.advance(dt,cr);ct=e.time;if(e.type==='bolus'){eng.advance(0.05,e.value/0.05);ct+=0.05}else if(e.type==='rate')cr=e.value;else if(e.type==='pause')cr=0;ep++}const dt=st-ct;if(dt>0){eng.advance(dt,cr);ct=st}const c=eng.getConcentrations();curve.push({time:st,Cp:c.Cp,Ce:c.Ce,C2:c.C2,C3:c.C3,rate:cr});st+=step}return curve}
-  function getStateAtTime(d,time){getConcentrationsAt(d,time);return engines[d]?engines[d].getState():new Float64Array(4)}
-  function getStateAtLastEvent(d){for(let i=events.length-1;i>=0;i--){if(events[i].drug===d&&events[i].snapshot)return{state:events[i].snapshot,time:events[i].time}}return{state:engines[d]?engines[d].getState():new Float64Array(4),time:0}}
-  function addRate(d,time,rate,ann){const e=createEvt(d,time,'rate',rate,{annotation:ann||''});insert(e);replayDrug(d);return e}
-  function addBolus(d,time,mg,ann){const pr=getRateAtTime(d,time);const be=createEvt(d,time,'bolus',mg,{annotation:ann||''});insert(be);const re=createEvt(d,time+0.05,'rate',pr,{source:'system',annotation:'Rate restored'});insert(re);replayDrug(d);return be}
-  function addRateBatch(d,steps,ann){const created=[];for(const s of steps){const e=createEvt(d,s.time,'rate',s.rate,{source:'tci',annotation:ann||''});insert(e);created.push(e)}if(created.length>0)replayDrug(d);return created}
-  return{registerEngine,getEngine,insert,getAll,getByDrug,clearAfter,clearAll,replayDrug,replayAll,getConcentrationsAt,computeCurve,getRateAtTime,getActiveRateForDrug,getStateAtLastEvent,getStateAtTime,addRate,addBolus,addRateBatch,get length(){return events.length},get raw(){return events}};
-}
+// createEventList (shared helper), plus the inline planTCIScheme / createModel
+// below, are test scaffolding for exercising the full chain against the REAL
+// engine + Eleveld; the production event/sim/planner layers are covered by
+// test-session-roundtrip, test-pump-rate-correction, test-tci-scheme, and the
+// end-to-end clinical-outcome check in test-tci-plan-fidelity.
+import { createEventList } from './helpers/mini-event-list.mjs';
 
 // Inline TCI planner (simplified — generates bolus + rate steps)
 function planTCIScheme(engine, startState, startTime, ceTarget, config={}) {

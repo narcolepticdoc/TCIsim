@@ -4,6 +4,54 @@
 
 ## Session History
 
+### Test-suite improvement round: fidelity baseline, retire legacy, de-dupe (v0.5.43) — Interim
+
+Follow-on to the 0.5.41.x/0.5.42 audit. The audit made the tests import real
+production code; this round analysed whether the suite tests against a *proper
+baseline* or merely locks existing behavior, and whether any of it is legacy or
+redundant. Four changes (a fifth — downgrading the exact-minute change-detection
+locks — was deliberately deferred):
+
+1. **New clinical-outcome baseline (`test-tci-plan-fidelity.mjs`).** The gap the
+   audit surfaced: no test drove `createModel().planTCI()`, the real production
+   entry point. Every planner test called `planTCISchemeEmulation(...)` directly
+   and replayed with a bespoke sampler, so the facade layer — live pump-settings
+   read (the derived maxRate=125), event insertion, `getConcentrationsAt()`
+   replay (the on-screen Ce card path) — was untested. That's exactly where the
+   earlier maxRate bug hid. The new test iterates 5 patients × 3 Ce targets
+   through the real facade and asserts a *clinical outcome*, not a fingerprint:
+   onset (≥95% target ≤6 min), maintenance hold (±5% over 10–120 min), and a hard
+   90% clinical floor from onset on. Measured margins on the real path: onset
+   ≤3.6 min, hold within ±1.6% — the assertions have real headroom yet still trip
+   on a broken therapeutic result. This is the "baseline" the suite was missing:
+   behavior-property, tuning-independent, tied to what a clinician needs.
+2. **maxRate faithfulness.** `test-tci-ce-tracking` and
+   `test-tci-tolerance-diagnostic` drove the planner at `maxRate: 200`; the app
+   derives 125 (`bolusRateMlH×concentration/60`, installed by setup.js on every
+   case). Both corrected to 125 — the tests now match the delivery ceiling
+   production actually enforces. Both stay green.
+3. **Retire legacy.** `test-sim-v2` asserted READY/RUNNING/PAUSED transitions and
+   stateChange callbacks on an inline `createSimulation` harness — an obsolete
+   design; the production `simulation.js` facade is stateless (no getState, no
+   start/pause). Those 13 assertions protected nothing real and were deleted
+   (45→32); the behavioral sections (manual rate/bolus, edit, jump, multi-drug,
+   tick fan-out) stay. `test-tci-tolerance-diagnostic` was a ~200-line printer
+   around one real assertion (ceTolerance sweep ⇒ ≥2 distinct plans = slider is
+   wired); trimmed to that assertion plus a per-plan reach-target check (1→6).
+4. **De-duplicate scaffolding.** `test-model` / `test-integration` / `test-t0-edge`
+   each inlined their own copy of the same ~50-line mini event-list (the exact
+   drift pattern the audit fought). Extracted to one documented
+   `tests/helpers/mini-event-list.mjs` (test-only, not precached). The helper is
+   the union of the three (test-model's fuller CRUD API + `addManual*` aliases
+   for the t=0 edge tests, no `status` field so test-model's absence-assertion
+   still holds). Every assertion preserved (42/25/40); ~120 lines removed. Each
+   test runs in its own process (run-tests.js spawnSync), so the helper's
+   module-level id counter never leaks across suites.
+
+Suite: 842 → 894 green. Test-only change; no shipped-code delta (version bumped
+per the every-code-change workflow, sw.js in lockstep).
+
+
 ### cet-emulation is the production planner + default (v0.5.42) — Interim
 
 Direct follow-on from the test-audit finding that the app's real behavior matches
