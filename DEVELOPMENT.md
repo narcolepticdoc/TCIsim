@@ -4,6 +4,75 @@
 
 ## Session History
 
+### cet-emulation is the production planner + default (v0.5.42) — Interim
+
+Direct follow-on from the test-audit finding that the app's real behavior matches
+cet-emulation (the SimTIVA deliver_cpt port), and the maintainer confirming the
+other planners had no clinical advantage. Changes: factory default TCI Planning
+Mode is now cet-emulation (was stepped); the setup-screen picker is hidden from
+users (form-row #row-tci-mode, hidden by default) and revealed only when a
+developer sets localStorage['tci-dev-planners']='true' and reloads. On restore,
+a legacy saved mode (stepped/cet/cet-conservative) is honoured only with the dev
+flag on — otherwise it's ignored so existing users migrate to cet-emulation. The
+stepped / cet / cet-conservative planner modules and simulation.js's four-way
+tciMode dispatch are LEFT INTACT for development. app.js getTciMode fallbacks and
+setup.js getTciMode default both changed 'stepped' → 'cet-emulation'. Verified
+headless: default hidden+emulation, dev-flag reveals + honours saved mode,
+dev-off migrates a saved 'stepped' back to emulation.
+
+
+### Test-suite audit: exercise real code, not inline copies (v0.5.41.3) — Interim
+
+Audit finding: 14 of 26 test files loaded ZERO production code — they inlined
+copies of the engine / Eleveld / planners / predictors and tested the copies,
+which had silently drifted. Worst measured drift: inline Eleveld was 337% off
+production Q3 for a 70y/55kg opioid patient; `test-vs-simtiva`'s headline
+"0.0000% vs SimTIVA" validated a copy of the engine that never imported
+js/pk/engine.js.
+
+Converted to import real modules (renamed to .mjs where a big file needed
+static imports without a 300-line async reindent; the runner already discovers
+.mjs):
+- test-vs-simtiva: real createEngine + calcEleveldParams; analytical +
+  SimTIVA-tick + SimTIVA-param oracles kept inline (independent references).
+  Verified real Eleveld matches the SimTIVA oracle within 0.1% across 7
+  patients — no hidden production discrepancy.
+- test-unit-safety: real validateParams.
+- test-decay, test-steady-state-predictor: real predictors + engine + drug
+  calculators; exact regression locks re-baselined to real output (propofol
+  Ce_ss 2.857→3.017 at CL 1.79, ketamine Ce_ss 0.9375→0.776 at 63 mL/kg, etc.).
+- New test-meta: version lockstep + precache-vs-disk (previously manual).
+
+test-tci-scheme: converted to the real **CET planner** (planTCISchemeCET) — the
+only planner used in production (stepped / cet-conservative / cet-emulation were
+development aids, per the maintainer). Its inline copy was a stepped-style
+variant matching neither shipping planner. Convergence bounds re-baselined to
+CET's fast-onset reality (leading pause excluded from the rates-decrease check;
+long-horizon band widened to CET's ~5.3% undershoot). TEST 13 reframed: the
+quantize-in-loop plan is a genuinely different integer-mL/h plan (the loop
+re-selects rates around the grid), so the guard is now "quantized plan still
+converges to target" rather than "quantized ≈ unquantized."
+
+CORRECTION (0.5.41.6): an earlier note here claimed enabling round-in-display-units "materially slows CET onset" (12-17% low for ~2 h). That was WRONG. It came from wiring test-tci-scheme to a DEVELOPMENT planner (planTCISchemeCET) with the wrong maxRate (200 vs the production 125 mg/min from 750 mL/h pump settings). The production planner is cet-emulation (planTCISchemeEmulation, the SimTIVA deliver_cpt port) — verified against the live app (35 y/70 kg, target 3.5, rounding ON): Ce reaches target by ~5 min and HOLDS the band (replay: Ce@5=3.04, @30=2.99, @60=3.01 for target 3.0, quantized). test-tci-scheme now imports planTCISchemeEmulation with the production pump config; step-count bounds re-baselined to emulation's fine cpt-interval step-down (~20 steps, tolerance-independent). Lesson: reproduce against the actual planTCI path / pump config before trusting a standalone planner call — the tell was a bolus mismatch (standalone 2350 vs app 2100 mcg/kg).
+
+Follow-up (completed): the remaining inline-copy files now import real code —
+test-fentanyl-pk / test-ketamine-pk (real calculators; population constants kept
+as independent expected values), test-units (real converter), test-t0-edge /
+test-model / test-reconcile (real engine; matrix-exp primitive checks reframed
+through getSystemMatrix), test-sim-v2 / test-integration (real engine + real
+Eleveld, dropping their inline drifted copies). Mini event/sim harnesses kept as
+labelled scaffolding; reconcile's Cardano cubic and vs-simtiva's analytical
+solver kept as deliberate independent oracles. Only test-pk retains a faithful
+inline engine (it already imports the real Eleveld + PD, and its block includes
+generic matrix-exp primitive tests that would be an anti-pattern to reframe).
+The 4×4 matrix engine — previously copy-pasted across 11 files —
+
+Superseded note: test-fentanyl-pk,
+test-ketamine-pk (verified their inline constants match production exactly),
+test-units, and the engine-mechanics files test-model / test-sim-v2 /
+test-t0-edge / test-integration / test-reconcile.
+
+
 ### Unpaired-state: relabel, lighten, drop hints (v0.5.41.2) — Interim
 
 v0.5.41.1 overshot (opacity .4 unreadable; the status-line hints read as untappable dead text; treatment diverged from the patient button). Final form per user direction: all five sync buttons relabel with the patient button's "⚙ Pair to enable …" language via a `SYNC_BUTTON_LABELS` table in `refreshSyncButtons()` (case buttons: "⚙ Pair to enable case sync"; compact template row: "⚙ Pair"), dim lightened to opacity .7 (the label explains the state — readability wins), the persistent hints and `noticeUnpaired`/`wasUnpaired` machinery removed, and the no-code tap is plain `openSettingsToSync()` again — identical to the patient button. The `animation:none` guard from 0.5.41.1 stays: without it the `.setup-form>*` fadeIn (fill-mode `both`) pins the case buttons at the retained final keyframe's opacity:1 and no dim applies at all.

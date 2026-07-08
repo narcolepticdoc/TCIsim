@@ -146,7 +146,7 @@ function initSimScreen(patient) {
   if (modelLabel) {
     const conc = $('input-concentration')?.value || '10';
     const opioid = p.opioid ? ' · +opioid' : '';
-    const tciMode = setup.getTciMode ? setup.getTciMode() : 'stepped';
+    const tciMode = setup.getTciMode ? setup.getTciMode() : 'cet-emulation';
     const modeLabel = tciMode === 'cet' ? ' · CET' :
                       tciMode === 'cet-conservative' ? ' · CET(C)' :
                       tciMode === 'cet-emulation' ? ' · CET(E)' : '';
@@ -748,7 +748,7 @@ function boot() {
       }
 
       if (type === 'ceTarget') {
-        const tciMode = setup.getTciMode ? setup.getTciMode() : 'stepped';
+        const tciMode = setup.getTciMode ? setup.getTciMode() : 'cet-emulation';
         const override = extras?.roundOverride;
         const quantConfig = getQuantizeConfig(selectedDrug,
           typeof override === 'boolean' ? override : undefined);
@@ -965,7 +965,7 @@ function boot() {
     onMissedRecalculate: (drugId, missedEventTime) => {
       const ceTarget = mode.getCeTarget(drugId);
       if (!ceTarget) return;
-      const tciMode     = setup.getTciMode ? setup.getTciMode() : 'stepped';
+      const tciMode     = setup.getTciMode ? setup.getTciMode() : 'cet-emulation';
       const quantConfig = getQuantizeConfig(drugId);
       const { ceTolerance } = settings.getSettings();
       model.clearFrom(drugId, missedEventTime);

@@ -1,149 +1,45 @@
 /**
- * test-steady-state-predictor.js — Tests for:
- *   1. Analytical steady-state predictor (predictSteadyStateCe, predictTimeToSteadyState)
- *   2. Slope-reversal plateau detector (predictPlateau)
- *   3. Relative-tolerance curve scan for TCI time-to-target
+ * test-steady-state-predictor.js — Analytical steady-state + plateau predictors.
  *
- * Inline copies of math, Eleveld/Fentanyl/Ketamine parameter calculators,
- * the PK engine, and the predictors mirror the CommonJS pattern used by
- * the rest of the test suite.
+ * Imports the REAL js/pk/steady-state-predictor.js (predictSteadyStateCe,
+ * predictTimeToSteadyState, predictPlateau) against the real engine and real
+ * Eleveld/Fentanyl/Ketamine params. Previously inlined faithful-but-drifted
+ * copies (the inline Eleveld used base CL 1.89 vs production 1.79, and the
+ * inline ketamine was an entirely different volume model).
+ *
+ * Exact-value assertions are regression locks pinned to the REAL predictors'
+ * output (Ce_ss values, integer plateau entry/exit minutes); the surrounding
+ * behavioral assertions (plateau present/absent, entry<exit, band ordering)
+ * validate correctness independent of the exact numbers.
+ *
+ * A compact inv4 is kept inline ONLY for TEST 1's independent matrix-solve
+ * cross-check of Ce_ss vs Cp_ss — that is deliberately not production code.
  */
 
-// ============ INLINE math + engine (compact — mirrors test-decay.js) ============
-const N=4;function mat4(){return new Float64Array(16)}function eye4(){const m=mat4();m[0]=m[5]=m[10]=m[15]=1;return m}
-function mul4(A,B){const C=mat4();for(let i=0;i<N;i++)for(let j=0;j<N;j++){let s=0;for(let k=0;k<N;k++)s+=A[i*N+k]*B[k*N+j];C[i*N+j]=s}return C}
-function mulVec4(A,x){const y=new Float64Array(4);for(let i=0;i<N;i++){let s=0;for(let j=0;j<N;j++)s+=A[i*N+j]*x[j];y[i]=s}return y}
-function add4(A,B){const C=mat4();for(let i=0;i<16;i++)C[i]=A[i]+B[i];return C}
-function sub4(A,B){const C=mat4();for(let i=0;i<16;i++)C[i]=A[i]-B[i];return C}
-function scale4(A,s){const B=mat4();for(let i=0;i<16;i++)B[i]=A[i]*s;return B}
-function inv4(M){const a=new Float64Array(32);for(let i=0;i<N;i++){for(let j=0;j<N;j++)a[i*8+j]=M[i*N+j];a[i*8+(N+i)]=1}for(let col=0;col<N;col++){let mv=Math.abs(a[col*8+col]),mr=col;for(let r=col+1;r<N;r++){const v=Math.abs(a[r*8+col]);if(v>mv){mv=v;mr=r}}if(mv<1e-15)return null;if(mr!==col)for(let j=0;j<8;j++){const t=a[col*8+j];a[col*8+j]=a[mr*8+j];a[mr*8+j]=t}const p=a[col*8+col];for(let j=0;j<8;j++)a[col*8+j]/=p;for(let r=0;r<N;r++){if(r===col)continue;const f=a[r*8+col];for(let j=0;j<8;j++)a[r*8+j]-=f*a[col*8+j]}}const inv=mat4();for(let i=0;i<N;i++)for(let j=0;j<N;j++)inv[i*N+j]=a[i*8+(N+j)];return inv}
-function expm4(A){const c=[1,1/2,5/44,1/66,1/792,1/15840,1/665280];const nA=(()=>{let mx=0;for(let j=0;j<N;j++){let cs=0;for(let i=0;i<N;i++)cs+=Math.abs(A[i*N+j]);if(cs>mx)mx=cs}return mx})();let s=0;if(nA>0.5){s=Math.ceil(Math.log2(nA/0.5));if(s<0)s=0}const As=(s>0)?scale4(A,1/(1<<s)):A;const As2=mul4(As,As),As3=mul4(As,As2),As4=mul4(As2,As2),As5=mul4(As,As4),As6=mul4(As2,As4);const I=eye4();const powers=[I,As,As2,As3,As4,As5,As6];let Nm=mat4(),Dm=mat4();for(let k=0;k<=6;k++){const sg=(k%2===0)?1:-1;for(let i=0;i<16;i++){Nm[i]+=c[k]*powers[k][i];Dm[i]+=sg*c[k]*powers[k][i]}}const Di=inv4(Dm);if(!Di)return add4(I,A);let result=mul4(Di,Nm);for(let i=0;i<s;i++)result=mul4(result,result);return result}
+import { calcEleveldParams } from '../js/pk/eleveld.js';
+import { calcFentanylParams } from '../js/pk/fentanyl.js';
+import { calcKetamineParams } from '../js/pk/ketamine.js';
+import { createEngine } from '../js/pk/engine.js';
+import { predictSteadyStateCe, predictTimeToSteadyState, predictPlateau } from '../js/pk/steady-state-predictor.js';
 
-function sigmoid(x,E50,g){return Math.pow(x,g)/(Math.pow(x,g)+Math.pow(E50,g))}
-function fatFreeMass(w,h,a,m){const b=w/Math.pow(h/100,2);if(m)return(.88+(1-.88)/(1+Math.pow(a/13.4,-12.7)))*((9270*w)/(6680+216*b));return(1.11+(1-1.11)/(1+Math.pow(a/7.1,-1.1)))*((9270*w)/(8780+244*b))}
-const TH={V1:6.28,V2:25.5,V3:273,CL:1.89,Q2:1.75,Q3:1.11,V2_aging:-0.0156,CL_aging_opioid:-0.00286,V3_aging_opioid:-0.00286,V1_E50_WGT:33.6,CL_female:1.30,CL_mat_PMA50:42.3,CL_mat_hill:9.06,Q3_mat_AGE50:68.3,Q3_mat_hill:1.89,ke0_ref:0.146,ke0_wgt_exp:-0.25};
-
-function calcEleveldParams(pt){const{age:a,weight:w,height:h,male:m,opioid:o}=pt;const bmi=w/Math.pow(h/100,2);const ffm=fatFreeMass(w,h,a,m);const pma=(a*52)+40;const of=o?1:0;const WR=70,AR=35;const V1=TH.V1*(sigmoid(w,TH.V1_E50_WGT,1)/sigmoid(WR,TH.V1_E50_WGT,1));const V2=TH.V2*(w/WR)*Math.exp(TH.V2_aging*(a-AR));const fr=fatFreeMass(WR,170,AR,true);const V3=TH.V3*(ffm/fr)*Math.exp(of*TH.V3_aging_opioid*(a-AR));const cm=sigmoid(pma,TH.CL_mat_PMA50,TH.CL_mat_hill)/sigmoid((AR*52+40),TH.CL_mat_PMA50,TH.CL_mat_hill);const CL=TH.CL*Math.pow(w/WR,0.75)*cm*(m?1:TH.CL_female)*Math.exp(of*TH.CL_aging_opioid*(a-AR));const Q2=TH.Q2*Math.pow(V2/TH.V2,0.75);const q3m=sigmoid(a,TH.Q3_mat_AGE50,TH.Q3_mat_hill)/sigmoid(AR,TH.Q3_mat_AGE50,TH.Q3_mat_hill);const Q3=TH.Q3*Math.pow(V3/TH.V3,0.75)*(m?1:q3m);const ke0=TH.ke0_ref*Math.pow(w/WR,TH.ke0_wgt_exp);return{V1,V2,V3,CL,Q2,Q3,ke0}}
-
-function calcFentanylParams(pt){const{weight:w,height:h}=pt;const bmi=w/Math.pow(h/100,2);const pkm=(w>=85&&bmi>30)?(52/(1+(196.4*Math.exp(-0.025*w)-53.66)/100)):w;const s=pkm/70;return{V1:7.35*s,V2:33.94*s,V3:275.62*s,CL:(36.47/60)*s,Q2:(207.71/60)*s,Q3:(99.22/60)*s,ke0:0.1195}}
-
-function calcKetamineParams(pt){const w=pt.weight;const s=w/70;return{V1:21*s,V2:56*s,V3:195*s,CL:(96/60)*s,Q2:(179.4/60)*s,Q3:(90.36/60)*s,ke0:0.52}}
-
-function buildSysMat(p){const{V1,V2,V3,CL,Q2,Q3,ke0}=p;const A=mat4();A[0]=-(CL+Q2+Q3)/V1;A[1]=Q2/V2;A[2]=Q3/V3;A[4]=Q2/V1;A[5]=-Q2/V2;A[8]=Q3/V1;A[10]=-Q3/V3;A[12]=ke0/V1;A[15]=-ke0;return A}
-function createEngine(p){const A=buildSysMat(p);const{V1,V2,V3}=p;let st=new Float64Array(4);function adv(dt,R){if(dt<=0)return;const e=expm4(scale4(A,dt));const xH=mulVec4(e,st);if(R===0){st=xH;return}const Ai=inv4(A);if(!Ai){st=xH;return}const M=mul4(Ai,sub4(e,eye4()));for(let i=0;i<4;i++)st[i]=xH[i]+M[i*4]*R}function gc(){return{Cp:st[0]/V1,C2:st[1]/V2,C3:st[2]/V3,Ce:st[3],A1:st[0],A2:st[1],A3:st[2]}}function getSystemMatrix(){return new Float64Array(A)}function reset(){st=new Float64Array(4)}function getState(){return new Float64Array(st)}function setState(s){st=new Float64Array(s)}return{advance:adv,getConcentrations:gc,getSystemMatrix,reset,getState,setState,get params(){return p}}}
-
-// ============ INLINE PREDICTOR (mirrors js/pk/steady-state-predictor.js) ============
-
-const SS_FRACTION = 0.95;
-
-function predictSteadyStateCe(engine, rate) {
-  if (rate <= 0) return null;
-  const A = engine.getSystemMatrix();
-  const Ainv = inv4(A);
-  if (!Ainv) return null;
-  const ceSS = -Ainv[3 * 4 + 0] * rate;
-  return ceSS > 0 ? ceSS : null;
-}
-
-function predictTimeToSteadyState(engine, startState, rate, opts = {}) {
-  const ceSS = predictSteadyStateCe(engine, rate);
-  if (ceSS === null) return null;
-  const STEP    = opts.step    ?? 1;
-  const HORIZON = opts.horizon ?? 360;
-  const TOL     = 1 - SS_FRACTION;
-  const savedState = engine.getState();
-  try {
-    engine.setState(startState);
-    const ce = new Float64Array(HORIZON + 1);
-    ce[0] = engine.getConcentrations().Ce;
-    for (let i = 1; i <= HORIZON; i++) {
-      engine.advance(STEP, rate);
-      ce[i] = engine.getConcentrations().Ce;
-    }
-    let lastOutside = -1;
-    for (let i = HORIZON; i >= 0; i--) {
-      if (Math.abs(ce[i] - ceSS) / ceSS > TOL) {
-        lastOutside = i;
-        break;
-      }
-    }
-    if (lastOutside === -1) return { ceSS, timeToSsMin: 0, reachable: true };
-    if (lastOutside === HORIZON) return { ceSS, timeToSsMin: null, reachable: false };
-    return { ceSS, timeToSsMin: lastOutside + 1, reachable: true };
-  } finally {
-    engine.setState(savedState);
+// Compact 4×4 inverse — test-side math for the TEST 1 matrix cross-check only.
+function inv4(M){
+  const N=4, a=new Float64Array(32);
+  for(let i=0;i<N;i++){for(let j=0;j<N;j++)a[i*8+j]=M[i*N+j];a[i*8+(N+i)]=1}
+  for(let col=0;col<N;col++){
+    let mv=Math.abs(a[col*8+col]),mr=col;
+    for(let r=col+1;r<N;r++){const v=Math.abs(a[r*8+col]);if(v>mv){mv=v;mr=r}}
+    if(mv<1e-15)return null;
+    if(mr!==col)for(let j=0;j<8;j++){const t=a[col*8+j];a[col*8+j]=a[mr*8+j];a[mr*8+j]=t}
+    const p=a[col*8+col];for(let j=0;j<8;j++)a[col*8+j]/=p;
+    for(let r=0;r<N;r++){if(r===col)continue;const f=a[r*8+col];for(let j=0;j<8;j++)a[r*8+j]-=f*a[col*8+j]}
   }
+  const inv=new Float64Array(16);for(let i=0;i<N;i++)for(let j=0;j<N;j++)inv[i*N+j]=a[i*8+(N+j)];return inv;
 }
 
-function predictPlateau(engine, startState, rate, slopeTol, opts = {}) {
-  if (rate <= 0) return null;
-  if (!(slopeTol > 0 && slopeTol < 1)) return null;
-  const STEP          = opts.step         ?? 1;
-  const HORIZON       = opts.horizon      ?? 360;
-  const SUSTAIN       = opts.sustain      ?? 15;
-  const EXIT_HORIZON  = opts.exitHorizon  ?? HORIZON;
-  const EXIT_BAND_PCT = opts.exitBandPct  ?? 0.05;
-  const NN            = HORIZON + EXIT_HORIZON + SUSTAIN;
-  const noPlateauResult = {
-    plateauCe: null, entryMin: null, exitMin: null,
-    bandLow: null, bandHigh: null, noPlateau: true,
-  };
-  const savedState = engine.getState();
-  try {
-    engine.setState(startState);
-    const ce = new Float64Array(NN + 1);
-    ce[0] = engine.getConcentrations().Ce;
-    for (let i = 1; i <= NN; i++) {
-      engine.advance(STEP, rate);
-      ce[i] = engine.getConcentrations().Ce;
-    }
-    const EPS = 1e-9;
-    let entryIdx = -1;
-    outer:
-    for (let i = 0; i <= HORIZON; i++) {
-      for (let k = 0; k < SUSTAIN; k++) {
-        const base = Math.max(ce[i + k], EPS);
-        const rel  = Math.abs(ce[i + k + 1] - ce[i + k]) / base;
-        if (rel >= slopeTol) continue outer;
-      }
-      entryIdx = i;
-      break;
-    }
-    if (entryIdx < 0) return noPlateauResult;
-    const lookback = Math.max(0, entryIdx - SUSTAIN);
-    const preDirection  = ce[entryIdx] - ce[lookback];
-    const postStart = entryIdx + SUSTAIN;
-    let hasReversal = false;
-    const DIR_EPS = EPS;
-    if (Math.abs(preDirection) > DIR_EPS) {
-      const preRising = preDirection > 0;
-      for (let j = postStart + 1; j <= Math.min(postStart + EXIT_HORIZON, NN); j++) {
-        const delta = ce[j] - ce[postStart];
-        if (Math.abs(delta) <= DIR_EPS) continue;
-        if ((preRising && delta < -DIR_EPS) || (!preRising && delta > DIR_EPS)) {
-          hasReversal = true;
-          break;
-        }
-      }
-    }
-    if (!hasReversal) return noPlateauResult;
-    const pCe     = ce[entryIdx];
-    const bandLow  = pCe * (1 - EXIT_BAND_PCT);
-    const bandHigh = pCe * (1 + EXIT_BAND_PCT);
-    let exitIdx = -1;
-    for (let j = entryIdx + SUSTAIN; j <= NN; j++) {
-      if (ce[j] < bandLow || ce[j] > bandHigh) { exitIdx = j; break; }
-    }
-    return {
-      plateauCe: pCe, entryMin: entryIdx, exitMin: exitIdx >= 0 ? exitIdx : null,
-      bandLow, bandHigh, noPlateau: false,
-    };
-  } finally {
-    engine.setState(savedState);
-  }
-}
 
-// Mirror of drug-panel.js: relative-tolerance curve scan for TCI "time to target".
+// Test-side time-to-target scan over a precomputed Ce curve (used by the
+// synthetic-curve TCI tests below — not a production export).
 function estimateTimeToTarget(curve, t, Ce, ceTarget, fraction) {
   if (!curve) return null;
   if (!(ceTarget > 0)) return null;
@@ -160,8 +56,8 @@ function estimateTimeToTarget(curve, t, Ce, ceTarget, fraction) {
 // ============ TEST HARNESS ============
 let passed = 0, failed = 0;
 function assert(c, m) {
-  if (c) { passed++; console.log('  \u2713 ' + m); }
-  else   { failed++; console.error('  \u2717 ' + m); }
+  if (c) { passed++; console.log('  ✓ ' + m); }
+  else   { failed++; console.error('  ✗ ' + m); }
 }
 
 const patient = { age: 35, weight: 70, height: 170, male: true, opioid: false };
@@ -182,8 +78,8 @@ console.log('\n=== TEST 1: Propofol Ce_ss analytical computation (regression loc
   const rate = 5.4;
   const ceSS = predictSteadyStateCe(eng, rate);
   assert(ceSS !== null, 'Ce_ss computed');
-  assert(Math.abs(ceSS - 2.857143) < 1e-4,
-    `Ce_ss = 2.857143 (got ${ceSS.toFixed(6)})`);
+  assert(Math.abs(ceSS - 3.016760) < 1e-4,
+    `Ce_ss = 3.016760 (got ${ceSS.toFixed(6)})`);
 
   // Ce_ss should equal Cp_ss at true steady state
   const A = eng.getSystemMatrix();
@@ -201,7 +97,7 @@ console.log('\n=== TEST 2: Propofol time to 95% of Ce_ss from zero (not reachabl
   assert(result !== null, 'Result returned');
   assert(result.reachable === false,
     'Not reachable within 6h (propofol V3 time constant too slow)');
-  assert(Math.abs(result.ceSS - 2.857143) < 1e-4,
+  assert(Math.abs(result.ceSS - 3.016760) < 1e-4,
     `ceSS reported correctly (${result.ceSS.toFixed(6)})`);
   assert(result.timeToSsMin === null,
     'timeToSsMin is null when not reachable');
@@ -213,8 +109,8 @@ console.log('\n=== TEST 3: Propofol with extended horizon reaches 95% ===');
   const result = predictTimeToSteadyState(eng, eng.getState(), 5.4, { horizon: 1000 });
   assert(result !== null && result.reachable === true,
     'Reachable within 1000 min');
-  assert(result.timeToSsMin === 824,
-    `Time to 95% = 824 min (got ${result.timeToSsMin})`);
+  assert(result.timeToSsMin === 856,
+    `Time to 95% = 856 min (got ${result.timeToSsMin})`);
 }
 
 console.log('\n=== TEST 4: Pre-advanced state (at SS) → timeToSsMin = 0 ===');
@@ -247,7 +143,7 @@ console.log('\n=== TEST 4b: Transient crossing rejected — rate lowered, Ce pas
   // At 360 min horizon, Ce hasn't re-entered the band → not reachable.
   assert(result.reachable === false,
     'Transient band crossing rejected — Ce undershoots then does not re-enter within 6h');
-  assert(result.ceSS > 1.0 && result.ceSS < 1.1,
+  assert(result.ceSS > 1.11 && result.ceSS < 1.13,
     `Ce_ss correct (${result.ceSS.toFixed(4)})`);
 }
 
@@ -269,8 +165,8 @@ console.log('\n=== TEST 6: Ketamine Ce_ss analytical computation ===');
   const rate = 1.5;
   const ceSS = predictSteadyStateCe(eng, rate);
   assert(ceSS !== null, 'Ce_ss computed');
-  assert(Math.abs(ceSS - 0.9375) < 1e-4,
-    `Ketamine Ce_ss = 0.9375 (got ${ceSS.toFixed(4)})`);
+  assert(Math.abs(ceSS - 0.776380) < 1e-4,
+    `Ketamine Ce_ss = 0.776380 (got ${ceSS.toFixed(4)})`);
 }
 
 console.log('\n=== TEST 7: Rate ≤ 0 returns null ===');
@@ -339,8 +235,8 @@ console.log('\n=== TEST 11: Post-bolus propofol → plateau found ===');
   const result = predictPlateau(eng, postBolusState, mainRate, TOL_STD);
   assert(result !== null && result.noPlateau === false,
     'Post-bolus propofol has a local plateau (overshoot → flat → reversal)');
-  assert(result.entryMin === 59,
-    `Entry at 59 min (got ${result.entryMin})`);
+  assert(result.entryMin === 60,
+    `Entry at 60 min (got ${result.entryMin})`);
 }
 
 console.log('\n=== TEST 12: Rate lowered from high — falling → flat → reversal ===');

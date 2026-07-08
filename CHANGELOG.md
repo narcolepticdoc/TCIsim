@@ -11,6 +11,21 @@
 
 ---
 
+## [0.5.42] — 2026-07-07
+
+- **CET (Emulation) is now the factory-default TCI planner** and the only one shown to users. The `stepped` / `cet` / `cet-conservative` planners had no clinical advantage over cet-emulation (the SimTIVA deliver_cpt port) and are retired from the UI — their code is retained for development only. The TCI Planning Mode picker on the setup screen is hidden by default; a developer can reveal it by setting `localStorage['tci-dev-planners'] = 'true'` and reloading. Existing users with a legacy saved mode (e.g. `stepped`) are migrated to cet-emulation automatically.
+
+## [0.5.41.6] — 2026-07-07
+
+Test-suite audit — the test files now exercise the real code they claim to validate (they had drifted into testing inline copies).
+
+- **`test-vs-simtiva`** now imports the real `js/pk/engine.js` and `js/pk/eleveld.js`. Its "0.0000% vs SimTIVA" cross-validation previously ran against an inline *copy* of the engine that never touched production; it now validates the shipping matrix-exp engine and Eleveld calculator against the independent analytical eigenvalue oracle (kept inline by design). Confirmed real Eleveld matches the SimTIVA reference within 0.1% across all 7 patients.
+- **`test-unit-safety`** now imports the real `validateParams` (js/pk/engine.js) instead of an inline copy.
+- **`test-decay`** and **`test-steady-state-predictor`** now import the real predictors + engine + Eleveld/Fentanyl/Ketamine calculators. The inline copies had drifted from production (inline Eleveld used base CL 1.89 vs the real 1.79; inline ketamine was an entirely different volume model). Exact-value regression locks were re-baselined to the real predictors' output.
+- **Remaining inline-engine tests converted**: `test-t0-edge`, `test-model`, `test-reconcile`, `test-sim-v2`, `test-integration`, `test-fentanyl-pk`, `test-ketamine-pk`, `test-units` now import the real engine / Eleveld / drug calculators / unit converter instead of copied-and-pasted duplicates (the 4×4 matrix engine was inlined 11×). `test-sim-v2` / `test-integration` also drop their inline *drifted* Eleveld for the real one. Mini event/sim harnesses are kept as labelled scaffolding (the production event/sim layers are covered by `test-session-roundtrip` / `test-pump-rate-correction`); genuinely-independent references (reconcile's Cardano cubic, vs-simtiva's analytical solver) stay inline by design. Matrix-exp primitive checks reframed through the engine's public `getSystemMatrix` + `advance`.
+- **`test-tci-scheme`** now imports the real **cet-emulation planner** (`planTCISchemeEmulation`, the production planner) with the production pump config, instead of an inline copy of a stepped-style planner. It reaches target by ~5 min and holds the band, with or without display-rounding — verified against the live app (35 y/70 kg, target 3.5, rounding on). (A `0.5.41.4` note claiming display-rounding "slows CET onset" was **wrong** — it came from wiring the test to a development planner (`planTCISchemeCET`) with the wrong maxRate; corrected in `0.5.41.6`.)
+- **New `test-meta`**: automated release-hygiene checks that were previously manual — `js/version.js` ↔ `sw.js` version lockstep, and `sw.js` PRECACHE_URLS ↔ the js modules on disk.
+
 ## [0.5.41.2] — 2026-07-06
 
 - **Unpaired sync buttons now relabel like the patient button** (0.5.41.1's dim+hint treatment was too dark and inconsistent). All five buttons use the same "⚙ Pair to enable …" language when no code is stored — case buttons say "⚙ Pair to enable case sync", the compact template buttons say "⚙ Pair" — with a light dim (opacity .7) that keeps the text readable, since the label itself explains the disabled state. The untappable "Not paired — tap to set up" status-line notices are removed, and tapping goes straight to Settings → Sync with no extra message.

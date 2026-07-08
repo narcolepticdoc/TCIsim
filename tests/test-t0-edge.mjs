@@ -10,67 +10,12 @@
  * - Matrix exponential with zero state vector
  */
 
-// ============ INLINE PK ENGINE ============
-const N=4;
-function mat4(){return new Float64Array(16)}
-function eye4(){const m=mat4();m[0]=m[5]=m[10]=m[15]=1;return m}
-function mul4(A,B){const C=mat4();for(let i=0;i<N;i++)for(let j=0;j<N;j++){let s=0;for(let k=0;k<N;k++)s+=A[i*N+k]*B[k*N+j];C[i*N+j]=s}return C}
-function mulVec4(A,x){const y=new Float64Array(4);for(let i=0;i<N;i++){let s=0;for(let j=0;j<N;j++)s+=A[i*N+j]*x[j];y[i]=s}return y}
-function add4(A,B){const C=mat4();for(let i=0;i<16;i++)C[i]=A[i]+B[i];return C}
-function sub4(A,B){const C=mat4();for(let i=0;i<16;i++)C[i]=A[i]-B[i];return C}
-function scale4(A,s){const B=mat4();for(let i=0;i<16;i++)B[i]=A[i]*s;return B}
-function inv4(M){
-  const a=new Float64Array(32);
-  for(let i=0;i<N;i++){for(let j=0;j<N;j++)a[i*8+j]=M[i*N+j];a[i*8+(N+i)]=1}
-  for(let col=0;col<N;col++){
-    let mv=Math.abs(a[col*8+col]),mr=col;
-    for(let r=col+1;r<N;r++){const v=Math.abs(a[r*8+col]);if(v>mv){mv=v;mr=r}}
-    if(mv<1e-15)return null;
-    if(mr!==col)for(let j=0;j<8;j++){const t=a[col*8+j];a[col*8+j]=a[mr*8+j];a[mr*8+j]=t}
-    const p=a[col*8+col];for(let j=0;j<8;j++)a[col*8+j]/=p;
-    for(let r=0;r<N;r++){if(r===col)continue;const f=a[r*8+col];for(let j=0;j<8;j++)a[r*8+j]-=f*a[col*8+j]}
-  }
-  const inv=mat4();for(let i=0;i<N;i++)for(let j=0;j<N;j++)inv[i*N+j]=a[i*8+(N+j)];return inv
-}
-function expm4(A){
-  const c=[1,1/2,5/44,1/66,1/792,1/15840,1/665280];
-  const nA=(()=>{let mx=0;for(let j=0;j<N;j++){let cs=0;for(let i=0;i<N;i++)cs+=Math.abs(A[i*N+j]);if(cs>mx)mx=cs}return mx})();
-  let s=0;if(nA>0.5){s=Math.ceil(Math.log2(nA/0.5));if(s<0)s=0}
-  const As=(s>0)?scale4(A,1/(1<<s)):A;
-  const As2=mul4(As,As),As3=mul4(As,As2),As4=mul4(As2,As2),As5=mul4(As,As4),As6=mul4(As2,As4);
-  const I=eye4();const powers=[I,As,As2,As3,As4,As5,As6];
-  let Nm=mat4(),Dm=mat4();
-  for(let k=0;k<=6;k++){const sg=(k%2===0)?1:-1;for(let i=0;i<16;i++){Nm[i]+=c[k]*powers[k][i];Dm[i]+=sg*c[k]*powers[k][i]}}
-  const Di=inv4(Dm);if(!Di)return add4(I,A);
-  let result=mul4(Di,Nm);for(let i=0;i<s;i++)result=mul4(result,result);return result
-}
 
-// ============ PK ENGINE ============
-function createEngine(p){
-  const{V1,V2,V3}=p;
-  const A=mat4();
-  A[0]=-(p.CL+p.Q2+p.Q3)/V1; A[1]=p.Q2/V2; A[2]=p.Q3/V3;
-  A[4]=p.Q2/V1; A[5]=-p.Q2/V2;
-  A[8]=p.Q3/V1; A[10]=-p.Q3/V3;
-  A[12]=p.ke0/V1; A[15]=-p.ke0;
-  let st=new Float64Array(4);
-  return{
-    advance(dt,R){
-      if(dt<=0)return;
-      const e=expm4(scale4(A,dt));
-      const xH=mulVec4(e,st);
-      if(R===0){st=xH;return}
-      const Ai=inv4(A);if(!Ai){st=xH;return}
-      const M=mul4(Ai,sub4(e,eye4()));
-      for(let i=0;i<4;i++) st[i]=xH[i]+M[i*4]*R;
-    },
-    getConc(){return{Cp:st[0]/V1,C2:st[1]/V2,C3:st[2]/V3,Ce:st[3]}},
-    getState(){return new Float64Array(st)},
-    setState(s){st=new Float64Array(s)},
-    reset(){st=new Float64Array(4)},
-    predictCe(dt,R){const sv=new Float64Array(st);const self=this;self.advance(dt,R);const ce=st[3];st=sv;return ce},
-  };
-}
+import { createEngine } from '../js/pk/engine.js';
+
+// The mini event-list below is deliberate TEST SCAFFOLDING for exercising
+// event ordering at t=0 against the REAL engine (registered via
+// registerEngine) — it is not a reimplementation of js/sim/events under test.
 
 // ============ MINI EVENT SYSTEM ============
 let _nid=1;
@@ -116,7 +61,7 @@ function createEventList(){
     const cr=getActiveRateForDrug(d,li);
     const dt=time-ct;
     if(dt>0)eng.advance(dt,cr);
-    return{...eng.getConc(),rate:cr};
+    return{...eng.getConcentrations(),rate:cr};
   }
 
   function addManualBolus(d,time,mg){
@@ -149,7 +94,7 @@ console.log('\n===== 1. Engine Zero-State Initialization =====\n');
 
 {
   const eng = createEngine(REF);
-  const c = eng.getConc();
+  const c = eng.getConcentrations();
   ok(c.Cp === 0 && c.Ce === 0 && c.C2 === 0 && c.C3 === 0, 
     'Fresh engine returns all-zero concentrations');
 }
@@ -157,21 +102,21 @@ console.log('\n===== 1. Engine Zero-State Initialization =====\n');
 {
   const eng = createEngine(REF);
   eng.advance(0, 10); // dt=0, should be no-op
-  const c = eng.getConc();
+  const c = eng.getConcentrations();
   ok(c.Cp === 0 && c.Ce === 0, 'advance(0, R) is a no-op — state stays zero');
 }
 
 {
   const eng = createEngine(REF);
   eng.advance(-1, 10); // negative dt, should be no-op
-  const c = eng.getConc();
+  const c = eng.getConcentrations();
   ok(c.Cp === 0 && c.Ce === 0, 'advance(negative dt, R) is a no-op');
 }
 
 {
   const eng = createEngine(REF);
   eng.advance(5, 0); // zero rate, zero state — decay of nothing
-  const c = eng.getConc();
+  const c = eng.getConcentrations();
   ok(c.Cp === 0 && c.Ce === 0, 'advance(dt, 0) from zero state stays zero');
 }
 
@@ -182,7 +127,7 @@ console.log('\n===== 2. Bolus from Zero State =====\n');
   // 100mg bolus delivered over 0.05 min (3 seconds) — our standard delivery
   const eng = createEngine(REF);
   eng.advance(0.05, 100 / 0.05); // 2000 mg/min for 0.05 min = 100mg
-  const c = eng.getConc();
+  const c = eng.getConcentrations();
   
   ok(c.Cp > 0, `Bolus from zero: Cp is positive (${c.Cp.toFixed(3)} µg/mL)`);
   ok(c.Ce > 0, `Bolus from zero: Ce is positive (${c.Ce.toFixed(6)} µg/mL)`);
@@ -220,8 +165,8 @@ console.log('\n===== 2. Bolus from Zero State =====\n');
   engB.setState(snapshot);
   engB.advance(4.95, 0);
   
-  const cA = engA.getConc();
-  const cB = engB.getConc();
+  const cA = engA.getConcentrations();
+  const cB = engB.getConcentrations();
   near(cA.Cp, cB.Cp, 1e-10, 'Snapshot save/restore preserves Cp exactly');
   near(cA.Ce, cB.Ce, 1e-10, 'Snapshot save/restore preserves Ce exactly');
 }
@@ -232,7 +177,7 @@ console.log('\n===== 3. Rate Infusion from Zero State =====\n');
 {
   const eng = createEngine(REF);
   eng.advance(1, 2.0); // 2 mg/min for 1 minute = 2mg delivered
-  const c = eng.getConc();
+  const c = eng.getConcentrations();
   ok(c.Cp > 0, `1 min infusion from zero: Cp > 0 (${c.Cp.toFixed(4)})`);
   ok(c.Ce > 0, `1 min infusion from zero: Ce > 0 (${c.Ce.toFixed(6)})`);
   ok(c.Ce < c.Cp, 'Ce lags Cp during initial infusion');
@@ -297,7 +242,7 @@ console.log('\n===== 4. Event System at t=0 =====\n');
   // Compare with direct engine computation
   const eng = createEngine(REF);
   eng.advance(5, 2.0);
-  const cDirect = eng.getConc();
+  const cDirect = eng.getConcentrations();
   near(c5.Cp, cDirect.Cp, 1e-6, 'Event-system Cp matches direct engine Cp at t=5');
   near(c5.Ce, cDirect.Ce, 1e-6, 'Event-system Ce matches direct engine Ce at t=5');
 }
@@ -318,44 +263,48 @@ console.log('\n===== 4. Event System at t=0 =====\n');
   const eng = createEngine(REF);
   eng.advance(0.05, 100/0.05); // bolus
   eng.advance(9.95, 5.0);       // infusion for remaining time
-  near(c10.Cp, eng.getConc().Cp, 0.01, 'Bolus+Rate matches direct engine at t=10');
+  near(c10.Cp, eng.getConcentrations().Cp, 0.01, 'Bolus+Rate matches direct engine at t=10');
 }
 
 // ===== GROUP 5: Matrix Exponential Edge Cases =====
 console.log('\n===== 5. Matrix Exponential Edge Cases =====\n');
 
+// The engine's matrix exponential is validated end-to-end at 0.0000% vs the
+// analytical eigenvalue solution in test-vs-simtiva. Here we pin two low-level
+// properties using only the engine's public getSystemMatrix + advance (the
+// primitive itself is internal, so we probe it through observable behavior).
 {
-  // expm(A * 0) should equal identity
-  const Adt = scale4(mat4(), 0); // zero matrix
-  const result = expm4(Adt);
-  const I = eye4();
+  // expm(A·0)·x = x — advancing a known non-zero state by dt=0 is exact identity.
+  const eng = createEngine(REF);
+  eng.setState(new Float64Array([10, 5, 2, 1]));
+  const before = eng.getState();
+  eng.advance(0, 0);
+  const after = eng.getState();
   let maxDiff = 0;
-  for(let i = 0; i < 16; i++) maxDiff = Math.max(maxDiff, Math.abs(result[i] - I[i]));
-  ok(maxDiff < 1e-14, `expm(0) = I (max diff ${maxDiff.toExponential(2)})`);
+  for (let i = 0; i < 4; i++) maxDiff = Math.max(maxDiff, Math.abs(after[i] - before[i]));
+  ok(maxDiff === 0, `advance(0) is exact identity on state (max diff ${maxDiff})`);
 }
 
 {
-  // expm(A * very_small_dt) should be close to I + A*dt
+  // expm(A·ε)·x ≈ x + A·x·ε for tiny ε (leading linear term). A comes from the
+  // engine's own getSystemMatrix; the 4×4 mat-vec is the independent reference.
   const eng = createEngine(REF);
-  const A = mat4();
-  A[0]=-(REF.CL+REF.Q2+REF.Q3)/REF.V1; A[1]=REF.Q2/REF.V2; A[2]=REF.Q3/REF.V3;
-  A[4]=REF.Q2/REF.V1; A[5]=-REF.Q2/REF.V2;
-  A[8]=REF.Q3/REF.V1; A[10]=-REF.Q3/REF.V3;
-  A[12]=REF.ke0/REF.V1; A[15]=-REF.ke0;
-  
-  const dt = 1e-8; // tiny timestep
-  const Adt = scale4(A, dt);
-  const result = expm4(Adt);
-  const I = eye4();
-  // For tiny dt: expm(A*dt) ≈ I + A*dt
+  const x0 = new Float64Array([10, 5, 2, 1]);
+  eng.setState(x0);
+  const A = eng.getSystemMatrix();
+  const eps = 1e-8;
+  eng.advance(eps, 0); // homogeneous (rate 0) evolution of the state
+  const x1 = eng.getState();
   let maxRelDiff = 0;
-  for(let i = 0; i < 16; i++){
-    const expected = I[i] + Adt[i];
-    const diff = Math.abs(result[i] - expected);
+  for (let i = 0; i < 4; i++) {
+    let Ax = 0;
+    for (let j = 0; j < 4; j++) Ax += A[i * 4 + j] * x0[j];
+    const expected = x0[i] + Ax * eps;
+    const diff = Math.abs(x1[i] - expected);
     const scale = Math.max(Math.abs(expected), 1e-15);
-    maxRelDiff = Math.max(maxRelDiff, diff/scale);
+    maxRelDiff = Math.max(maxRelDiff, diff / scale);
   }
-  ok(maxRelDiff < 1e-3, `expm(A*ε) ≈ I + A*ε for tiny ε (max rel diff ${maxRelDiff.toExponential(2)})`);
+  ok(maxRelDiff < 1e-3, `engine advance(ε) ≈ x + A·x·ε for tiny ε (max rel diff ${maxRelDiff.toExponential(2)})`);
 }
 
 // ===== GROUP 6: Continuity at Bolus Delivery Boundary =====

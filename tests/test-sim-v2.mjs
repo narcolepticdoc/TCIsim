@@ -5,38 +5,13 @@
  * instead of the old tick-based tci.js approach.
  */
 
-// ============ INLINE DEPENDENCIES ============
-// (Minified versions of math, engine, pd, events, tci-planner, decay-predictor)
+// ============ REAL engine + Eleveld ============
+import { createEngine } from '../js/pk/engine.js';
+import { calcEleveldParams } from '../js/pk/eleveld.js';
+// createEventList + createSimulation below are test scaffolding (the latter is
+// an obsolete state-machine design; production simulation.js is a stateless
+// facade covered by test-session-roundtrip / test-pump-rate-correction).
 
-const N=4;
-function mat4(){return new Float64Array(16)}
-function eye4(){const m=mat4();m[0]=m[5]=m[10]=m[15]=1;return m}
-function mul4(A,B){const C=mat4();for(let i=0;i<N;i++)for(let j=0;j<N;j++){let s=0;for(let k=0;k<N;k++)s+=A[i*N+k]*B[k*N+j];C[i*N+j]=s}return C}
-function mulVec4(A,x){const y=new Float64Array(4);for(let i=0;i<N;i++){let s=0;for(let j=0;j<N;j++)s+=A[i*N+j]*x[j];y[i]=s}return y}
-function add4(A,B){const C=mat4();for(let i=0;i<16;i++)C[i]=A[i]+B[i];return C}
-function sub4(A,B){const C=mat4();for(let i=0;i<16;i++)C[i]=A[i]-B[i];return C}
-function scale4(A,s){const B=mat4();for(let i=0;i<16;i++)B[i]=A[i]*s;return B}
-function inv4(M){const a=new Float64Array(32);for(let i=0;i<N;i++){for(let j=0;j<N;j++)a[i*8+j]=M[i*N+j];a[i*8+(N+i)]=1}for(let col=0;col<N;col++){let mv=Math.abs(a[col*8+col]),mr=col;for(let r=col+1;r<N;r++){const v=Math.abs(a[r*8+col]);if(v>mv){mv=v;mr=r}}if(mv<1e-15)return null;if(mr!==col)for(let j=0;j<8;j++){const t=a[col*8+j];a[col*8+j]=a[mr*8+j];a[mr*8+j]=t}const p=a[col*8+col];for(let j=0;j<8;j++)a[col*8+j]/=p;for(let r=0;r<N;r++){if(r===col)continue;const f=a[r*8+col];for(let j=0;j<8;j++)a[r*8+j]-=f*a[col*8+j]}}const inv=mat4();for(let i=0;i<N;i++)for(let j=0;j<N;j++)inv[i*N+j]=a[i*8+(N+j)];return inv}
-function expm4(A){const c=[1,1/2,5/44,1/66,1/792,1/15840,1/665280];const nA=(()=>{let mx=0;for(let j=0;j<N;j++){let cs=0;for(let i=0;i<N;i++)cs+=Math.abs(A[i*N+j]);if(cs>mx)mx=cs}return mx})();let s=0;if(nA>0.5){s=Math.ceil(Math.log2(nA/0.5));if(s<0)s=0}const As=(s>0)?scale4(A,1/(1<<s)):A;const As2=mul4(As,As),As3=mul4(As,As2),As4=mul4(As2,As2),As5=mul4(As,As4),As6=mul4(As2,As4);const I=eye4();const powers=[I,As,As2,As3,As4,As5,As6];let Nm=mat4(),Dm=mat4();for(let k=0;k<=6;k++){const sg=(k%2===0)?1:-1;for(let i=0;i<16;i++){Nm[i]+=c[k]*powers[k][i];Dm[i]+=sg*c[k]*powers[k][i]}}const Di=inv4(Dm);if(!Di)return add4(I,A);let result=mul4(Di,Nm);for(let i=0;i<s;i++)result=mul4(result,result);return result}
-
-function createEngine(p){
-  const{V1,V2,V3}=p;
-  const A=mat4();
-  A[0]=-(p.CL+p.Q2+p.Q3)/V1;A[1]=p.Q2/V2;A[2]=p.Q3/V3;
-  A[4]=p.Q2/V1;A[5]=-p.Q2/V2;
-  A[8]=p.Q3/V1;A[10]=-p.Q3/V3;
-  A[12]=p.ke0/V1;A[15]=-p.ke0;
-  let st=new Float64Array(4);
-  return{
-    advance(dt,R){if(dt<=0)return;const e=expm4(scale4(A,dt));const xH=mulVec4(e,st);if(R===0){st=xH;return}const Ai=inv4(A);if(!Ai){st=xH;return}const M=mul4(Ai,sub4(e,eye4()));for(let i=0;i<4;i++)st[i]=xH[i]+M[i*4]*R},
-    getConcentrations(){return{Cp:st[0]/V1,C2:st[1]/V2,C3:st[2]/V3,Ce:st[3],A1:st[0],A2:st[1],A3:st[2]}},
-    predictCe(dt,R){const sv=new Float64Array(st);this.advance(dt,R);const ce=st[3];st=sv;return ce},
-    getState(){return new Float64Array(st)},
-    setState(s){st=new Float64Array(s)},
-    reset(){st=new Float64Array(4)},
-    get params(){return p},
-  };
-}
 
 // Mini event system (from events.js)
 let _nid=1;
@@ -73,29 +48,6 @@ function createPDModel(p){
 }
 
 // Mini Eleveld (reference male only, for testing)
-function calcEleveldParams(pt){
-  const{age,weight,height,male,opioid}=pt;
-  const bmi=weight/Math.pow(height/100,2);
-  const fsig=(x,y,z)=>Math.pow(x,z)/(Math.pow(x,z)+Math.pow(y,z));
-  const fcentral=x=>fsig(x,33.6,1);
-  const V1=6.28*fcentral(weight)/fcentral(70);
-  const V2=25.5*weight/70*Math.exp(-0.0156*(age-35));
-  const toweeks=52.1429;
-  const ffm=male?(0.88+(1-0.88)/(1+Math.pow(age/13.4,-12.7)))*((9270*weight)/(6680+216*bmi)):(1.11+(1-1.11)/(1+Math.pow(age/7.1,-1.1)))*((9270*weight)/(8780+244*bmi));
-  const ffmref=(0.88+(1-0.88)/(1+Math.pow(35/13.4,-12.7)))*((9270*70)/(6680+216*24.22145));
-  const V3=opioid?273*ffm/ffmref*Math.exp(-0.0138*age):273*ffm/ffmref;
-  const PMA=age*toweeks+40;const PMA_REF=35*toweeks+40;
-  const fclmat=x=>fsig(x,42.3,9.06);
-  const fq3mat=x=>fsig(x+40,68.3,1);
-  const clBase=male?1.79:2.1;
-  let CL=clBase*Math.pow(weight/70,0.75)*(fclmat(PMA)/fclmat(PMA_REF));
-  if(opioid)CL*=Math.exp(-0.00286*age);
-  const Q2=1.75*Math.pow(V2/25.5,0.75)*(1+1.3*(1-fq3mat(age*toweeks)));
-  const Q3=1.11*Math.pow(V3/273,0.75)*(fq3mat(age*toweeks)/fq3mat(35*toweeks));
-  const ke0=0.146*Math.pow(weight/70,-0.25);
-  const Ce50=3.08*Math.exp(-0.00635*(age-35));
-  return{V1,V2,V3,CL,Q2,Q3,ke0,Ce50,gamma1:1.47,gamma2:1.89,BIS_baseline:93,patient:pt};
-}
 
 // ============ SIMULATION (UNDER TEST) ============
 // Inline the new simulation.js logic to test it standalone

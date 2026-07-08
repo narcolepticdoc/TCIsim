@@ -8,7 +8,10 @@
  * Inline implementation mirrors js/pk/ketamine.js.
  */
 
-// ── Inline ketamine.js ────────────────────────────────────────────
+import { calcKetamineParams } from '../js/pk/ketamine.js';
+
+// Fixed population micro-constants (Domino/Navarrete) used as independent
+// expected values in the assertions below — NOT a second implementation.
 const K10 = 0.4381;
 const K12 = 0.5921;
 const K21 = 0.2470;
@@ -17,17 +20,7 @@ const K31 = 0.0146;
 const KE0 = 0.238;
 const V1_PER_KG = 0.063;
 
-function calcKetamineParams(patient) {
-  const { weight } = patient;
-  const V1 = V1_PER_KG * weight;
-  const V2 = (K12 / K21) * V1;
-  const V3 = (K13 / K31) * V1;
-  const CL = K10 * V1;
-  const Q2 = K12 * V1;
-  const Q3 = K13 * V1;
-  return { V1, V2, V3, CL, Q2, Q3, ke0: KE0,
-    k10: K10, k12: K12, k21: K21, k13: K13, k31: K31 };
-}
+// calcKetamineParams imported from production below.
 // ─────────────────────────────────────────────────────────────────
 
 let passed = 0;
