@@ -11,6 +11,14 @@
 
 ---
 
+## [0.5.44.1] — 2026-07-08
+
+Three UI fixes.
+
+- **Version status now shows two timestamps.** The setup-screen status line used to read "Last update `<ts>`", where `<ts>` was only the install time of the running version — misread as a "last checked" time. It now surfaces both: "Last update check `<ts>`" (stamped on every completed version poll, persisted under `tcisim:lastCheckedAt`) and "Last version updated `<ts>`" (the existing install timestamp). Background polls now repaint the steady-state line so the check time refreshes without a click.
+- **History "Notes" button is always lit and self-labelling.** It previously dimmed when notations were hidden; now it stays full-color and reads "Show notes" / "Hide notes" to convey state through its label rather than brightness.
+- **Detail cursor persists across drug switches.** The chart inspect cursor (time-position line + model-state readout) no longer resets when switching drugs — it stays at its current time position and re-renders the newly selected drug's data. It also survives dosing/edits; only toggling inspect off or starting a New Case clears it.
+
 ## [0.5.44] — 2026-07-08
 
 Test-suite improvement round 2 — the follow-up items from the 0.5.43 review, plus a written suite guide. All green at 957 assertions (was 894). Test-only; no shipped-code delta.

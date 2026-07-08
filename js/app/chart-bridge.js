@@ -163,7 +163,8 @@ export function createChartBridge({
     // so the eBIS tooltip line reflects the right drug (null clears it
     // for fentanyl/ketamine which have no PD model).
     chart.setPDModel(model.getPDModel(selectedDrug));
-    chart.clearInspect();
+    // Inspect cursor persists across refreshes (drug switches, dosing, edits);
+    // its renderers recompute from s.inspectTime against the new curve.
     chart.setCurveData(chartCurve);
     drugPanel.setCurveData(rawCurve);  // drug-panel uses canonical mcg/mL for threshold comparisons
     computeEffectOverlay();  // clears BIS bands for drugs without a PD model

@@ -4,6 +4,37 @@
 
 ## Session History
 
+### Three UI fixes: version status timestamps, history notes button label, persistent detail cursor (v0.5.44.1) — Interim
+
+Three user-facing tweaks/bug-fixes.
+
+1. **Version notification — two timestamps** (`js/app/sw-register.js`). The
+   steady-state status line showed a single "Last update `<ts>`" that was really
+   the install time of the running version, read by users as a "last checked"
+   time. Added a `tcisim:lastCheckedAt` localStorage key, stamped inside
+   `checkServerVersion()` on every completed poll (fetch ok + version regex
+   matched, before the update-vs-no-update branch, so both paths record it;
+   failed/offline polls that `return false` early do not). `refreshConnectivityStatus()`
+   now renders "Last update check `<ts>`. Last version updated `<ts>`." (the
+   check clause is omitted until we have a check time — offline first boot /
+   no-SW path). The 60-second poll now repaints the steady-state line after a
+   no-update result so the check time updates without a manual click.
+2. **History notes button always lit** (`index.html`, `js/app.js`). Was dim when
+   notations hidden, lit when shown, static "Notes" label. Dropped the
+   `--text-muted` override (and the now-unused `.active` brightness rule) so it's
+   always `--text-primary`; `js/app.js` now sets `textContent` to "Hide notes" /
+   "Show notes" from `history.getNotationsVisible()` / `toggleNotations()` instead
+   of toggling the `active` class. No change to `js/ui/history.js`.
+3. **Persistent detail cursor** (`js/ui/chart/index.js`, `js/app/chart-bridge.js`).
+   The inspect cursor reset on drug switch because two paths cleared
+   `s.inspectTime`: `switchDrug()` and the chart-bridge `refresh()`
+   (`clearInspect()`, also run after every dose/edit). Removed both. The four
+   renderers (annotation line, inspect-handle, inspect-dots, readout-panel)
+   recompute pixel positions from `s.inspectTime` on every draw, so the cursor
+   stays at its time while `setCurveData` swaps in the new drug's curve.
+   `s.inspectEnabled` was already preserved and `toggleInspect()` still clears the
+   cursor when the mode is turned off; New Case recreates the chart and resets it.
+
 ### Test-suite improvement round 2: coverage gaps, de-fossilize, tolerance windows, suite guide (v0.5.44) — Interim
 
 The five follow-up items proposed at the end of the v0.5.43 round (the user

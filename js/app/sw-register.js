@@ -14,17 +14,22 @@
  *
  * Status display: writes a status line into #app-status-tag (sits under
  * #app-version-tag in the setup-screen brand panel). Steady states show
- * the timestamp of the currently-cached version:
- *   • just-updated → "✓ New update installed. Last update <ts>."
+ * two timestamps: when we last checked the server for a newer version
+ * ("Last update check"), and when the running version was downloaded
+ * ("Last version updated"):
+ *   • just-updated → "✓ New update installed. Last version updated <ts>."
  *                    (sticky for the whole session — survives
  *                     online/offline transitions)
- *   • online       → "No new version available. Last update <ts>."
- *   • offline      → "Offline. Cached version last updated <ts>."
+ *   • online       → "No new version available. Last update check <ts>.
+ *                     Last version updated <ts>."
+ *   • offline      → "Offline. Last version updated <ts>." (+ last check
+ *                    time when we have one)
  * Transient states ("Update available (vX)…", "Updating to latest…",
  * "↻ Update queued · applies at next case start.") wrap around the SW
  * update flow. The install timestamp is persisted in localStorage and
  * re-stamped whenever the stored version no longer matches the running
  * APP_VERSION (which is exactly when an update has just been applied).
+ * The last-check timestamp is stamped on every completed version poll.
  */
 
 import { APP_VERSION } from '../util/constants.js';
@@ -35,10 +40,12 @@ const STATUS_EL_ID = 'app-status-tag';
 const SS_JUST_UPDATED = 'tcisim:justUpdated';
 const LS_INSTALLED_VERSION = 'tcisim:installedVersion';
 const LS_INSTALLED_AT = 'tcisim:installedAt';
+const LS_LAST_CHECKED_AT = 'tcisim:lastCheckedAt';
 
 const supportsServiceWorker = 'serviceWorker' in navigator;
 const installedAt = stampInstallTimeIfNeeded();
 const justUpdated = consumeJustUpdatedFlag();
+let lastCheckedAt = readLastCheckedAt();
 let updateTriggered = false;
 let pendingReload = false;
 let reloading = false;
@@ -101,7 +108,11 @@ async function init() {
 
   document.addEventListener('tcisim:screenchange', onScreenChange);
 
-  const poll = () => checkServerVersion().catch(() => {});
+  // Repaint the steady-state status after a poll that didn't find an update,
+  // so the freshly stamped "Last update check" time shows without a click.
+  const poll = () => checkServerVersion()
+    .then((found) => { if (!found) refreshConnectivityStatus(); })
+    .catch(() => {});
   poll();
   setInterval(poll, POLL_INTERVAL_MS);
   document.addEventListener('visibilitychange', () => {
@@ -150,6 +161,8 @@ async function checkServerVersion() {
   const text = await res.text();
   const match = text.match(VERSION_RE);
   if (!match) return false;
+  // A real check completed — record when, regardless of the result.
+  stampLastCheckedNow();
   const serverVersion = match[1];
   if (serverVersion !== APP_VERSION) {
     setStatus('updating', `Update available (v${serverVersion})…`);
@@ -204,6 +217,24 @@ function stampInstallTimeIfNeeded() {
   return isNaN(parsed.getTime()) ? new Date() : parsed;
 }
 
+// Read the persisted last-check timestamp (null if never checked / unreadable).
+function readLastCheckedAt() {
+  try {
+    const stored = localStorage.getItem(LS_LAST_CHECKED_AT);
+    if (!stored) return null;
+    const parsed = new Date(stored);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Stamp "now" as the last successful version check, in memory + localStorage.
+function stampLastCheckedNow() {
+  lastCheckedAt = new Date();
+  try { localStorage.setItem(LS_LAST_CHECKED_AT, lastCheckedAt.toISOString()); } catch (_) {}
+}
+
 function formatTimestamp(date) {
   try {
     return date.toLocaleString(undefined, {
@@ -216,19 +247,22 @@ function formatTimestamp(date) {
 }
 
 function refreshConnectivityStatus() {
-  const ts = formatTimestamp(installedAt);
+  const updatedTs = formatTimestamp(installedAt);
+  const checkedTs = lastCheckedAt ? formatTimestamp(lastCheckedAt) : null;
   // The just-updated state is sticky for the whole session — once an update
   // has been applied, "✓ New update installed." stays the active message
   // (regardless of connectivity) until the user reloads without an update.
   if (justUpdated) {
-    setStatus('updated', `✓ New update installed. Last update ${ts}.`);
+    setStatus('updated', `✓ New update installed. Last version updated ${updatedTs}.`);
     return;
   }
   const online = navigator.onLine !== false;
   if (online) {
-    setStatus('online', `No new version available. Last update ${ts}.`);
+    const check = checkedTs ? `Last update check ${checkedTs}. ` : '';
+    setStatus('online', `No new version available. ${check}Last version updated ${updatedTs}.`);
   } else {
-    setStatus('offline', `Offline. Cached version last updated ${ts}.`);
+    const check = checkedTs ? `Last update check ${checkedTs}. ` : '';
+    setStatus('offline', `Offline. ${check}Last version updated ${updatedTs}.`);
   }
 }
 
