@@ -726,7 +726,15 @@ function restorePumpSettingsUI() {
       const el = $('input-concentration'); if (el) el.value = savedConc;
     }
     if (savedRate) { const el = $('input-max-pump-rate'); if (el) el.value = savedRate; }
-    if (savedMode) { const el = $('input-tci-mode'); if (el) el.value = savedMode; }
+    // Planner mode: production is fixed to cet-emulation (the select's default).
+    // Honour a saved mode only when the dev picker is unlocked; otherwise any
+    // legacy saved value (stepped / cet / cet-conservative from an older build)
+    // is ignored so existing users migrate to cet-emulation.
+    if (savedMode && devPlannersEnabled()) {
+      const el = $('input-tci-mode'); if (el) el.value = savedMode;
+    }
+    const modeRow = $('row-tci-mode');
+    if (modeRow) modeRow.hidden = !devPlannersEnabled();
     if (savedOpioid) { const el = $('input-opioid'); if (el) el.value = savedOpioid; }
   } catch (e) {}
 
@@ -857,11 +865,23 @@ export function setGlobalMaxPumpRate(mlh) {
 
 /**
  * Get the currently selected TCI planning mode.
- * @returns {string} 'stepped' | 'cet' | 'cet-conservative'
+ * @returns {string} 'cet-emulation' (production) | 'stepped' | 'cet' |
+ *          'cet-conservative' (dev only)
  */
 export function getTciMode() {
   const el = $('input-tci-mode');
-  return el ? el.value : 'stepped';
+  return el ? el.value : 'cet-emulation';
+}
+
+/**
+ * True when the developer planner picker is unlocked
+ * (localStorage['tci-dev-planners'] === 'true'). Users always get
+ * cet-emulation; a developer can set this flag in the console + reload to
+ * reveal the picker and select a legacy planner for testing.
+ */
+function devPlannersEnabled() {
+  try { return localStorage.getItem('tci-dev-planners') === 'true'; }
+  catch (e) { return false; }
 }
 
 /**

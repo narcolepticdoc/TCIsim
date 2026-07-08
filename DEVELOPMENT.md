@@ -4,6 +4,23 @@
 
 ## Session History
 
+### cet-emulation is the production planner + default (v0.5.42) — Interim
+
+Direct follow-on from the test-audit finding that the app's real behavior matches
+cet-emulation (the SimTIVA deliver_cpt port), and the maintainer confirming the
+other planners had no clinical advantage. Changes: factory default TCI Planning
+Mode is now cet-emulation (was stepped); the setup-screen picker is hidden from
+users (form-row #row-tci-mode, hidden by default) and revealed only when a
+developer sets localStorage['tci-dev-planners']='true' and reloads. On restore,
+a legacy saved mode (stepped/cet/cet-conservative) is honoured only with the dev
+flag on — otherwise it's ignored so existing users migrate to cet-emulation. The
+stepped / cet / cet-conservative planner modules and simulation.js's four-way
+tciMode dispatch are LEFT INTACT for development. app.js getTciMode fallbacks and
+setup.js getTciMode default both changed 'stepped' → 'cet-emulation'. Verified
+headless: default hidden+emulation, dev-flag reveals + honours saved mode,
+dev-off migrates a saved 'stepped' back to emulation.
+
+
 ### Test-suite audit: exercise real code, not inline copies (v0.5.41.3) — Interim
 
 Audit finding: 14 of 26 test files loaded ZERO production code — they inlined

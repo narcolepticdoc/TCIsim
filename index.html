@@ -1155,13 +1155,17 @@
                 <option value="true">With opioid</option>
               </select>
             </div>
-            <div class="form-row">
+            <!-- TCI Planning Mode is fixed to CET (Emulation) in production — the
+                 stepped / cet / cet-conservative planners are retained for
+                 development only. This row stays hidden unless the dev flag
+                 localStorage['tci-dev-planners']==='true' is set (setup.js). -->
+            <div class="form-row" id="row-tci-mode" hidden>
               <label for="input-tci-mode">TCI Planning Mode</label>
               <select id="input-tci-mode">
-                <option value="stepped" selected>Stepped</option>
-                <option value="cet">CET</option>
-                <option value="cet-conservative">CET (Conservative)</option>
-                <option value="cet-emulation">CET (Emulation)</option>
+                <option value="cet-emulation" selected>CET (Emulation)</option>
+                <option value="stepped">Stepped (dev)</option>
+                <option value="cet">CET (dev)</option>
+                <option value="cet-conservative">CET (Conservative, dev)</option>
               </select>
             </div>
             <div class="form-row">

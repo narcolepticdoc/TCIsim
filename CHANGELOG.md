@@ -11,6 +11,10 @@
 
 ---
 
+## [0.5.42] — 2026-07-07
+
+- **CET (Emulation) is now the factory-default TCI planner** and the only one shown to users. The `stepped` / `cet` / `cet-conservative` planners had no clinical advantage over cet-emulation (the SimTIVA deliver_cpt port) and are retired from the UI — their code is retained for development only. The TCI Planning Mode picker on the setup screen is hidden by default; a developer can reveal it by setting `localStorage['tci-dev-planners'] = 'true'` and reloading. Existing users with a legacy saved mode (e.g. `stepped`) are migrated to cet-emulation automatically.
+
 ## [0.5.41.6] — 2026-07-07
 
 Test-suite audit — the test files now exercise the real code they claim to validate (they had drifted into testing inline copies).

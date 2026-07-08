@@ -58,6 +58,8 @@ js/version.js APP_VERSION — bump here (and sw.js) only
 | `cet-conservative` | SimTIVA-style, rate-corrected bolus | `planTCISchemeCETConservative` |
 | `cet-emulation` | SimTIVA deliver_cpt port, best accuracy | `planTCISchemeEmulation` |
 
+**Production uses `cet-emulation` only** (factory default; the setup picker is hidden unless `localStorage['tci-dev-planners'] === 'true'`). `stepped`/`cet`/`cet-conservative` are retained for development but never shipped — `simulation.js planTCI` still dispatches all four by `tciMode`.
+
 The emulation planner maintains a parallel SimTIVA eigenstate (`ps1/ps2/ps3`); after any Ce-boost `engine.advance()`, call `refitEigenstate()` before resuming Cp-targeting. `computeRateCorrFactor` in `simtiva-reference.js` takes `(rawBolusMg, peakTimeSec, maxRateMgSec, e_coef, lambda)` — not pump-rate scalars — and simulates Ce second-by-second to find the correction duration. Full algorithms and validation data: `TCI-PLANNERS.md`.
 
 ## Pump Settings
