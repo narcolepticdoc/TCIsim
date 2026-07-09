@@ -4,6 +4,14 @@
 
 ## Session History
 
+### Restyle the Add Event button (v0.5.44.5) — Interim
+
+Cosmetic follow-up to the notes-button restyle. The `#btn-add-event` label in the
+history-actions row was "+ Add Event". Dropped the "+" and stacked the two words onto
+their own lines ("Add" over "Event", via `Add<br>Event` + `line-height:1.15` on
+`.h-action-add`) so it matches the two-line notes button beside it. `index.html`-only;
+button id/classes and the `js/app.js` click handler untouched.
+
 ### Extended-case steady-state rate oscillation fix (v0.5.44.4) — Interim
 
 Observed on the Compartment Analysis far-future tail: at ~11 h case time the

@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.44.5] — 2026-07-09
+
+UI tweak.
+
+- **Restyled the "Add Event" button.** Dropped the leading "+" and stacked the label onto two lines ("Add" over "Event") to match the neighbouring notes button, instead of the previous single-line "+ Add Event". No behaviour change.
+
 ## [0.5.44.4] — 2026-07-09
 
 Bug fix — TCI planner (cet-emulation).
