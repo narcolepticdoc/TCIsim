@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.44.4] — 2026-07-09
+
+UI tweak.
+
+- **Dropped the "+" from the "Add Event" button.** The history-actions button now reads just "Add Event" (wrapping to "Add" / "Event") instead of "+ Add Event", matching the restyled notes button beside it. No behaviour change.
+
 ## [0.5.44.3] — 2026-07-09
 
 UI tweak.
