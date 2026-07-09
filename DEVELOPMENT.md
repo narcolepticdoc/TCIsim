@@ -4,12 +4,13 @@
 
 ## Session History
 
-### Drop the "+" from the Add Event button (v0.5.44.4) — Interim
+### Restyle the Add Event button (v0.5.44.4) — Interim
 
 Cosmetic follow-up to the notes-button restyle. The `#btn-add-event` label in the
-history-actions row was "+ Add Event" (the "+" rendered on its own line above
-"Add"/"Event"); removed the "+ " prefix so it reads just "Add Event". `index.html`
-one-token change; button id/classes and the `js/app.js` click handler untouched.
+history-actions row was "+ Add Event". Dropped the "+" and stacked the two words onto
+their own lines ("Add" over "Event", via `Add<br>Event` + `line-height:1.15` on
+`.h-action-add`) so it matches the two-line notes button beside it. `index.html`-only;
+button id/classes and the `js/app.js` click handler untouched.
 
 ### History notes button label stacks vertically (v0.5.44.3) — Interim
 
