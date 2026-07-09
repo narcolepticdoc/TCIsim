@@ -926,10 +926,11 @@ function boot() {
 
   const btnHistoryNotes = $('btn-history-notes');
   if (btnHistoryNotes) {
-    btnHistoryNotes.textContent = history.getNotationsVisible() ? 'Hide notes' : 'Show notes';
+    const notesVerb = btnHistoryNotes.querySelector('.notes-verb');
+    notesVerb.textContent = history.getNotationsVisible() ? 'Hide' : 'Show';
     btnHistoryNotes.addEventListener('click', () => {
       const on = history.toggleNotations();
-      btnHistoryNotes.textContent = on ? 'Hide notes' : 'Show notes';
+      notesVerb.textContent = on ? 'Hide' : 'Show';
     });
   }
 
