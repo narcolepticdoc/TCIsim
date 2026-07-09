@@ -4,6 +4,20 @@
 
 ## Session History
 
+### Emergence trajectory persists while pump paused (v0.5.44.2) — Interim
+
+The red dashed emergence trajectory (`chart.setEmergenceTrajectory`) is drawn per
+frame in `js/app/chart-bridge.js onFrame`. Its guard required a running infusion
+(`getConcentrationsAt(...).rate > 0`), so when lowering the Ce target paused the pump
+(rate→0) the line disappeared until the infusion restarted — even though that pause is
+exactly the decay the line projects. `computeDecayTrajectory` (`js/sim/simulation.js`)
+already advances at `engine.advance(step, 0)` (infusion stopped), so it needs no rate.
+Replaced the pump-rate guard with `conc.Ce > exitCe` (both canonical mcg/mL, matching
+the static exit line at chart-bridge.js:214-215): the line now shows whenever a target
+is set and current Ce is above it, regardless of pump state, and clears once Ce reaches
+the target. Also drops the pre-existing degenerate case (running pump, nothing on
+board) where a flat line at Ce≈0 could draw.
+
 ### Three UI fixes: version status timestamps, history notes button label, persistent detail cursor (v0.5.44.1) — Interim
 
 Three user-facing tweaks/bug-fixes.

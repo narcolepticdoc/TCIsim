@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.44.2] — 2026-07-09
+
+Bug fix.
+
+- **Emergence line stays visible while the pump is paused.** The red dashed emergence trajectory (projected Ce decay to the emergence target) used to be gated on a running infusion, so lowering the target — which pauses the pump while Ce coasts down — made the line vanish until the infusion restarted. It's now shown whenever a target is set and current Ce is above it, regardless of pump state (the decay predictor already models "infusion stopped"). The line clears once Ce has decayed to/below the target.
+
 ## [0.5.44.1] — 2026-07-08
 
 Three UI fixes.

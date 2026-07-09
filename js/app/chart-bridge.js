@@ -326,15 +326,16 @@ export function createChartBridge({
       }
 
       // Emergence trajectory — red dashed projection of how Ce would decay if
-      // the running infusion were stopped now, descending to the emergence
-      // threshold. Shown only when a threshold is set AND an infusion is
-      // currently running for the selected drug; otherwise cleared. Scaled to
-      // match the live Ce dataset units.
+      // the infusion were stopped now, descending to the emergence threshold.
+      // Shown whenever a threshold is set AND current Ce is above it — regardless
+      // of pump state, since the predictor already advances at rate 0. This keeps
+      // the line visible while the pump is paused (e.g. after lowering the target),
+      // which is exactly the decay it projects. Scaled to match the live Ce dataset.
       if (model && chart.setEmergenceTrajectory) {
         const exitCe = mode.getExitCe(selectedDrug);
-        const running = exitCe > 0 && t > 0 &&
-          model.getConcentrationsAt(selectedDrug, t).rate > 0;
-        if (running) {
+        const conc = model.getConcentrationsAt(selectedDrug, t);
+        const showEmergence = exitCe > 0 && t > 0 && conc.Ce > exitCe;
+        if (showEmergence) {
           const traj = model.computeDecayTrajectory(selectedDrug, t, exitCe);
           const scaled = (traj && ys !== 1)
             ? traj.map(p => ({ time: p.time, Ce: p.Ce * ys }))
