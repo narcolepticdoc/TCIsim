@@ -443,7 +443,8 @@
     .history-actions .h-action-time .t-rt{color:var(--text-muted);transition:color .15s}
     .history-actions .h-action-time .active{color:var(--text-primary);font-weight:600}
     .history-actions .h-action-time .t-sep{color:var(--border);margin:0 3px}
-    .history-actions .h-action-notes{flex:0 0 auto;min-width:72px;color:var(--text-primary)}
+    .history-actions .h-action-notes{flex:0 0 auto;min-width:72px;color:var(--text-primary);line-height:1.15}
+    .history-actions .h-action-notes .notes-verb{display:block}
     .history-actions .h-action-edit{flex:0 0 auto;min-width:60px}
     .history-actions .h-action-edit.active{background:var(--amber);color:#000;border-color:var(--amber);box-shadow:0 0 0 1px var(--amber)}
     .history-reconcile-row{display:none;padding:6px 12px;border-top:1px solid var(--border-subtle)}
@@ -1467,7 +1468,7 @@
           <div class="history-actions">
             <button class="evt-action-btn h-action-time" id="btn-history-time" title="Toggle time display"><span class="t-et active">ET</span><span class="t-sep">/</span><span class="t-rt">RT</span></button>
             <button class="evt-action-btn h-action-add" id="btn-add-event">+ Add Event</button>
-            <button class="evt-action-btn h-action-notes" id="btn-history-notes" title="Show/hide notations">Hide notes</button>
+            <button class="evt-action-btn h-action-notes" id="btn-history-notes" title="Show/hide notations"><span class="notes-verb">Hide</span>notes</button>
             <button class="evt-action-btn h-action-edit" id="btn-history-edit">Edit</button>
           </div>
         </div>

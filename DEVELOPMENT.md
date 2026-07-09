@@ -4,6 +4,16 @@
 
 ## Session History
 
+### History notes button label stacks vertically (v0.5.44.3) — Interim
+
+Follow-up to the v0.5.44.1 notes-button change. The "Show notes"/"Hide notes" label
+now stacks the two words (verb over "notes") to match the "+ Add Event" button in the
+same history-actions row. Implemented by wrapping the verb in a `<span class="notes-verb">`
+(display:block) followed by a static "notes" text node — `index.html` markup + a CSS
+rule near `.h-action-notes` (block span + `line-height:1.15`), and `js/app.js` now swaps
+only the verb span's textContent ("Hide"/"Show") on init and click instead of the whole
+button label. No behaviour change; the button stays always-lit (`--text-primary`).
+
 ### Emergence trajectory persists while pump paused (v0.5.44.2) — Interim
 
 The red dashed emergence trajectory (`chart.setEmergenceTrajectory`) is drawn per

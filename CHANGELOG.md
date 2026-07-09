@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.44.3] — 2026-07-09
+
+UI tweak.
+
+- **History notes button label stacks vertically.** The "Show notes" / "Hide notes" toggle now renders the verb over "notes" on two lines (matching the neighbouring "+ Add Event" button) instead of a single line. Behaviour and always-lit styling are unchanged; only the verb ("Show"/"Hide") swaps on toggle.
+
 ## [0.5.44.2] — 2026-07-09
 
 Bug fix.
