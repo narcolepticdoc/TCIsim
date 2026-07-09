@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.44.4] — 2026-07-09
+
+Bug fix — TCI planner (cet-emulation).
+
+- **Extended-case steady-state rate oscillation removed.** On very long cases (well past a realistic case length — ~8–11 h in), the maintenance plan developed a sustained sawtooth: once the slow (V3) compartment saturated, the infusion rate flip-flopped between two adjacent pump-grid values (e.g. 90 ↔ 95 mcg/kg/min) every ~14 min and Ce bounced within its drift band. This is a quantized-actuator limit cycle — the true steady-state rate lands *between* grid points, so re-rounding each maintenance step to the coarse display grid can never settle. The correction loop now switches to a ÷10-finer grid (0.5 mcg/kg/min / 0.1 mL/h / 0.01 mg/min) once per-probe corrections converge below one normal grid step, so the tail settles smoothly onto target instead of hunting. Far-tail Ce amplitude drops ~10–35× (to well under 0.05 µg/mL — visually flat) and tail rate-change markers thin from ~1/14 min to ~1/hour. Clean round grid numbers are preserved through induction and active maintenance; the fix only engages in the saturated tail. Behaviour is unchanged when display-unit rounding is off, and it self-re-arms across target changes (a new target replans with coarse rounding, then re-converges). Worst in mcg/kg/min (the coarsest rate unit); also affected mL/h at 20 mg/mL.
+
 ## [0.5.44.3] — 2026-07-09
 
 UI tweak.

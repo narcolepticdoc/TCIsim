@@ -8,7 +8,19 @@
  */
 
 import { computeSteadyStateRate } from '../../pk/steady-state-predictor.js';
-import { quantizeInDisplay } from '../../util/units.js';
+import { quantizeInDisplay, getQuantStep, toCanonical } from '../../util/units.js';
+
+/**
+ * Maintenance-tail fine-grid divisor. Once the correction loop converges (the
+ * per-probe rate change falls below the normal grid step), the emulation
+ * planner snaps rates on `normalStep / TAIL_GRID_DIVISOR` instead of the normal
+ * display grid. ÷10 keeps the worst-case (½-step) settled-Ce offset below
+ * CE_TOL (±1.5%) for every rate unit and every realistic target — the coarsest
+ * current case, 5 mcg/kg/min at Ce 1.0 (offset 9.2%), becomes 0.9% — while
+ * staying a clean, programmable number at/above the pump's own ~0.1 mL/h
+ * resolution. See TCI-PLANNERS.md (correction pass) for the derivation.
+ */
+export const TAIL_GRID_DIVISOR = 10;
 
 /**
  * @typedef {Object} TCISchemeConfig
@@ -63,7 +75,33 @@ export function makeQuantizers(cfg) {
     return quantizeInDisplay(mgMin, cfg.rateDisplayUnit, cfg.drugId, 'rate',
       { weightKg: cfg.weightKg, concentration: cfg.bolusConcentration });
   };
-  return { qBolus, qRate };
+  // Fine maintenance-tail quantizer: same unit/context path as qRate, but snaps
+  // on TAIL_GRID_DIVISOR-times-finer grid. No-op (like qRate) when quantization
+  // is off or the unit has no defined step.
+  const qRateFine = (mgMin) => {
+    if (!cfg.quantizeInDisplay || !cfg.rateDisplayUnit || !cfg.drugId) return mgMin;
+    const step = getQuantStep(cfg.drugId, 'rate', cfg.rateDisplayUnit);
+    if (!step) return mgMin;
+    return quantizeInDisplay(mgMin, cfg.rateDisplayUnit, cfg.drugId, 'rate',
+      { weightKg: cfg.weightKg, concentration: cfg.bolusConcentration },
+      step / TAIL_GRID_DIVISOR);
+  };
+  return { qBolus, qRate, qRateFine };
+}
+
+/**
+ * Current rate grid step, expressed in canonical mg/min. Returns 0 when
+ * quantization is off or the active display unit has no defined step. Used by
+ * the emulation correction loop to detect the quantization-dominated regime
+ * (per-probe rate change below one grid step). Rate conversions are linear
+ * through zero, so one display-unit step maps to toCanonical(step).
+ */
+export function rateGridStepMgMin(cfg) {
+  if (!cfg.quantizeInDisplay || !cfg.rateDisplayUnit || !cfg.drugId) return 0;
+  const step = getQuantStep(cfg.drugId, 'rate', cfg.rateDisplayUnit);
+  if (!step) return 0;
+  return toCanonical(step, cfg.rateDisplayUnit, cfg.drugId, 'rate',
+    { weightKg: cfg.weightKg, concentration: cfg.bolusConcentration }).value;
 }
 
 /**
