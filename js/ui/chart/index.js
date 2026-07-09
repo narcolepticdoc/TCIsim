@@ -773,7 +773,9 @@ export function createChart(canvas, config = {}) {
     s.currentDrugId = drugId;
     s.yScale = yScale || 1;
     s.thresholdCe = null;
-    s.inspectTime = null;
+    // Inspect cursor is deliberately preserved across drug switches — it stays
+    // at its current time position while setCurveData swaps in the new drug's
+    // data. Only toggling inspect off (or New Case) clears it.
 
     chart.options.scales.y.title.text = yLabel || 'μg/mL';
 
