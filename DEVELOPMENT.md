@@ -4,13 +4,52 @@
 
 ## Session History
 
-### Restyle the Add Event button (v0.5.44.4) — Interim
+### Restyle the Add Event button (v0.5.44.5) — Interim
 
 Cosmetic follow-up to the notes-button restyle. The `#btn-add-event` label in the
 history-actions row was "+ Add Event". Dropped the "+" and stacked the two words onto
 their own lines ("Add" over "Event", via `Add<br>Event` + `line-height:1.15` on
 `.h-action-add`) so it matches the two-line notes button beside it. `index.html`-only;
 button id/classes and the `js/app.js` click handler untouched.
+
+### Extended-case steady-state rate oscillation fix (v0.5.44.4) — Interim
+
+Observed on the Compartment Analysis far-future tail: at ~11 h case time the
+cet-emulation plan's infusion rate oscillated between two adjacent grid values
+(90 ↔ 95 mcg/kg/min) every ~14 min, with Ce sawtoothing inside its ±CE_TOL band.
+Diagnosis (confirmed numerically against the real Eleveld engine): a
+quantized-actuator **limit cycle**. The maintenance correction loop
+(`js/sim/tci/emulation.js` `planTCISchemeEmulation`) re-solves the exact
+Ce-holding rate every `PROBE ≈ 2/ke0 ≈ 14 min` and snaps it to the display-unit
+grid via `qRate`. Early in maintenance the required rate declines by more than a
+grid step per probe (clean descending staircase); once V3 saturates
+(k31 ≈ 0.0048/min, t½ ≈ 144 min) the true steady-state rate lands *between* grid
+points and the memoryless re-rounding flip-flops. Coarseness is unit-dependent
+(rounding is in the display unit): mcg/kg/min (step 5 → 0.35 mg/min, ~5.3% of a
+3.5 target) is the coarsest and worst; mg/min (0.1) barely oscillates; mL/h at
+20 mg/mL is as coarse as mcg/kg/min.
+
+Analysis established that Ce_ss is exactly linear in rate, so the settled Ce gap
+between two grid rates = grid-step / operating-rate; a hard "freeze to the
+analytical SS rate" was rejected because it undershoots (a downward Ce sag
+≈ 20.8% × (1 − V3 saturation) — ~4.9% at a 5 h switch, worse than the
+oscillation). Instead: a **two-tier grid**. While per-probe corrections exceed
+one normal grid step, snap on the normal grid (clean round numbers through
+induction/active maintenance); once corrections converge below one grid step,
+latch to a `TAIL_GRID_DIVISOR = 10` finer grid (0.5 mcg/kg/min / 0.1 mL/h /
+0.01 mg/min). ÷10 keeps the worst-case ½-step settled-Ce offset under CE_TOL for
+every unit/target (coarsest case, Ce 1.0 in mcg/kg/min: 9.2% → 0.9%), stays a
+clean pump-programmable number at/above the pump's ~0.1 mL/h resolution, and lets
+the extend-loop reach `MAX_DUR` so tail markers thin to ~1/hour. Because the
+planner is a pure function replanned from the current loaded state, a target
+change makes corrections large again → coarse rounding resumes → re-converges
+(self-re-arming). Implementation: `js/util/units.js` `quantizeInDisplay` gains a
+`stepOverride`; `js/sim/tci/shared.js` adds `TAIL_GRID_DIVISOR`, `qRateFine`, and
+`rateGridStepMgMin`; the correction loop tracks `prevExact`/`useFine` and the
+terminal SS append matches the grid the loop ended on. Inert when rounding is
+off. Validated: far-tail Ce amplitude 0.005–0.05 µg/mL (10–35× reduction),
+target held within ±0.4%, target-up/down settling — see `TCI-PLANNERS.md` and
+`tests/test-tci-scheme.mjs` TEST 15.
 
 ### History notes button label stacks vertically (v0.5.44.3) — Interim
 

@@ -296,7 +296,7 @@ console.log('\n=== TEST 11: SS Rate Event Is Emitted In Scheme ===');
   assert(dev < 0.02, `Last emitted rate within 2% of analytical SS rate (actual: ${(dev*100).toFixed(2)}%)`);
 }
 
-console.log('\n=== TEST 12: Quantize-In-Loop Stepped — All Rates Snap To Integer mL/h ===');
+console.log('\n=== TEST 12: Quantize-In-Loop Stepped — Rates Snap To The mL/h Grid ===');
 {
   const eng=createEngine(params);
   const scheme=planTCISchemeQuantized(eng, eng.getState(), 0, 3.0);
@@ -304,16 +304,19 @@ console.log('\n=== TEST 12: Quantize-In-Loop Stepped — All Rates Snap To Integ
   console.log(`  Quantized scheme: ${scheme.length} steps`);
   fmtScheme(scheme,70);
 
-  // Every rate, when converted to mL/h, must be an integer (within FP tolerance)
+  // Every rate, in mL/h, must land on the maintenance grid: integer mL/h during
+  // the active phase, or the ÷10 fine tail grid (0.1 mL/h) once the correction
+  // loop converges into the steady-state regime. So every rate is a multiple of
+  // 0.1 mL/h (within FP tolerance).
   let allOnGrid=true;
   for (const s of scheme) {
     if (s.type === 'rate') {
       const mlh = s.value * 60 / CONC;
-      const k = Math.round(mlh);
+      const k = Math.round(mlh * 10) / 10;
       if (Math.abs(mlh - k) > 1e-9) { allOnGrid=false; break; }
     }
   }
-  assert(allOnGrid, 'Every rate in scheme is an integer mL/h value');
+  assert(allOnGrid, 'Every rate in scheme is a multiple of 0.1 mL/h');
 
   // Bolus is a whole mg
   const bolusEvt = scheme.find(s => s.type === 'bolus');
@@ -362,6 +365,81 @@ console.log('\n=== TEST 14: Quantize-In-Loop — State Is Preserved ===');
   let ok=true;
   for (let i=0;i<4;i++) { if (Math.abs(before[i]-after[i])>1e-10) { ok=false; break; } }
   assert(ok,'Quantized planner preserves engine state');
+}
+
+console.log('\n=== TEST 15: Extended-case tail — no steady-state rate oscillation ===');
+{
+  // Regression for the quantized-actuator limit cycle: on long cases the
+  // correction loop used to flip-flop between two coarse grid rates (e.g. 90↔95
+  // mcg/kg/min) once V3 saturated, bouncing Ce within the CE_TOL band. The fix
+  // drops to a ÷10 fine tail grid once corrections converge, so the far tail
+  // settles instead of hunting. mcg/kg/min is the coarsest unit (worst case).
+  const CE_TOL = 0.015;
+  const toMkm = (mgMin) => mgMin * 1000 / 70;
+
+  // Replay a scheme (bolus over its pump duration + piecewise rates) and sample
+  // Ce every dt out to tEnd.
+  function ceTrace(scheme, tEnd, dt=0.5) {
+    const e=createEngine(params);
+    const rates=scheme.filter(s=>s.type==='rate').sort((a,b)=>a.time-b.time);
+    const bol=scheme.filter(s=>s.type==='bolus').map(b=>{
+      const dur=Math.max(0.05,(b.value/CONC)/750*60); return {t:b.time,end:b.time+dur,rate:b.value/dur}; });
+    const rateAt=(t)=>{ let base=0; for(const r of rates){ if(r.time<=t+1e-9) base=r.value; else break; }
+      let extra=0; for(const b of bol) if(t>=b.t-1e-9 && t<b.end-1e-9) extra+=b.rate; return base+extra; };
+    const out=[];
+    for(let t=0;t<tEnd;t+=dt){ e.advance(dt, rateAt(t)); out.push({t:t+dt, ce:e.getConcentrations().Ce}); }
+    return out;
+  }
+
+  for (const target of [2.0, 3.5, 5.0]) {
+    const scheme=planTCISchemeQuantized(createEngine(params), createEngine(params).getState(), 0, target,
+      { rateDisplayUnit:'mcg/kg/min' });
+    const rates=scheme.filter(s=>s.type==='rate');
+    const tEnd=Math.min(1000, rates[rates.length-1].time+30);
+    // Far tail = true steady state (V3 ~saturated): amplitude must be tiny.
+    const far=ceTrace(scheme, tEnd).filter(p=>p.t>=700);
+    const amp=Math.max(...far.map(p=>p.ce))-Math.min(...far.map(p=>p.ce));
+    console.log(`  target ${target}: far-tail Ce amplitude ${amp.toFixed(4)} µg/mL`);
+    // Original coarse sawtooth was ~0.18 µg/mL at Ce 3.5; fixed is <0.03.
+    assert(amp < 0.06, `Far-tail Ce amplitude < 0.06 µg/mL at Ce ${target} (actual ${amp.toFixed(4)})`);
+
+    // Final rate's asymptotic Ce sits on target (fine grid holds within CE_TOL).
+    const lastRate=rates[rates.length-1].value;
+    const e2=createEngine(params); e2.advance(100000, lastRate); // → steady state
+    const off=Math.abs(e2.getConcentrations().Ce-target)/target;
+    assert(off<=CE_TOL, `Final rate converges Ce to within CE_TOL at Ce ${target} (actual ${(off*100).toFixed(2)}%)`);
+
+    // The tail must actually engage the fine grid (some rate off the coarse
+    // 5 mcg/kg/min grid) — proves the two-tier switch fired.
+    const usedFine=rates.some(r=>{ const m=toMkm(r.value); return Math.abs(m-Math.round(m/5)*5)>1e-6; });
+    assert(usedFine, `Tail engages the fine ÷10 grid at Ce ${target}`);
+  }
+
+  // Target change re-arms rounding: after settling at Ce 3.5, a new target must
+  // replan with coarse (round) loading rates and settle at the new target.
+  {
+    const base=planTCISchemeQuantized(createEngine(params), createEngine(params).getState(), 0, 3.5,
+      { rateDisplayUnit:'mcg/kg/min' });
+    // Load an engine to the near-steady state at t≈720 min by replaying base.
+    const e=createEngine(params);
+    const rates=base.filter(s=>s.type==='rate').sort((a,b)=>a.time-b.time);
+    const bol=base.filter(s=>s.type==='bolus').map(b=>{const dur=Math.max(0.05,(b.value/CONC)/750*60);return {t:b.time,end:b.time+dur,rate:b.value/dur};});
+    const rateAt=(t)=>{let base2=0;for(const r of rates){if(r.time<=t+1e-9)base2=r.value;else break;}let x=0;for(const b of bol)if(t>=b.t-1e-9&&t<b.end-1e-9)x+=b.rate;return base2+x;};
+    for(let t=0;t<720;t+=0.5) e.advance(0.5, rateAt(t));
+
+    for (const newT of [2.5, 4.5]) {
+      const sch=planTCISchemeQuantized(e, e.getState(), 720, newT, { rateDisplayUnit:'mcg/kg/min' });
+      const r=sch.filter(s=>s.type==='rate');
+      // Early post-change maintenance rate should be on the coarse grid (rounding
+      // resumed because corrections are large again).
+      const coarseEarly=r.some(s=>{const m=toMkm(s.value); return s.value>0 && Math.abs(m-Math.round(m/5)*5)<1e-6;});
+      assert(coarseEarly, `Target change 3.5→${newT} re-arms coarse rounding`);
+      // Final rate settles at the new target.
+      const e3=createEngine(params); e3.advance(100000, r[r.length-1].value);
+      const off=Math.abs(e3.getConcentrations().Ce-newT)/newT;
+      assert(off<=CE_TOL, `Target change 3.5→${newT} settles Ce to new target (actual ${(off*100).toFixed(2)}%)`);
+    }
+  }
 }
 
 // ---- SUMMARY ----

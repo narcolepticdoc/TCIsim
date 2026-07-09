@@ -155,10 +155,12 @@ export function getQuantStep(drugId, task, displayUnit) {
  * @param {string} drugId
  * @param {string} task           - 'bolus' | 'rate'
  * @param {Object} ctx            - { weightKg, concentration }
+ * @param {number} [stepOverride] - snap on this display-unit step instead of
+ *   the drug/task default (e.g. a finer maintenance-tail grid). null = default.
  * @returns {number} canonical value snapped to the display-unit grid
  */
-export function quantizeInDisplay(canonicalValue, displayUnit, drugId, task, ctx = {}) {
-  const step = getQuantStep(drugId, task, displayUnit);
+export function quantizeInDisplay(canonicalValue, displayUnit, drugId, task, ctx = {}, stepOverride = null) {
+  const step = stepOverride != null ? stepOverride : getQuantStep(drugId, task, displayUnit);
   if (!step || !Number.isFinite(canonicalValue)) return canonicalValue;
   const displayVal = fromCanonical(canonicalValue, displayUnit, drugId, task, ctx);
   const snapped = Math.round(displayVal / step) * step;

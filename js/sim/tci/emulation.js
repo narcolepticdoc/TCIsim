@@ -23,11 +23,11 @@
 
 import { computeSimTIVACETBolus, computeUDFs } from '../simtiva-reference.js';
 import { computeSteadyStateRate } from '../../pk/steady-state-predictor.js';
-import { DEFAULT_SCHEME_CONFIG, makeQuantizers, plannerBolusDelivery, waitForDecay } from './shared.js';
+import { DEFAULT_SCHEME_CONFIG, makeQuantizers, plannerBolusDelivery, waitForDecay, rateGridStepMgMin } from './shared.js';
 
 export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, config = {}) {
   const cfg = { ...DEFAULT_SCHEME_CONFIG, ...config };
-  const { qBolus, qRate } = makeQuantizers(cfg);
+  const { qBolus, qRate, qRateFine } = makeQuantizers(cfg);
   const scheme = [];
 
   if (ceTarget <= 0) {
@@ -456,6 +456,9 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   // after PROBE minutes, then extend the step as long as Ce stays within ±CE_TOL.
   // This gives tight control when V3 equilibrates fast (~15-30 min steps early)
   // and relaxed control when the rate barely changes (~60-90 min steps late).
+  // Tracks whether the correction loop converged into the fine-tail grid, so the
+  // terminal SS-rate append (after this block) can match it.
+  let endedFine = false;
   {
     // PROBE scales with ke0: Ce needs ~2τ = 2/ke0 to meaningfully respond
     // to a rate change. Clamped to a 10-min clinical floor (keep plans
@@ -516,6 +519,19 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
       // peak) produced clinically significant undershoot (~14% below
       // target for tens of minutes). See TCI-TOLERANCE-ANALYSIS.md §8
       // before attempting peak-awareness here again.
+      // Two-tier quantization. While the required rate is still declining by
+      // more than one normal grid step per probe (V2/V3 filling fast), snap on
+      // the normal display grid — a clean descending staircase (…105, 100, 95).
+      // Once the per-probe change falls below one grid step, the normal grid can
+      // no longer take a genuine step down: it would stall between two grid
+      // lines and flip-flop (the extended-case sawtooth). From there, snap on a
+      // TAIL_GRID_DIVISOR-finer grid, whose ½-step settled-Ce offset stays under
+      // CE_TOL, so the rate settles instead of hunting. rateStepMg is the normal
+      // grid step in mg/min (0 when quantization is off → always normal branch).
+      const rateStepMg = rateGridStepMgMin(cfg);
+      const FINE_TRIGGER_FRAC = 1.0; // switch once |Δexact| < one grid step/probe
+      let prevExact = null;
+      let useFine = false;
       for (let t = corrStart; t < corrEnd; ) {
         const state = engine.getState();
 
@@ -527,10 +543,20 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
           engine.advance(PROBE, mid);
           if (engine.getConcentrations().Ce < ceTarget) lo = mid; else hi = mid;
         }
+        const exact = (lo + hi) / 2;
+
+        // Latch into the fine tail grid once corrections converge below one
+        // normal grid step (monotonic decline, so it never un-latches).
+        if (!useFine && prevExact !== null && rateStepMg > 0 &&
+            Math.abs(exact - prevExact) < FINE_TRIGGER_FRAC * rateStepMg) {
+          useFine = true;
+        }
+        prevExact = exact;
+
         // Quantize BEFORE the forward-probe extension loop so the probe
         // uses the same rate the pump will deliver — otherwise extension
         // stops too early (or too late) under display-unit rounding.
-        const rate = qRate((lo + hi) / 2);
+        const rate = useFine ? qRateFine(exact) : qRate(exact);
 
         // Probe forward: extend this rate while Ce stays within tolerance
         let dur = PROBE;
@@ -546,12 +572,15 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
         engine.advance(dur, rate);
         t += dur;
       }
+      endedFine = useFine;
     }
   }
 
-  // Append analytical SS rate beyond the correction horizon for t → ∞
+  // Append analytical SS rate beyond the correction horizon for t → ∞.
+  // Match the grid the correction loop ended on so the tail stays consistent:
+  // fine grid if the loop converged into the fine-tail regime, normal otherwise.
   const ssRateRaw = computeSteadyStateRate(engine, ceTarget);
-  const ssRate = ssRateRaw != null ? qRate(ssRateRaw) : null;
+  const ssRate = ssRateRaw != null ? (endedFine ? qRateFine(ssRateRaw) : qRate(ssRateRaw)) : null;
   if (ssRate != null && scheme.length > 0) {
     const lastRateEvt = [...scheme].reverse().find(s => s.type === 'rate');
     // Denominator floor: a 0-rate last step must not become 0/0 → NaN and
