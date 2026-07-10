@@ -519,32 +519,36 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
       // peak) produced clinically significant undershoot (~14% below
       // target for tens of minutes). See TCI-TOLERANCE-ANALYSIS.md §8
       // before attempting peak-awareness here again.
-      // Progressive multi-tier quantization. The maintenance rate declines
-      // monotonically as V2/V3 fill; the whole active case is a clean descending
-      // staircase on the normal display grid (…105, 100, 95), deliberately
-      // riding the upper tolerance band — the accepted loading-phase overshoot.
-      // Only near steady state does a grid tier fail: the required rate lands
-      // between its grid points, so the loop would flip-flop (the extended-case
-      // sawtooth). When that happens we refine to the next-finer tier and keep
-      // going, so the plan stays on the coarsest readable grid that still works.
+      // Progressive multi-tier quantization. During loading the maintenance rate
+      // moves across many grid cells, so the base display grid tracks it as a
+      // clean staircase (…105, 100, 95 on the way up or down), riding the upper
+      // tolerance band. Only near steady state can a grid tier fail: if the
+      // steady-state rate lands between that tier's grid points by more than the
+      // tolerance, the loop would flip-flop (the extended-case sawtooth). We then
+      // refine to a finer tier so the tail settles. Tiers step the display grid
+      // down by TIER_DIV (÷1, ÷5, ÷10, ÷50 → e.g. 5, 1, 0.5, 0.1 mcg/kg/min);
+      // divisors are relative to the unit's own grid, so this generalises to
+      // every rate unit and drug.
       //
-      // Trigger = a genuine REVERSAL, detected + backtracked. Descend on the
-      // current tier; the moment the tier-snapped rate would strictly RISE above
-      // the last emitted rate, that tier has bottomed out and is about to hunt —
-      // so refine (tier++) and BACKTRACK one step (undo the over-descended step,
-      // restoring engine state / scheme / time) before re-emitting on the finer
-      // grid. Repeats (flat steps from round-to-nearest) do NOT trigger — only a
-      // strict up-move — so the plan never emits a reversal at any tier. Tiers
-      // step the display grid down by TIER_DIV (÷1, ÷5, ÷10, ÷50 → e.g. 5, 1,
-      // 0.5, 0.1 mcg/kg/min); the divisors are relative to the unit's own grid,
-      // so this generalises to every rate unit and drug. Fully adaptive: no
-      // steady-state-rate estimate, no magic threshold. rateStepMg is the base
-      // grid step in mg/min (0 when quantization is off → stays on tier 0 = the
-      // identity qRate, i.e. current un-quantized behaviour).
+      // Trigger = a genuine DIRECTION REVERSAL on the current tier, detected +
+      // backtracked. A monotone move — descent (induction) or ascent (the rate
+      // rising as V3 releases after a target DECREASE) — never reverses on the
+      // grid, so it stays coarse. Only when the tier-snapped rate changes
+      // direction (down-then-up, or up-then-down) has that grid stopped tracking
+      // and started to hunt; we then refine one tier and BACKTRACK the last
+      // (over-shot) step, restoring engine state / scheme / time before
+      // re-emitting on the finer grid. Keying off direction change — not "any
+      // up-move" — is what makes it robust to the non-monotone post-decrease
+      // profile (a rate rising toward steady state is not hunting). Tiers step
+      // the display grid down by TIER_DIV (÷1, ÷5, ÷10, ÷50 → e.g. 5, 1, 0.5,
+      // 0.1 mcg/kg/min); divisors are relative to the unit's own grid, so this
+      // generalises to every rate unit and drug. rateStepMg is the base grid
+      // step in mg/min (0 when quantization is off → stays on tier 0 = identity).
       const rateStepMg = rateGridStepMgMin(cfg);
       const TIER_DIV = [1, 5, 10, 50];
       let tier = 0;
       let lastRate = Infinity;         // last emitted rate (mg/min), current tier
+      let lastDir = 0;                 // established trend: -1 down, +1 up, 0 none
       let backState = null, backT = 0, backLen = 0; // checkpoint before last step
       for (let t = corrStart; t < corrEnd; ) {
         const state = engine.getState();
@@ -560,11 +564,17 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
         }
         const exact = (lo + hi) / 2;
 
-        // Reversal at the current tier → refine + backtrack the over-step.
+        // Direction of the candidate move on the current tier's grid.
+        const cand = qRateDiv(exact, TIER_DIV[tier]);
+        const dir = !isFinite(lastRate) ? 0
+          : (cand > lastRate + 1e-9 ? 1 : (cand < lastRate - 1e-9 ? -1 : 0));
+
+        // Genuine reversal (trend flips) → refine one tier + backtrack the
+        // over-shot step. Repeats (dir 0) and monotone moves do not trigger.
         if (tier < TIER_DIV.length - 1 && rateStepMg > 0 &&
-            qRateDiv(exact, TIER_DIV[tier]) > lastRate + 1e-9) {
+            lastDir !== 0 && dir !== 0 && dir !== lastDir) {
           tier++;
-          lastRate = Infinity;         // reset tracker for the finer tier
+          lastRate = Infinity; lastDir = 0;
           if (backState) {
             engine.setState(backState);
             scheme.length = backLen;
@@ -576,6 +586,7 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
         // Quantize BEFORE the forward-probe extension loop so the probe uses the
         // same rate the pump will deliver (else extension stops early/late).
         const rate = qRateDiv(exact, TIER_DIV[tier]);
+        if (dir !== 0) lastDir = dir;
         lastRate = rate;
         backState = state; backT = t; backLen = lenBefore;
 

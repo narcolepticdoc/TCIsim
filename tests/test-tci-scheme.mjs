@@ -438,6 +438,13 @@ console.log('\n=== TEST 15: Extended case — no base-grid oscillation, Ce conve
       assert(usesCoarse, `Target change 3.5→${newT} re-arms a coarse base-grid descent`);
       // No base-grid oscillation in the new plan.
       assert(baseGridReversals(r)===0, `Target change 3.5→${newT} has no base-grid reversals`);
+      // A target DECREASE must not cascade straight to the finest grid: the
+      // post-change rate profile rises (V3 releases), which is not hunting, so
+      // most rates stay on integer grids (5 or 1 mcg/kg/min), not decimals.
+      const onInteger=(v)=>Math.abs(toMkm(v)-Math.round(toMkm(v)))<1e-6;
+      const intFrac=r.filter(s=>onInteger(s.value)).length / r.length;
+      console.log(`  Target 3.5→${newT}: ${(intFrac*100).toFixed(0)}% of rates on integer grids`);
+      assert(intFrac >= 0.4, `Target change 3.5→${newT} keeps most rates on integer grids (actual ${(intFrac*100).toFixed(0)}%)`);
       // Ce settles near the new target.
       const e3=createEngine(params); e3.advance(100000, r[r.length-1].value);
       const off=Math.abs(e3.getConcentrations().Ce-newT)/newT;

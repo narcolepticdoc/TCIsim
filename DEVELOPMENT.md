@@ -4,7 +4,7 @@
 
 ## Session History
 
-### Progressive multi-tier maintenance grid (v0.5.44.7) — Interim
+### Progressive multi-tier maintenance grid (v0.5.44.8) — Interim
 
 Follow-up to the v0.5.44.4 two-tier grid fix. Reported from the History view: for a
 35 M/70 kg case the fine (÷10) grid engaged well before compartment filling (rates
@@ -19,18 +19,24 @@ priority: clean coarse (integer) numbers through the **3–8 h window at Ce 2–
 11–16 h far-tail smoothness does not. The correction loop descends on the base display
 grid and refines one tier at a time — divisors `[1, 5, 10, 50]` → `5 → 1 → 0.5 → 0.1
 mcg/kg/min` (relative to each unit's own grid, so it generalises to mL/h, mg/min, and
-other drugs). Refinement fires on a **genuine reversal**: when the current tier's
-snapped rate would strictly *rise* above the last emitted rate (the grid has bottomed
-out and is about to hunt), the loop refines (`tier++`) and **backtracks one step** —
-restoring engine state / scheme / time before re-emitting on the finer grid. Repeats
-(round-to-nearest flats) do not trigger; only a strict up-move does — so the plan never
-emits a reversal at any tier. Backtrack is required: without it the over-descended step
-causes a Ce dip and a real rate bounce.
+other drugs). Refinement fires on a **genuine direction reversal**: when the tier-snapped rate changes
+direction (down-then-up in a descent, or up-then-down) the grid has stopped tracking and
+is about to hunt, so the loop refines (`tier++`) and **backtracks one step** — restoring
+engine state / scheme / time before re-emitting on the finer grid. Only a direction
+*change* triggers — not any up-move — which is what makes it robust to a target
+**decrease**: after a drop, the required rate legitimately *rises* as V3 releases drug,
+and an earlier "strict up-move" trigger mistook that monotone ascent for hunting and
+cascaded straight to fine decimals (reported from the History view: a 3.5→2 drop showed
+58.4/61.6/63.2 …). Tracking the trend direction keeps that ascent (and its later
+decline) on clean integer rates, refining only at the actual near-SS hunt. Backtrack is
+required: without it the over-shot step causes a Ce dip and a real rate bounce.
 
-Design exploration (all validated against the real planner): the alternative "wait for
-the coarse grid to stall (repeat)" is equivalent to the per-step trigger and mis-fires
-early (round-to-nearest makes a still-descending rate look like a repeat); the reversal
-signal is unambiguous. Measured across 48–60 cases (2 patients × weights × targets):
+Design exploration (all validated against the real planner): "wait for the coarse grid
+to stall (repeat)" is equivalent to the per-step trigger and mis-fires early; "strict
+up-move" breaks on target decreases; a saturation-`finalTier` variant left the decrease
+transient hunting on the coarse grid — the direction-reversal signal is the one that is
+both unambiguous and direction-agnostic. Measured across 48–60 cases (2 patients ×
+weights × targets):
 **zero base-grid reversals** everywhere; the 3–8 h window stays on the clean 5-grid for
 ~93 % of Ce 3.5 and 100 % of Ce 5 (multi-tier keeps Ce 2–3 on integers — 5s then 1s —
 where single-tier ÷10 would show `.5` decimals for 20–47 % of the window); costs (a
