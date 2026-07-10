@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.44.6] — 2026-07-10
+
+Bug fix — TCI planner (cet-emulation).
+
+- **Fine maintenance-tail grid now engages near saturation, not during loading.** Follow-up to the v0.5.44.4 two-tier grid fix. That change switched to the fine (÷10) grid when the per-step rate decline fell below one grid step — but the adaptive extend-loop makes early maintenance steps short, so their per-step decline drops below a grid step while the rate is still 40–50% above steady state. The fine grid was therefore engaging very early (V3 only ~20–32% saturated, ~45–85 min in), so the slowly-descending maintenance rates showed fine `.5` increments through the whole active case instead of clean coarse numbers. The trigger now keys off **proximity to the analytic steady-state rate** (`computeSteadyStateRate`): it stays on the coarse display grid — a clean descending staircase riding the upper tolerance band, the intended loading behaviour — until the rate is within a few coarse steps of steady state (≈V3 65–85%), then refines. No coarse-grid oscillation anywhere, far-tail behaviour unchanged, and it still self-re-arms across target changes. Loading-phase behaviour (rate descent and tolerance-band tracking) is otherwise unchanged.
+
 ## [0.5.44.5] — 2026-07-09
 
 UI tweak.

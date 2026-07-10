@@ -4,6 +4,35 @@
 
 ## Session History
 
+### Fine-grid trigger keyed to saturation, not per-step decline (v0.5.44.6) — Interim
+
+Follow-up to the v0.5.44.4 two-tier grid fix. Reported from the History view: for a
+35 M/70 kg case the fine (÷10) grid engaged at ~45–85 min (rates showing `.5`
+increments like 106.5, 101.5) — well before compartment filling. Confirmed against
+the real planner: the fine grid engaged at V3 only 20–32% saturated, when the exact
+rate was still 40–51% above the steady-state rate. Root cause: the v0.5.44.4 trigger
+(`|Δexact| < one grid step` between consecutive emitted steps) is a poor saturation
+proxy — the adaptive extend-loop (`emulation.js`) makes early maintenance steps short
+(~PROBE), so each step's rate decline is small even while the total remaining descent
+is large.
+
+Fix: trigger on **proximity to steady state** instead. `computeSteadyStateRate(engine,
+ceTarget)` is state-independent (pure system-matrix inverse), so it is computed once
+before the correction loop; the loop latches to the fine grid when
+`|exact − ssRate| < SS_PROXIMITY_STEPS (3) × rateStepMg`. Validated across targets
+{2,3,3.5,5} and both patient types (M70 non-op, F70 opioid): zero coarse-grid
+reversals, fine grid engages at V3 ~64–84% for the reference male (≈4–7 h in), far-tail
+amplitude unchanged (0.01–0.06 µg/mL). K=3 gives margin: for a SS rate near a grid
+midpoint the coarse grid cannot hold, so fine must engage a few steps before full
+saturation to pre-empt coarse hunting (fundamental to a coarse actuator, not a tuning
+miss). The old-vs-new comparison confirmed the loading-phase Ce band-riding (rate
+descent riding the upper ±CE_TOL edge, briefly to ~+2.1%) is pre-existing and identical
+in the all-coarse planner — an accepted compromise for fast, non-oscillating loading —
+so it is deliberately left unchanged. `emulation.js` only (drop `FINE_TRIGGER_FRAC`/
+`prevExact`, add the SS-proximity latch); regression guard `tests/test-tci-scheme.mjs`
+TEST 16 (no coarse reversals before engagement; fine engages within 4 coarse steps of
+the SS rate).
+
 ### Restyle the Add Event button (v0.5.44.5) — Interim
 
 Cosmetic follow-up to the notes-button restyle. The `#btn-add-event` label in the

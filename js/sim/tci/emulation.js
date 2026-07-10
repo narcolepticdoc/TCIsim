@@ -519,18 +519,28 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
       // peak) produced clinically significant undershoot (~14% below
       // target for tens of minutes). See TCI-TOLERANCE-ANALYSIS.md §8
       // before attempting peak-awareness here again.
-      // Two-tier quantization. While the required rate is still declining by
-      // more than one normal grid step per probe (V2/V3 filling fast), snap on
-      // the normal display grid — a clean descending staircase (…105, 100, 95).
-      // Once the per-probe change falls below one grid step, the normal grid can
-      // no longer take a genuine step down: it would stall between two grid
-      // lines and flip-flop (the extended-case sawtooth). From there, snap on a
-      // TAIL_GRID_DIVISOR-finer grid, whose ½-step settled-Ce offset stays under
-      // CE_TOL, so the rate settles instead of hunting. rateStepMg is the normal
-      // grid step in mg/min (0 when quantization is off → always normal branch).
+      // Two-tier quantization. The maintenance rate declines monotonically as
+      // V2/V3 fill; the whole active case is a clean descending staircase on the
+      // normal display grid (…105, 100, 95), deliberately riding the upper
+      // tolerance band — the accepted loading-phase overshoot. Only near steady
+      // state does the coarse grid fail: the true SS rate lands between grid
+      // points, so the loop would flip-flop (the extended-case sawtooth). From
+      // there, snap on a TAIL_GRID_DIVISOR-finer grid, whose ½-step settled-Ce
+      // offset stays under CE_TOL, so the rate settles instead of hunting.
+      //
+      // Trigger = SATURATION, not per-step decline. Latch to the fine grid once
+      // the exact rate is within SS_PROXIMITY_STEPS coarse grid steps of the
+      // analytic steady-state rate (ssRateProx). ssRateProx is state-independent
+      // (pure system-matrix inverse), so compute it once. Keying off proximity
+      // to the SS rate — rather than the per-step decline, which the extend-loop
+      // makes small even while the rate is still far above SS — defers the fine
+      // grid to genuine near-saturation (≈V3 65–85%). K=3 gives margin: for a SS
+      // rate near a grid midpoint the coarse grid cannot hold, so fine must
+      // engage a few steps early to pre-empt coarse hunting. rateStepMg is the
+      // normal grid step in mg/min (0 when quantization is off → always normal).
       const rateStepMg = rateGridStepMgMin(cfg);
-      const FINE_TRIGGER_FRAC = 1.0; // switch once |Δexact| < one grid step/probe
-      let prevExact = null;
+      const ssRateProx = computeSteadyStateRate(engine, ceTarget);
+      const SS_PROXIMITY_STEPS = 3;
       let useFine = false;
       for (let t = corrStart; t < corrEnd; ) {
         const state = engine.getState();
@@ -545,13 +555,14 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
         }
         const exact = (lo + hi) / 2;
 
-        // Latch into the fine tail grid once corrections converge below one
-        // normal grid step (monotonic decline, so it never un-latches).
-        if (!useFine && prevExact !== null && rateStepMg > 0 &&
-            Math.abs(exact - prevExact) < FINE_TRIGGER_FRAC * rateStepMg) {
+        // Latch into the fine tail grid once the exact rate is within
+        // SS_PROXIMITY_STEPS coarse steps of the analytic SS rate — i.e. V3 is
+        // nearly saturated and the coarse grid can no longer step cleanly.
+        // Monotonic approach, so it never un-latches within a plan.
+        if (!useFine && rateStepMg > 0 && ssRateProx != null &&
+            Math.abs(exact - ssRateProx) < SS_PROXIMITY_STEPS * rateStepMg) {
           useFine = true;
         }
-        prevExact = exact;
 
         // Quantize BEFORE the forward-probe extension loop so the probe
         // uses the same rate the pump will deliver — otherwise extension

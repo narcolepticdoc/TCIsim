@@ -442,6 +442,39 @@ console.log('\n=== TEST 15: Extended-case tail — no steady-state rate oscillat
   }
 }
 
+console.log('\n=== TEST 16: Fine grid engages near saturation, not during loading ===');
+{
+  // Regression guard for the saturation-based trigger. The fine tail grid must
+  // NOT engage while the rate is still descending far above steady state (the
+  // per-step trigger's flaw engaged it at V3 ~20-32%, rate 40-50% above SS).
+  // It must (a) leave the whole coarse descent free of rate reversals, and
+  // (b) only switch when the rate is within a few coarse steps of the analytic
+  // SS rate. mcg/kg/min (coarsest unit) is the worst case.
+  const toMkm=(mg)=>mg*1000/70;
+  const GRID=5; // coarse mcg/kg/min step
+  const isFine=(v)=>{const m=toMkm(v);return Math.abs(m-Math.round(m/5)*5)>1e-6;};
+  for (const target of [2.0, 3.0, 3.5, 5.0]) {
+    const scheme=planTCISchemeQuantized(createEngine(params), createEngine(params).getState(), 0, target,
+      { rateDisplayUnit:'mcg/kg/min' });
+    const rates=scheme.filter(s=>s.type==='rate' && s.value>0);
+    const ssMkm=toMkm(computeSteadyStateRate(createEngine(params), target));
+    const first=rates.find(r=>isFine(r.value));
+
+    // (a) no coarse-grid reversals before the fine grid engages
+    const coarse=rates.filter(r=>!first || r.time<first.time);
+    let rev=0,last=0;
+    for(let i=1;i<coarse.length;i++){const d=coarse[i].value-coarse[i-1].value;if(Math.abs(d)<1e-9)continue;const dir=Math.sign(d);if(last!==0&&dir!==last)rev++;last=dir;}
+    assert(rev===0, `No coarse-grid rate reversals before fine engages at Ce ${target} (got ${rev})`);
+
+    // (b) fine grid engages only near SS (within 4 coarse steps of the SS rate)
+    if (first) {
+      const gap=Math.abs(toMkm(first.value)-ssMkm);
+      console.log(`  Ce ${target}: first fine ${toMkm(first.value).toFixed(1)}, SS ${ssMkm.toFixed(1)}, gap ${gap.toFixed(1)} mcg/kg/min`);
+      assert(gap <= 4*GRID, `Fine grid engages within 4 coarse steps of SS at Ce ${target} (gap ${gap.toFixed(1)})`);
+    }
+  }
+}
+
 // ---- SUMMARY ----
 console.log(`\n${'='.repeat(50)}`);
 console.log(`  RESULTS: ${passed} passed, ${failed} failed`);
