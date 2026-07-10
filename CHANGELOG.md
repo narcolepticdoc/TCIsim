@@ -11,11 +11,11 @@
 
 ---
 
-## [0.5.44.6] — 2026-07-10
+## [0.5.44.7] — 2026-07-10
 
 Bug fix — TCI planner (cet-emulation).
 
-- **Fine maintenance-tail grid now engages near saturation, not during loading.** Follow-up to the v0.5.44.4 two-tier grid fix. That change switched to the fine (÷10) grid when the per-step rate decline fell below one grid step — but the adaptive extend-loop makes early maintenance steps short, so their per-step decline drops below a grid step while the rate is still 40–50% above steady state. The fine grid was therefore engaging very early (V3 only ~20–32% saturated, ~45–85 min in), so the slowly-descending maintenance rates showed fine `.5` increments through the whole active case instead of clean coarse numbers. The trigger now keys off **proximity to the analytic steady-state rate** (`computeSteadyStateRate`): it stays on the coarse display grid — a clean descending staircase riding the upper tolerance band, the intended loading behaviour — until the rate is within a few coarse steps of steady state (≈V3 65–85%), then refines. No coarse-grid oscillation anywhere, far-tail behaviour unchanged, and it still self-re-arms across target changes. Loading-phase behaviour (rate descent and tolerance-band tracking) is otherwise unchanged.
+- **Maintenance rates stay on the coarsest readable grid, refining only as needed.** Follow-up to the v0.5.44.4 two-tier grid fix. That change dropped straight to a fine (÷10) grid, and it engaged the switch too early — so the slowly-descending maintenance rates showed fine `.5` increments during the clinically active 3–8 h window instead of clean coarse numbers. The correction loop now uses a **progressive multi-tier grid**: it descends on the base display grid (5 mcg/kg/min), and only when that grid would start to hunt near steady state does it refine one tier at a time — `5 → 1 → 0.5 → 0.1 mcg/kg/min` (divisors of each unit's own grid, so it generalises to mL/h and mg/min and to other drugs). Refinement is triggered by a **genuine rate reversal**, detected and backtracked one step, so the plan never emits a coarse-grid reversal (the extended-case sawtooth) and stays on clean integer rates through the active case — e.g. a Ce 3.5–5 case shows round 5-grid (then 1-grid) numbers across essentially the whole 3–8 h window, dropping to decimals only in the far tail or at very low targets. Fully adaptive (no steady-state-rate estimate or tuning constant); the intended loading-phase behaviour (rate descent riding the upper tolerance band) is unchanged, and it self-re-arms across target changes.
 
 ## [0.5.44.5] — 2026-07-09
 

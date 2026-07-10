@@ -4,34 +4,47 @@
 
 ## Session History
 
-### Fine-grid trigger keyed to saturation, not per-step decline (v0.5.44.6) — Interim
+### Progressive multi-tier maintenance grid (v0.5.44.7) — Interim
 
 Follow-up to the v0.5.44.4 two-tier grid fix. Reported from the History view: for a
-35 M/70 kg case the fine (÷10) grid engaged at ~45–85 min (rates showing `.5`
-increments like 106.5, 101.5) — well before compartment filling. Confirmed against
-the real planner: the fine grid engaged at V3 only 20–32% saturated, when the exact
-rate was still 40–51% above the steady-state rate. Root cause: the v0.5.44.4 trigger
-(`|Δexact| < one grid step` between consecutive emitted steps) is a poor saturation
-proxy — the adaptive extend-loop (`emulation.js`) makes early maintenance steps short
-(~PROBE), so each step's rate decline is small even while the total remaining descent
-is large.
+35 M/70 kg case the fine (÷10) grid engaged well before compartment filling (rates
+showing `.5` increments like 106.5, 101.5 during the active case). The v0.5.44.4
+trigger (`|Δexact| < one grid step`) is a poor saturation proxy — the extend-loop
+makes early maintenance steps short, so the per-step decline drops below a grid step
+while the rate is still ~40–50% above steady state. An interim saturation-proximity
+trigger (`|exact − ssRate| < 3·gridStep`) improved it but still keyed off an estimate.
 
-Fix: trigger on **proximity to steady state** instead. `computeSteadyStateRate(engine,
-ceTarget)` is state-independent (pure system-matrix inverse), so it is computed once
-before the correction loop; the loop latches to the fine grid when
-`|exact − ssRate| < SS_PROXIMITY_STEPS (3) × rateStepMg`. Validated across targets
-{2,3,3.5,5} and both patient types (M70 non-op, F70 opioid): zero coarse-grid
-reversals, fine grid engages at V3 ~64–84% for the reference male (≈4–7 h in), far-tail
-amplitude unchanged (0.01–0.06 µg/mL). K=3 gives margin: for a SS rate near a grid
-midpoint the coarse grid cannot hold, so fine must engage a few steps before full
-saturation to pre-empt coarse hunting (fundamental to a coarse actuator, not a tuning
-miss). The old-vs-new comparison confirmed the loading-phase Ce band-riding (rate
-descent riding the upper ±CE_TOL edge, briefly to ~+2.1%) is pre-existing and identical
-in the all-coarse planner — an accepted compromise for fast, non-oscillating loading —
-so it is deliberately left unchanged. `emulation.js` only (drop `FINE_TRIGGER_FRAC`/
-`prevExact`, add the SS-proximity latch); regression guard `tests/test-tci-scheme.mjs`
-TEST 16 (no coarse reversals before engagement; fine engages within 4 coarse steps of
-the SS rate).
+The design landed on a **progressive multi-tier grid** driven by the clinical
+priority: clean coarse (integer) numbers through the **3–8 h window at Ce 2–5** matter;
+11–16 h far-tail smoothness does not. The correction loop descends on the base display
+grid and refines one tier at a time — divisors `[1, 5, 10, 50]` → `5 → 1 → 0.5 → 0.1
+mcg/kg/min` (relative to each unit's own grid, so it generalises to mL/h, mg/min, and
+other drugs). Refinement fires on a **genuine reversal**: when the current tier's
+snapped rate would strictly *rise* above the last emitted rate (the grid has bottomed
+out and is about to hunt), the loop refines (`tier++`) and **backtracks one step** —
+restoring engine state / scheme / time before re-emitting on the finer grid. Repeats
+(round-to-nearest flats) do not trigger; only a strict up-move does — so the plan never
+emits a reversal at any tier. Backtrack is required: without it the over-descended step
+causes a Ce dip and a real rate bounce.
+
+Design exploration (all validated against the real planner): the alternative "wait for
+the coarse grid to stall (repeat)" is equivalent to the per-step trigger and mis-fires
+early (round-to-nearest makes a still-descending rate look like a repeat); the reversal
+signal is unambiguous. Measured across 48–60 cases (2 patients × weights × targets):
+**zero base-grid reversals** everywhere; the 3–8 h window stays on the clean 5-grid for
+~93 % of Ce 3.5 and 100 % of Ce 5 (multi-tier keeps Ce 2–3 on integers — 5s then 1s —
+where single-tier ÷10 would show `.5` decimals for 20–47 % of the window); costs (a
+rougher band-riding far tail ~0.09 µg/mL and a ~−2 % transition dip) land at 10–16 h,
+the clinically irrelevant zone. Some cases legitimately never refine (coarse grid holds
+— ideal). Fully adaptive: no `computeSteadyStateRate`, no tuning constant. Loading-phase
+band-riding (to ~+2.1 %) is pre-existing and unchanged.
+
+`js/sim/tci/shared.js` adds `qRateDiv(mgMin, divisor)` to `makeQuantizers` (replacing the
+single `qRateFine`/`TAIL_GRID_DIVISOR`); `js/sim/tci/emulation.js` correction loop tracks
+a `tier` index + `lastRate` + a backtrack checkpoint. Regression guards rewritten:
+`tests/test-tci-scheme.mjs` TEST 15 (zero base-grid reversals; Ce converges within the
+band-riding envelope; target-change re-arm) and TEST 16 (active phase <2 h stays on the
+5-grid; finer tiers appear only later).
 
 ### Restyle the Add Event button (v0.5.44.5) — Interim
 

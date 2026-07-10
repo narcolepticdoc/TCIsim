@@ -27,7 +27,7 @@ import { DEFAULT_SCHEME_CONFIG, makeQuantizers, plannerBolusDelivery, waitForDec
 
 export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, config = {}) {
   const cfg = { ...DEFAULT_SCHEME_CONFIG, ...config };
-  const { qBolus, qRate, qRateFine } = makeQuantizers(cfg);
+  const { qBolus, qRate, qRateDiv } = makeQuantizers(cfg);
   const scheme = [];
 
   if (ceTarget <= 0) {
@@ -456,9 +456,9 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   // after PROBE minutes, then extend the step as long as Ce stays within ±CE_TOL.
   // This gives tight control when V3 equilibrates fast (~15-30 min steps early)
   // and relaxed control when the rate barely changes (~60-90 min steps late).
-  // Tracks whether the correction loop converged into the fine-tail grid, so the
-  // terminal SS-rate append (after this block) can match it.
-  let endedFine = false;
+  // Tracks which grid tier the correction loop finished on, so the terminal
+  // SS-rate append (after this block) can snap on the same grid.
+  let endedTier = 0;
   {
     // PROBE scales with ke0: Ce needs ~2τ = 2/ke0 to meaningfully respond
     // to a rate change. Clamped to a 10-min clinical floor (keep plans
@@ -519,31 +519,36 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
       // peak) produced clinically significant undershoot (~14% below
       // target for tens of minutes). See TCI-TOLERANCE-ANALYSIS.md §8
       // before attempting peak-awareness here again.
-      // Two-tier quantization. The maintenance rate declines monotonically as
-      // V2/V3 fill; the whole active case is a clean descending staircase on the
-      // normal display grid (…105, 100, 95), deliberately riding the upper
-      // tolerance band — the accepted loading-phase overshoot. Only near steady
-      // state does the coarse grid fail: the true SS rate lands between grid
-      // points, so the loop would flip-flop (the extended-case sawtooth). From
-      // there, snap on a TAIL_GRID_DIVISOR-finer grid, whose ½-step settled-Ce
-      // offset stays under CE_TOL, so the rate settles instead of hunting.
+      // Progressive multi-tier quantization. The maintenance rate declines
+      // monotonically as V2/V3 fill; the whole active case is a clean descending
+      // staircase on the normal display grid (…105, 100, 95), deliberately
+      // riding the upper tolerance band — the accepted loading-phase overshoot.
+      // Only near steady state does a grid tier fail: the required rate lands
+      // between its grid points, so the loop would flip-flop (the extended-case
+      // sawtooth). When that happens we refine to the next-finer tier and keep
+      // going, so the plan stays on the coarsest readable grid that still works.
       //
-      // Trigger = SATURATION, not per-step decline. Latch to the fine grid once
-      // the exact rate is within SS_PROXIMITY_STEPS coarse grid steps of the
-      // analytic steady-state rate (ssRateProx). ssRateProx is state-independent
-      // (pure system-matrix inverse), so compute it once. Keying off proximity
-      // to the SS rate — rather than the per-step decline, which the extend-loop
-      // makes small even while the rate is still far above SS — defers the fine
-      // grid to genuine near-saturation (≈V3 65–85%). K=3 gives margin: for a SS
-      // rate near a grid midpoint the coarse grid cannot hold, so fine must
-      // engage a few steps early to pre-empt coarse hunting. rateStepMg is the
-      // normal grid step in mg/min (0 when quantization is off → always normal).
+      // Trigger = a genuine REVERSAL, detected + backtracked. Descend on the
+      // current tier; the moment the tier-snapped rate would strictly RISE above
+      // the last emitted rate, that tier has bottomed out and is about to hunt —
+      // so refine (tier++) and BACKTRACK one step (undo the over-descended step,
+      // restoring engine state / scheme / time) before re-emitting on the finer
+      // grid. Repeats (flat steps from round-to-nearest) do NOT trigger — only a
+      // strict up-move — so the plan never emits a reversal at any tier. Tiers
+      // step the display grid down by TIER_DIV (÷1, ÷5, ÷10, ÷50 → e.g. 5, 1,
+      // 0.5, 0.1 mcg/kg/min); the divisors are relative to the unit's own grid,
+      // so this generalises to every rate unit and drug. Fully adaptive: no
+      // steady-state-rate estimate, no magic threshold. rateStepMg is the base
+      // grid step in mg/min (0 when quantization is off → stays on tier 0 = the
+      // identity qRate, i.e. current un-quantized behaviour).
       const rateStepMg = rateGridStepMgMin(cfg);
-      const ssRateProx = computeSteadyStateRate(engine, ceTarget);
-      const SS_PROXIMITY_STEPS = 3;
-      let useFine = false;
+      const TIER_DIV = [1, 5, 10, 50];
+      let tier = 0;
+      let lastRate = Infinity;         // last emitted rate (mg/min), current tier
+      let backState = null, backT = 0, backLen = 0; // checkpoint before last step
       for (let t = corrStart; t < corrEnd; ) {
         const state = engine.getState();
+        const lenBefore = scheme.length;
 
         // Binary search: rate where Ce = ceTarget after PROBE minutes.
         let lo = 0, hi = cfg.maxRate;
@@ -555,19 +560,24 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
         }
         const exact = (lo + hi) / 2;
 
-        // Latch into the fine tail grid once the exact rate is within
-        // SS_PROXIMITY_STEPS coarse steps of the analytic SS rate — i.e. V3 is
-        // nearly saturated and the coarse grid can no longer step cleanly.
-        // Monotonic approach, so it never un-latches within a plan.
-        if (!useFine && rateStepMg > 0 && ssRateProx != null &&
-            Math.abs(exact - ssRateProx) < SS_PROXIMITY_STEPS * rateStepMg) {
-          useFine = true;
+        // Reversal at the current tier → refine + backtrack the over-step.
+        if (tier < TIER_DIV.length - 1 && rateStepMg > 0 &&
+            qRateDiv(exact, TIER_DIV[tier]) > lastRate + 1e-9) {
+          tier++;
+          lastRate = Infinity;         // reset tracker for the finer tier
+          if (backState) {
+            engine.setState(backState);
+            scheme.length = backLen;
+            t = backT;
+            continue;                  // re-run the undone step on the finer grid
+          }
         }
 
-        // Quantize BEFORE the forward-probe extension loop so the probe
-        // uses the same rate the pump will deliver — otherwise extension
-        // stops too early (or too late) under display-unit rounding.
-        const rate = useFine ? qRateFine(exact) : qRate(exact);
+        // Quantize BEFORE the forward-probe extension loop so the probe uses the
+        // same rate the pump will deliver (else extension stops early/late).
+        const rate = qRateDiv(exact, TIER_DIV[tier]);
+        lastRate = rate;
+        backState = state; backT = t; backLen = lenBefore;
 
         // Probe forward: extend this rate while Ce stays within tolerance
         let dur = PROBE;
@@ -583,15 +593,17 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
         engine.advance(dur, rate);
         t += dur;
       }
-      endedFine = useFine;
+      endedTier = tier;
     }
   }
 
-  // Append analytical SS rate beyond the correction horizon for t → ∞.
-  // Match the grid the correction loop ended on so the tail stays consistent:
-  // fine grid if the loop converged into the fine-tail regime, normal otherwise.
+  // Append analytical SS rate beyond the correction horizon for t → ∞. Snap on
+  // the same grid tier the correction loop ended on so the tail stays consistent.
+  const TERMINAL_TIER_DIV = [1, 5, 10, 50];
   const ssRateRaw = computeSteadyStateRate(engine, ceTarget);
-  const ssRate = ssRateRaw != null ? (endedFine ? qRateFine(ssRateRaw) : qRate(ssRateRaw)) : null;
+  const ssRate = ssRateRaw != null
+    ? qRateDiv(ssRateRaw, TERMINAL_TIER_DIV[Math.min(endedTier, TERMINAL_TIER_DIV.length - 1)])
+    : null;
   if (ssRate != null && scheme.length > 0) {
     const lastRateEvt = [...scheme].reverse().find(s => s.type === 'rate');
     // Denominator floor: a 0-rate last step must not become 0/0 → NaN and
