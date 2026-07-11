@@ -4,6 +4,54 @@
 
 ## Session History
 
+### Progressive multi-tier maintenance grid (v0.5.44.8) — Interim
+
+Follow-up to the v0.5.44.4 two-tier grid fix. Reported from the History view: for a
+35 M/70 kg case the fine (÷10) grid engaged well before compartment filling (rates
+showing `.5` increments like 106.5, 101.5 during the active case). The v0.5.44.4
+trigger (`|Δexact| < one grid step`) is a poor saturation proxy — the extend-loop
+makes early maintenance steps short, so the per-step decline drops below a grid step
+while the rate is still ~40–50% above steady state. An interim saturation-proximity
+trigger (`|exact − ssRate| < 3·gridStep`) improved it but still keyed off an estimate.
+
+The design landed on a **progressive multi-tier grid** driven by the clinical
+priority: clean coarse (integer) numbers through the **3–8 h window at Ce 2–5** matter;
+11–16 h far-tail smoothness does not. The correction loop descends on the base display
+grid and refines one tier at a time — divisors `[1, 5, 10, 50]` → `5 → 1 → 0.5 → 0.1
+mcg/kg/min` (relative to each unit's own grid, so it generalises to mL/h, mg/min, and
+other drugs). Refinement fires on a **genuine direction reversal**: when the tier-snapped rate changes
+direction (down-then-up in a descent, or up-then-down) the grid has stopped tracking and
+is about to hunt, so the loop refines (`tier++`) and **backtracks one step** — restoring
+engine state / scheme / time before re-emitting on the finer grid. Only a direction
+*change* triggers — not any up-move — which is what makes it robust to a target
+**decrease**: after a drop, the required rate legitimately *rises* as V3 releases drug,
+and an earlier "strict up-move" trigger mistook that monotone ascent for hunting and
+cascaded straight to fine decimals (reported from the History view: a 3.5→2 drop showed
+58.4/61.6/63.2 …). Tracking the trend direction keeps that ascent (and its later
+decline) on clean integer rates, refining only at the actual near-SS hunt. Backtrack is
+required: without it the over-shot step causes a Ce dip and a real rate bounce.
+
+Design exploration (all validated against the real planner): "wait for the coarse grid
+to stall (repeat)" is equivalent to the per-step trigger and mis-fires early; "strict
+up-move" breaks on target decreases; a saturation-`finalTier` variant left the decrease
+transient hunting on the coarse grid — the direction-reversal signal is the one that is
+both unambiguous and direction-agnostic. Measured across 48–60 cases (2 patients ×
+weights × targets):
+**zero base-grid reversals** everywhere; the 3–8 h window stays on the clean 5-grid for
+~93 % of Ce 3.5 and 100 % of Ce 5 (multi-tier keeps Ce 2–3 on integers — 5s then 1s —
+where single-tier ÷10 would show `.5` decimals for 20–47 % of the window); costs (a
+rougher band-riding far tail ~0.09 µg/mL and a ~−2 % transition dip) land at 10–16 h,
+the clinically irrelevant zone. Some cases legitimately never refine (coarse grid holds
+— ideal). Fully adaptive: no `computeSteadyStateRate`, no tuning constant. Loading-phase
+band-riding (to ~+2.1 %) is pre-existing and unchanged.
+
+`js/sim/tci/shared.js` adds `qRateDiv(mgMin, divisor)` to `makeQuantizers` (replacing the
+single `qRateFine`/`TAIL_GRID_DIVISOR`); `js/sim/tci/emulation.js` correction loop tracks
+a `tier` index + `lastRate` + a backtrack checkpoint. Regression guards rewritten:
+`tests/test-tci-scheme.mjs` TEST 15 (zero base-grid reversals; Ce converges within the
+band-riding envelope; target-change re-arm) and TEST 16 (active phase <2 h stays on the
+5-grid; finer tiers appear only later).
+
 ### Restyle the Add Event button (v0.5.44.5) — Interim
 
 Cosmetic follow-up to the notes-button restyle. The `#btn-add-event` label in the

@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.44.8] — 2026-07-10
+
+Bug fix — TCI planner (cet-emulation).
+
+- **Maintenance rates stay on the coarsest readable grid, refining only as needed — in both directions.** Follow-up to the v0.5.44.4 two-tier grid fix. That change dropped straight to a fine (÷10) grid and engaged too early, so the slowly-changing maintenance rates showed fine `.5` decimals during the clinically active 3–8 h window instead of clean coarse numbers. The correction loop now uses a **progressive multi-tier grid**: it tracks the rate on the base display grid (5 mcg/kg/min) and only when that grid starts to *hunt* near steady state does it refine one tier at a time — `5 → 1 → 0.5 → 0.1 mcg/kg/min` (divisors of each unit's own grid, so it generalises to mL/h, mg/min and other drugs). Refinement is triggered by a **genuine direction reversal** on the grid (down-then-up or up-then-down), detected and backtracked one step — *not* by any single up-move. That distinction matters: on a target **decrease** the required rate legitimately rises as the deep compartment releases drug, and the earlier build mistook that ascent for hunting and cascaded straight to fine decimals; the plan now keeps that transient on clean integer rates. The plan never emits a coarse-grid reversal (the extended-case sawtooth) and stays on round 5-grid (then 1-grid) numbers through the active case — e.g. a Ce 3.5–5 induction is ~93–100% on the 5-grid across 3–8 h. Fully adaptive (no steady-state-rate estimate or tuning constant); the intended loading-phase behaviour is unchanged, and it self-re-arms across target changes.
+
 ## [0.5.44.5] — 2026-07-09
 
 UI tweak.

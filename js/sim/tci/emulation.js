@@ -27,7 +27,7 @@ import { DEFAULT_SCHEME_CONFIG, makeQuantizers, plannerBolusDelivery, waitForDec
 
 export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, config = {}) {
   const cfg = { ...DEFAULT_SCHEME_CONFIG, ...config };
-  const { qBolus, qRate, qRateFine } = makeQuantizers(cfg);
+  const { qBolus, qRate, qRateDiv } = makeQuantizers(cfg);
   const scheme = [];
 
   if (ceTarget <= 0) {
@@ -456,9 +456,9 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
   // after PROBE minutes, then extend the step as long as Ce stays within ±CE_TOL.
   // This gives tight control when V3 equilibrates fast (~15-30 min steps early)
   // and relaxed control when the rate barely changes (~60-90 min steps late).
-  // Tracks whether the correction loop converged into the fine-tail grid, so the
-  // terminal SS-rate append (after this block) can match it.
-  let endedFine = false;
+  // Tracks which grid tier the correction loop finished on, so the terminal
+  // SS-rate append (after this block) can snap on the same grid.
+  let endedTier = 0;
   {
     // PROBE scales with ke0: Ce needs ~2τ = 2/ke0 to meaningfully respond
     // to a rate change. Clamped to a 10-min clinical floor (keep plans
@@ -519,21 +519,40 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
       // peak) produced clinically significant undershoot (~14% below
       // target for tens of minutes). See TCI-TOLERANCE-ANALYSIS.md §8
       // before attempting peak-awareness here again.
-      // Two-tier quantization. While the required rate is still declining by
-      // more than one normal grid step per probe (V2/V3 filling fast), snap on
-      // the normal display grid — a clean descending staircase (…105, 100, 95).
-      // Once the per-probe change falls below one grid step, the normal grid can
-      // no longer take a genuine step down: it would stall between two grid
-      // lines and flip-flop (the extended-case sawtooth). From there, snap on a
-      // TAIL_GRID_DIVISOR-finer grid, whose ½-step settled-Ce offset stays under
-      // CE_TOL, so the rate settles instead of hunting. rateStepMg is the normal
-      // grid step in mg/min (0 when quantization is off → always normal branch).
+      // Progressive multi-tier quantization. During loading the maintenance rate
+      // moves across many grid cells, so the base display grid tracks it as a
+      // clean staircase (…105, 100, 95 on the way up or down), riding the upper
+      // tolerance band. Only near steady state can a grid tier fail: if the
+      // steady-state rate lands between that tier's grid points by more than the
+      // tolerance, the loop would flip-flop (the extended-case sawtooth). We then
+      // refine to a finer tier so the tail settles. Tiers step the display grid
+      // down by TIER_DIV (÷1, ÷5, ÷10, ÷50 → e.g. 5, 1, 0.5, 0.1 mcg/kg/min);
+      // divisors are relative to the unit's own grid, so this generalises to
+      // every rate unit and drug.
+      //
+      // Trigger = a genuine DIRECTION REVERSAL on the current tier, detected +
+      // backtracked. A monotone move — descent (induction) or ascent (the rate
+      // rising as V3 releases after a target DECREASE) — never reverses on the
+      // grid, so it stays coarse. Only when the tier-snapped rate changes
+      // direction (down-then-up, or up-then-down) has that grid stopped tracking
+      // and started to hunt; we then refine one tier and BACKTRACK the last
+      // (over-shot) step, restoring engine state / scheme / time before
+      // re-emitting on the finer grid. Keying off direction change — not "any
+      // up-move" — is what makes it robust to the non-monotone post-decrease
+      // profile (a rate rising toward steady state is not hunting). Tiers step
+      // the display grid down by TIER_DIV (÷1, ÷5, ÷10, ÷50 → e.g. 5, 1, 0.5,
+      // 0.1 mcg/kg/min); divisors are relative to the unit's own grid, so this
+      // generalises to every rate unit and drug. rateStepMg is the base grid
+      // step in mg/min (0 when quantization is off → stays on tier 0 = identity).
       const rateStepMg = rateGridStepMgMin(cfg);
-      const FINE_TRIGGER_FRAC = 1.0; // switch once |Δexact| < one grid step/probe
-      let prevExact = null;
-      let useFine = false;
+      const TIER_DIV = [1, 5, 10, 50];
+      let tier = 0;
+      let lastRate = Infinity;         // last emitted rate (mg/min), current tier
+      let lastDir = 0;                 // established trend: -1 down, +1 up, 0 none
+      let backState = null, backT = 0, backLen = 0; // checkpoint before last step
       for (let t = corrStart; t < corrEnd; ) {
         const state = engine.getState();
+        const lenBefore = scheme.length;
 
         // Binary search: rate where Ce = ceTarget after PROBE minutes.
         let lo = 0, hi = cfg.maxRate;
@@ -545,18 +564,31 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
         }
         const exact = (lo + hi) / 2;
 
-        // Latch into the fine tail grid once corrections converge below one
-        // normal grid step (monotonic decline, so it never un-latches).
-        if (!useFine && prevExact !== null && rateStepMg > 0 &&
-            Math.abs(exact - prevExact) < FINE_TRIGGER_FRAC * rateStepMg) {
-          useFine = true;
-        }
-        prevExact = exact;
+        // Direction of the candidate move on the current tier's grid.
+        const cand = qRateDiv(exact, TIER_DIV[tier]);
+        const dir = !isFinite(lastRate) ? 0
+          : (cand > lastRate + 1e-9 ? 1 : (cand < lastRate - 1e-9 ? -1 : 0));
 
-        // Quantize BEFORE the forward-probe extension loop so the probe
-        // uses the same rate the pump will deliver — otherwise extension
-        // stops too early (or too late) under display-unit rounding.
-        const rate = useFine ? qRateFine(exact) : qRate(exact);
+        // Genuine reversal (trend flips) → refine one tier + backtrack the
+        // over-shot step. Repeats (dir 0) and monotone moves do not trigger.
+        if (tier < TIER_DIV.length - 1 && rateStepMg > 0 &&
+            lastDir !== 0 && dir !== 0 && dir !== lastDir) {
+          tier++;
+          lastRate = Infinity; lastDir = 0;
+          if (backState) {
+            engine.setState(backState);
+            scheme.length = backLen;
+            t = backT;
+            continue;                  // re-run the undone step on the finer grid
+          }
+        }
+
+        // Quantize BEFORE the forward-probe extension loop so the probe uses the
+        // same rate the pump will deliver (else extension stops early/late).
+        const rate = qRateDiv(exact, TIER_DIV[tier]);
+        if (dir !== 0) lastDir = dir;
+        lastRate = rate;
+        backState = state; backT = t; backLen = lenBefore;
 
         // Probe forward: extend this rate while Ce stays within tolerance
         let dur = PROBE;
@@ -572,15 +604,17 @@ export function planTCISchemeEmulation(engine, startState, startTime, ceTarget, 
         engine.advance(dur, rate);
         t += dur;
       }
-      endedFine = useFine;
+      endedTier = tier;
     }
   }
 
-  // Append analytical SS rate beyond the correction horizon for t → ∞.
-  // Match the grid the correction loop ended on so the tail stays consistent:
-  // fine grid if the loop converged into the fine-tail regime, normal otherwise.
+  // Append analytical SS rate beyond the correction horizon for t → ∞. Snap on
+  // the same grid tier the correction loop ended on so the tail stays consistent.
+  const TERMINAL_TIER_DIV = [1, 5, 10, 50];
   const ssRateRaw = computeSteadyStateRate(engine, ceTarget);
-  const ssRate = ssRateRaw != null ? (endedFine ? qRateFine(ssRateRaw) : qRate(ssRateRaw)) : null;
+  const ssRate = ssRateRaw != null
+    ? qRateDiv(ssRateRaw, TERMINAL_TIER_DIV[Math.min(endedTier, TERMINAL_TIER_DIV.length - 1)])
+    : null;
   if (ssRate != null && scheme.length > 0) {
     const lastRateEvt = [...scheme].reverse().find(s => s.type === 'rate');
     // Denominator floor: a 0-rate last step must not become 0/0 → NaN and
