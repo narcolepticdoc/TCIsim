@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.44.10] — 2026-07-12
+
+Bug fix — landscape font inflation (iOS Safari).
+
+- **Text no longer renders oversized in landscape.** On iOS Safari the setup screen (and any wide text block) rendered its fonts noticeably larger in landscape than in portrait — the model description, the "Plan rounds to…" line, and the dropdown values all ballooned once the phone was rotated. Cause: the page never pinned `text-size-adjust`, so WebKit's automatic text-inflation heuristic kicked in and scaled fonts up based on the width of their containing block (which grows in landscape), independent of the authored CSS `font-size`. Added `-webkit-text-size-adjust:100%; text-size-adjust:100%` to the root `html,body` rule (the standard normalize.css fix), which disables the inflation so every viewport renders the authored sizes. Portrait was already close to the authored sizes and is visually unchanged; landscape now matches it. CSS-only, one declaration; no behaviour change.
+
 ## [0.5.44.9] — 2026-07-12
 
 Bug fix — Patient Demographics modal (landscape / short viewport).

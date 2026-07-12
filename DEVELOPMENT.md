@@ -4,6 +4,33 @@
 
 ## Session History
 
+### Landscape font inflation fixed with text-size-adjust (v0.5.44.10) — Interim
+
+Reported after the v0.5.44.9 modal fix: on the same phone, the setup screen's
+fonts looked inconsistently large in landscape versus portrait — the Eleveld
+model description, the "Plan rounds to…" rounding note, and the dropdown values
+all appeared roughly 2× bigger once rotated to landscape.
+
+Diagnosis ruled out CSS: a headless render at 874×402 (landscape) and 402×874
+(portrait) reported *identical* computed `font-size` for every element measured
+(`.rounding-note` 10px, `.model-info-desc` 10px, `.form-row select` 14px in both
+orientations). The divergence only appears on a real device, which points at
+WebKit's **automatic text inflation** ("font boosting"): to keep body text
+legible when a wide block would otherwise be zoomed, the engine scales fonts up
+by a factor derived from the containing block's width relative to the viewport.
+In landscape the setup form sits in a `flex-direction:row` layout and its text
+blocks are wider, so the heuristic inflated them; the narrow portrait column did
+not trigger it. The page had never set `text-size-adjust`, so the default
+(`auto`) left inflation enabled — Chromium (and our `user-scalable=no` viewport)
+happen not to inflate, which is why the headless numbers looked fine.
+
+Fix is the standard normalize.css declaration on the root: `-webkit-text-size-adjust:100%; text-size-adjust:100%` added to the existing
+`html,body` rule. `100%` (rather than `none`) disables inflation while still
+honouring the user's OS/browser text-zoom preference. Verified the property
+computes to `100%` and the authored font sizes are unchanged in headless; on iOS
+Safari this makes landscape render the same authored sizes as portrait. One CSS
+declaration, no markup or JS change.
+
 ### Patient Demographics modal side-by-side on short landscape (v0.5.44.9) — Interim
 
 Reported from a small landscape screen: the Patient Demographics entry panel
