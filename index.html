@@ -119,7 +119,7 @@
     .patient-summary-placeholder[hidden]{display:none}
     .patient-summary-icon{color:var(--text-muted);font-size:14px;margin-left:10px}
     /* Patient Demographics modal */
-    .modal-patient-box{max-width:480px;width:96%;padding:20px}
+    .modal-patient-box{max-width:480px;width:96%;padding:20px;max-height:92vh;overflow-y:auto}
     .pm-header{display:flex;align-items:center;justify-content:space-between;margin:0 0 14px;gap:10px}
     .pm-title{font-family:var(--font-mono);font-size:14px;color:var(--text-secondary);letter-spacing:2px;text-transform:uppercase;margin:0;font-weight:500}
     .pm-units{flex-shrink:0}
@@ -672,6 +672,14 @@
       .keypad-display{min-height:36px;font-size:22px;padding:6px 8px}
       .key{font-size:15px;padding:7px 0}
       .modal-actions button{padding:6px 12px;font-size:11px}
+      /* Patient modal: tighten so fields + keypad + confirm fit a short
+         landscape viewport (falls back to scroll via max-height/overflow). */
+      .modal-patient-box{padding:12px}
+      .pm-header{margin:0 0 8px}
+      .pm-field{padding:5px 12px;margin-bottom:4px}
+      .pm-value{font-size:16px}
+      .pm-keypad{gap:4px;margin:8px 0}
+      .pm-key{font-size:16px;padding:8px 0}
     }
 
     /* ==== PORTRAIT LAYOUT — chart top, drugs bottom ==== */

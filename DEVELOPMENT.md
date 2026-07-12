@@ -4,6 +4,28 @@
 
 ## Session History
 
+### Patient Demographics modal fits short landscape viewports (v0.5.44.9) — Interim
+
+Reported from a small landscape screen: the Patient Demographics entry panel
+(sex toggle + age/height/weight fields + built-in numeric keypad + Cancel/Confirm)
+overflowed the viewport. `.modal-patient-box` had no `max-height`, and
+`.modal-overlay` centres its child with `align-items:center`, so on a short
+landscape viewport the box was taller than the screen and got clipped at *both*
+ends — the "Patient Demographics" header disappeared above the top edge and the
+keypad's bottom row plus the Cancel/Confirm buttons disappeared below the bottom
+edge, with no scroll affordance to reach them.
+
+Fix mirrors the existing `.modal-evt-editor` overflow pattern: cap the box at
+`max-height:92vh` with `overflow-y:auto` so it always sits inside the viewport and
+scrolls internally when the content is taller. Added a short-landscape media query
+(reusing the existing `max-width:900px and max-height:420px` phone-landscape block)
+that tightens `.modal-patient-box` padding, `.pm-field`/`.pm-value` sizing, and the
+`.pm-keypad`/`.pm-key` spacing so the panel fits with little or no scrolling on
+typical landscape phones. Verified with a headless render at 1024×470: pre-fix the
+box was ~606 px tall in a 470 px viewport (clipped both ends); post-fix it caps at
+432 px, header visible, and the Confirm button is reachable via internal scroll.
+No JS or behaviour change — CSS only.
+
 ### Progressive multi-tier maintenance grid (v0.5.44.8) — Interim
 
 Follow-up to the v0.5.44.4 two-tier grid fix. Reported from the History view: for a

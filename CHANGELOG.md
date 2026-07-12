@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.44.9] — 2026-07-12
+
+Bug fix — Patient Demographics modal (landscape / short viewport).
+
+- **Patient entry panel no longer clips off-screen on short landscape displays.** The `.modal-patient-box` had no height cap, and the modal overlay centres its box vertically (`align-items:center`), so on a short landscape viewport (e.g. a phone or iPad in landscape) the sex + age/height/weight fields, numeric keypad, and Confirm button together exceeded the viewport height — the header ran off the top and the keypad's bottom row plus the Cancel/Confirm buttons ran off the bottom, with no way to scroll to them. The box now caps at `max-height:92vh` with `overflow-y:auto` (the same pattern already used by the event-editor modal), so it always fits within the viewport and scrolls internally when needed. A short-landscape media query (`max-width:900px and max-height:420px`) additionally tightens the modal padding, field heights, and keypad so the whole panel fits with minimal or no scrolling.
+
 ## [0.5.44.8] — 2026-07-10
 
 Bug fix — TCI planner (cet-emulation).
