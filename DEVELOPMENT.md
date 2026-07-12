@@ -4,27 +4,45 @@
 
 ## Session History
 
-### Patient Demographics modal fits short landscape viewports (v0.5.44.9) — Interim
+### Patient Demographics modal side-by-side on short landscape (v0.5.44.9) — Interim
 
 Reported from a small landscape screen: the Patient Demographics entry panel
 (sex toggle + age/height/weight fields + built-in numeric keypad + Cancel/Confirm)
 overflowed the viewport. `.modal-patient-box` had no `max-height`, and
 `.modal-overlay` centres its child with `align-items:center`, so on a short
-landscape viewport the box was taller than the screen and got clipped at *both*
-ends — the "Patient Demographics" header disappeared above the top edge and the
-keypad's bottom row plus the Cancel/Confirm buttons disappeared below the bottom
-edge, with no scroll affordance to reach them.
+landscape viewport the stacked box was taller than the screen and got clipped at
+*both* ends — the "Patient Demographics" header disappeared above the top edge and
+the keypad's bottom row plus the Cancel/Confirm buttons disappeared below the
+bottom edge, with no scroll affordance to reach them.
 
-Fix mirrors the existing `.modal-evt-editor` overflow pattern: cap the box at
-`max-height:92vh` with `overflow-y:auto` so it always sits inside the viewport and
-scrolls internally when the content is taller. Added a short-landscape media query
-(reusing the existing `max-width:900px and max-height:420px` phone-landscape block)
-that tightens `.modal-patient-box` padding, `.pm-field`/`.pm-value` sizing, and the
-`.pm-keypad`/`.pm-key` spacing so the panel fits with little or no scrolling on
-typical landscape phones. Verified with a headless render at 1024×470: pre-fix the
-box was ~606 px tall in a 470 px viewport (clipped both ends); post-fix it caps at
-432 px, header visible, and the Confirm button is reachable via internal scroll.
-No JS or behaviour change — CSS only.
+A first pass added `max-height:92vh; overflow-y:auto` to the box, but scrolling a
+data-entry panel is a poor UX. The real fix restructures the layout: the fields and
+keypad are wrapped in a `.pm-body` container and laid out **side by side** (fields
+left, keypad right — the same two-column pattern the shared keypad modal already
+uses) whenever the viewport is landscape and short. The header spans the top row and
+the Cancel/Confirm actions span the bottom, so the whole panel fits the short height
+with no scrolling.
+
+Key details:
+- **Trigger** is `@media (orientation:landscape) and (max-height:520px)` — keyed on
+  orientation + height, *not* width. The reported device is a phone in landscape
+  (~932×430 CSS px); its width exceeds the existing `max-width:900px` phone-landscape
+  breakpoint, so a width-keyed query would have missed it. Tall landscape displays
+  (iPad at ≥768 px height) keep the original stacked layout.
+- **Box width** widens to 660 px so two columns fit. This needs the selector
+  `.modal-box.modal-patient-box` (specificity 0,2,0) to out-specify the base
+  `.modal-box{max-width:400px}` at line ~870, which otherwise wins on source order —
+  the same reason the box was only ever 400 px wide before.
+- **Sex toggle** is `overflow:hidden`, which lets it shrink below its content in a
+  narrow flex column and clip the "Female" button; `flex-shrink:0` pins its natural
+  width.
+
+Verified with headless renders: iPhone-landscape (932×430) and a small landscape
+(667×375) both lay out side by side with no scroll and the Confirm button visible;
+iPad-landscape-tall (1024×768) keeps the stacked block layout. `max-height:92vh;
+overflow-y:auto` is retained on the box purely as a last-resort fallback for
+pathologically short viewports. CSS + markup wrapper only — no JS or behaviour
+change.
 
 ### Progressive multi-tier maintenance grid (v0.5.44.8) — Interim
 

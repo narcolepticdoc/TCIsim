@@ -138,6 +138,7 @@
     .pm-sex-btn.active{background:var(--blue-dim);color:var(--text-primary)}
     .pm-error{font-family:var(--font-mono);font-size:11px;color:var(--red);margin:4px 0 0;min-height:0}
     .pm-error:empty{display:none}
+    .pm-body{display:block}
     .pm-keypad{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:12px 0}
     .pm-key{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:20px;padding:14px 0;cursor:pointer;transition:background .15s,opacity .15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation;user-select:none;-webkit-user-select:none}
     .pm-key:hover{background:var(--bg-hover)}
@@ -672,14 +673,27 @@
       .keypad-display{min-height:36px;font-size:22px;padding:6px 8px}
       .key{font-size:15px;padding:7px 0}
       .modal-actions button{padding:6px 12px;font-size:11px}
-      /* Patient modal: tighten so fields + keypad + confirm fit a short
-         landscape viewport (falls back to scroll via max-height/overflow). */
-      .modal-patient-box{padding:12px}
-      .pm-header{margin:0 0 8px}
-      .pm-field{padding:5px 12px;margin-bottom:4px}
-      .pm-value{font-size:16px}
-      .pm-keypad{gap:4px;margin:8px 0}
-      .pm-key{font-size:16px;padding:8px 0}
+    }
+
+    /* Landscape short viewports (e.g. any phone rotated to landscape): lay the
+       Patient Demographics fields and numeric keypad SIDE BY SIDE so the whole
+       panel fits the short height without scrolling. Keyed on orientation +
+       height (not width) so it also catches wide phones whose landscape width
+       exceeds the 900px phone-landscape breakpoint above. */
+    @media (orientation:landscape) and (max-height:520px){
+      /* .modal-box.modal-patient-box needed to out-specify the base
+         .modal-box{max-width:400px}, which otherwise wins on source order. */
+      .modal-box.modal-patient-box{max-width:660px;padding:14px}
+      .pm-header{margin:0 0 10px}
+      .pm-body{display:flex;gap:14px;align-items:flex-start}
+      .pm-fields{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:6px}
+      .pm-fields .pm-field{margin-bottom:0}
+      /* The sex toggle is overflow:hidden, so in a narrow flex column it can
+         shrink below its content and clip "Female" — pin its natural width. */
+      .pm-fields .pm-sex-toggle{flex-shrink:0}
+      .pm-error{margin:0}
+      .pm-keypad{flex:0 0 auto;width:250px;margin:0}
+      .pm-key{padding:10px 0;font-size:18px}
     }
 
     /* ==== PORTRAIT LAYOUT — chart top, drugs bottom ==== */
@@ -1539,41 +1553,45 @@
           <button type="button" id="pm-imperial">Imperial</button>
         </div>
       </div>
-      <div class="pm-field pm-field-sex" data-field="sex">
-        <label>Sex</label>
-        <div class="pm-sex-toggle">
-          <button type="button" class="pm-sex-btn" data-sex="male">Male</button>
-          <button type="button" class="pm-sex-btn" data-sex="female">Female</button>
+      <div class="pm-body">
+        <div class="pm-fields">
+          <div class="pm-field pm-field-sex" data-field="sex">
+            <label>Sex</label>
+            <div class="pm-sex-toggle">
+              <button type="button" class="pm-sex-btn" data-sex="male">Male</button>
+              <button type="button" class="pm-sex-btn" data-sex="female">Female</button>
+            </div>
+          </div>
+          <div class="pm-field" data-field="age">
+            <label>Age <span class="pm-unit">(years)</span></label>
+            <div class="pm-value empty" id="pm-age-val">&mdash;</div>
+          </div>
+          <div class="pm-field" data-field="height">
+            <label>Height <span class="pm-unit" id="pm-height-unit">(cm)</span></label>
+            <div class="pm-value empty" id="pm-height-val">&mdash;</div>
+          </div>
+          <div class="pm-field" data-field="weight">
+            <label>Weight <span class="pm-unit" id="pm-weight-unit">(kg)</span></label>
+            <div class="pm-value empty" id="pm-weight-val">&mdash;</div>
+          </div>
+          <div class="pm-error" id="pm-error"></div>
         </div>
-      </div>
-      <div class="pm-field" data-field="age">
-        <label>Age <span class="pm-unit">(years)</span></label>
-        <div class="pm-value empty" id="pm-age-val">&mdash;</div>
-      </div>
-      <div class="pm-field" data-field="height">
-        <label>Height <span class="pm-unit" id="pm-height-unit">(cm)</span></label>
-        <div class="pm-value empty" id="pm-height-val">&mdash;</div>
-      </div>
-      <div class="pm-field" data-field="weight">
-        <label>Weight <span class="pm-unit" id="pm-weight-unit">(kg)</span></label>
-        <div class="pm-value empty" id="pm-weight-val">&mdash;</div>
-      </div>
-      <div class="pm-error" id="pm-error"></div>
-      <div class="pm-keypad">
-        <button class="pm-key" data-key="7">7</button>
-        <button class="pm-key" data-key="8">8</button>
-        <button class="pm-key" data-key="9">9</button>
-        <button class="pm-key" data-key="4">4</button>
-        <button class="pm-key" data-key="5">5</button>
-        <button class="pm-key" data-key="6">6</button>
-        <button class="pm-key" data-key="1">1</button>
-        <button class="pm-key" data-key="2">2</button>
-        <button class="pm-key" data-key="3">3</button>
-        <button class="pm-key pm-key-clear" data-key="clear">C</button>
-        <button class="pm-key" data-key="0">0</button>
-        <button class="pm-key pm-key-dot" data-key=".">.</button>
-        <button class="pm-key pm-key-back" data-key="back">&#9003;</button>
-        <button class="pm-key pm-key-next" data-key="next">Next &#8594;</button>
+        <div class="pm-keypad">
+          <button class="pm-key" data-key="7">7</button>
+          <button class="pm-key" data-key="8">8</button>
+          <button class="pm-key" data-key="9">9</button>
+          <button class="pm-key" data-key="4">4</button>
+          <button class="pm-key" data-key="5">5</button>
+          <button class="pm-key" data-key="6">6</button>
+          <button class="pm-key" data-key="1">1</button>
+          <button class="pm-key" data-key="2">2</button>
+          <button class="pm-key" data-key="3">3</button>
+          <button class="pm-key pm-key-clear" data-key="clear">C</button>
+          <button class="pm-key" data-key="0">0</button>
+          <button class="pm-key pm-key-dot" data-key=".">.</button>
+          <button class="pm-key pm-key-back" data-key="back">&#9003;</button>
+          <button class="pm-key pm-key-next" data-key="next">Next &#8594;</button>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="pm-cancel">Cancel</button>
