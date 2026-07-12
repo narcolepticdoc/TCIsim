@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.44.9] — 2026-07-12
+
+Bug fix — Patient Demographics modal (landscape / short viewport).
+
+- **Patient entry panel lays its fields and keypad side by side on short landscape screens.** Previously `.modal-patient-box` had no height cap, and the modal overlay centres its box vertically (`align-items:center`), so on a short landscape viewport (e.g. a phone rotated to landscape) the stacked sex + age/height/weight fields, numeric keypad, and Confirm button together exceeded the viewport height — the header ran off the top and the keypad's bottom row plus the Cancel/Confirm buttons ran off the bottom, with no way to reach them. The fields and keypad now sit in **two columns** (fields left, keypad right — mirroring the shared keypad modal's `keypad-layout`) whenever the viewport is landscape and short (`@media (orientation:landscape) and (max-height:520px)`), so the whole panel fits the short height without scrolling; the header spans the top and Cancel/Confirm span the bottom. The trigger keys off orientation + height rather than width, so it also catches wide phones whose landscape width exceeds the existing 900px phone-landscape breakpoint (the reported device). The narrow-column layout widens the box to 660px (via `.modal-box.modal-patient-box` to out-specify the base `.modal-box{max-width:400px}`) and pins the sex toggle's width (it is `overflow:hidden`, so it would otherwise collapse and clip "Female"). A defensive `max-height:92vh; overflow-y:auto` on the box remains as a last-resort fallback for extremely short viewports. Portrait and tall (e.g. iPad) layouts are unchanged. CSS-only; no JS or behaviour change.
+
 ## [0.5.44.8] — 2026-07-10
 
 Bug fix — TCI planner (cet-emulation).
