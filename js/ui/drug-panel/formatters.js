@@ -16,7 +16,7 @@ export const EMERGENCE_CE = 1.5;
 // settings.js (tciFraction: 0.95, ssSlopeTol: 0.0010).
 export const TCI_FRACTION_DEFAULT = 0.95;
 export const SS_SLOPE_DEFAULT     = 0.0010;
-export const EXIT_BAND_DEFAULT    = 0.05;
+export const EXIT_BAND_DEFAULT    = 0.025;
 
 /** Format minutes as m:ss  (e.g. 125.4s → "2:05") */
 export function fmtCountdown(minutes) {

@@ -27,7 +27,7 @@ const DEFAULTS     = {
                        // planned event time. Engine/history/chart are untouched.
   ceTolerance: 0.015,  // CET emulation post-extraction drift tolerance (0.005–0.030)
   ssSlopeTol:  0.0010, // Manual-mode plateau slope — per-minute relative (0.10 %/min)
-  exitBandPct: 0.05,   // Plateau exit ±% band (0.05 = ±5%)
+  exitBandPct: 0.025,  // Plateau exit ±% band (0.025 = ±2.5%; range 0.01–0.05)
   cpOpacity:   1.0,    // Cp line opacity (0.1–1.0)
   nomogramOpacity: 1.0, // BIS nomogram band opacity (0.1–1.0, applied as multiplier)
   overlayOpacity:  1.0, // Threshold/target line opacity (0.1–1.0)

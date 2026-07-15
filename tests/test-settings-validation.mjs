@@ -66,7 +66,7 @@ console.log('\n=== settings.js getSettings/setSettings validation ===\n');
   const s = getSettings();
   ok(s.ceTolerance === 0.015, 'ceTolerance 0.5 (out of 0.005–0.030) → default 0.015');
   ok(s.ssSlopeTol === 0.0010, 'ssSlopeTol 5 (out of range) → default 0.0010');
-  ok(s.exitBandPct === 0.05, 'exitBandPct 0.9 (out of 0.01–0.05) → default 0.05');
+  ok(s.exitBandPct === 0.025, 'exitBandPct 0.9 (out of 0.01–0.05) → default 0.025');
   ok(s.cpOpacity === 1.0, 'cpOpacity 5 (out of 0.1–1.0) → default 1.0');
   ok(s.nomogramOpacity === 1.0 && s.overlayOpacity === 1.0, 'nomogram/overlay opacity out of range → default 1.0');
   ok(s.ghostOpacity === 0.5, 'ghostOpacity 0 (below 0.1 floor) → default 0.5');

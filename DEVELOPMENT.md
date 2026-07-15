@@ -4,6 +4,20 @@
 
 ## Session History
 
+### Plateau exit band default lowered to ±2.5% (v0.5.44.12) — Interim
+
+Followed the range narrowing by dropping the factory default exit band from
+±5% to ±2.5% for earlier plateau-departure detection. Because 2.5% falls
+between the old integer slider stops, moved the "Plateau exit band" slider to a
+half-percent grid (`step` `1` → `0.5`, `value` `5` → `2.5` in `index.html`) and
+made `settings-ui.js` decimal-aware: added `exitBandGridPct`/`exitBandToSlider`/
+`exitBandLabel` helpers that snap to the 0.5% grid and format without a trailing
+`.0` (so whole percents still read `±5%`), and switched the save path from
+`parseInt`/`×100` integer handling to `parseFloat`. Updated `DEFAULTS.exitBandPct`
+(settings.js) and `EXIT_BAND_DEFAULT` (drug-panel/formatters.js) to `0.025`, plus
+the validation test's default-fallback assertion. The 0.01–0.05 validation window
+is unchanged; saved user values are untouched.
+
 ### Plateau exit band range narrowed to ±1–5% (v0.5.44.11) — Interim
 
 The Settings → Simulation "Plateau exit band" slider previously ranged ±2–10%.

@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.44.12] — 2026-07-15
+
+Tweak — plateau exit band default lowered to ±2.5%.
+
+- **Default plateau exit band is now ±2.5%** (was ±5%). The tighter default flags a departure from plateau sooner. The "Plateau exit band" slider now moves on a 0.5% grid (step `1` → `0.5`) so ±2.5% is selectable, and its live readout shows one decimal when needed (e.g. `±2.5%`, `±5%`). Updated `DEFAULTS.exitBandPct` and the drug-panel `EXIT_BAND_DEFAULT` fallback to `0.025`. Existing saved settings keep whatever exit band they stored; only the factory default changes.
+
 ## [0.5.44.11] — 2026-07-15
 
 Tweak — narrower plateau exit band range.
