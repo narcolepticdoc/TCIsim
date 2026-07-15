@@ -4,6 +4,24 @@
 
 ## Session History
 
+### History action-button row clipped "Edit" on narrow tablets (v0.5.44.13) — Interim
+
+Reported from an iPad mini (2266×1488 physical → 1133 CSS px landscape): in the
+split layout the events-history action row (time toggle · Add Event · notes
+toggle · Edit) overflowed the ~285 px history panel and clipped the right edge of
+the "Edit" button. Measured with Playwright across 1024–1366 px viewports: the row
+needed ~284 px but the `flex:1` history panel shrinks to ~248–285 px at those
+widths, so "Edit" was clipped by up to 35 px (and sat with only ~1 px of margin at
+the iPad-mini width — hence the real-device clip). Root cause: the time/notes/edit
+buttons carried fixed `min-width` floors (68/72/60 px) larger than their text,
+inflating the row's minimum width. Fix (CSS-only, `.history-actions` block in
+`index.html`): removed the three `min-width` floors, reduced the row padding
+(`6px 12px` → `6px 8px`), gap (`6px` → `4px`), and per-button horizontal padding
+(`10px` → `7px`), and set all four buttons to `flex:1 1 auto` so they size to
+content and share the leftover space evenly instead of Add Event hogging it.
+Verified the row fits with margin at every width from the 1020 px split-layout
+minimum up, and stays visually balanced.
+
 ### Plateau exit band default lowered to ±2.5% (v0.5.44.12) — Interim
 
 Followed the range narrowing by dropping the factory default exit band from
