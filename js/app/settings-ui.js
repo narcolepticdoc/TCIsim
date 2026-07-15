@@ -27,6 +27,13 @@ const ssSlopeToSlider = (tol) => {
   return pct.toFixed(2);
 };
 
+// Plateau exit band — ±% band on a half-percent grid (1–5% range).
+// Stored as a fraction (0.025 = ±2.5%). Snap to the 0.5% slider grid, then
+// format without a trailing ".0" so whole percents read as "±5%".
+const exitBandGridPct = (pct) => Math.round(pct * 200) / 2;   // fraction → %, snapped
+const exitBandToSlider = (pct) => exitBandGridPct(pct).toFixed(1);
+const exitBandLabel    = (pct) => '±' + exitBandGridPct(pct).toFixed(1).replace(/\.0$/, '') + '%';
+
 const INFO_TEXTS = {
   notifications: 'Configure how the simulator alerts you to upcoming pump events. Prep alerts provide early visual warning with an amber pulse on drug cards. Alert popups appear closer to the event with optional sound cues. The status indicator colors the drug card edge based on event proximity.',
   simulation: 'Fine-tune how the simulator generates TCI plans. Max pump rate is the global delivery rate (mL/h) shared by every pumped drug; it caps the infusion rate and sets how fast boluses are delivered, and can be changed mid-case (it affects subsequent plans and boluses, not already-delivered events). Ce drift tolerance sets how far the effect-site concentration is allowed to drift from target before the planner emits a new pump rate step \u2014 lower values give tighter tracking at the cost of more frequent rate changes; higher values produce simpler plans with more visible Ce variation. The default (1.5%) is already tighter than a live clinician could hold manually. Plateau slope tolerance determines how flat the concentration curve must be to qualify as steady-state.',
@@ -121,8 +128,8 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   if (ceTolVal)    ceTolVal.textContent                = ((savedSettings.ceTolerance ?? 0.015) * 100).toFixed(1) + '%';
   if (ssSlopeSlider)     ssSlopeSlider.value           = ssSlopeToSlider(savedSettings.ssSlopeTol ?? SS_SLOPE_DEFAULT);
   if (ssSlopeVal)        ssSlopeVal.textContent        = ssSlopeLabel(savedSettings.ssSlopeTol ?? SS_SLOPE_DEFAULT);
-  if (exitBandSlider)    exitBandSlider.value          = Math.round((savedSettings.exitBandPct ?? 0.05) * 100);
-  if (exitBandVal)       exitBandVal.textContent       = '±' + Math.round((savedSettings.exitBandPct ?? 0.05) * 100) + '%';
+  if (exitBandSlider)    exitBandSlider.value          = exitBandToSlider(savedSettings.exitBandPct ?? 0.025);
+  if (exitBandVal)       exitBandVal.textContent       = exitBandLabel(savedSettings.exitBandPct ?? 0.025);
   if (cpOpacitySlider)   cpOpacitySlider.value         = Math.round((savedSettings.cpOpacity ?? 1.0) * 100);
   if (cpOpacityVal)      cpOpacityVal.textContent      = Math.round((savedSettings.cpOpacity ?? 1.0) * 100) + '%';
   if (nomogramSlider)    nomogramSlider.value          = Math.round((savedSettings.nomogramOpacity ?? 1.0) * 100);
@@ -154,8 +161,7 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
     const ceTolerance       = ceTolTenths / 1000;
     const ssSlopePct        = ssSlopeSlider ? parseFloat(ssSlopeSlider.value) : 0.10;
     const ssSlopeTol        = ssSlopePct / 100;
-    const exitBandInt       = exitBandSlider ? parseInt(exitBandSlider.value, 10) : 5;
-    const exitBandPct       = exitBandInt / 100;
+    const exitBandPct       = exitBandSlider ? parseFloat(exitBandSlider.value) / 100 : 0.025;
     const cpOpacityPct      = cpOpacitySlider ? parseInt(cpOpacitySlider.value, 10) : 100;
     const cpOpacity         = cpOpacityPct / 100;
     const nomogramPct       = nomogramSlider ? parseInt(nomogramSlider.value, 10) : 100;
@@ -178,7 +184,7 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
     if (reactDelayVal)   reactDelayVal.textContent   = reactionDelaySec.toFixed(1) + ' s';
     if (ceTolVal)        ceTolVal.textContent        = (ceTolTenths / 10).toFixed(1) + '%';
     if (ssSlopeVal)      ssSlopeVal.textContent      = ssSlopeLabel(ssSlopeTol);
-    if (exitBandVal)     exitBandVal.textContent     = '±' + exitBandInt + '%';
+    if (exitBandVal)     exitBandVal.textContent     = exitBandLabel(exitBandPct);
     if (cpOpacityVal)    cpOpacityVal.textContent    = cpOpacityPct      + '%';
     if (nomogramVal)     nomogramVal.textContent     = nomogramPct       + '%';
     if (overlayVal)      overlayVal.textContent      = overlayPct        + '%';
