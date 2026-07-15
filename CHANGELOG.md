@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.44.13] — 2026-07-15
+
+Bug fix — history action buttons no longer clip the "Edit" button.
+
+- **The events-history action row now fits its panel on narrow landscape tablets.** On split-layout tablets whose history panel is narrow (e.g. iPad mini in landscape), the four action buttons (time toggle, Add Event, notes toggle, Edit) overflowed the panel and the rightmost "Edit" button had its edge cut off. The buttons carried fixed `min-width` floors (68/72/60 px) that inflated the row past the panel width. Removed those floors, trimmed the row's horizontal padding (12 → 8 px) and gap (6 → 4 px), and switched all four buttons to `flex:1 1 auto` so they size to their content and share the remaining space evenly. The row now fits with margin down to the 1020 px split-layout minimum and stays balanced on wide screens. CSS-only.
+
 ## [0.5.44.12] — 2026-07-15
 
 Tweak — plateau exit band default lowered to ±2.5%.
