@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.44.11] — 2026-07-15
+
+Tweak — narrower plateau exit band range.
+
+- **Plateau exit band slider now spans ±1–5%** (was ±2–10%). The Settings → Simulation "Plateau exit band" control's range and the `exitBandPct` validation window were tightened so the exit band can be tuned more finely at the low end and no longer permits the wide ±6–10% settings, which were too loose to flag a genuine departure from plateau. Default remains ±5%. Persisted values outside the new 0.01–0.05 range now snap back to the default on load.
+
 ## [0.5.44.10] — 2026-07-12
 
 Bug fix — landscape font inflation (iOS Safari).

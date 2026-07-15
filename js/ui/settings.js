@@ -87,7 +87,7 @@ export function getSettings() {
         ? p.ssSlopeTol : DEFAULTS.ssSlopeTol;
 
       const exitBandPct = (typeof p.exitBandPct === 'number'
-                           && p.exitBandPct >= 0.01 && p.exitBandPct <= 0.20)
+                           && p.exitBandPct >= 0.01 && p.exitBandPct <= 0.05)
         ? p.exitBandPct : DEFAULTS.exitBandPct;
 
       const cpOpacity = (typeof p.cpOpacity === 'number'

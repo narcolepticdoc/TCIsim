@@ -4,6 +4,19 @@
 
 ## Session History
 
+### Plateau exit band range narrowed to ±1–5% (v0.5.44.11) — Interim
+
+The Settings → Simulation "Plateau exit band" slider previously ranged ±2–10%.
+Narrowed it to ±1–5%: the low end now allows finer tuning (down to ±1%), and the
+upper half (±6–10%) was removed because a band that wide rarely flags a real
+departure from plateau. Changed the `<input type="range">` `min`/`max` in
+`index.html` (`2`/`10` → `1`/`5`, default value unchanged at `5`) and tightened
+the `exitBandPct` validation window in `js/ui/settings.js` (`<= 0.20` → `<= 0.05`)
+so persisted out-of-range values snap back to the ±5% default on load. Updated the
+two affected assertions in `tests/test-settings-validation.mjs` (the out-of-range
+comment and the round-trip fixture value, previously `0.10`, now `0.03`). Default
+`exitBandPct` (0.05) and the predictor logic are unchanged.
+
 ### Landscape font inflation fixed with text-size-adjust (v0.5.44.10) — Interim
 
 Reported after the v0.5.44.9 modal fix: on the same phone, the setup screen's
