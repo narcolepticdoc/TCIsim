@@ -395,6 +395,13 @@ export function createChartBridge({
       if (typeof chart.setGhostEnabled === 'function') {
         chart.setGhostEnabled(!!s.ghostTracesEnabled);
       }
+      // X-axis time scale: min | h:min | real time. Feed the wall-clock
+      // anchor (epoch ms for sim t=0) so 'rt' can render clock labels;
+      // null falls back to h:min. Idempotent — early-returns when unchanged.
+      if (typeof chart.setTimeAxisMode === 'function') {
+        const wc = timer.getWallClockStart();
+        chart.setTimeAxisMode(s.timeAxisMode ?? 'min', wc ? wc.getTime() : null);
+      }
     }
     // Check for upcoming events requiring advance warning
     if (t > 0) settings.check(t);

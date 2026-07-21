@@ -4,6 +4,37 @@
 
 ## Session History
 
+### Chart crossover highlights + selectable x-axis time scale (v0.5.45) — Interim
+
+Two chart additions.
+
+**Crossover dots.** The chart already draws a red dashed "emergence trajectory"
+(the projected Ce-if-stopped-now decay, from `computeDecayTrajectory` →
+`setEmergenceTrajectory`), which descends until it meets the horizontal emergence
+threshold. Nothing marked *where* it crossed the threshold lines. Added a new
+`afterDraw` canvas plugin `js/ui/chart/plugins/crossover-dots.js` (modeled on
+`inspect-dots.js`) that finds the first downward crossing of the trend dataset
+against `s.thresholdCe` (redose) and `s.exitCe` (emergence), interpolates the
+crossing x, and draws an orange dot (redose) / red dot (emergence). Because both
+thresholds are stored in the same chart y-units as the dataset and the plugin reads
+existing state, there is no new state field and no per-frame bridge plumbing — it
+self-heals across New Case. Registered after `inspectDots` so dots draw on top.
+Colors come from `--amber`/`--red` so they match their lines and follow theme.
+
+**Selectable x-axis time scale.** The x-axis was fixed to sim-minutes. Added a
+Settings → Appearance "Time axis" segmented control (Min / H:Min / Real time),
+following the Text size / Theme pattern (`DEFAULTS.timeAxisMode` +
+`TIME_AXIS_MODES` validation in `settings.js`; grab/init/handler in
+`settings-ui.js`; markup in `index.html`). The chart got a dedicated x-axis tick
+formatter `fmtXTick` (the shared `fmtTick` still formats the y-axes) plus an
+`xAxisTitle` helper and a `setTimeAxisMode(mode, wallClockStartMs)` setter that
+updates the tick callback and axis title. `chart-bridge.js onFrame` pushes the mode
+plus `timer.getWallClockStart()` every frame (idempotent). Real time reuses the
+`history.js fmtTime` approach — `new Date(wallClockStart + m*60000)` → `H:MM` — and
+falls back to h:min when no case start time is set. The setting lives inside the
+`tci-warn-settings` blob, so it cloud-syncs with the other preferences with no
+manifest change.
+
 ### History action-button row clipped "Edit" on narrow tablets (v0.5.44.13) — Interim
 
 Reported from an iPad mini (2266×1488 physical → 1133 CSS px landscape): in the

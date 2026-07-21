@@ -13,7 +13,7 @@
  * caches, and the page reloads onto the new version.
  */
 
-const VERSION = '0.5.44.13';
+const VERSION = '0.5.45';
 const CACHE_NAME = `tcisim-v${VERSION}`;
 
 const PRECACHE_URLS = [
@@ -66,6 +66,7 @@ const PRECACHE_URLS = [
   'js/ui/chart/gestures.js',
   'js/ui/chart/index.js',
   'js/ui/chart/interpolation.js',
+  'js/ui/chart/plugins/crossover-dots.js',
   'js/ui/chart/plugins/cursor-dots.js',
   'js/ui/chart/plugins/event-markers.js',
   'js/ui/chart/plugins/inspect-dots.js',

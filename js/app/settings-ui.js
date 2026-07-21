@@ -108,6 +108,8 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   const textSizeBtns      = textSizeGroup ? [...textSizeGroup.querySelectorAll('.seg-btn')] : [];
   const themeGroup        = $('set-theme');
   const themeBtns         = themeGroup ? [...themeGroup.querySelectorAll('.seg-btn')] : [];
+  const timeAxisGroup     = $('set-time-axis');
+  const timeAxisBtns      = timeAxisGroup ? [...timeAxisGroup.querySelectorAll('.seg-btn')] : [];
   if (!prepSlider || !alertSlider) return;
 
   // Populate controls from saved settings
@@ -147,6 +149,8 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   let currentTheme = savedSettings.theme ?? 'dark';
   for (const btn of themeBtns) btn.classList.toggle('active', btn.dataset.theme === currentTheme);
   applyTheme(currentTheme);
+  let currentTimeAxis = savedSettings.timeAxisMode ?? 'min';
+  for (const btn of timeAxisBtns) btn.classList.toggle('active', btn.dataset.mode === currentTimeAxis);
 
   function saveAll() {
     const prepSec           = parseInt(prepSlider.value,  10);
@@ -178,6 +182,7 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
     const textSize          = currentTextSize;
     const theme             = currentTheme;
     const showCeBand        = showCeBandChk ? showCeBandChk.checked : false;
+    const timeAxisMode      = currentTimeAxis;
     if (prepVal)         prepVal.textContent         = prepSec           + 's';
     if (alertVal)        alertVal.textContent        = alertSec          + 's';
     if (statusWarnVal)   statusWarnVal.textContent   = statusWarnMinutes + ' min';
@@ -190,7 +195,7 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
     if (overlayVal)      overlayVal.textContent      = overlayPct        + '%';
     if (ghostOpacVal)    ghostOpacVal.textContent    = ghostOpacPct      + '%';
     if (markerSizeVal)   markerSizeVal.textContent   = eventMarkerSize   + ' px';
-    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand });
+    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode });
   }
 
   prepSlider.addEventListener('input',    saveAll);
@@ -226,6 +231,15 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
       currentTheme = theme;
       for (const b of themeBtns) b.classList.toggle('active', b.dataset.theme === theme);
       applyTheme(theme);
+      saveAll();
+    });
+  }
+  for (const btn of timeAxisBtns) {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.mode;
+      if (!mode || mode === currentTimeAxis) return;
+      currentTimeAxis = mode;
+      for (const b of timeAxisBtns) b.classList.toggle('active', b.dataset.mode === mode);
       saveAll();
     });
   }

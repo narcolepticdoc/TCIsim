@@ -55,5 +55,10 @@ export function createState(cfg) {
     patientWeightKg: null,
     pdModel: null,
     yMaxManual: null,
+    // X-axis time-scale display: 'min' (sim minutes), 'hmin' (h:mm), or
+    // 'rt' (wall-clock). wallClockStartMs anchors 'rt' — epoch ms for sim t=0,
+    // pushed each frame by the bridge from timer.getWallClockStart().
+    timeAxisMode: 'min',
+    wallClockStartMs: null,
   };
 }
