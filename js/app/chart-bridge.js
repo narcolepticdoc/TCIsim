@@ -89,6 +89,10 @@ export function createChartBridge({
   let lastSsCe = null;
   let lastPlateauRegion = null;
   let lastEventMarkersKey = '';
+  // Last non-'rt' time-axis mode, tracked every frame in onFrame. The history
+  // RT toggle restores this so turning real-time off never destroys the chart's
+  // min-vs-h:min tick choice.
+  let lastNonRtMode = 'min';
 
   // Opacity / marker-size / font-scale setters are idempotent inside the chart
   // (early-return when the value matches) so we can call them every frame without
@@ -405,12 +409,25 @@ export function createChartBridge({
       // Reflect the current mode onto the on-chart time-axis button so its
       // label stays correct no matter which surface (this button or the
       // Settings segmented control) last changed the setting. Idempotent.
+      const mode = s.timeAxisMode ?? 'min';
       const taBtn = $('btn-chart-timeaxis');
       if (taBtn) {
-        const mode = s.timeAxisMode ?? 'min';
         const label = { min: 'min', hmin: 'h:m', rt: 'rt' }[mode] || 'min';
         if (taBtn.textContent !== label) taBtn.textContent = label;
         taBtn.classList.toggle('active', mode !== 'min');
+      }
+      // Sync the history log to the same real-time dimension as the chart axis:
+      // clock time when the mode is 'rt', elapsed h:mm:ss otherwise. Remember the
+      // last non-'rt' mode so the history RT toggle can restore the chart's tick
+      // style (min vs h:min) when it turns real-time off. All idempotent.
+      if (mode !== 'rt') lastNonRtMode = mode;
+      history.setTimeFormat(mode === 'rt' ? 'rt' : 'et');
+      const htBtn = $('btn-history-time');
+      if (htBtn) {
+        const etEl = htBtn.querySelector('.t-et');
+        const rtEl = htBtn.querySelector('.t-rt');
+        if (etEl) etEl.classList.toggle('active', mode !== 'rt');
+        if (rtEl) rtEl.classList.toggle('active', mode === 'rt');
       }
     }
     // Check for upcoming events requiring advance warning
@@ -427,5 +444,7 @@ export function createChartBridge({
     computeEffectOverlay();
   });
 
-  return { getConfig, computeEffectOverlay, refresh, onFrame };
+  function getLastNonRtMode() { return lastNonRtMode; }
+
+  return { getConfig, computeEffectOverlay, refresh, onFrame, getLastNonRtMode };
 }
