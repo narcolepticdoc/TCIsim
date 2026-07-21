@@ -4,6 +4,66 @@
 
 ## Session History
 
+### Removed stray hover circles + on-chart x-axis control (v0.5.46) — Interim
+
+Two follow-ups to the v0.5.45 chart work.
+
+**Hover-circle removal.** A user reported long-standing unfilled circles that ride
+the Cp/Ce/trend lines and re-snap to the clicked x-position. They were not from any
+custom plugin (cursor-dots, inspect-dots, crossover-dots all draw *filled* dots) —
+they were Chart.js's built-in hover/active-element points. Every dataset sets
+`pointRadius: 0`, but none disabled the hover radius, so the default
+`pointHoverRadius: 4` drew a point on each curve at the active index. With
+`interaction: { mode: 'index', intersect: false }`, hovering/clicking activates the
+nearest index across all datasets, and the near-transparent dataset fills
+(`color + '18'` / `transparent`) left just a colored ring. The tooltip is disabled
+and `onClick` reads `event.x`, so nothing depended on hover activation. Fixed with
+`options.elements.point.hoverRadius = 0` in `js/ui/chart/index.js`.
+
+**On-chart x-axis time-scale button.** Added `btn-chart-timeaxis` to the
+`#chart-controls` strip (`index.html`), a compact text button that cycles
+`min → hmin → rt`. Wiring mirrors the persisted ghost-toggle pattern: the click
+handler (`js/app.js`, "Wire chart controls" block) computes the next mode, persists
+it via `settings.setSettings({ ...cur, timeAxisMode })`, and calls
+`chart.setTimeAxisMode(next, timer.getWallClockStart()?.getTime())` for immediate
+feedback. The button's *label* is reflected from the setting in `chart-bridge.js
+onFrame` (idempotent, every frame — the rAF loop runs continuously), so it stays
+correct whichever surface last changed the mode. The Settings → Appearance segmented
+control re-seeds its `.active` state when the settings modal opens
+(`settings-ui.js`), keeping the two controls in sync. `settings.timeAxisMode` stays
+the single source of truth; no new chart/engine logic.
+
+### Chart crossover highlights + selectable x-axis time scale (v0.5.45) — Interim
+
+Two chart additions.
+
+**Crossover dots.** The chart already draws a red dashed "emergence trajectory"
+(the projected Ce-if-stopped-now decay, from `computeDecayTrajectory` →
+`setEmergenceTrajectory`), which descends until it meets the horizontal emergence
+threshold. Nothing marked *where* it crossed the threshold lines. Added a new
+`afterDraw` canvas plugin `js/ui/chart/plugins/crossover-dots.js` (modeled on
+`inspect-dots.js`) that finds the first downward crossing of the trend dataset
+against `s.thresholdCe` (redose) and `s.exitCe` (emergence), interpolates the
+crossing x, and draws an orange dot (redose) / red dot (emergence). Because both
+thresholds are stored in the same chart y-units as the dataset and the plugin reads
+existing state, there is no new state field and no per-frame bridge plumbing — it
+self-heals across New Case. Registered after `inspectDots` so dots draw on top.
+Colors come from `--amber`/`--red` so they match their lines and follow theme.
+
+**Selectable x-axis time scale.** The x-axis was fixed to sim-minutes. Added a
+Settings → Appearance "Time axis" segmented control (Min / H:Min / Real time),
+following the Text size / Theme pattern (`DEFAULTS.timeAxisMode` +
+`TIME_AXIS_MODES` validation in `settings.js`; grab/init/handler in
+`settings-ui.js`; markup in `index.html`). The chart got a dedicated x-axis tick
+formatter `fmtXTick` (the shared `fmtTick` still formats the y-axes) plus an
+`xAxisTitle` helper and a `setTimeAxisMode(mode, wallClockStartMs)` setter that
+updates the tick callback and axis title. `chart-bridge.js onFrame` pushes the mode
+plus `timer.getWallClockStart()` every frame (idempotent). Real time reuses the
+`history.js fmtTime` approach — `new Date(wallClockStart + m*60000)` → `H:MM` — and
+falls back to h:min when no case start time is set. The setting lives inside the
+`tci-warn-settings` blob, so it cloud-syncs with the other preferences with no
+manifest change.
+
 ### History action-button row clipped "Edit" on narrow tablets (v0.5.44.13) — Interim
 
 Reported from an iPad mini (2266×1488 physical → 1133 CSS px landscape): in the

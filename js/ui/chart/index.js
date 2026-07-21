@@ -15,6 +15,7 @@ import { attachGestures } from './gestures.js';
 import { createTargetLabelPlugin } from './plugins/target-label.js';
 import { createCursorDotsPlugin } from './plugins/cursor-dots.js';
 import { createInspectDotsPlugin } from './plugins/inspect-dots.js';
+import { createCrossoverDotsPlugin } from './plugins/crossover-dots.js';
 import { createInspectHandlePlugin } from './plugins/inspect-handle.js';
 import { createReadoutPanelPlugin } from './plugins/readout-panel.js';
 import { createEventMarkersPlugin } from './plugins/event-markers.js';
@@ -43,6 +44,30 @@ function fmtTick(v) {
   if (!Number.isFinite(v)) return '';
   const r = Math.round(v * 1000) / 1000;
   return Number.isInteger(r) ? r.toString() : r.toFixed(1);
+}
+
+// Format an x-axis tick (sim minutes) per the selected time-axis mode.
+// Dedicated to the x-axis — the y-axes keep using the generic fmtTick.
+// Mirrors the elapsed/real-time formatting in history.js fmtTime.
+function fmtXTick(v, mode, wallClockStartMs) {
+  if (!Number.isFinite(v)) return '';
+  if (mode === 'rt' && wallClockStartMs != null) {
+    const d = new Date(wallClockStartMs + v * 60000);
+    return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  if (mode === 'hmin' || (mode === 'rt' && wallClockStartMs == null)) {
+    const totalMin = Math.round(v);
+    const sign = totalMin < 0 ? '-' : '';
+    const a = Math.abs(totalMin);
+    return sign + Math.floor(a / 60) + ':' + String(a % 60).padStart(2, '0');
+  }
+  return fmtTick(v);
+}
+
+function xAxisTitle(mode) {
+  if (mode === 'hmin') return 'Time (h:min)';
+  if (mode === 'rt') return 'Clock time';
+  return 'Time (min)';
 }
 
 /**
@@ -234,6 +259,12 @@ export function createChart(canvas, config = {}) {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
+      // Suppress Chart.js's built-in hover/active-element points. Datasets set
+      // pointRadius: 0 for the resting state, but the default pointHoverRadius (4)
+      // still drew hollow rings on every curve at the hovered/clicked x-index
+      // (interaction mode 'index'). The tooltip is disabled and onClick reads
+      // event.x, so nothing depends on hover activation — kill the rings here.
+      elements: { point: { hoverRadius: 0 } },
       layout: {
         padding: { right: 5 },
       },
@@ -256,14 +287,14 @@ export function createChart(canvas, config = {}) {
       scales: {
         x: {
           type: 'linear',
-          title: { display: true, text: 'Time (min)', color: theme.axisTitle, font: { size: 10 } },
+          title: { display: true, text: xAxisTitle(s.timeAxisMode), color: theme.axisTitle, font: { size: 10 } },
           min: s.viewMin,
           max: s.viewMax,
           ticks: {
             color: theme.tick,
             font: { size: 9 },
             maxTicksLimit: 12,
-            callback: fmtTick,
+            callback: (v) => fmtXTick(v, s.timeAxisMode, s.wallClockStartMs),
           },
           grid: { color: theme.grid },
         },
@@ -400,6 +431,7 @@ export function createChart(canvas, config = {}) {
       createTargetLabelPlugin(s),
       createCursorDotsPlugin(s),
       createInspectDotsPlugin(s),
+      createCrossoverDotsPlugin(s),
       createInspectHandlePlugin(s),
       createReadoutPanelPlugin(s),
       createEventMarkersPlugin(s),
@@ -477,6 +509,24 @@ export function createChart(canvas, config = {}) {
   function setThresholdLine(ce) {
     s.thresholdCe = ce;
     chart.options.plugins.annotation.annotations = buildAnnotations(s);
+    chart.update('none');
+  }
+
+  /**
+   * Select the x-axis time-scale display: 'min' | 'hmin' | 'rt'.
+   * wallClockStartMs anchors 'rt' (epoch ms for sim t=0). Idempotent — the
+   * bridge pushes this every frame, so unchanged values early-return.
+   */
+  function setTimeAxisMode(mode, wallClockStartMs = null) {
+    const m = (mode === 'hmin' || mode === 'rt') ? mode : 'min';
+    if (m === s.timeAxisMode && wallClockStartMs === s.wallClockStartMs) return;
+    s.timeAxisMode = m;
+    s.wallClockStartMs = wallClockStartMs;
+    const xScale = chart.options.scales.x;
+    if (xScale) {
+      xScale.title.text = xAxisTitle(m);
+      xScale.ticks.callback = (v) => fmtXTick(v, s.timeAxisMode, s.wallClockStartMs);
+    }
     chart.update('none');
   }
 
@@ -901,6 +951,7 @@ export function createChart(canvas, config = {}) {
     setTargetLine,
     setCeToleranceBand,
     setThresholdLine,
+    setTimeAxisMode,
     setPlateauRegion,
     setReconciliationRegion,
     setGhostCurve,

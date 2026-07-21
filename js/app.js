@@ -1064,6 +1064,21 @@ function boot() {
     // for the next refresh trigger (e.g. an event edit or rAF tick).
     chartBridge.refresh();
   });
+  // On-chart x-axis time-scale cycle: min → h:min → real time → min. Persists
+  // via the settings store (single source of truth, shared with the Settings →
+  // Appearance segmented control). The button's label is reflected from the
+  // setting by chart-bridge onFrame; here we persist + apply immediately.
+  const btnChartTimeAxis = $('btn-chart-timeaxis');
+  if (btnChartTimeAxis) btnChartTimeAxis.addEventListener('click', () => {
+    const order = ['min', 'hmin', 'rt'];
+    const cur = settings.getSettings();
+    const next = order[(order.indexOf(cur.timeAxisMode ?? 'min') + 1) % order.length];
+    settings.setSettings({ ...cur, timeAxisMode: next });
+    if (chart) {
+      const wc = timer.getWallClockStart();
+      chart.setTimeAxisMode(next, wc ? wc.getTime() : null);
+    }
+  });
   const btnNewCaseConfirm = $('btn-new-case-confirm');
   if (btnNewCaseConfirm) btnNewCaseConfirm.addEventListener('click', () => {
     closeModal('modal-new-case');

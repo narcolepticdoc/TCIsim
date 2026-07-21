@@ -11,6 +11,20 @@
 
 ---
 
+## [0.5.46] — 2026-07-21
+
+Fix + feature — removed stray hover circles from the chart and added an on-chart x-axis time-scale control.
+
+- **Removed the hollow circles that rode the curves.** Chart.js's built-in hover/active-element points were being drawn on every curve at the hovered/clicked x-index — hollow rings (the datasets' fill is a near-transparent tint) that tracked the lines and re-snapped on click. They served no purpose (the tooltip is disabled and the click handler reads the pointer x directly, not the active elements). Suppressed them with `options.elements.point.hoverRadius = 0`. The filled "now" cursor dots, amber inspect dots, and crossover dots are unaffected.
+- **On-chart x-axis time-scale button.** The Min / H:Min / Real-time selector (added in 0.5.45) is now also reachable directly from the chart-controls strip: a small button that cycles `min → h:min → real time`. It shares the single `timeAxisMode` setting with the Settings → Appearance segmented control — changing either surface updates the other (the chart button's label is reflected from the setting each frame; the segmented control re-seeds when the Settings modal opens). The chart axis and label update live.
+
+## [0.5.45] — 2026-07-21
+
+Feature — future threshold-crossover highlights on the chart, and a selectable x-axis time scale.
+
+- **Crossover dots on the emergence trajectory.** Where the red dashed "Ce if stopped now" projection crosses a horizontal threshold, the chart now draws a highlight dot so the trainee can read the crossing time at a glance: an **orange dot** where it crosses the redose threshold (amber line) and a **red dot** where it meets the emergence/exit threshold (red line). The dots appear automatically whenever the trend line and the relevant threshold are both present, and clear when the trend line is not shown — no toggle. Implemented as a new `afterDraw` canvas plugin (`js/ui/chart/plugins/crossover-dots.js`) that reads the existing `emergence-traj` dataset and the `thresholdCe`/`exitCe` state, so it self-heals across New Case and needs no per-frame plumbing. Colors read from the `--amber`/`--red` CSS variables to stay theme-aware.
+- **Selectable x-axis time scale.** A new Settings → Appearance "Time axis" control switches the chart's x-axis between **Min** (sim minutes, unchanged default), **H:Min** (h:mm), and **Real time** (wall-clock, anchored to the case start time from the timer). The choice persists (inside the settings blob, so it cloud-syncs with other preferences) and updates the axis ticks and title live. Real time falls back to h:min when no case start time is set. The x-axis now uses a dedicated tick formatter; the y-axes are unchanged.
+
 ## [0.5.44.13] — 2026-07-15
 
 Bug fix — history action buttons no longer clip the "Edit" button.

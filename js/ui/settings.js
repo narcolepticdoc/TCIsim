@@ -37,10 +37,12 @@ const DEFAULTS     = {
   textSize:    'normal',// Text scale: 'normal' | 'large' | 'xl' | 'xxl'
   theme:       'dark',  // App color scheme: 'dark' | 'light'
   showCeBand:  false,   // Show the Ce drift tolerance band around target lines
+  timeAxisMode: 'min',  // Chart x-axis scale: 'min' | 'hmin' | 'rt' (real time)
 };
 
 const TEXT_SIZES = ['normal', 'large', 'xl', 'xxl'];
 const THEMES     = ['dark', 'light'];
+const TIME_AXIS_MODES = ['min', 'hmin', 'rt'];
 
 const DRUG_NAMES = {
   propofol:     'Propofol',
@@ -122,6 +124,9 @@ export function getSettings() {
       const showCeBand = (typeof p.showCeBand === 'boolean')
         ? p.showCeBand : DEFAULTS.showCeBand;
 
+      const timeAxisMode = (typeof p.timeAxisMode === 'string' && TIME_AXIS_MODES.includes(p.timeAxisMode))
+        ? p.timeAxisMode : DEFAULTS.timeAxisMode;
+
       // Clamp to [0, 2] and snap to a 0.5 s grid.
       const reactionDelaySec = (typeof p.reactionDelaySec === 'number' && isFinite(p.reactionDelaySec))
         ? Math.round(Math.max(0, Math.min(2, p.reactionDelaySec)) * 2) / 2
@@ -147,14 +152,15 @@ export function getSettings() {
         textSize,
         theme,
         showCeBand,
+        timeAxisMode,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode })); } catch (e) {}
 }
 
 /**

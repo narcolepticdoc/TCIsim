@@ -394,6 +394,7 @@
     .chart-btn{width:38px;height:38px;border:1px solid var(--border-subtle);border-radius:6px;background:var(--bg-card);color:var(--text-secondary);font-size:22px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s,background .15s}
     .chart-btn:hover{color:var(--text-primary);background:var(--bg-hover)}
     .chart-btn.active{color:var(--blue)}
+    .chart-btn-sm{font-size:12px;font-weight:700}
     .chart-placeholder .ph-icon{font-size:28px;margin-bottom:6px;opacity:.4}
     .history-area{flex:1;overflow-y:auto;padding:8px 12px}
     .history-area .history-empty{text-align:center;color:var(--text-muted);font-size:12px;padding-top:30px}
@@ -1477,6 +1478,7 @@
               <button class="chart-btn" id="btn-chart-tooltip" title="Toggle crosshair values">ⓘ</button>
               <button class="chart-btn" id="btn-chart-events" title="Toggle future event markers (TCI)">⚑</button>
               <button class="chart-btn" id="btn-chart-ghosts" title="Toggle ghost traces of other drugs">∿</button>
+              <button class="chart-btn chart-btn-sm" id="btn-chart-timeaxis" title="X-axis time scale (min / h:min / real time)">min</button>
               <button class="chart-btn" id="btn-chart-expand" title="Expand chart">⤢</button>
             </div>
           </div>
@@ -2044,6 +2046,16 @@
                 <div class="seg-group" id="set-theme">
                   <button type="button" class="seg-btn active" data-theme="dark">Dark</button>
                   <button type="button" class="seg-btn" data-theme="light">Light</button>
+                </div>
+              </div>
+            </div>
+            <div class="settings-row">
+              <label>Time axis</label>
+              <div class="settings-control">
+                <div class="seg-group" id="set-time-axis">
+                  <button type="button" class="seg-btn active" data-mode="min">Min</button>
+                  <button type="button" class="seg-btn" data-mode="hmin">H:Min</button>
+                  <button type="button" class="seg-btn" data-mode="rt">Real time</button>
                 </div>
               </div>
             </div>
