@@ -259,6 +259,12 @@ export function createChart(canvas, config = {}) {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
+      // Suppress Chart.js's built-in hover/active-element points. Datasets set
+      // pointRadius: 0 for the resting state, but the default pointHoverRadius (4)
+      // still drew hollow rings on every curve at the hovered/clicked x-index
+      // (interaction mode 'index'). The tooltip is disabled and onClick reads
+      // event.x, so nothing depends on hover activation — kill the rings here.
+      elements: { point: { hoverRadius: 0 } },
       layout: {
         padding: { right: 5 },
       },

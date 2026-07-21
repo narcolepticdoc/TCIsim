@@ -4,6 +4,35 @@
 
 ## Session History
 
+### Removed stray hover circles + on-chart x-axis control (v0.5.46) — Interim
+
+Two follow-ups to the v0.5.45 chart work.
+
+**Hover-circle removal.** A user reported long-standing unfilled circles that ride
+the Cp/Ce/trend lines and re-snap to the clicked x-position. They were not from any
+custom plugin (cursor-dots, inspect-dots, crossover-dots all draw *filled* dots) —
+they were Chart.js's built-in hover/active-element points. Every dataset sets
+`pointRadius: 0`, but none disabled the hover radius, so the default
+`pointHoverRadius: 4` drew a point on each curve at the active index. With
+`interaction: { mode: 'index', intersect: false }`, hovering/clicking activates the
+nearest index across all datasets, and the near-transparent dataset fills
+(`color + '18'` / `transparent`) left just a colored ring. The tooltip is disabled
+and `onClick` reads `event.x`, so nothing depended on hover activation. Fixed with
+`options.elements.point.hoverRadius = 0` in `js/ui/chart/index.js`.
+
+**On-chart x-axis time-scale button.** Added `btn-chart-timeaxis` to the
+`#chart-controls` strip (`index.html`), a compact text button that cycles
+`min → hmin → rt`. Wiring mirrors the persisted ghost-toggle pattern: the click
+handler (`js/app.js`, "Wire chart controls" block) computes the next mode, persists
+it via `settings.setSettings({ ...cur, timeAxisMode })`, and calls
+`chart.setTimeAxisMode(next, timer.getWallClockStart()?.getTime())` for immediate
+feedback. The button's *label* is reflected from the setting in `chart-bridge.js
+onFrame` (idempotent, every frame — the rAF loop runs continuously), so it stays
+correct whichever surface last changed the mode. The Settings → Appearance segmented
+control re-seeds its `.active` state when the settings modal opens
+(`settings-ui.js`), keeping the two controls in sync. `settings.timeAxisMode` stays
+the single source of truth; no new chart/engine logic.
+
 ### Chart crossover highlights + selectable x-axis time scale (v0.5.45) — Interim
 
 Two chart additions.

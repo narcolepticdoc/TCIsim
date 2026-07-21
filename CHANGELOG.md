@@ -11,6 +11,13 @@
 
 ---
 
+## [0.5.46] — 2026-07-21
+
+Fix + feature — removed stray hover circles from the chart and added an on-chart x-axis time-scale control.
+
+- **Removed the hollow circles that rode the curves.** Chart.js's built-in hover/active-element points were being drawn on every curve at the hovered/clicked x-index — hollow rings (the datasets' fill is a near-transparent tint) that tracked the lines and re-snapped on click. They served no purpose (the tooltip is disabled and the click handler reads the pointer x directly, not the active elements). Suppressed them with `options.elements.point.hoverRadius = 0`. The filled "now" cursor dots, amber inspect dots, and crossover dots are unaffected.
+- **On-chart x-axis time-scale button.** The Min / H:Min / Real-time selector (added in 0.5.45) is now also reachable directly from the chart-controls strip: a small button that cycles `min → h:min → real time`. It shares the single `timeAxisMode` setting with the Settings → Appearance segmented control — changing either surface updates the other (the chart button's label is reflected from the setting each frame; the segmented control re-seeds when the Settings modal opens). The chart axis and label update live.
+
 ## [0.5.45] — 2026-07-21
 
 Feature — future threshold-crossover highlights on the chart, and a selectable x-axis time scale.

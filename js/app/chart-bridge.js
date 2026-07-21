@@ -402,6 +402,16 @@ export function createChartBridge({
         const wc = timer.getWallClockStart();
         chart.setTimeAxisMode(s.timeAxisMode ?? 'min', wc ? wc.getTime() : null);
       }
+      // Reflect the current mode onto the on-chart time-axis button so its
+      // label stays correct no matter which surface (this button or the
+      // Settings segmented control) last changed the setting. Idempotent.
+      const taBtn = $('btn-chart-timeaxis');
+      if (taBtn) {
+        const mode = s.timeAxisMode ?? 'min';
+        const label = { min: 'min', hmin: 'h:m', rt: 'rt' }[mode] || 'min';
+        if (taBtn.textContent !== label) taBtn.textContent = label;
+        taBtn.classList.toggle('active', mode !== 'min');
+      }
     }
     // Check for upcoming events requiring advance warning
     if (t > 0) settings.check(t);
