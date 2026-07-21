@@ -906,14 +906,24 @@ function boot() {
     onNotationDelete: (id) => deleteAnnotation(id),
   });
 
+  // Seed the history log's time format from the persisted x-axis mode so it
+  // renders correctly before the first rAF frame (no ET→RT flash on load).
+  history.setTimeFormat((settings.getSettings().timeAxisMode ?? 'min') === 'rt' ? 'rt' : 'et');
   const btnHistoryTime = $('btn-history-time');
   if (btnHistoryTime) {
-    const etEl = btnHistoryTime.querySelector('.t-et');
-    const rtEl = btnHistoryTime.querySelector('.t-rt');
+    // The history ET/RT button flips the shared real-time dimension. Turning
+    // real-time off restores the chart's last non-'rt' tick style (min/h:min).
+    // Reflection (spans, history rows, chart axis, on-chart button) flows from
+    // chart-bridge onFrame; here we only write the setting + apply immediately.
     btnHistoryTime.addEventListener('click', () => {
-      const fmt = history.toggleTimeFormat();
-      if (etEl) etEl.classList.toggle('active', fmt === 'et');
-      if (rtEl) rtEl.classList.toggle('active', fmt === 'rt');
+      const cur = settings.getSettings();
+      const isRt = (cur.timeAxisMode ?? 'min') === 'rt';
+      const next = isRt ? chartBridge.getLastNonRtMode() : 'rt';
+      settings.setSettings({ ...cur, timeAxisMode: next });
+      if (chart) {
+        const wc = timer.getWallClockStart();
+        chart.setTimeAxisMode(next, wc ? wc.getTime() : null);
+      }
     });
   }
   const btnHistoryEdit = $('btn-history-edit');

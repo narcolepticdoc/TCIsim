@@ -4,6 +4,25 @@
 
 ## Session History
 
+### History timescale synced to chart x-axis (v0.5.47) — Interim
+
+The history log's ET/RT time format was a separate, session-only toggle
+(`_timeFormat` in `history.js`) that could disagree with the chart x-axis and
+reset every reload. Unified them onto the shared, persisted `timeAxisMode` along
+the real-time dimension only: `rt` → history shows clock time; `min`/`hmin` →
+elapsed `h:mm:ss`. The history keeps its second precision; the chart keeps its
+min-vs-h:min tick distinction (irrelevant to the log).
+
+Single source of truth stays `settings.timeAxisMode`, reflected every frame in
+`chart-bridge.js onFrame` — which now also (a) tracks the last non-`rt` mode,
+(b) calls the new idempotent `history.setTimeFormat(fmt)` (replacing
+`toggleTimeFormat`), and (c) reflects the history ET/RT button spans. The history
+button handler (`app.js`) was rewritten to flip the shared setting: real-time
+on → `rt`, off → `chartBridge.getLastNonRtMode()` (so the chart's tick style is
+never destroyed). Both button surfaces and the Settings → Appearance segmented
+control are now views of the one setting. History gains real-time persistence
+for free. No new settings key.
+
 ### Removed stray hover circles + on-chart x-axis control (v0.5.46) — Interim
 
 Two follow-ups to the v0.5.45 chart work.

@@ -138,11 +138,17 @@ export function exitEditMode() {
   return was;
 }
 
-/** Toggle the time-format display between elapsed (ET) and real-time (RT). */
-export function toggleTimeFormat() {
-  _timeFormat = _timeFormat === 'et' ? 'rt' : 'et';
+/**
+ * Set the time-format display: 'et' (elapsed) or 'rt' (real/clock time).
+ * Driven by the shared `timeAxisMode` setting via chart-bridge, so the history
+ * log tracks the chart x-axis. Idempotent — the bridge calls this every frame,
+ * so it only re-renders when the format actually changes.
+ */
+export function setTimeFormat(fmt) {
+  const next = fmt === 'rt' ? 'rt' : 'et';
+  if (next === _timeFormat) return;
+  _timeFormat = next;
   render(_selectedDrug);
-  return _timeFormat;
 }
 
 /**

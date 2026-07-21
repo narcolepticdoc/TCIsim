@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.47] — 2026-07-21
+
+Feature — the history log's time format now follows the chart x-axis time scale.
+
+- **The history ET/RT toggle and the chart x-axis time scale are now one setting.** Previously the history log's elapsed-vs-real-time toggle was a separate, session-only control that could disagree with the chart axis and reset on every reload. Now both share the persisted `timeAxisMode`: when the chart is in **Real time**, the history rows show clock time; otherwise they show elapsed `h:mm:ss`. Changing the mode from any surface — the history ET/RT button, the on-chart cycle button, or Settings → Appearance — updates all of them together (reflected each frame in `chart-bridge.js onFrame`). The history log keeps its second-level precision; the chart keeps its separate `min` vs `h:min` tick choice, since that only affects axis ticks. Turning real time **off** from the history button restores whatever tick style the chart had before (never forcing `min` or `h:min`). As a side benefit, the history's real-time choice now persists across reloads.
+
 ## [0.5.46] — 2026-07-21
 
 Fix + feature — removed stray hover circles from the chart and added an on-chart x-axis time-scale control.
