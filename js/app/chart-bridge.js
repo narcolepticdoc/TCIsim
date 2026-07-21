@@ -329,18 +329,23 @@ export function createChartBridge({
         }
       }
 
-      // Emergence trajectory — red dashed projection of how Ce would decay if
-      // the infusion were stopped now, descending to the emergence threshold.
+      // Decay projection — red dashed "Ce if stopped now" trend line. Projected
+      // toward the LOWEST set threshold (redose or emergence) so it descends far
+      // enough to cross both threshold lines; the crossover-dots plugin reads
+      // this dataset to place its orange (redose) and red (emergence) dots.
       // Shown whenever a threshold is set AND current Ce is above it — regardless
       // of pump state, since the predictor already advances at rate 0. This keeps
       // the line visible while the pump is paused (e.g. after lowering the target),
       // which is exactly the decay it projects. Scaled to match the live Ce dataset.
       if (model && chart.setEmergenceTrajectory) {
-        const exitCe = mode.getExitCe(selectedDrug);
+        const exitCe   = mode.getExitCe(selectedDrug);
+        const redoseCe = mode.getIntermittentThreshold(selectedDrug);
         const conc = model.getConcentrationsAt(selectedDrug, t);
-        const showEmergence = exitCe > 0 && t > 0 && conc.Ce > exitCe;
-        if (showEmergence) {
-          const traj = model.computeDecayTrajectory(selectedDrug, t, exitCe);
+        const targets = [exitCe, redoseCe].filter(v => v > 0);
+        const target = targets.length ? Math.min(...targets) : 0;
+        const showTrajectory = target > 0 && t > 0 && conc.Ce > target;
+        if (showTrajectory) {
+          const traj = model.computeDecayTrajectory(selectedDrug, t, target);
           const scaled = (traj && ys !== 1)
             ? traj.map(p => ({ time: p.time, Ce: p.Ce * ys }))
             : traj;

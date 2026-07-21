@@ -11,6 +11,12 @@
 
 ---
 
+## [0.5.47.1] — 2026-07-21
+
+Bug fix — the redose-threshold crossover dot now shows when only the redose threshold is set.
+
+- **The orange redose crossover dot no longer requires an emergence threshold.** The chart's "Ce if stopped now" trend line — which the crossover-dots plugin reads to place its dots — was only computed when an emergence (exit) threshold was set, so with only a redose threshold there was no trend line and thus no orange dot. The decay projection is now aimed at the **lowest set threshold** (redose or emergence), so the trend line appears whenever either threshold is set and current Ce is above it, and it descends far enough to cross both lines. Redose-only cases now show the orange dot; emergence-only and both-set cases are unchanged. Fixed in `js/app/chart-bridge.js`.
+
 ## [0.5.47] — 2026-07-21
 
 Feature — the history log's time format now follows the chart x-axis time scale.

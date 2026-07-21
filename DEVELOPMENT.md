@@ -4,6 +4,19 @@
 
 ## Session History
 
+### Redose crossover dot shows without an emergence threshold (v0.5.47.1) — Interim
+
+Bug fix to the crossover-highlights feature (v0.5.45). The orange dot marking where
+the "Ce if stopped now" trend line crosses the redose threshold only appeared when an
+emergence threshold was also set. Root cause: the trend line (`emergence-traj`
+dataset, which `crossover-dots.js` reads) was computed in `chart-bridge.js onFrame`
+only when `exitCe > 0`, targeting `exitCe`. Generalized it to project toward the
+lowest set threshold — `Math.min` of the positive values among `getExitCe` and
+`getIntermittentThreshold` — so the trend line exists whenever either threshold is set
+and Ce is above it, descending far enough to cross both lines. Emergence-only and
+both-set behavior is preserved (min collapses to the same target). Dataset role and
+`setEmergenceTrajectory` setter names left unchanged to avoid churn.
+
 ### History timescale synced to chart x-axis (v0.5.47) — Interim
 
 The history log's ET/RT time format was a separate, session-only toggle
