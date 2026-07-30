@@ -7,9 +7,12 @@
  *
  * Categories are differentiated on three independent channels, so no row
  * ever has to be faded to read as secondary:
- *   - left-border colour  = what the event is (bolus, rate, TCI hold, stop, note)
- *   - badge chip          = who commanded it (TCI filled, AUTO outlined, manual bare)
- *   - row surface         = commanded (filled card) vs. derived (unfilled hairline)
+ *   - border colour + label text = what the event is (bolus, rate, hold, stop, note)
+ *   - badge chip                 = who commanded it (TCI, AUTO, MAN)
+ *   - row surface                = commanded (filled card) vs. derived (hairline)
+ *
+ * The value line is never category-coloured, so the dose/rate number keeps full
+ * contrast. Red carries a single meaning: the pump is not delivering.
  *
  * Opacity is reserved for one thing only: the panel divides events into past
  * (before current time) and future (after current time, dimmed).
@@ -326,21 +329,24 @@ export function renderTotals(drugId) {
 // ---- Source badge ----
 
 /**
- * Chip marking who commanded the event. A manual event gets no chip — it is
- * the unmarked baseline; only machine-authored rows are labelled.
+ * Chip marking who commanded the event. Every event carries one, so the label
+ * column stays aligned: TCI (a plan step), AUTO (machine-derived), MAN (a human
+ * acted). Manual is the fallback — createEvent defaults `source` to 'manual',
+ * so an unset source lands there too.
  */
 function sourceBadge(source) {
   if (source === 'tci') return '<span class="h-badge h-badge-tci">TCI</span>';
   if (source === 'system') return '<span class="h-badge h-badge-auto">AUTO</span>';
-  return '';
+  return '<span class="h-badge h-badge-man">MAN</span>';
 }
 
 // ---- Type icon / class ----
 
 /**
- * Category class driving the row's left-border colour. A TCI zero-rate step is
- * a scheduled hold, not a rate command, so it gets its own class rather than
- * sharing h-evt-rate.
+ * Category class driving the row's border and label colour. A TCI zero-rate step
+ * is a scheduled hold, not a rate command, so it gets its own class — it shares
+ * the red of a manual stop (neither is delivering), and the TCI chip is what
+ * distinguishes a planned hold from a user-initiated one.
  */
 function typeClass(evt) {
   if (evt.type === 'bolus') return 'h-evt-bolus';

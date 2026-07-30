@@ -401,14 +401,20 @@
     .history-list{display:flex;flex-direction:column;gap:2px}
     .history-row{display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:1px;align-items:baseline;padding:5px 10px;background:var(--bg-card);border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:11px;border-left:3px solid transparent;transition:background .15s,outline-color .15s}
     /* Category scheme — one meaning per visual channel:
-         left-border colour = what the event is (bolus / rate / hold / stop / note)
-         badge chip         = who commanded it (TCI filled, AUTO outlined, manual bare)
-         row surface        = commanded (filled card) vs. derived (unfilled hairline)
-       Text is never faded to signal category; opacity is reserved for past-vs-future. */
+         border colour + label text = what the event is (bolus / rate / hold / stop / note)
+         badge chip                 = who commanded it (TCI filled, AUTO and MAN outlined)
+         row surface                = commanded (filled card) vs. derived (unfilled hairline)
+       The value line is never category-coloured — it stays --text-primary so the number
+       you read precisely keeps full contrast. Text is never faded to signal category;
+       opacity is reserved for past-vs-future. Red means exactly one thing: not delivering. */
     .history-row.h-evt-bolus{border-left-color:var(--purple)}
     .history-row.h-evt-rate{border-left-color:var(--cyan)}
-    .history-row.h-evt-hold{border-left-color:var(--cyan)}
+    .history-row.h-evt-hold{border-left-color:var(--red)}
     .history-row.h-evt-pause{border-left-color:var(--red)}
+    .history-row.h-evt-bolus .h-type{color:var(--purple)}
+    .history-row.h-evt-rate .h-type{color:var(--cyan)}
+    .history-row.h-evt-hold .h-type{color:var(--red)}
+    .history-row.h-evt-pause .h-type{color:var(--red)}
     .history-row.h-future{opacity:0.45}
     /* System (auto rate-restore) rows recede by surface, not by ink — the card fill
        drops to a hairline outline while the label and value stay full contrast. */
@@ -461,13 +467,17 @@
     .history-reconcile-row .h-action-reconcile{width:100%;font-size:12px;padding:8px 12px}
     .history-reconcile-row .h-action-reconcile:hover{color:var(--amber);border-color:var(--amber)}
     body.edit-history-mode .history-reconcile-row{display:block}
-    /* Source chips — TCI is filled (a commanded plan step), AUTO is outlined
-       (machine-derived). A manual event carries no chip: it is the baseline. */
+    /* Source chips — TCI is filled (a commanded plan step); AUTO (machine-derived)
+       and MAN (a human acted) are outlined. Chips nest inside .h-type, so each sets
+       its own `color` explicitly rather than inheriting the category colour — that
+       is what keeps MAN slate on a red PUMP STOPPED row, and it also pins the
+       currentColor outline. Do not change these to inherit. */
     /* Chips are sized in em so they track .h-type across the four text scales —
        they carry category meaning now, so they must not shrink into illegibility. */
     .h-badge{display:inline-block;font-size:0.9em;font-weight:700;padding:1px 4px;border-radius:3px;margin-right:5px;vertical-align:middle;letter-spacing:0}
     .h-badge-tci{background:var(--amber);color:#000}
     .h-badge-auto{background:transparent;color:var(--cyan);font-weight:600;box-shadow:inset 0 0 0 1px currentColor}
+    .h-badge-man{background:transparent;color:var(--text-secondary);font-weight:600;box-shadow:inset 0 0 0 1px currentColor}
 
     /* Control bar — below chart */
     .sim-controls{display:flex;align-items:center;gap:5px;padding:6px 10px;background:var(--bg-card);border-top:1px solid var(--border-subtle);flex-shrink:0}

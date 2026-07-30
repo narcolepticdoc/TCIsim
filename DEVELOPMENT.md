@@ -4,6 +4,44 @@
 
 ## Session History
 
+### History log: MAN chip + colour into the label text (v0.5.48.1) — Interim
+
+Follow-up refining the v0.5.48 scheme on two axes the first pass left
+half-expressed.
+
+**Source chips are now complete.** v0.5.48 treated manual as "the unmarked
+baseline" and gave it no chip. In use that read as an omission rather than a
+default: the label column didn't align across rows, and the one source the user
+is personally responsible for was the only one not stated. `sourceBadge` now
+falls through to `MAN` (outlined `--text-secondary`), so the family is `TCI`
+filled / `AUTO` outlined cyan / `MAN` outlined slate. Manual is the fallback
+branch rather than an equality test, which also covers an unset `source` —
+though `createEvent` already defaults it to `'manual'`.
+
+**Category colour reaches the label text.** Previously only the 3px stripe
+carried it (plus notation labels, which were already amber). Added
+`.h-evt-* .h-type` colour rules at specificity `0,3,0` so they beat the base
+`.history-row .h-type` rule, making the category readable when the stripe is at
+the edge of vision on a narrow panel.
+
+Deliberately stopped short of colouring the **value** line. Mocked up all three
+reaches side by side (label-only / label+value / stops-only) and rendered them in
+both themes before deciding: tinting the numeric readout cost contrast on the one
+thing you read precisely, and the loss was worse in light theme. The value stays
+`--text-primary` on every row.
+
+**A TCI zero-rate hold moved from cyan to red**, joining the manual stop. Both
+mean no drug is flowing, so red now carries exactly one meaning — *not
+delivering* — and the `TCI` chip is what separates a planned hold from a
+user-initiated stop. `typeClass` already emitted `h-evt-hold`; only its colour
+moved.
+
+One inheritance trap worth remembering: chips are nested **inside** `.h-type`, so
+they would otherwise pick up the new category colour. `.h-badge-auto` and
+`.h-badge-man` each set `color` explicitly, which both fixes the chip's own hue
+and pins the `currentColor` its outline is drawn with — that is what keeps `MAN`
+slate on a red `PUMP STOPPED` row. Do not "simplify" those to inherit.
+
 ### History log: category scheme with no dimmed rows (v0.5.48) — Interim
 
 The history panel was signalling "this row matters less" by fading ink. Auto
