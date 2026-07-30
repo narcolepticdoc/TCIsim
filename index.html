@@ -25,6 +25,11 @@
       --text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#475569;--text-accent:#60a5fa;
       --blue:#3b82f6;--blue-dim:#1e40af;--red:#ef4444;--green:#22c55e;
       --amber:#f59e0b;--cyan:#06b6d4;--purple:#8b5cf6;
+      /* Violet as ink rather than fill. --purple is used as a button/indicator
+         background under white text, so it cannot be brightened; text and thin
+         strokes on a dark card need a lighter step to match the luminance of
+         --cyan and --red beside them. */
+      --purple-bright:#a78bfa;
       /* Chart-specific tokens (consumed by Chart.js axes/grid/legend/labels). */
       --chart-axis-title:#9ca3af;--chart-tick:#6b7280;--chart-grid:#1e293b;
       --chart-legend:#9ca3af;--chart-tooltip-bg:#1e293bee;--chart-label-fg:#ffffff;
@@ -43,6 +48,9 @@
       --text-primary:#0f172a;--text-secondary:#475569;--text-muted:#94a3b8;--text-accent:#2563eb;
       --blue:#2563eb;--blue-dim:#bfdbfe;--red:#dc2626;--green:#16a34a;
       --amber:#d97706;--cyan:#0891b2;--purple:#7c3aed;
+      /* Intentionally identical to --purple here: on a white card the darker
+         violet already is the correct ink. Only dark theme needed the lift. */
+      --purple-bright:#7c3aed;
       --chart-axis-title:#475569;--chart-tick:#64748b;--chart-grid:#e2e8f0;
       --chart-legend:#475569;--chart-tooltip-bg:#ffffffee;--chart-label-fg:#0f172a;
       --bis-band-alpha:55;
@@ -407,11 +415,11 @@
        The value line is never category-coloured — it stays --text-primary so the number
        you read precisely keeps full contrast. Text is never faded to signal category;
        opacity is reserved for past-vs-future. Red means exactly one thing: not delivering. */
-    .history-row.h-evt-bolus{border-left-color:var(--purple)}
+    .history-row.h-evt-bolus{border-left-color:var(--purple-bright)}
     .history-row.h-evt-rate{border-left-color:var(--cyan)}
     .history-row.h-evt-hold{border-left-color:var(--red)}
     .history-row.h-evt-pause{border-left-color:var(--red)}
-    .history-row.h-evt-bolus .h-type{color:var(--purple)}
+    .history-row.h-evt-bolus .h-type{color:var(--purple-bright)}
     .history-row.h-evt-rate .h-type{color:var(--cyan)}
     .history-row.h-evt-hold .h-type{color:var(--red)}
     .history-row.h-evt-pause .h-type{color:var(--red)}

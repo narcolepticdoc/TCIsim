@@ -4,6 +4,48 @@
 
 ## Session History
 
+### History log: short labels + brighter bolus violet (v0.5.48.2) — Interim
+
+Two fallouts from v0.5.48.1, both reported in use.
+
+**Labels wrapped.** Adding a chip to every row spent horizontal budget the label
+line didn't have. The history panel is `flex:1` of `.sim-content` with
+`min-width:200px` (tablet-landscape block in `index.html`), so its real working
+width is 200–240px, not the comfortable width it gets in a wide test viewport —
+which is why the v0.5.48.1 screenshots missed it. Measured `.h-type` height ÷
+`line-height` per row in the live panel:
+
+| panel | `AUTO Rate Resumed` | `MAN Pump Stopped` | `MAN Pump Bolus` |
+|---|---|---|---|
+| 200px | 2 | 2 | 2 |
+| 220px | 2 | 2 | 1 |
+| 240px+ | 1 | 1 | 1 |
+
+So the reported `Rate Resumed` was not a one-off — `Pump Stopped` was within a
+character of the same failure. Shortened the whole set rather than patching one
+string: **BOLUS / IV PUSH / RATE / RESUMED / STOPPED / PAUSED**, all one line at
+every width. The dropped words were already carried by the chip and the category
+colour, and `BOLUS` vs `IV PUSH` still expresses `deliveryMode`. Display strings
+only — the `evt.annotation` values `js/sim/events/actions.js` matches on are
+untouched.
+
+**The bolus violet read as recessed.** `--purple` (`#8b5cf6`, violet-500) is
+materially less luminous than the `--cyan` and `--red` rows next to it. Could not
+just brighten the token: `--purple` is a **fill** under white text elsewhere
+(`.btn-ctrl-rate.active-mode`, `.modal-btn-confirm-rate`, the manual-mode
+indicator), where a lighter violet destroys contrast. The history rows need
+violet as **ink** — a different requirement — so added `--purple-bright`,
+following the existing `--blue`/`--blue-dim` precedent. Dark `#a78bfa`
+(violet-400, already the push-bolus confirm fill and `COLORS.ghost`); light
+`#7c3aed`, intentionally identical to light `--purple` because on a white card
+the darker violet already is the correct ink. Only dark theme had the problem.
+
+Process note: chose the shade from a rendered four-way comparison
+(violet-500/400/300 and purple-500) shown against the cyan and red rows, rather
+than reasoning about hex values in the abstract. Worth repeating — relative
+luminance against neighbours is the thing that matters here, and it is not
+legible from the numbers.
+
 ### History log: MAN chip + colour into the label text (v0.5.48.1) — Interim
 
 Follow-up refining the v0.5.48 scheme on two axes the first pass left

@@ -11,6 +11,16 @@
 
 ---
 
+## [0.5.48.2] — 2026-07-30
+
+Fixes — history labels no longer wrap, and the bolus violet is legible against its neighbours.
+
+- **Row labels are shortened so they fit on one line.** Adding the `MAN`/`AUTO` chips in v0.5.48.1 pushed the label past the available width: the history panel is `flex:1` of the content area with `min-width:200px`, so on a tablet it commonly sits at 200–240px. Measured in the real panel, `AUTO Rate Resumed` and `MAN Pump Stopped` both wrapped to two lines at 200–220px, and `MAN Pump Bolus` wrapped at 200px. Labels are now **BOLUS / IV PUSH / RATE / RESUMED / STOPPED / PAUSED** — all fit on one line at every panel width. Nothing is lost: the chip and the category colour already said "pump", and `BOLUS` vs `IV PUSH` still distinguishes the delivery mode. These are display strings only — the `annotation` values the event layer keys on (`'Rate restored after bolus'`) are untouched.
+- **The bolus violet is brighter in dark theme.** `--purple` (`#8b5cf6`) is noticeably less luminous than the cyan rate rows and red stop rows beside it, so the bolus category read as recessed. Bolus rows now use a new `--purple-bright` token — `#a78bfa` in dark theme, and deliberately the same `#7c3aed` in light theme, where the darker violet already is the correct ink on a white card.
+- `--purple` itself is unchanged. It is used as a **fill** under white text (`.btn-ctrl-rate.active-mode`, `.modal-btn-confirm-rate`, the manual-mode indicator), so brightening it would have destroyed that contrast. The history rows need violet as **ink**, which is a separate requirement — hence the separate token, following the existing `--blue` / `--blue-dim` precedent.
+
+Changed in `js/ui/history.js` (`buildEventRow`) and the theme tokens plus history CSS in `index.html`.
+
 ## [0.5.48.1] — 2026-07-30
 
 Tweak — every history row now names its source, and the category colour reaches the label text.

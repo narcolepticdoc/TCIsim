@@ -359,7 +359,14 @@ function typeClass(evt) {
 
 // ---- Main render ----
 
-/** Build the HTML for one pump-command (event) row. */
+/**
+ * Build the HTML for one pump-command (event) row.
+ *
+ * Labels are kept short — BOLUS / IV PUSH / RATE / RESUMED / STOPPED / PAUSED.
+ * The chip and the category colour already say "pump", and the label shares its
+ * line with a source chip, so anything longer wraps once the history panel is at
+ * its 200–240px working width (it is flex:1 of .sim-content, min-width 200px).
+ */
 function buildEventRow(evt, now) {
   const isPast = evt.time <= now;
   const isSystem = evt.source === 'system';
@@ -371,7 +378,7 @@ function buildEventRow(evt, now) {
   let desc = '';
   if (evt.type === 'bolus') {
     const dose = fmtBolusDose(evt.value, evt.drug);
-    const modeLabel = evt.deliveryMode === 'push' ? 'IV Push' : 'Pump Bolus';
+    const modeLabel = evt.deliveryMode === 'push' ? 'IV Push' : 'Bolus';
     desc = `<span class="h-type">${badge}${modeLabel}</span>` +
            `<span class="h-value"><strong>${dose}</strong></span>`;
   } else if (evt.type === 'rate') {
@@ -382,12 +389,12 @@ function buildEventRow(evt, now) {
       const rate = fmtRate(evt.value, evt.drug);
       // A system rate event is the post-bolus restore. The AUTO chip already
       // says it was machine-generated, so the label just names what happened.
-      const label = isSystem ? 'Rate Resumed' : 'Rate';
+      const label = isSystem ? 'Resumed' : 'Rate';
       desc = `<span class="h-type">${badge}${label}</span>` +
              `<span class="h-value"><strong>${rate}</strong></span>`;
     }
   } else if (evt.type === 'pause') {
-    desc = `<span class="h-type">${badge}Pump Stopped</span>`;
+    desc = `<span class="h-type">${badge}Stopped</span>`;
   }
 
   return `<div class="history-row ${tc}${dimClass}${sysClass}" data-evt-id="${evt.id}" data-evt-time="${evt.time}">` +
