@@ -11,6 +11,32 @@
 
 ---
 
+## [0.5.48.1] — 2026-07-30
+
+Tweak — every history row now names its source, and the category colour reaches the label text.
+
+- **Manual events carry a `MAN` chip.** v0.5.48 left manual as the unmarked baseline, which meant the label column didn't align across rows and the one source the user is personally responsible for was the only one not stated. `MAN` is outlined slate — deliberately quiet, so it aligns the column without competing with the filled `TCI` chip, and adds no new hue. All three chips now read as a family: `TCI` filled (a plan step), `AUTO` outlined cyan (machine-derived), `MAN` outlined slate (a human acted).
+- **The category colour extends from the stripe into the label text.** `PUMP BOLUS` is violet, `RATE` cyan, `PUMP STOPPED` red, `NOTE` amber — so the category survives when the 3px stripe is at the edge of vision on a narrow panel. Notation rows already did this; the other types just stop being the exception.
+- **The value line is deliberately *not* coloured.** The dose/rate readout stays `--text-primary` at full contrast. Tinting it was mocked up and rejected: it cost contrast on the one number you read precisely, and the loss was worse in light theme.
+- **A TCI scheduled hold joins the red family.** `PAUSED` was cyan (rate family) while `PUMP STOPPED` was red, even though both mean no drug is flowing. Red now carries exactly one meaning — *not delivering* — and the `TCI` chip is what distinguishes a planned hold from a user-initiated stop.
+- Chips nest inside the label, so each sets its own `color` explicitly rather than inheriting the category colour. That is what keeps `MAN` slate on a red `PUMP STOPPED` row, and it pins the `currentColor` outline the two outlined chips draw with.
+
+Changed in `js/ui/history.js` (`sourceBadge`) and the history CSS block in `index.html`.
+
+## [0.5.48] — 2026-07-30
+
+Readability — the history log no longer fades any category of event.
+
+- **Auto rate-restore rows are legible again.** The post-bolus "rate restored" event was rendered at `opacity:.35` in italic with its colour stripe stripped, which made the one row that explains *why the pump went back to its old rate* the hardest row in the list to read — and near-invisible in light theme. It now renders at full text contrast with its cyan rate stripe intact, labelled **Rate Resumed** (the `↩` prefix is gone), and recedes by **surface** instead of by ink: the card fill drops to a 1px hairline outline so the row still reads as derived rather than commanded.
+- **Pump stops are no longer greyed out.** `Pump Stopped` carried a `--text-muted` slate stripe that read as *disabled*. It now takes a red stripe — stopping the pump is a real clinical action, not a de-emphasised one.
+- **One meaning per visual channel.** The scheme is now: left-border colour = what the event is (bolus violet, rate cyan, TCI hold cyan, stop red, note amber); badge chip = who commanded it; row surface = commanded vs. derived. Opacity is reserved for a single job — past vs. future.
+- **A new outlined `AUTO` chip** marks system-generated events, alongside the existing filled `TCI` chip. A manual event still carries no chip: it is the unmarked baseline. Chips are now sized in `em` so they track the label across all four text scales instead of staying pinned at 9px.
+- **TCI scheduled holds are distinguishable from rate changes.** A TCI zero-rate step gets its own `h-evt-hold` category class rather than sharing one with real rate commands.
+- **Label line contrast raised.** The event label was `--text-muted` on the card background; it is now `--text-secondary`, uppercase and letter-spaced across all row types. Notation labels lose their italic (an italic is a dimming-adjacent affordance) and pick up the amber of their stripe.
+- **Theme fixes.** The bolus stripe was a hardcoded `#6d28d9`, a near-black violet on a white card in light theme; it now uses `var(--purple)`, which has a light-theme value. Two rules also referenced `var(--border)`, a variable defined in neither `:root` block — the notation delete button's border and the ET/RT separator now use `var(--border-subtle)`.
+
+Changed in `js/ui/history.js` and the history CSS block in `index.html`.
+
 ## [0.5.47.1] — 2026-07-21
 
 Bug fix — the redose-threshold crossover dot now shows when only the redose threshold is set.

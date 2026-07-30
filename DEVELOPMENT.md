@@ -4,6 +4,90 @@
 
 ## Session History
 
+### History log: MAN chip + colour into the label text (v0.5.48.1) — Interim
+
+Follow-up refining the v0.5.48 scheme on two axes the first pass left
+half-expressed.
+
+**Source chips are now complete.** v0.5.48 treated manual as "the unmarked
+baseline" and gave it no chip. In use that read as an omission rather than a
+default: the label column didn't align across rows, and the one source the user
+is personally responsible for was the only one not stated. `sourceBadge` now
+falls through to `MAN` (outlined `--text-secondary`), so the family is `TCI`
+filled / `AUTO` outlined cyan / `MAN` outlined slate. Manual is the fallback
+branch rather than an equality test, which also covers an unset `source` —
+though `createEvent` already defaults it to `'manual'`.
+
+**Category colour reaches the label text.** Previously only the 3px stripe
+carried it (plus notation labels, which were already amber). Added
+`.h-evt-* .h-type` colour rules at specificity `0,3,0` so they beat the base
+`.history-row .h-type` rule, making the category readable when the stripe is at
+the edge of vision on a narrow panel.
+
+Deliberately stopped short of colouring the **value** line. Mocked up all three
+reaches side by side (label-only / label+value / stops-only) and rendered them in
+both themes before deciding: tinting the numeric readout cost contrast on the one
+thing you read precisely, and the loss was worse in light theme. The value stays
+`--text-primary` on every row.
+
+**A TCI zero-rate hold moved from cyan to red**, joining the manual stop. Both
+mean no drug is flowing, so red now carries exactly one meaning — *not
+delivering* — and the `TCI` chip is what separates a planned hold from a
+user-initiated stop. `typeClass` already emitted `h-evt-hold`; only its colour
+moved.
+
+One inheritance trap worth remembering: chips are nested **inside** `.h-type`, so
+they would otherwise pick up the new category colour. `.h-badge-auto` and
+`.h-badge-man` each set `color` explicitly, which both fixes the chip's own hue
+and pins the `currentColor` its outline is drawn with — that is what keeps `MAN`
+slate on a red `PUMP STOPPED` row. Do not "simplify" those to inherit.
+
+### History log: category scheme with no dimmed rows (v0.5.48) — Interim
+
+The history panel was signalling "this row matters less" by fading ink. Auto
+rate-restore rows rendered at `opacity:.35`, italic, with their colour stripe
+replaced by `--border-subtle`; pump stops carried a `--text-muted` slate stripe
+that read as *disabled*. Both are events the user needs to read — the
+rate-restore row is the one that explains why the pump returned to its previous
+rate, and the CLAUDE.md invariant already requires those rows to stay visible.
+Light theme made it worse: no history selector had a `[data-theme="light"]`
+override and the bolus stripe was a hardcoded `#6d28d9`, a near-black violet on
+a white card.
+
+Root problem was channel overloading. The event shape carries `type`, `source`
+and `deliveryMode`, but the row only expressed `type` (stripe colour) plus a
+single `TCI` badge, so `source` had nowhere to live except the faded surface.
+Reassigned to one meaning per channel:
+
+| Channel | Encodes |
+|---|---|
+| left-border colour | what the event is — bolus `--purple`, rate `--cyan`, TCI hold `--cyan`, stop `--red`, note `--amber` |
+| badge chip | who commanded it — `TCI` filled amber, `AUTO` outlined cyan, manual bare |
+| row surface | commanded (filled `--bg-card`) vs. derived (transparent + 1px inset hairline) |
+| row opacity | past vs. future *only* (`h-future`, unchanged) |
+
+So a system row now recedes by surface while its label and value sit at full
+contrast, and its label reads `Rate Resumed` (the `↩` prefix retired — the
+`AUTO` chip carries that meaning). Kept the `h-system` class name; only its CSS
+meaning changed. `typeClass` also gained `h-evt-hold` so a TCI zero-rate step
+stops sharing a category with real rate commands.
+
+Deliberately scoped out: past/future dimming stays as-is (temporal cue, not a
+category cue), and the two-line row grid is untouched — recolour and chips only,
+so nothing reflows across the four text-scale tiers. Chips did move from a fixed
+`9px` to `0.9em` so they track `.h-type` at `text-lg`/`xl`/`xxl` instead of
+shrinking into illegibility now that they are load-bearing.
+
+Incidental fixes in the same block: `.h-type` raised from `--text-muted` to
+`--text-secondary` (it was `#475569` on `#111827`) and made uppercase for all row
+types; notation labels lost their italic and took the amber of their stripe; and
+`.h-note-del` / `.t-sep` were pointed at `--border-subtle` — they referenced
+`var(--border)`, which is defined in neither `:root` block.
+
+`updateDimming()`, the `data-evt-id`/`data-evt-time` attributes, the merge/sort
+in `render()` and `buildNoteRow` are all unchanged, so edit-mode selection and
+the rAF dimming path are unaffected.
+
 ### Redose crossover dot shows without an emergence threshold (v0.5.47.1) — Interim
 
 Bug fix to the crossover-highlights feature (v0.5.45). The orange dot marking where

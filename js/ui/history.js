@@ -3,11 +3,19 @@
  * 
  * Renders the model's event list into the history panel.
  * Shows pump commands (rate, bolus, pause) with timing and
- * delivery details. System events (rate-restore after bolus)
- * are hidden. Events are colour-coded by source (manual, TCI).
- * 
- * The panel divides events into past (before current time)
- * and future (after current time, dimmed).
+ * delivery details, interleaved with editorial notations.
+ *
+ * Categories are differentiated on three independent channels, so no row
+ * ever has to be faded to read as secondary:
+ *   - border colour + label text = what the event is (bolus, rate, hold, stop, note)
+ *   - badge chip                 = who commanded it (TCI, AUTO, MAN)
+ *   - row surface                = commanded (filled card) vs. derived (hairline)
+ *
+ * The value line is never category-coloured, so the dose/rate number keeps full
+ * contrast. Red carries a single meaning: the pump is not delivering.
+ *
+ * Opacity is reserved for one thing only: the panel divides events into past
+ * (before current time) and future (after current time, dimmed).
  */
 
 import {
@@ -320,16 +328,31 @@ export function renderTotals(drugId) {
 
 // ---- Source badge ----
 
+/**
+ * Chip marking who commanded the event. Every event carries one, so the label
+ * column stays aligned: TCI (a plan step), AUTO (machine-derived), MAN (a human
+ * acted). Manual is the fallback — createEvent defaults `source` to 'manual',
+ * so an unset source lands there too.
+ */
 function sourceBadge(source) {
   if (source === 'tci') return '<span class="h-badge h-badge-tci">TCI</span>';
-  return '';
+  if (source === 'system') return '<span class="h-badge h-badge-auto">AUTO</span>';
+  return '<span class="h-badge h-badge-man">MAN</span>';
 }
 
 // ---- Type icon / class ----
 
+/**
+ * Category class driving the row's border and label colour. A TCI zero-rate step
+ * is a scheduled hold, not a rate command, so it gets its own class — it shares
+ * the red of a manual stop (neither is delivering), and the TCI chip is what
+ * distinguishes a planned hold from a user-initiated one.
+ */
 function typeClass(evt) {
   if (evt.type === 'bolus') return 'h-evt-bolus';
-  if (evt.type === 'rate') return 'h-evt-rate';
+  if (evt.type === 'rate') {
+    return (evt.value === 0 && evt.source === 'tci') ? 'h-evt-hold' : 'h-evt-rate';
+  }
   if (evt.type === 'pause') return 'h-evt-pause';
   return '';
 }
@@ -357,8 +380,10 @@ function buildEventRow(evt, now) {
       desc = `<span class="h-type">${badge}Paused</span>`;
     } else {
       const rate = fmtRate(evt.value, evt.drug);
-      const prefix = isSystem ? '↩ ' : '';
-      desc = `<span class="h-type">${badge}${prefix}Rate</span>` +
+      // A system rate event is the post-bolus restore. The AUTO chip already
+      // says it was machine-generated, so the label just names what happened.
+      const label = isSystem ? 'Rate Resumed' : 'Rate';
+      desc = `<span class="h-type">${badge}${label}</span>` +
              `<span class="h-value"><strong>${rate}</strong></span>`;
     }
   } else if (evt.type === 'pause') {
