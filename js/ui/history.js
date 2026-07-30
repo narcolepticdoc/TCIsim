@@ -3,11 +3,16 @@
  * 
  * Renders the model's event list into the history panel.
  * Shows pump commands (rate, bolus, pause) with timing and
- * delivery details. System events (rate-restore after bolus)
- * are hidden. Events are colour-coded by source (manual, TCI).
- * 
- * The panel divides events into past (before current time)
- * and future (after current time, dimmed).
+ * delivery details, interleaved with editorial notations.
+ *
+ * Categories are differentiated on three independent channels, so no row
+ * ever has to be faded to read as secondary:
+ *   - left-border colour  = what the event is (bolus, rate, TCI hold, stop, note)
+ *   - badge chip          = who commanded it (TCI filled, AUTO outlined, manual bare)
+ *   - row surface         = commanded (filled card) vs. derived (unfilled hairline)
+ *
+ * Opacity is reserved for one thing only: the panel divides events into past
+ * (before current time) and future (after current time, dimmed).
  */
 
 import {
@@ -320,16 +325,28 @@ export function renderTotals(drugId) {
 
 // ---- Source badge ----
 
+/**
+ * Chip marking who commanded the event. A manual event gets no chip — it is
+ * the unmarked baseline; only machine-authored rows are labelled.
+ */
 function sourceBadge(source) {
   if (source === 'tci') return '<span class="h-badge h-badge-tci">TCI</span>';
+  if (source === 'system') return '<span class="h-badge h-badge-auto">AUTO</span>';
   return '';
 }
 
 // ---- Type icon / class ----
 
+/**
+ * Category class driving the row's left-border colour. A TCI zero-rate step is
+ * a scheduled hold, not a rate command, so it gets its own class rather than
+ * sharing h-evt-rate.
+ */
 function typeClass(evt) {
   if (evt.type === 'bolus') return 'h-evt-bolus';
-  if (evt.type === 'rate') return 'h-evt-rate';
+  if (evt.type === 'rate') {
+    return (evt.value === 0 && evt.source === 'tci') ? 'h-evt-hold' : 'h-evt-rate';
+  }
   if (evt.type === 'pause') return 'h-evt-pause';
   return '';
 }
@@ -357,8 +374,10 @@ function buildEventRow(evt, now) {
       desc = `<span class="h-type">${badge}Paused</span>`;
     } else {
       const rate = fmtRate(evt.value, evt.drug);
-      const prefix = isSystem ? '↩ ' : '';
-      desc = `<span class="h-type">${badge}${prefix}Rate</span>` +
+      // A system rate event is the post-bolus restore. The AUTO chip already
+      // says it was machine-generated, so the label just names what happened.
+      const label = isSystem ? 'Rate Resumed' : 'Rate';
+      desc = `<span class="h-type">${badge}${label}</span>` +
              `<span class="h-value"><strong>${rate}</strong></span>`;
     }
   } else if (evt.type === 'pause') {

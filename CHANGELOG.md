@@ -11,6 +11,20 @@
 
 ---
 
+## [0.5.48] — 2026-07-30
+
+Readability — the history log no longer fades any category of event.
+
+- **Auto rate-restore rows are legible again.** The post-bolus "rate restored" event was rendered at `opacity:.35` in italic with its colour stripe stripped, which made the one row that explains *why the pump went back to its old rate* the hardest row in the list to read — and near-invisible in light theme. It now renders at full text contrast with its cyan rate stripe intact, labelled **Rate Resumed** (the `↩` prefix is gone), and recedes by **surface** instead of by ink: the card fill drops to a 1px hairline outline so the row still reads as derived rather than commanded.
+- **Pump stops are no longer greyed out.** `Pump Stopped` carried a `--text-muted` slate stripe that read as *disabled*. It now takes a red stripe — stopping the pump is a real clinical action, not a de-emphasised one.
+- **One meaning per visual channel.** The scheme is now: left-border colour = what the event is (bolus violet, rate cyan, TCI hold cyan, stop red, note amber); badge chip = who commanded it; row surface = commanded vs. derived. Opacity is reserved for a single job — past vs. future.
+- **A new outlined `AUTO` chip** marks system-generated events, alongside the existing filled `TCI` chip. A manual event still carries no chip: it is the unmarked baseline. Chips are now sized in `em` so they track the label across all four text scales instead of staying pinned at 9px.
+- **TCI scheduled holds are distinguishable from rate changes.** A TCI zero-rate step gets its own `h-evt-hold` category class rather than sharing one with real rate commands.
+- **Label line contrast raised.** The event label was `--text-muted` on the card background; it is now `--text-secondary`, uppercase and letter-spaced across all row types. Notation labels lose their italic (an italic is a dimming-adjacent affordance) and pick up the amber of their stripe.
+- **Theme fixes.** The bolus stripe was a hardcoded `#6d28d9`, a near-black violet on a white card in light theme; it now uses `var(--purple)`, which has a light-theme value. Two rules also referenced `var(--border)`, a variable defined in neither `:root` block — the notation delete button's border and the ET/RT separator now use `var(--border-subtle)`.
+
+Changed in `js/ui/history.js` and the history CSS block in `index.html`.
+
 ## [0.5.47.1] — 2026-07-21
 
 Bug fix — the redose-threshold crossover dot now shows when only the redose threshold is set.

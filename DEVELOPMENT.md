@@ -4,6 +4,52 @@
 
 ## Session History
 
+### History log: category scheme with no dimmed rows (v0.5.48) — Interim
+
+The history panel was signalling "this row matters less" by fading ink. Auto
+rate-restore rows rendered at `opacity:.35`, italic, with their colour stripe
+replaced by `--border-subtle`; pump stops carried a `--text-muted` slate stripe
+that read as *disabled*. Both are events the user needs to read — the
+rate-restore row is the one that explains why the pump returned to its previous
+rate, and the CLAUDE.md invariant already requires those rows to stay visible.
+Light theme made it worse: no history selector had a `[data-theme="light"]`
+override and the bolus stripe was a hardcoded `#6d28d9`, a near-black violet on
+a white card.
+
+Root problem was channel overloading. The event shape carries `type`, `source`
+and `deliveryMode`, but the row only expressed `type` (stripe colour) plus a
+single `TCI` badge, so `source` had nowhere to live except the faded surface.
+Reassigned to one meaning per channel:
+
+| Channel | Encodes |
+|---|---|
+| left-border colour | what the event is — bolus `--purple`, rate `--cyan`, TCI hold `--cyan`, stop `--red`, note `--amber` |
+| badge chip | who commanded it — `TCI` filled amber, `AUTO` outlined cyan, manual bare |
+| row surface | commanded (filled `--bg-card`) vs. derived (transparent + 1px inset hairline) |
+| row opacity | past vs. future *only* (`h-future`, unchanged) |
+
+So a system row now recedes by surface while its label and value sit at full
+contrast, and its label reads `Rate Resumed` (the `↩` prefix retired — the
+`AUTO` chip carries that meaning). Kept the `h-system` class name; only its CSS
+meaning changed. `typeClass` also gained `h-evt-hold` so a TCI zero-rate step
+stops sharing a category with real rate commands.
+
+Deliberately scoped out: past/future dimming stays as-is (temporal cue, not a
+category cue), and the two-line row grid is untouched — recolour and chips only,
+so nothing reflows across the four text-scale tiers. Chips did move from a fixed
+`9px` to `0.9em` so they track `.h-type` at `text-lg`/`xl`/`xxl` instead of
+shrinking into illegibility now that they are load-bearing.
+
+Incidental fixes in the same block: `.h-type` raised from `--text-muted` to
+`--text-secondary` (it was `#475569` on `#111827`) and made uppercase for all row
+types; notation labels lost their italic and took the amber of their stripe; and
+`.h-note-del` / `.t-sep` were pointed at `--border-subtle` — they referenced
+`var(--border)`, which is defined in neither `:root` block.
+
+`updateDimming()`, the `data-evt-id`/`data-evt-time` attributes, the merge/sort
+in `render()` and `buildNoteRow` are all unchanged, so edit-mode selection and
+the rAF dimming path are unaffected.
+
 ### Redose crossover dot shows without an emergence threshold (v0.5.47.1) — Interim
 
 Bug fix to the crossover-highlights feature (v0.5.45). The orange dot marking where
