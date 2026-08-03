@@ -4,6 +4,50 @@
 
 ## Session History
 
+### History log: badge chip text optically centred (v0.5.48.3) — Interim
+
+Reported as "the chip text doesn't look properly centred vertically". It wasn't —
+at base scale a 13.69px chip had 1.85px above the glyphs and 4.84px below.
+
+**Root cause is font metrics, not padding.** Canvas metrics for DM Mono at the
+badge weight: `ascent 0.778em`, `descent 0.333em`, `capHeight 0.778em`. Cap height
+*equals* the full ascent, so capitals touch the very top of the ascent box while
+0.333em of descender space hangs empty below. `TCI`, `AUTO` and `MAN` contain no
+descenders, so that entire gap collects underneath the text. The chip compounded
+it by inheriting `line-height:1.3` from `.h-type` (padding the line box further)
+and using symmetric `padding:1px 4px`, which cannot correct an asymmetry.
+
+**The obvious fix is wrong, and this is the part worth remembering.** A fixed
+`padding:2px 4px 0` looked perfect when checked at base and `text-xxl` — but the
+error is not scale-invariant. Device-pixel rounding of the inherited
+`1.3 × font-size` line height makes it oscillate:
+
+| scale | base | text-lg | text-xl | text-xxl |
+|---|---|---|---|---|
+| off-centre | 1.49 | 0.99 | 0.50 | 1.49 |
+
+so a fixed 1px shift *worsens* `text-xl` (0.50 → 1.00). Any two-scale spot check
+would have shipped that.
+
+Fixed with `line-height:1` + `padding:.36em .45em .16em`. `line-height:1` decouples
+the chip box from `.h-type`; the 0.20em asymmetry pushes caps down to optical
+centre; em units make the correction track `font-size:0.9em` instead of drifting.
+The 0.20em difference was found by sweeping the padding *difference* against
+measured error at all four scales — notably it beats the theoretically exact
+0.333em (= descent − (ascent − capHeight)), which is perfect at base but 1.44px
+out at `text-xl` once em padding rounds to device pixels. Worst case 1.49 → 0.68px,
+and stable across scales. Residual is sub-pixel rounding plus genuine round-letter
+overshoot (`O`, `C` sit a hair below the baseline by design) — not worth chasing.
+
+Horizontal padding moved `4px` → `.45em` (4.05px at base) so chips breathe
+proportionally at large text scales. Re-ran the wrap table before/after to confirm
+the wider chips introduce no new wrapping — identical.
+
+**Known gap, not fixed here:** that wrap check surfaced that at `text-lg` and above
+combined with a 200px panel, labels still wrap. The v0.5.48.2 wrap fix was only
+verified at the base text scale, so this predates this change and is untouched by
+it. Worth a follow-up.
+
 ### History log: short labels + brighter bolus violet (v0.5.48.2) — Interim
 
 Two fallouts from v0.5.48.1, both reported in use.
