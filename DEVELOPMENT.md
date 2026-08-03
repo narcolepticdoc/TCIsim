@@ -4,6 +4,58 @@
 
 ## Session History
 
+### Chart: ghosted crossover dots for background drugs (v0.5.49) — Interim
+
+Requested as "display the crossover dots as ghosts when the drug is in the
+background". The premise needed correcting first: **background drugs had no
+crossover dots at all**. `crossover-dots.js` found one dataset
+(`role: 'emergence-traj'`), read `s.thresholdCe` / `s.exitCe`, and drew against
+`ch.scales.y` — all three selected-drug-only, populated by `chart-bridge.js
+onFrame`. So this was a feature addition, not a restyle.
+
+**Naming trap worth flagging.** `role: 'ghost-drug'` (per-drug background traces)
+is unrelated to `COLORS.ghost` / `role: 'ghost-reconcile'` (a purple
+pre-reconciliation snapshot of the *selected* drug). This work belongs to the
+former; the two share only the word.
+
+Design — reuse the existing per-drug ghost machinery, don't build a parallel one:
+
+- **Bridge** `updateGhostCrossings(t)` computes, per non-selected drug with
+  events, the same target/guard the foreground uses (`min` of the positive
+  thresholds; require `conc.Ce > target`), then `computeDecayTrajectory`, scaling
+  Ce *and* both thresholds by that drug's `yScale`.
+- **Chart** `setGhostCrossings(byDrug)` mirrors `setGhostTraces` — per-drug
+  signature, early-return, `chart.update('none')` only when dirty. No dataset and
+  no new axis: the dots are canvas-drawn, so nothing needs hiding from the legend.
+- **Plugin** keeps the foreground path untouched and appends a background pass,
+  with the arc drawing factored into one helper so the two can't drift. Dimming
+  uses the `ctx.globalAlpha` precedent from `event-markers.js`.
+
+Two decisions that carry the design:
+
+1. **The dots sit on `yGhost_<drugId>`, never `scales.y`.** Easy to get wrong and
+   impossible to eyeball: with propofol foreground (axis max 20) and ketamine
+   background (max 10000, yScale 1000), the same threshold is y-pixel 662 on the
+   right axis and −4159 on the foreground one. Wrong axis = dot silently off
+   canvas, no error. Asserted numerically in testing.
+2. **Cost is contained.** Each background drug is a full decay simulation. Gated
+   on `chart.ghostTracesEnabled` so the default-off state costs nothing;
+   throttled to the 2 s `lastHistoryDimUpdate` cadence rather than the 500 ms
+   tick; and sampled at `{ step: 1 }` instead of the default 0.25 since the
+   trajectory is only interpolated for a crossing, never drawn (52 points vs
+   ~208). `refresh()` also calls it directly so dosing edits move the dots
+   immediately.
+
+Verified by sampling the rendered canvas at each predicted dot centre: redose
+returned rgba(245,157,12,128) — `--amber` at exactly 0.5 `ghostOpacity` — and
+emergence rgba(239,68,68,128) — `--red`, same alpha.
+
+**Known limitation:** ketamine's `DRUG_DEFS.color` is `#f59e0b`, identical to
+`--amber`, so on ketamine's *redose* ghost dot the drug-coloured ring is
+invisible against the amber fill and it reads as a plain ghost dot. Its emergence
+dot (red fill) is unaffected, as are the other drugs. Not worked around — the
+alternative is colour-distance logic for one collision.
+
 ### History log: badge chip text optically centred (v0.5.48.3) — Interim
 
 Reported as "the chip text doesn't look properly centred vertically". It wasn't —

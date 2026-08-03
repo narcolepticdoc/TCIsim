@@ -86,6 +86,7 @@ export function createChartBridge({
   // Throttle state — replaces properties previously glued onto the chart object
   let lastCursorUpdate = 0;
   let lastHistoryDimUpdate = 0;
+  let lastGhostCrossUpdate = 0;
   let lastSsCe = null;
   let lastPlateauRegion = null;
   let lastEventMarkersKey = '';
@@ -138,6 +139,53 @@ export function createChartBridge({
       { ceMin: ce60, ceMax: ce40, color: '#eab308' + a, label: 'GA' },              // Yellow BIS 40-60
       { ceMin: ce40, ceMax: ce20, color: '#22c55e' + a, label: 'Deep Anesthesia' }, // Green  BIS 20-40
     ]);
+  }
+
+  /**
+   * Per-drug decay projections for the background drugs, feeding the ghosted
+   * crossover dots. Mirrors the foreground trajectory logic in onFrame, but
+   * for every non-selected drug.
+   *
+   * Only runs while ghost traces are on — with the toggle off (the default)
+   * the whole feature costs nothing, which matters because each drug here is
+   * a full decay simulation. The trajectory is sampled at a coarse 1-minute
+   * step: it is never drawn, only interpolated for a crossing, so the default
+   * 0.25 min sampling would be four times the engine work and array size for
+   * no visible gain.
+   */
+  function updateGhostCrossings(t) {
+    const chart = getChart();
+    const model = getModel();
+    if (!chart || !model || !chart.setGhostCrossings) return;
+    if (!chart.ghostTracesEnabled) { chart.setGhostCrossings({}); return; }
+
+    const selectedDrug = getSelectedDrug();
+    const byDrug = {};
+    for (const drugId of DRUG_IDS) {
+      if (drugId === selectedDrug) continue;
+      const drugEvents = model.getEvents(drugId);
+      if (!drugEvents || drugEvents.length === 0) continue;
+
+      const exitCe = mode.getExitCe(drugId);
+      const redoseCe = mode.getIntermittentThreshold(drugId);
+      const targets = [exitCe, redoseCe].filter(v => v > 0);
+      if (!targets.length || !(t > 0)) continue;
+      const target = Math.min(...targets);
+      const conc = model.getConcentrationsAt(drugId, t);
+      if (!conc || !(conc.Ce > target)) continue;
+
+      const traj = model.computeDecayTrajectory(drugId, t, target, { step: 1 });
+      if (!traj || traj.length < 2) continue;
+
+      // Scale onto this drug's own ghost axis — never the foreground's.
+      const ys = getConfig(drugId).yScale;
+      byDrug[drugId] = {
+        traj: ys === 1 ? traj : traj.map(p => ({ time: p.time, Ce: p.Ce * ys })),
+        exitCe: exitCe > 0 ? exitCe * ys : 0,
+        thresholdCe: redoseCe > 0 ? redoseCe * ys : 0,
+      };
+    }
+    chart.setGhostCrossings(byDrug);
   }
 
   /**
@@ -201,6 +249,11 @@ export function createChartBridge({
       chart.setGhostTraces(tracesByDrug);
     }
 
+    // Ghosted crossover dots for the background drugs. Also refreshed on the
+    // onFrame throttle, but recomputed here too so a dosing edit moves them
+    // immediately rather than up to 2 s later.
+    updateGhostCrossings(t);
+
     // Show chart controls
     const cc = $('chart-controls');
     if (cc) cc.style.display = 'flex';
@@ -243,12 +296,21 @@ export function createChartBridge({
         chart.setCursorTime(t);
       }
     }
-    // Update history past/future dimming — throttled to every 2s
+    // Slow lane — history past/future dimming and the background-drug
+    // crossover dots, both throttled to every 2s.
     {
       const now = Date.now();
       if (!lastHistoryDimUpdate || now - lastHistoryDimUpdate > 2000) {
         lastHistoryDimUpdate = now;
         history.updateDimming();
+      }
+      // Background-drug crossover dots — one full decay simulation per
+      // background drug, so throttled to the same 2 s cadence rather than
+      // riding the 500 ms tick. The dots mark a projection minutes out; 2 s
+      // of granularity is imperceptible.
+      if (!lastGhostCrossUpdate || now - lastGhostCrossUpdate > 2000) {
+        lastGhostCrossUpdate = now;
+        updateGhostCrossings(t);
       }
     }
     // Chart annotations — updated per-frame so they reflect the

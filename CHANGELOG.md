@@ -11,6 +11,18 @@
 
 ---
 
+## [0.5.49] — 2026-07-30
+
+Feature — background drugs now show ghosted crossover dots on the chart.
+
+- **Background drugs get crossover dots for the first time.** The dots marking where the "Ce if stopped now" trend line crosses a threshold — amber at redose, red at emergence — previously existed only for the selected drug: the plugin read a single `emergence-traj` dataset, took its thresholds from the `s.thresholdCe` / `s.exitCe` scalars, and positioned dots against the foreground `y` scale, all of which the bridge populates for the selected drug alone. Every non-selected drug now gets the same two dots, rendered as ghosts.
+- **Ghost styling:** amber/red fill preserved so the threshold meaning survives, drawn at `ghostOpacity`, with the white ring replaced by the drug's own `DRUG_DEFS` colour. A background drug draws no threshold line, so that ring is the only cue for which drug a dot belongs to.
+- **Gated on the `∿` ghost-traces toggle**, the same switch that reveals the background Ce curves — a dot with no curve and no threshold line beneath it would be meaningless. With the toggle off (the default) the feature also does no work at all: the bridge returns before computing anything.
+- **Each drug's dots sit on its own hidden `yGhost_<drugId>` axis**, not the foreground scale. This matters: with propofol foreground (axis max 20) and ketamine background (max 10000, `yScale` 1000), the same threshold maps to y-pixel 662 on the correct axis versus −4159 on the foreground one — i.e. far off-canvas, where the dot would silently never draw.
+- **Cost is contained.** Each background drug needs a full decay simulation, so the per-frame path is throttled to the same 2 s cadence the history dimming already uses (the timer ticks at 500 ms), and `refresh()` also recomputes immediately so a dosing edit moves the dots at once rather than up to 2 s later. The trajectory is sampled at a coarse 1-minute step instead of the default 0.25 — it is never drawn, only interpolated for a crossing, so the finer sampling would be 4× the engine work and array size for no visible gain (52 points instead of ~208 in testing).
+
+New `setGhostCrossings` setter in `js/ui/chart/index.js` (idempotent per drug, like `setGhostTraces`), new `ghostCrossings` state in `js/ui/chart/state.js`, `updateGhostCrossings()` in `js/app/chart-bridge.js`, and a background pass in `js/ui/chart/plugins/crossover-dots.js`.
+
 ## [0.5.48.3] — 2026-07-30
 
 Fix — the `TCI` / `AUTO` / `MAN` chip text now sits vertically centred in its pill.
