@@ -4,6 +4,57 @@
 
 ## Session History
 
+### Chart: ghost crossover dots only when the projection is real (v0.5.49.1) — Interim
+
+Refinement of v0.5.49, from a good catch: when a background drug's infusion is
+**running**, its decay projection is a hypothetical — "what if I stopped now" —
+not a forecast. The dot marked a crossing the drug was never going to reach.
+
+Measured, ketamine background infusing at 3 mg/min, t=20 min:
+
+| dot | lands at | drug's own ghost curve there |
+|---|---|---|
+| redose | t=30.8, y=300 | **761** |
+| emergence | t=55.5, y=150 | **834** (still climbing) |
+
+So the dots floated hundreds of units below the trace with nothing connecting
+them. The foreground never shows this because it draws the dashed
+`Ce (if stopped)` line, which both labels the hypothetical and gives the dot
+something to sit on; background drugs draw no such line.
+
+Considered adding a ghosted trajectory line for background drugs (the data was
+already in the payload, so it was nearly free) and rendered a three-way
+comparison. The better answer was the user's: **don't draw the dot unless the
+projection is what will actually happen.** That condition — nothing more going
+in — is precisely when the drug's own ghost Ce curve descends through the
+threshold, so a drawn dot always sits on a visible line and the orphan case
+cannot recur. No extra ink, and the semantics get stricter rather than looser.
+
+Guard added ahead of `computeDecayTrajectory` in `updateGhostCrossings()`:
+skip when `model.getRateAtTime(drugId, t) > 0`, and skip when any future event
+is a bolus or a rate > 0. The strict second half matters — a drug paused with a
+queued TCI step is still not going to follow the decay curve. `getRateAtTime`
+already existed; `drugEvents` was already fetched for the empty-events check, so
+the scan is free.
+
+**Foreground deliberately untouched** — its labelled trajectory means its dots
+are not misleading, and suppressing them would strip a shipped feature.
+
+Side benefit: the guard sits *before* the decay simulation, so a running
+background drug now costs zero decay sims instead of one per update — the
+feature got cheaper, not more expensive.
+
+Verified through the real bridge across four background states: infusion running
+(no dots, 0 decay sims), stopped with nothing queued (dots, **gap = 0** between
+dot and ghost curve), stopped with a future rate step (no dots), stopped with a
+future bolus (no dots) — with the foreground trajectory confirmed present in all
+four.
+
+Harness note for next time: the bridge pushes `setGhostEnabled` from
+`settings.ghostTracesEnabled` **every frame**, so a test stub returning `{}` from
+`getSettings()` silently switches ghosts back off after you enable them
+manually. Stub `{ ghostTracesEnabled: true, ghostOpacity: 0.5 }`.
+
 ### Chart: ghosted crossover dots for background drugs (v0.5.49) — Interim
 
 Requested as "display the crossover dots as ghosts when the drug is in the

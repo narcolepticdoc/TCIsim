@@ -166,6 +166,17 @@ export function createChartBridge({
       const drugEvents = model.getEvents(drugId);
       if (!drugEvents || drugEvents.length === 0) continue;
 
+      // A decay projection is only a real forecast when nothing more is going
+      // in. While an infusion runs — or more dosing is queued — it is a "what
+      // if", and its crossing would sit far from this drug's own ghost trace
+      // with no line to sit on: unlike the foreground, a background drug draws
+      // no "Ce (if stopped)" trajectory to anchor the dot. Skipping here also
+      // means the (expensive) decay simulation below is never run for a
+      // running drug, which is the common case.
+      if (model.getRateAtTime(drugId, t) > 0) continue;
+      if (drugEvents.some(e => e.time > t &&
+          (e.type === 'bolus' || (e.type === 'rate' && e.value > 0)))) continue;
+
       const exitCe = mode.getExitCe(drugId);
       const redoseCe = mode.getIntermittentThreshold(drugId);
       const targets = [exitCe, redoseCe].filter(v => v > 0);

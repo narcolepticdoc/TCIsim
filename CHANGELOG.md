@@ -11,6 +11,17 @@
 
 ---
 
+## [0.5.49.1] — 2026-07-30
+
+Fix — background crossover dots now appear only when the decay projection is a real forecast.
+
+- **A running infusion's decay curve is a "what if", not a prediction.** While a background drug is still delivering, its "Ce if stopped now" projection describes a course the drug is not on, so the dot marked a crossing it would never reach. Measured with ketamine infusing at 3 mg/min at t=20: the redose dot sat at y=300 while the drug's own ghost curve was at **761** there, and the emergence dot at y=150 while the curve was at **834** and still climbing — the dots floated hundreds of units below the trace with no line to sit on. The foreground drug avoids this because it draws the dashed `Ce (if stopped)` line, which labels the hypothetical and gives the dot something to sit on; a background drug draws no such line.
+- **Background dots are now suppressed unless nothing more is going in** — no infusion running *and* no future rate or bolus events queued. A drug paused with an upcoming TCI step still isn't going to follow the decay curve, so it is excluded too. That test is exactly the condition under which the drug's own ghost Ce curve descends through the threshold, so a dot that does draw always sits on a visible line: verified at **gap = 0** between the dot and the ghost curve, against gaps of 461 and 684 before.
+- **The foreground is deliberately unchanged.** Its dots still show whatever the pump is doing, because the labelled `Ce (if stopped)` trajectory already declares them as a projection.
+- **Side benefit: the feature got cheaper.** The guard sits ahead of `computeDecayTrajectory`, so a running background drug — the common case — now costs zero decay simulations instead of one per update.
+
+Changed in `updateGhostCrossings()` in `js/app/chart-bridge.js`. No change to the chart, the plugin, or the state.
+
 ## [0.5.49] — 2026-07-30
 
 Feature — background drugs now show ghosted crossover dots on the chart.
