@@ -11,6 +11,17 @@
 
 ---
 
+## [0.5.48.3] — 2026-07-30
+
+Fix — the `TCI` / `AUTO` / `MAN` chip text now sits vertically centred in its pill.
+
+- **The chip text hugged the top of its box.** Measured in the live panel at base scale, a 13.7px chip had 1.85px above the glyphs and 4.84px below. The cause is font metrics, not a stray padding value: DM Mono reports `capHeight` identical to its full ascent (0.778em) with 0.333em of descender space below, so all-caps chip text — `TCI`, `AUTO`, `MAN` all lack descenders — touches the top of the ascent box and leaves the whole descender gap empty underneath. The chip compounded it by inheriting `line-height:1.3` from `.h-type` and using symmetric `padding:1px 4px`, which cannot compensate.
+- **Fixed with `line-height:1` and asymmetric em padding** (`.36em .45em .16em`). The 0.20em extra on top pushes the caps back to optical centre; `line-height:1` stops the box depending on `.h-type`; and em units mean the correction tracks `font-size:0.9em` across all four text scales instead of drifting. Worst-case off-centre drops from **1.49px to 0.68px**, and is now consistent across scales rather than oscillating.
+- A fixed-pixel correction was tried first and rejected: because the inherited `1.3 × font-size` line height rounds differently per scale, the error oscillates (1.49 / 0.99 / 0.50 / 1.49px at base / `text-lg` / `text-xl` / `text-xxl`), so `padding:2px 4px 0` fixes base and `text-xxl` but *worsens* `text-xl`. The 0.20em difference was chosen by sweeping against measured error at every scale — it also beats the theoretically exact 0.333em, which is perfect at base but 1.44px out at `text-xl` once em padding rounds to device pixels.
+- Horizontal padding moves `4px` → `.45em` — 4.05px at base, unchanged in practice, but now proportional at the larger text scales. Verified this introduces no new label wrapping at any panel width or scale.
+
+Changed in the `.h-badge` rule in `index.html`. No JS change.
+
 ## [0.5.48.2] — 2026-07-30
 
 Fixes — history labels no longer wrap, and the bolus violet is legible against its neighbours.
