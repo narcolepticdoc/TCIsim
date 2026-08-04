@@ -11,6 +11,29 @@
 
 ---
 
+## [0.5.49.1] — 2026-07-30
+
+Fix — background crossover dots now appear only when the decay projection is a real forecast.
+
+- **A running infusion's decay curve is a "what if", not a prediction.** While a background drug is still delivering, its "Ce if stopped now" projection describes a course the drug is not on, so the dot marked a crossing it would never reach. Measured with ketamine infusing at 3 mg/min at t=20: the redose dot sat at y=300 while the drug's own ghost curve was at **761** there, and the emergence dot at y=150 while the curve was at **834** and still climbing — the dots floated hundreds of units below the trace with no line to sit on. The foreground drug avoids this because it draws the dashed `Ce (if stopped)` line, which labels the hypothetical and gives the dot something to sit on; a background drug draws no such line.
+- **Background dots are now suppressed unless nothing more is going in** — no infusion running *and* no future rate or bolus events queued. A drug paused with an upcoming TCI step still isn't going to follow the decay curve, so it is excluded too. That test is exactly the condition under which the drug's own ghost Ce curve descends through the threshold, so a dot that does draw always sits on a visible line: verified at **gap = 0** between the dot and the ghost curve, against gaps of 461 and 684 before.
+- **The foreground is deliberately unchanged.** Its dots still show whatever the pump is doing, because the labelled `Ce (if stopped)` trajectory already declares them as a projection.
+- **Side benefit: the feature got cheaper.** The guard sits ahead of `computeDecayTrajectory`, so a running background drug — the common case — now costs zero decay simulations instead of one per update.
+
+Changed in `updateGhostCrossings()` in `js/app/chart-bridge.js`. No change to the chart, the plugin, or the state.
+
+## [0.5.49] — 2026-07-30
+
+Feature — background drugs now show ghosted crossover dots on the chart.
+
+- **Background drugs get crossover dots for the first time.** The dots marking where the "Ce if stopped now" trend line crosses a threshold — amber at redose, red at emergence — previously existed only for the selected drug: the plugin read a single `emergence-traj` dataset, took its thresholds from the `s.thresholdCe` / `s.exitCe` scalars, and positioned dots against the foreground `y` scale, all of which the bridge populates for the selected drug alone. Every non-selected drug now gets the same two dots, rendered as ghosts.
+- **Ghost styling:** amber/red fill preserved so the threshold meaning survives, drawn at `ghostOpacity`, with the white ring replaced by the drug's own `DRUG_DEFS` colour. A background drug draws no threshold line, so that ring is the only cue for which drug a dot belongs to.
+- **Gated on the `∿` ghost-traces toggle**, the same switch that reveals the background Ce curves — a dot with no curve and no threshold line beneath it would be meaningless. With the toggle off (the default) the feature also does no work at all: the bridge returns before computing anything.
+- **Each drug's dots sit on its own hidden `yGhost_<drugId>` axis**, not the foreground scale. This matters: with propofol foreground (axis max 20) and ketamine background (max 10000, `yScale` 1000), the same threshold maps to y-pixel 662 on the correct axis versus −4159 on the foreground one — i.e. far off-canvas, where the dot would silently never draw.
+- **Cost is contained.** Each background drug needs a full decay simulation, so the per-frame path is throttled to the same 2 s cadence the history dimming already uses (the timer ticks at 500 ms), and `refresh()` also recomputes immediately so a dosing edit moves the dots at once rather than up to 2 s later. The trajectory is sampled at a coarse 1-minute step instead of the default 0.25 — it is never drawn, only interpolated for a crossing, so the finer sampling would be 4× the engine work and array size for no visible gain (52 points instead of ~208 in testing).
+
+New `setGhostCrossings` setter in `js/ui/chart/index.js` (idempotent per drug, like `setGhostTraces`), new `ghostCrossings` state in `js/ui/chart/state.js`, `updateGhostCrossings()` in `js/app/chart-bridge.js`, and a background pass in `js/ui/chart/plugins/crossover-dots.js`.
+
 ## [0.5.48.3] — 2026-07-30
 
 Fix — the `TCI` / `AUTO` / `MAN` chip text now sits vertically centred in its pill.

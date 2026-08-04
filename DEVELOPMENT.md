@@ -4,6 +4,109 @@
 
 ## Session History
 
+### Chart: ghost crossover dots only when the projection is real (v0.5.49.1) — Interim
+
+Refinement of v0.5.49, from a good catch: when a background drug's infusion is
+**running**, its decay projection is a hypothetical — "what if I stopped now" —
+not a forecast. The dot marked a crossing the drug was never going to reach.
+
+Measured, ketamine background infusing at 3 mg/min, t=20 min:
+
+| dot | lands at | drug's own ghost curve there |
+|---|---|---|
+| redose | t=30.8, y=300 | **761** |
+| emergence | t=55.5, y=150 | **834** (still climbing) |
+
+So the dots floated hundreds of units below the trace with nothing connecting
+them. The foreground never shows this because it draws the dashed
+`Ce (if stopped)` line, which both labels the hypothetical and gives the dot
+something to sit on; background drugs draw no such line.
+
+Considered adding a ghosted trajectory line for background drugs (the data was
+already in the payload, so it was nearly free) and rendered a three-way
+comparison. The better answer was the user's: **don't draw the dot unless the
+projection is what will actually happen.** That condition — nothing more going
+in — is precisely when the drug's own ghost Ce curve descends through the
+threshold, so a drawn dot always sits on a visible line and the orphan case
+cannot recur. No extra ink, and the semantics get stricter rather than looser.
+
+Guard added ahead of `computeDecayTrajectory` in `updateGhostCrossings()`:
+skip when `model.getRateAtTime(drugId, t) > 0`, and skip when any future event
+is a bolus or a rate > 0. The strict second half matters — a drug paused with a
+queued TCI step is still not going to follow the decay curve. `getRateAtTime`
+already existed; `drugEvents` was already fetched for the empty-events check, so
+the scan is free.
+
+**Foreground deliberately untouched** — its labelled trajectory means its dots
+are not misleading, and suppressing them would strip a shipped feature.
+
+Side benefit: the guard sits *before* the decay simulation, so a running
+background drug now costs zero decay sims instead of one per update — the
+feature got cheaper, not more expensive.
+
+Verified through the real bridge across four background states: infusion running
+(no dots, 0 decay sims), stopped with nothing queued (dots, **gap = 0** between
+dot and ghost curve), stopped with a future rate step (no dots), stopped with a
+future bolus (no dots) — with the foreground trajectory confirmed present in all
+four.
+
+Harness note for next time: the bridge pushes `setGhostEnabled` from
+`settings.ghostTracesEnabled` **every frame**, so a test stub returning `{}` from
+`getSettings()` silently switches ghosts back off after you enable them
+manually. Stub `{ ghostTracesEnabled: true, ghostOpacity: 0.5 }`.
+
+### Chart: ghosted crossover dots for background drugs (v0.5.49) — Interim
+
+Requested as "display the crossover dots as ghosts when the drug is in the
+background". The premise needed correcting first: **background drugs had no
+crossover dots at all**. `crossover-dots.js` found one dataset
+(`role: 'emergence-traj'`), read `s.thresholdCe` / `s.exitCe`, and drew against
+`ch.scales.y` — all three selected-drug-only, populated by `chart-bridge.js
+onFrame`. So this was a feature addition, not a restyle.
+
+**Naming trap worth flagging.** `role: 'ghost-drug'` (per-drug background traces)
+is unrelated to `COLORS.ghost` / `role: 'ghost-reconcile'` (a purple
+pre-reconciliation snapshot of the *selected* drug). This work belongs to the
+former; the two share only the word.
+
+Design — reuse the existing per-drug ghost machinery, don't build a parallel one:
+
+- **Bridge** `updateGhostCrossings(t)` computes, per non-selected drug with
+  events, the same target/guard the foreground uses (`min` of the positive
+  thresholds; require `conc.Ce > target`), then `computeDecayTrajectory`, scaling
+  Ce *and* both thresholds by that drug's `yScale`.
+- **Chart** `setGhostCrossings(byDrug)` mirrors `setGhostTraces` — per-drug
+  signature, early-return, `chart.update('none')` only when dirty. No dataset and
+  no new axis: the dots are canvas-drawn, so nothing needs hiding from the legend.
+- **Plugin** keeps the foreground path untouched and appends a background pass,
+  with the arc drawing factored into one helper so the two can't drift. Dimming
+  uses the `ctx.globalAlpha` precedent from `event-markers.js`.
+
+Two decisions that carry the design:
+
+1. **The dots sit on `yGhost_<drugId>`, never `scales.y`.** Easy to get wrong and
+   impossible to eyeball: with propofol foreground (axis max 20) and ketamine
+   background (max 10000, yScale 1000), the same threshold is y-pixel 662 on the
+   right axis and −4159 on the foreground one. Wrong axis = dot silently off
+   canvas, no error. Asserted numerically in testing.
+2. **Cost is contained.** Each background drug is a full decay simulation. Gated
+   on `chart.ghostTracesEnabled` so the default-off state costs nothing;
+   throttled to the 2 s `lastHistoryDimUpdate` cadence rather than the 500 ms
+   tick; and sampled at `{ step: 1 }` instead of the default 0.25 since the
+   trajectory is only interpolated for a crossing, never drawn (52 points vs
+   ~208). `refresh()` also calls it directly so dosing edits move the dots
+   immediately.
+
+Verified by sampling the rendered canvas at each predicted dot centre: redose
+returned rgba(245,157,12,128) — `--amber` at exactly 0.5 `ghostOpacity` — and
+emergence rgba(239,68,68,128) — `--red`, same alpha.
+
+**Known limitation:** ketamine's `DRUG_DEFS.color` is `#f59e0b`, identical to
+`--amber`, so on ketamine's *redose* ghost dot the drug-coloured ring is
+invisible against the amber fill and it reads as a plain ghost dot. Its emergence
+dot (red fill) is unaffected, as are the other drugs. Not worked around — the
+alternative is colour-distance logic for one collision.
+
 ### History log: badge chip text optically centred (v0.5.48.3) — Interim
 
 Reported as "the chip text doesn't look properly centred vertically". It wasn't —

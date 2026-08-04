@@ -29,6 +29,13 @@ export function createState(cfg) {
     // ghosts). Distinct from `ghostCurveSig` (the single pre-reconcile
     // ghost) — keyed by drugId.
     ghostTracesSigs: {},
+    // Per-drug decay projections for background drugs, keyed by drugId:
+    //   { traj: [{x, y}], exitCe, thresholdCe }   — all already y-scaled to
+    // that drug's own ghost axis. The crossover-dots plugin interpolates the
+    // threshold crossings out of `traj` and draws them dimmed. Populated only
+    // while ghost traces are enabled; `{}` otherwise.
+    ghostCrossings: {},
+    ghostCrossingsSigs: {},
     ghostOpacity: 0.5,
     ghostEnabled: false,
     // Foreground drug color (chart Ce trace + UI tinting). Cached so the

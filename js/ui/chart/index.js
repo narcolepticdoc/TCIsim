@@ -623,6 +623,42 @@ export function createChart(canvas, config = {}) {
   }
 
   /**
+   * Per-drug decay projections for background drugs. The crossover-dots plugin
+   * reads these to place dimmed threshold-crossing dots on each drug's own
+   * hidden ghost axis. No dataset is involved — the dots are canvas-drawn, so
+   * nothing needs hiding from the legend.
+   *
+   * `byDrug` maps drugId to { traj: [{time, Ce}], exitCe, thresholdCe }, all
+   * already scaled to that drug's ghost axis by the bridge. Idempotent per
+   * drug (CLAUDE.md self-heal invariant) — the bridge calls this repeatedly.
+   */
+  function setGhostCrossings(byDrug) {
+    let dirty = false;
+    const seen = {};
+    for (const drugId of DRUG_IDS) {
+      const entry = byDrug ? byDrug[drugId] : null;
+      const pts = entry && entry.traj;
+      const sig = pts && pts.length > 1
+        ? `${drugId}|${pts.length}|${pts[0].time}|${pts[pts.length - 1].time}|${entry.exitCe}|${entry.thresholdCe}`
+        : `${drugId}|`;
+      if (s.ghostCrossingsSigs[drugId] !== sig) {
+        s.ghostCrossingsSigs[drugId] = sig;
+        dirty = true;
+      }
+      if (pts && pts.length > 1) {
+        seen[drugId] = {
+          traj: pts.map(p => ({ x: p.time, y: p.Ce })),
+          exitCe: entry.exitCe,
+          thresholdCe: entry.thresholdCe,
+        };
+      }
+    }
+    if (!dirty) return;
+    s.ghostCrossings = seen;
+    chart.update('none');
+  }
+
+  /**
    * Set the Y-axis max for a drug's ghost trace. Bridge calls this once
    * per drug in refresh() so each ghost line height matches that drug's
    * own foreground Y calibration. Idempotent.
@@ -976,6 +1012,7 @@ export function createChart(canvas, config = {}) {
     setFontScale,
     setDrugColor,
     setGhostTraces,
+    setGhostCrossings,
     setGhostAxisMax,
     setGhostOpacity,
     setGhostEnabled,
