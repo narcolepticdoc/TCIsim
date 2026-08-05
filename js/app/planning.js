@@ -170,6 +170,15 @@ export function createPlanning(deps) {
       const v = Number.isFinite(entry.canonical) ? entry.canonical : 0;
       if (entry.type === 'exitCe') chart.setExitLine(v > 0 ? v * yScale : null);
       else chart.setThresholdLine(v > 0 ? v * yScale : null);
+      // The decay trajectory the crossover dots sit on is computed in
+      // chart-bridge from committed `mode` state — zero while a threshold is
+      // being set for the first time, which left the dots with no line. Feed
+      // it the value being previewed instead.
+      if (chartBridge.setPlanThresholds) {
+        chartBridge.setPlanThresholds(entry.type === 'exitCe'
+          ? { exitCe: v > 0 ? v : 0 }
+          : { thresholdCe: v > 0 ? v : 0 });
+      }
       chart.setPlanHandle(v > 0 ? { time: midViewTime(chart), ce: v * yScale } : null);
       renderReadout();
       return;
@@ -186,6 +195,9 @@ export function createPlanning(deps) {
       renderReadout();
       return;
     }
+
+    // Not a line task — no threshold override in play.
+    if (chartBridge.setPlanThresholds) chartBridge.setPlanThresholds(null);
 
     const t = getEntryTime();
     const action = buildAction(entry);
@@ -505,6 +517,7 @@ export function createPlanning(deps) {
       if (chart.setPlanEventMarkers) chart.setPlanEventMarkers([]);
     }
 
+    if (chartBridge.setPlanThresholds) chartBridge.setPlanThresholds(null);
     keypad.detach({ reopen: reopenModal });
     const home = getChartHome();
     if (home) teleportChart(home);

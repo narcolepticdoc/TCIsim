@@ -53,6 +53,8 @@ export function createState(cfg) {
     nomogramOpacity: 1.0,
     cpOpacity: 1.0,
     fontScale: 1.0,
+    // Label threshold-crossing dots with the crossing time (user setting).
+    crossoverLabels: false,
     eventMarkers: [],
     eventAnnotationsEnabled: false,
     eventMarkerSize: 7,

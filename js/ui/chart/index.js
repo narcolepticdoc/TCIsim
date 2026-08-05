@@ -1101,6 +1101,18 @@ export function createChart(canvas, config = {}) {
     return s.eventAnnotationsEnabled;
   }
 
+  /**
+   * Show/hide the crossing-time label beside each crossover dot. The dots
+   * themselves are unaffected — the label is the part that adds clutter, and
+   * it is off by default.
+   */
+  function setCrossoverLabels(on) {
+    const v = !!on;
+    if (s.crossoverLabels === v) return;
+    s.crossoverLabels = v;
+    chart.update('none');
+  }
+
   function setEventMarkerSize(px) {
     const clamped = Math.max(4, Math.min(16, Math.round(px)));
     if (s.eventMarkerSize === clamped) return;
@@ -1159,6 +1171,7 @@ export function createChart(canvas, config = {}) {
     setOverlayOpacity,
     setEventAnnotations,
     toggleEventAnnotations,
+    setCrossoverLabels,
     setEventMarkerSize,
     setFontScale,
     setDrugColor,

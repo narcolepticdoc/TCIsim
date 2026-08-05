@@ -39,6 +39,7 @@ const DEFAULTS     = {
   showCeBand:  false,   // Show the Ce drift tolerance band around target lines
   timeAxisMode: 'min',  // Chart x-axis scale: 'min' | 'hmin' | 'rt' (real time)
   planningModeDefault: false, // Open dose entry straight into planning mode
+  crossoverTimeLabels: false, // Label threshold-crossing dots with the crossing time
 };
 
 const TEXT_SIZES = ['normal', 'large', 'xl', 'xxl'];
@@ -131,6 +132,9 @@ export function getSettings() {
       const planningModeDefault = (typeof p.planningModeDefault === 'boolean')
         ? p.planningModeDefault : DEFAULTS.planningModeDefault;
 
+      const crossoverTimeLabels = (typeof p.crossoverTimeLabels === 'boolean')
+        ? p.crossoverTimeLabels : DEFAULTS.crossoverTimeLabels;
+
       // Clamp to [0, 2] and snap to a 0.5 s grid.
       const reactionDelaySec = (typeof p.reactionDelaySec === 'number' && isFinite(p.reactionDelaySec))
         ? Math.round(Math.max(0, Math.min(2, p.reactionDelaySec)) * 2) / 2
@@ -158,14 +162,15 @@ export function getSettings() {
         showCeBand,
         timeAxisMode,
         planningModeDefault,
+        crossoverTimeLabels,
       };
     }
   } catch (e) {}
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode, planningModeDefault }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode, planningModeDefault })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode, planningModeDefault, crossoverTimeLabels }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode, planningModeDefault, crossoverTimeLabels })); } catch (e) {}
 }
 
 /**

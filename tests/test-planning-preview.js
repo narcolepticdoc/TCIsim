@@ -470,6 +470,22 @@ function fingerprint(model, drugId) {
     _store.clear();
     setSettings({ ...base, planningModeDefault: true, ceTolerance: 0.02 });
     ok(getSettings().ceTolerance === 0.02, 'neighbouring settings still round-trip');
+
+    // Crossover time labels — off by default; they are useful but cluttered,
+    // so they are opt-in.
+    _store.clear();
+    ok(getSettings().crossoverTimeLabels === false, 'crossover labels default to off');
+    setSettings({ ...getSettings(), crossoverTimeLabels: true });
+    ok(getSettings().crossoverTimeLabels === true, 'crossover labels round-trip');
+    _store.set('tci-warn-settings', JSON.stringify({ ...base, crossoverTimeLabels: 'yes' }));
+    ok(getSettings().crossoverTimeLabels === false, 'a non-boolean falls back to off');
+
+    // Both planning flags must survive being written together.
+    _store.clear();
+    setSettings({ ...base, planningModeDefault: true, crossoverTimeLabels: true });
+    const both = getSettings();
+    ok(both.planningModeDefault === true && both.crossoverTimeLabels === true,
+      'both planning settings persist together');
   }
 
   summary();

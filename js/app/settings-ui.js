@@ -105,6 +105,7 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   const markerSizeVal     = $('set-event-marker-size-val');
   const showCeBandChk     = $('set-show-ce-band');
   const planningDefChk    = $('set-planning-default');
+  const crossLabelsChk    = $('set-crossover-labels');
   const textSizeGroup     = $('set-text-size');
   const textSizeBtns      = textSizeGroup ? [...textSizeGroup.querySelectorAll('.seg-btn')] : [];
   const themeGroup        = $('set-theme');
@@ -145,6 +146,7 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   if (markerSizeVal)     markerSizeVal.textContent     = (savedSettings.eventMarkerSize ?? 7) + ' px';
   if (showCeBandChk)     showCeBandChk.checked         = savedSettings.showCeBand ?? false;
   if (planningDefChk)    planningDefChk.checked        = savedSettings.planningModeDefault ?? false;
+  if (crossLabelsChk)    crossLabelsChk.checked        = savedSettings.crossoverTimeLabels ?? false;
   let currentTextSize = savedSettings.textSize ?? 'normal';
   for (const btn of textSizeBtns) btn.classList.toggle('active', btn.dataset.size === currentTextSize);
   applyTextSize(currentTextSize);
@@ -185,6 +187,7 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
     const theme             = currentTheme;
     const showCeBand        = showCeBandChk ? showCeBandChk.checked : false;
     const planningModeDefault = planningDefChk ? planningDefChk.checked : false;
+    const crossoverTimeLabels = crossLabelsChk ? crossLabelsChk.checked : false;
     const timeAxisMode      = currentTimeAxis;
     if (prepVal)         prepVal.textContent         = prepSec           + 's';
     if (alertVal)        alertVal.textContent        = alertSec          + 's';
@@ -198,7 +201,7 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
     if (overlayVal)      overlayVal.textContent      = overlayPct        + '%';
     if (ghostOpacVal)    ghostOpacVal.textContent    = ghostOpacPct      + '%';
     if (markerSizeVal)   markerSizeVal.textContent   = eventMarkerSize   + ' px';
-    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode, planningModeDefault });
+    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode, planningModeDefault, crossoverTimeLabels });
   }
 
   prepSlider.addEventListener('input',    saveAll);
@@ -218,6 +221,7 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   if (markerSizeSlider)  markerSizeSlider.addEventListener('input',  saveAll);
   if (showCeBandChk)     showCeBandChk.addEventListener('change',    saveAll);
   if (planningDefChk)    planningDefChk.addEventListener('change',   saveAll);
+  if (crossLabelsChk)    crossLabelsChk.addEventListener('change',   saveAll);
   for (const btn of textSizeBtns) {
     btn.addEventListener('click', () => {
       const size = btn.dataset.size;

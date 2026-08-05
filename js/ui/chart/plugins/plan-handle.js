@@ -13,6 +13,13 @@
  * zoom and resize keep it accurate.
  */
 
+/**
+ * Distance from the plot's left edge to the handle's centre. Wide enough that
+ * the 44 px-wide hit region clears the 20 px y-axis drag zone gestures.js
+ * reserves along that edge.
+ */
+const HANDLE_INSET = 46;
+
 export function createPlanHandlePlugin(s) {
   return {
     id: 'planHandle',
@@ -25,13 +32,21 @@ export function createPlanHandlePlugin(s) {
       const ca = ch.chartArea;
       if (!xScl || !yScl || !ca) { s._planHandleHit = null; return; }
 
-      const cx = xScl.getPixelForValue(h.time);
       const cy = yScl.getPixelForValue(h.ce);
-      // Off-screen in either axis — no handle, and nothing to hit-test.
-      if (cx < ca.left || cx > ca.right || cy < ca.top || cy > ca.bottom) {
-        s._planHandleHit = null;
-        return;
-      }
+      if (cy < ca.top || cy > ca.bottom) { s._planHandleHit = null; return; }
+
+      // The handle parks near the LEFT edge of the plot rather than on the
+      // point it controls. Sitting on the curve put a 44×56 touch target — and
+      // a finger — right over the peak, which is the part being judged. The
+      // dashed tie-line keeps the connection visible.
+      //
+      // Left, not right: the right edge carries the target/threshold label
+      // pills, and a threshold handle shares their y exactly. The inset clears
+      // the 20 px y-axis drag zone in gestures.js.
+      const cx = ca.left + HANDLE_INSET;
+
+      // Where the handle's value is actually read off the curve.
+      const anchorX = xScl.getPixelForValue(h.time);
 
       const ctx = ch.ctx;
       const color = s.drugColor || '#cbd5e1';
@@ -43,16 +58,27 @@ export function createPlanHandlePlugin(s) {
 
       ctx.save();
 
-      // Guide line back to the y-axis, so the value being dragged is
-      // readable against the scale rather than floating in the plot.
+      // Tie-line from the handle out to the point it controls, so moving a
+      // handle at the edge still reads as moving that point.
       ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
-      ctx.moveTo(ca.left, cy);
-      ctx.lineTo(cx - w / 2 - 3, cy);
+      ctx.moveTo(cx + w / 2 + 3, cy);
+      ctx.lineTo(Math.min(Math.max(anchorX, cx + w / 2 + 3), ca.right), cy);
       ctx.stroke();
       ctx.setLineDash([]);
+
+      // Small marker at the anchor itself when it is on screen and clear of
+      // the handle — the tie-line needs somewhere to land.
+      if (anchorX > cx + w / 2 + 8 && anchorX <= ca.right) {
+        ctx.beginPath();
+        ctx.arc(anchorX, cy, 3, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.8;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
 
       // Touch-target halo
       ctx.fillStyle = 'rgba(148, 163, 184, 0.18)';

@@ -11,6 +11,18 @@
 
 ---
 
+## [0.6.1.1] — 2026-08-05
+
+Planning mode, second test round: crossover labels made optional, drag handle moved off the curve, and a first-time threshold now draws its dots.
+
+- **Crossover time labels are now opt-in and off by default.** They answer a real question but add a lot of ink to a chart that already carries four bands, two threshold lines and a cursor. Settings → Appearance → *Label crossover dots with the crossing time*. The dots themselves are unchanged — only the label is behind the toggle.
+- **The drag handle no longer sits on the point it controls.** A 44×56 touch target — and a finger — parked on the proposal's peak covered exactly the part being judged. The handle now rides the **left edge** of the plot at the same height, with a dashed tie-line out to a small marker at the anchor, so the connection stays legible while the curve stays visible. Left rather than right because the right edge carries the target/threshold label pills, which a threshold handle would share a y with exactly; the 46 px inset clears the y-axis drag zone.
+- **Setting a threshold for the first time now renders its crossover dots.** The dots sit on the "Ce if stopped" decay trajectory, which `chart-bridge` builds from **committed** mode state — zero while a threshold is being set for the first time, so no trajectory was drawn and the dots had nothing to sit on. Editing an *existing* threshold happened to work only because the old value was still non-zero. Planning mode now publishes the value being previewed for the trajectory to use, and releases it on exit. Verified: trajectory length 0 → 101 points while previewing a first emergence Ce of 1.5 µg/mL.
+
+Changed: `js/ui/chart/plugins/plan-handle.js`, `js/ui/chart/plugins/crossover-dots.js`, `js/app/chart-bridge.js` (`setPlanThresholds`), `js/app/planning.js`, `js/ui/chart/index.js` (`setCrossoverLabels`), `js/ui/settings.js`, `js/app/settings-ui.js`, `index.html`. Suite 1065 → 1069.
+
+---
+
 ## [0.6.1] — 2026-08-05
 
 Planning mode, from first test notes: layout fixes at phone sizes, a genuinely smooth drag, crossover dots on the proposal, plan step markers, and per-drug Ce titration steps.

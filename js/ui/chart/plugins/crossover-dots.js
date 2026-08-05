@@ -79,7 +79,7 @@ export function createCrossoverDotsPlugin(s) {
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        if (label) {
+        if (label && s.crossoverLabels) {
           const text = fmtTimeLabel(x, s.timeAxisMode, s.wallClockStartMs);
           if (text) {
             ctx.font = `600 ${fontPx}px ui-monospace, monospace`;

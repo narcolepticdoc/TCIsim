@@ -4,6 +4,71 @@
 
 ## Session History
 
+### Planning mode: second test-note round (v0.6.1.1) — Interim
+
+Three items. Two are refinements of things added last round; the third is a
+genuine bug with an instructive shape.
+
+**Crossover labels are opt-in now.** Added last round on request, then reported
+as "a lot of visual clutter" — both true. The chart already carries four BIS
+bands, two threshold lines, a cursor, event markers and now a preview curve, so
+a persistent text box per dot is a lot to add unconditionally. New setting
+`crossoverTimeLabels` (Appearance tab), **default off**, pushed from the bridge
+every frame like the other display settings. Only the label is gated; the dots
+stay. Default-off was the call because the reported problem *is* the current
+default — leaving it on would ship the complaint.
+
+**The handle was covering the thing it controls.** It sat on the anchor point
+— the proposal's peak — which is precisely the part being judged, under a
+44×56 touch target and a finger. It now parks at a fixed inset from the plot's
+**left** edge at the same height, with a dashed tie-line out to a small marker
+at the anchor.
+
+Left rather than right for two reasons: `target-label.js` draws its
+target/threshold pills against the right edge, and a threshold handle shares
+those pills' y exactly, so a right-side handle would land on top of one every
+time. The 46 px inset is chosen so the 44 px-wide hit region clears the 20 px
+y-axis drag zone `gestures.js` reserves along the left edge — they would
+otherwise fight, and the plan handle would win (it captures first), silently
+eating the y-rescale gesture.
+
+**First-time thresholds drew no dots; editing an existing one worked.** That
+asymmetry is the whole diagnosis. The dots are interpolated off the
+`emergence-traj` dataset, which `chart-bridge.onFrame` builds from **committed**
+`mode` state:
+
+```js
+const exitCe   = mode.getExitCe(selectedDrug);
+const redoseCe = mode.getIntermittentThreshold(selectedDrug);
+const target   = targets.length ? Math.min(...targets) : 0;
+const showTrajectory = target > 0 && ...
+```
+
+Setting a threshold for the first time leaves both at 0 → `target = 0` → no
+trajectory → nothing for a dot to sit on. Editing an existing one only appeared
+to work because the *old* value was still non-zero and kept the trajectory
+alive; the dot was being placed on a curve computed toward the previous target.
+
+Planning mode now publishes the previewed value through a new
+`chartBridge.setPlanThresholds({exitCe|thresholdCe})`, which `onFrame` prefers
+over committed state, and clears it on every non-line recompute and on exit.
+Measured: trajectory 0 → 101 points while previewing a first emergence Ce of
+1.5 µg/mL.
+
+Worth noting the general shape — this is the second bug this feature has thrown
+up from the same root: planning mode shows *proposed* state, but several chart
+inputs are computed from *committed* state by a per-frame loop that knows
+nothing about planning. The proposed TCI markers (0.6.1) were the first. Both
+were fixed by handing the bridge an explicit override rather than letting
+planning write to the chart directly, which would have been erased on the next
+frame. Any future "planning shows the old value" report should be checked
+against that list first.
+
+Verified in Chromium: first-time threshold draws trajectory + dot + label;
+labels absent by default and present with the setting on; handle at left+46 with
+the peak unobstructed and a drag from the new position still solving (60 → 149
+mg). 0 console errors. Suite 1065 → 1069.
+
 ### Planning mode: first test-note round (v0.6.1) — Interim
 
 Six items from testing v0.6 on real devices. Five were real; the sixth was a
