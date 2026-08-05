@@ -27,9 +27,10 @@
  */
 
 import { createPreview } from '../sim/preview.js';
-import { getQuantStep, getAllowedUnits, fromCanonical, toCanonical, formatValue, getQuantizeConfig }
+import { getQuantStep, getAllowedUnits, fromCanonical, toCanonical, formatValue, formatValueStep, getQuantizeConfig }
   from '../util/units.js';
 import { DRUG_DEFS } from '../util/constants.js';
+import { classifyFutureEvents } from './chart-bridge.js';
 
 const $ = id => document.getElementById(id);
 
@@ -42,8 +43,14 @@ const $ = id => document.getElementById(id);
 const DEBOUNCE_MS = 180;
 const DEBOUNCE_MS_TCI = 260;
 
-/** Drag updates are throttled separately — a solve is ~12 clones. */
-const DRAG_THROTTLE_MS = 40;
+/**
+ * A drag is NOT debounced — it coalesces on the animation frame instead, so
+ * the curve tracks the finger at display rate. Measured per frame: ~2.7 ms to
+ * back-solve the dose (warm-seeded from the previous one, ~4 clones) plus
+ * ~1.1 ms to reproject, comfortably inside a 16 ms budget. A TCI target costs
+ * more because each frame replans, and simply lands at whatever rate the
+ * planner allows.
+ */
 
 /** While a case runs, "now" moves; re-anchor the projection on this cadence. */
 const ANCHOR_TICK_MS = 1000;
@@ -87,7 +94,13 @@ export function createPlanning(deps) {
   let projection = null;     // last { points, peak, anchor, startTime }
   let debounceTimer = null;
   let anchorTimer = null;
-  let lastDragAt = 0;
+  // Drag state. `dragging` suppresses the keystroke debounce — otherwise every
+  // setCanonical during a drag would restart the 180 ms timer and the curve
+  // would not redraw until the finger stopped moving.
+  let dragging = false;
+  let dragRaf = null;
+  let dragPendingCe = null;
+  let lastSolvedDose = null;
 
   function isActive() { return active; }
 
@@ -153,6 +166,7 @@ export function createPlanning(deps) {
     if (LINE_TASKS.has(entry.type)) {
       projection = null;
       chart.setPlanPreview(null);
+      if (chart.setPlanEventMarkers) chart.setPlanEventMarkers([]);
       const v = Number.isFinite(entry.canonical) ? entry.canonical : 0;
       if (entry.type === 'exitCe') chart.setExitLine(v > 0 ? v * yScale : null);
       else chart.setThresholdLine(v > 0 ? v * yScale : null);
@@ -168,6 +182,7 @@ export function createPlanning(deps) {
       projection = null;
       chart.setPlanPreview(null);
       chart.setPlanHandle(null);
+      if (chart.setPlanEventMarkers) chart.setPlanEventMarkers([]);
       renderReadout();
       return;
     }
@@ -187,6 +202,7 @@ export function createPlanning(deps) {
     if (!result || !result.points.length) {
       chart.setPlanPreview(null);
       chart.setPlanHandle(null);
+      if (chart.setPlanEventMarkers) chart.setPlanEventMarkers([]);
       renderReadout();
       return;
     }
@@ -194,6 +210,24 @@ export function createPlanning(deps) {
     chart.setPlanPreview(yScale === 1 ? result.points : result.points.map(p => ({
       time: p.time, Ce: p.Ce * yScale, Cp: p.Cp * yScale,
     })));
+
+    // Step markers for the proposal. A TCI retarget emits a whole scheme whose
+    // events exist only on the preview clone, so without this the plan being
+    // chosen shows as a bare curve with no indication of when the pump changes.
+    if (chart.setPlanEventMarkers) {
+      // The WHOLE event list goes in, not just the future slice: rate steps are
+      // classified as increase/decrease against the preceding rate, so starting
+      // the walk mid-sequence would mislabel the first one. The nudged `now`
+      // keeps events landing exactly at startTime reading as upcoming rather
+      // than dimmed-past.
+      // …then keep only the ones the proposal actually contains. A marker
+      // before the projection starts has no curve to sit on — the binary
+      // search would clamp it to the preview's first sample and stack it
+      // against the left edge at the wrong height.
+      chart.setPlanEventMarkers(
+        classifyFutureEvents(result.events || [], result.startTime - 1e-6)
+          .filter(m => !m.past));
+    }
 
     // A TCI target's handle rides its own target line, which is the value
     // being set — there is nothing to back-solve. Everything else hangs off
@@ -312,7 +346,7 @@ export function createPlanning(deps) {
     try {
       const weightKg = getModel()?.getPatient()?.weight || 70;
       const canonical = toCanonical(next, entry.unit, entry.drugId, entry.task, { weightKg }).value;
-      if (Number.isFinite(canonical)) keypad.setCanonical(canonical);
+      if (Number.isFinite(canonical)) keypad.setCanonical(canonical, { step });
     } catch (err) { /* an unconvertible step just doesn't move */ }
   }
 
@@ -321,7 +355,7 @@ export function createPlanning(deps) {
     if (!el) return;
     if (!entry) { el.textContent = ''; return; }
     const step = stepFor(entry);
-    el.textContent = `± ${formatValue(step, entry.unit)} ${entry.unit}`;
+    el.textContent = `± ${formatValueStep(step, entry.unit, step)} ${entry.unit}`;
   }
 
   // ---- Drag ---------------------------------------------------------------
@@ -333,16 +367,30 @@ export function createPlanning(deps) {
    */
   function onDrag(chartCe) {
     if (!active || !entry) return;
-    const now = Date.now();
-    if (now - lastDragAt < DRAG_THROTTLE_MS) return;
-    lastDragAt = now;
+    dragging = true;
+    dragPendingCe = chartCe;
+    // Coalesce: a fast drag fires many pointer events per frame, and only the
+    // last position matters. One solve+reproject per frame, no throttle.
+    if (dragRaf === null) dragRaf = requestAnimationFrame(runDragFrame);
+  }
+
+  function runDragFrame() {
+    dragRaf = null;
+    if (!active || !entry || dragPendingCe === null) return;
+    const chartCe = dragPendingCe;
+    dragPendingCe = null;
 
     const { yScale } = chartBridge.getConfig(entry.drugId);
     const canonicalCe = chartCe / (yScale || 1);
     if (!(canonicalCe > 0)) return;
 
+    // The dragged value IS the value for a target or a threshold line.
+    // Precision follows the drug's step (fentanyl 0.05 ng/mL, ketamine 10) so
+    // the number tracks the finger instead of snapping through the whole
+    // clinical range in a few jumps.
     if (entry.type === 'ceTarget' || LINE_TASKS.has(entry.type)) {
-      keypad.setCanonical(canonicalCe);
+      keypad.setCanonical(canonicalCe, { step: stepFor(entry) });
+      recompute();
       return;
     }
 
@@ -351,13 +399,29 @@ export function createPlanning(deps) {
     const action = buildAction(entry);
     let dose = null;
     try {
+      // Warm-seeded from the previous frame's answer: the target barely moves
+      // between frames, so the bracket search starts close and converges in a
+      // handful of iterations instead of growing one from scratch.
       dose = preview.solveDose(model, entry.drugId, getEntryTime(), action, canonicalCe, {
-        seed: entry.canonical || 0,
+        seed: lastSolvedDose ?? entry.canonical ?? 0,
       });
     } catch (err) {
       console.error('[TCI Sim] Dose back-solve failed:', err);
     }
-    if (dose != null) keypad.setCanonical(dose);
+    if (dose == null) return;
+    lastSolvedDose = dose;
+    keypad.setCanonical(dose, { step: stepFor(entry) });
+    // Redraw now rather than through the debounce — this IS the interaction.
+    recompute();
+  }
+
+  /** Gestures reports the release; settle on a final, un-coalesced projection. */
+  function onDragEnd() {
+    dragging = false;
+    lastSolvedDose = null;
+    if (dragRaf !== null) { cancelAnimationFrame(dragRaf); dragRaf = null; }
+    if (dragPendingCe !== null) { dragPendingCe = null; }
+    if (active) recompute();
   }
 
   // ---- Enter / exit -------------------------------------------------------
@@ -402,7 +466,7 @@ export function createPlanning(deps) {
     keypad.attachTo(entryHost);
     showScreen('planning-screen');
 
-    chart.setPlanDragHandler(onDrag);
+    chart.setPlanDragHandler(onDrag, onDragEnd);
     recompute();
 
     // "Now" advances during a running case, so the projection's anchor would
@@ -428,11 +492,17 @@ export function createPlanning(deps) {
     if (anchorTimer) { clearInterval(anchorTimer); anchorTimer = null; }
     document.removeEventListener('keydown', onKeyDown, true);
 
+    dragging = false;
+    lastSolvedDose = null;
+    dragPendingCe = null;
+    if (dragRaf !== null) { cancelAnimationFrame(dragRaf); dragRaf = null; }
+
     const chart = getChart();
     if (chart) {
       chart.setPlanDragHandler(null);
       chart.setPlanPreview(null);
       chart.setPlanHandle(null);
+      if (chart.setPlanEventMarkers) chart.setPlanEventMarkers([]);
     }
 
     keypad.detach({ reopen: reopenModal });
@@ -479,7 +549,10 @@ export function createPlanning(deps) {
     if (!active) return;
     syncTopbarActions();
     renderStepLabel();
-    schedule();
+    // A drag drives its own redraw on the animation frame. Going through the
+    // debounce here would restart the timer on every frame, so the curve would
+    // not move until the finger stopped.
+    if (!dragging) schedule();
   }
 
   function initListeners() {

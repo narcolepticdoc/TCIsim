@@ -189,6 +189,7 @@ export const DRUG_TASK_UNITS = {
     ceTarget: {
       canonical: 'mcg/mL',
       allowed: ['mcg/mL'],
+      quantSteps: { 'mcg/mL': 0.1 },
     },
   },
   fentanyl: {
@@ -209,6 +210,7 @@ export const DRUG_TASK_UNITS = {
     ceTarget: {
       canonical: 'mcg/mL',
       allowed: ['ng/mL'],
+      quantSteps: { 'ng/mL': 0.05 },
     },
   },
   remifentanil: {
@@ -229,6 +231,7 @@ export const DRUG_TASK_UNITS = {
     ceTarget: {
       canonical: 'mcg/mL',
       allowed: ['ng/mL'],
+      quantSteps: { 'ng/mL': 0.05 },
     },
   },
   ketamine: {
@@ -249,6 +252,7 @@ export const DRUG_TASK_UNITS = {
     ceTarget: {
       canonical: 'mcg/mL',
       allowed: ['ng/mL'],
+      quantSteps: { 'ng/mL': 10 },
     },
   },
 };

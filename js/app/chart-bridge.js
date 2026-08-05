@@ -25,7 +25,7 @@ const $ = id => document.getElementById(id);
  * "resume" marker is only used when the new rate matches the prior rate
  * (or when no prior rate has ever been set).
  */
-function classifyFutureEvents(events, now) {
+export function classifyFutureEvents(events, now) {
   let currentRate = 0;
   let lastNonZeroRate = 0;
   const out = [];

@@ -1195,17 +1195,57 @@
        box's set would fire onConfirm while the screen was still detached. */
     .modal-keypad.keypad-inline .modal-actions{display:none}
 
-    /* Narrow or portrait: chart on top, entry below. */
-    @media (orientation:portrait),(max-width:860px){
+    /* The split switches on ORIENTATION, never on width. A phone in landscape
+       is wide but only ~390px tall: stacking it there leaves the chart ~75px
+       and effectively no chart at all. Height is the scarce axis in landscape,
+       width the scarce one in portrait, so each gets the split that spends the
+       axis it has. */
+
+    /* Portrait: chart on top, and it keeps the majority — the entry column
+       shrinks and scrolls rather than pushing the chart down. Without the
+       explicit basis the keypad's intrinsic height wins and the chart ends up
+       the smaller half. */
+    @media (orientation:portrait){
       .planning-main{flex-direction:column}
-      .planning-entry{width:100%;border-left:none;border-top:1px solid var(--border-subtle)}
-      .planning-chart-host{flex:1 1 0}
+      .planning-chart-host{flex:1 1 auto;min-height:52vh}
+      .planning-entry{width:100%;flex:0 1 auto;max-height:46vh;border-left:none;border-top:1px solid var(--border-subtle)}
+      /* Full viewport width here, so the keypad's row layout fits and is
+         shorter than the stacked one the narrow-modal rule would impose. */
+      .modal-keypad.keypad-inline .keypad-layout{flex-direction:row}
+      .modal-keypad.keypad-inline .keypad-right{width:212px;flex-shrink:0}
     }
-    @media (max-width:640px){
-      .planning-topbar{gap:8px;padding:5px 8px}
+
+    /* Short landscape (phones, small tablets in landscape): stay side by side
+       and buy the chart width by compacting the entry column. */
+    @media (orientation:landscape) and (max-height:560px){
+      .planning-entry{width:min(320px,44vw);padding:6px;gap:4px}
+      .planning-topbar{padding:3px 8px;gap:8px}
+      .planning-topbar h2{font-size:11px}
+      .planning-readout{font-size:10.5px;gap:9px}
+      .planning-readout .pr-label{font-size:9px}
+      .btn-planning-confirm{padding:5px 14px;font-size:12px}
+      .btn-planning-cancel,.btn-planning-push,.btn-planning-clear{padding:4px 10px;font-size:11px}
+      .planning-titrate{gap:6px}
+      .plan-step-btn{width:44px;height:32px;font-size:18px}
+      .plan-step-label{min-width:62px;font-size:10px}
+      .modal-keypad.keypad-inline .keypad-layout{flex-direction:row;gap:8px}
+      .modal-keypad.keypad-inline .keypad-right{width:min(168px,22vw);flex-shrink:0}
+      .modal-keypad.keypad-inline .keypad-display{min-height:34px;font-size:20px;padding:5px 8px}
+      .modal-keypad.keypad-inline .key{font-size:14px;padding:5px 0}
+      .modal-keypad.keypad-inline .keypad-conversion,
+      .modal-keypad.keypad-inline .keypad-bolus-time{font-size:10px}
+    }
+
+    /* Narrow portrait phones — same idea, less of everything. */
+    @media (orientation:portrait) and (max-width:560px){
+      .planning-topbar{gap:8px;padding:5px 8px;flex-wrap:wrap}
       .planning-topbar h2{font-size:12px}
       .planning-readout{font-size:11px;gap:10px}
       .plan-step-btn{width:48px;height:36px;font-size:19px}
+      .planning-chart-host{min-height:50vh}
+      .planning-entry{max-height:48vh}
+      .modal-keypad.keypad-inline .keypad-right{width:min(200px,52vw)}
+      .modal-keypad.keypad-inline .keypad-display{min-height:40px;font-size:22px}
     }
   </style>
 </head>

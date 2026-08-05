@@ -13,7 +13,7 @@
  * caches, and the page reloads onto the new version.
  */
 
-const VERSION = '0.6';
+const VERSION = '0.6.1';
 const CACHE_NAME = `tcisim-v${VERSION}`;
 
 const PRECACHE_URLS = [
@@ -79,6 +79,7 @@ const PRECACHE_URLS = [
   'js/ui/chart/rate-format.js',
   'js/ui/chart/shapes.js',
   'js/ui/chart/state.js',
+  'js/ui/chart/time-format.js',
   'js/ui/compartment-viz.js',
   'js/ui/controls.js',
   'js/ui/drug-panel.js',

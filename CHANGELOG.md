@@ -11,6 +11,22 @@
 
 ---
 
+## [0.6.1] — 2026-08-05
+
+Planning mode, from first test notes: layout fixes at phone sizes, a genuinely smooth drag, crossover dots on the proposal, plan step markers, and per-drug Ce titration steps.
+
+- **Phone landscape had no chart.** The split switched on `max-width: 860px`, which catches a phone in landscape — wide, but only ~390 px tall. Stacking it there left the chart **75 px**. The breakpoints now switch on **orientation**, never width: landscape stays side by side and buys chart width by compacting the entry column; portrait stacks. Height is the scarce axis in landscape, width the scarce one in portrait, and each layout now spends the axis it has.
+- **Portrait gave the chart less than half the screen** — 387 px against the entry's 405 px, because the keypad's intrinsic height won. The chart now holds a floor of 52 vh (50 vh on narrow phones) and the entry column shrinks and scrolls instead of pushing it down. Measured after: **480 px chart against 257 px entry** on a 390×844 phone, 865 against 261 on iPad portrait.
+- **The drag now redraws every frame.** Two things were fighting it: a 40 ms throttle that capped updates at 25 Hz, and — worse — `setCanonical` firing the 180 ms keystroke debounce, which restarted on every drag frame, so the curve did not move at all until the finger stopped. Drag updates now coalesce on `requestAnimationFrame` and bypass the debounce entirely. The throttle was pure pessimism: a back-solve is **~2.7 ms** warm-seeded from the previous frame's answer (~4 clones), plus ~1.1 ms to reproject. Measured over a 400 ms drag: **29 distinct curve redraws**, against zero before.
+- **Crossover dots now appear on the proposed curve**, marking where it descends through the redose and emergence thresholds — the same amber/red dots the committed trajectory already had.
+- **Crossover dots are now labelled with the crossing time**, in whatever units the x-axis is showing (minutes, h:mm, or clock time). A dot says the drug gets there; the label says when, which is the number being planned around. Foreground only — labelling every background drug's dots would crowd the plot.
+- **A proposed TCI plan now shows its rate-step markers.** The scheme a retarget generates lives on the preview clone, so nothing on the chart could read it and the plan being chosen drew as a bare curve. Preview markers render against the proposal and ignore the ⚑ toggle, since seeing the scheme *is* the reason to preview a target. Steps that predate the projection are excluded — they have no curve to sit on.
+- **Ce titration is per-drug now.** Fentanyl thresholds jumped in 0.1 ng/mL steps — most of the drug's clinical range in one press — because `ng/mL` carries one decimal, which is right for ketamine at 800 ng/mL and useless below 1. Ce steps are now declared per drug (**propofol 0.1 µg/mL, fentanyl 0.05 ng/mL, ketamine 10 ng/mL**) and the displayed precision follows the step rather than the unit. Fentanyl now steps 1.00 → 1.05 → 1.10 and drags continuously at 0.01.
+
+Changed: `index.html` (planning breakpoints), `js/app/planning.js`, `js/ui/chart/plugins/crossover-dots.js`, `js/ui/chart/plugins/event-markers.js`, `js/ui/chart/index.js`, `js/ui/keypad.js`, `js/util/units.js` (`decimalsForStep`, `formatValueStep`), `js/util/constants.js` (ceTarget `quantSteps`). New `js/ui/chart/time-format.js` — the axis formatters, extracted so plugins can label times the way the axis does without importing `chart/index.js`, which imports them. Suite 1042 → 1065.
+
+---
+
 ## [0.6] — 2026-08-05
 
 Feature — **dose planning mode**: see a dose on the chart before you commit it.

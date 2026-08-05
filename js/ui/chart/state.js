@@ -65,6 +65,11 @@ export function createState(cfg) {
     // Ce/Cp traces so the proposal reads as the foreground — see
     // _applyCommittedColors() in index.js.
     planPreviewActive: false,
+    // Step markers for the PROPOSED plan (planning mode). Same shape as
+    // eventMarkers, but positioned against the preview curve and drawn
+    // regardless of the event-annotation toggle.
+    planEventMarkers: [],
+    planEventMarkersSig: '',
     // Where the drag handle sits: { time, ce } in CHART units (already
     // y-scaled), or null when planning mode isn't driving a handle.
     planHandle: null,
@@ -74,6 +79,7 @@ export function createState(cfg) {
     _planDragging: false,
     _onPlanDrag: null,
     _onPlanDragEnd: null,
+    _onPlanDragUserEnd: null,
     rateValues: [],
     patientWeightKg: null,
     pdModel: null,

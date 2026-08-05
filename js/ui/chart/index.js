@@ -10,6 +10,7 @@ import { fromCanonical, getDefaultUnit, getPrefKey, formatValue, getAllowedUnits
 import { alphaToHex } from '../../util/color.js';
 
 import { createState } from './state.js';
+import { fmtTick, fmtXTick, xAxisTitle } from './time-format.js';
 import { buildAnnotations } from './annotations.js';
 import { attachGestures } from './gestures.js';
 import { createTargetLabelPlugin } from './plugins/target-label.js';
@@ -36,40 +37,6 @@ const BASE_FONTS = {
   legend: 10,
 };
 
-/**
- * Format an axis tick value. Chart.js's auto-computed min/max can produce
- * floating-point noise like 30.00000000000002; snap to 3 decimals and drop
- * the decimal entirely on integers so ticks read cleanly.
- */
-function fmtTick(v) {
-  if (!Number.isFinite(v)) return '';
-  const r = Math.round(v * 1000) / 1000;
-  return Number.isInteger(r) ? r.toString() : r.toFixed(1);
-}
-
-// Format an x-axis tick (sim minutes) per the selected time-axis mode.
-// Dedicated to the x-axis — the y-axes keep using the generic fmtTick.
-// Mirrors the elapsed/real-time formatting in history.js fmtTime.
-function fmtXTick(v, mode, wallClockStartMs) {
-  if (!Number.isFinite(v)) return '';
-  if (mode === 'rt' && wallClockStartMs != null) {
-    const d = new Date(wallClockStartMs + v * 60000);
-    return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
-  }
-  if (mode === 'hmin' || (mode === 'rt' && wallClockStartMs == null)) {
-    const totalMin = Math.round(v);
-    const sign = totalMin < 0 ? '-' : '';
-    const a = Math.abs(totalMin);
-    return sign + Math.floor(a / 60) + ':' + String(a % 60).padStart(2, '0');
-  }
-  return fmtTick(v);
-}
-
-function xAxisTitle(mode) {
-  if (mode === 'hmin') return 'Time (h:min)';
-  if (mode === 'rt') return 'Clock time';
-  return 'Time (min)';
-}
 
 /**
  * Read theme-derived chart colors from the document's CSS custom properties.
@@ -714,6 +681,20 @@ export function createChart(canvas, config = {}) {
   }
 
   /**
+   * Step markers for the proposed plan. Same `{time, kind, past}` shape as
+   * setEventAnnotations, but drawn against the preview curve. Signature-guarded
+   * like the rest — planning.js pushes these on every reprojection.
+   */
+  function setPlanEventMarkers(markers) {
+    const list = Array.isArray(markers) ? markers : [];
+    const sig = list.map(m => `${m.time}:${m.kind}`).join('|');
+    if (sig === s.planEventMarkersSig) return;
+    s.planEventMarkersSig = sig;
+    s.planEventMarkers = list;
+    chart.update('none');
+  }
+
+  /**
    * Position the vertical drag handle, or clear it with null.
    * `spec` is `{ time, ce }` in chart units — the point the user grabs to
    * retitrate the dose.
@@ -730,11 +711,13 @@ export function createChart(canvas, config = {}) {
   }
 
   /**
-   * Register the callback the vertical handle drag reports to.
-   * Receives the dragged Ce in CHART units; planning.js converts back.
+   * Register the callbacks the vertical handle drag reports to.
+   * `onDrag` receives the dragged Ce in CHART units; planning.js converts back.
+   * `onEnd` fires on release, after the axis has settled.
    */
-  function setPlanDragHandler(fn) {
-    s._onPlanDrag = typeof fn === 'function' ? fn : null;
+  function setPlanDragHandler(onDrag, onEnd) {
+    s._onPlanDrag = typeof onDrag === 'function' ? onDrag : null;
+    s._onPlanDragUserEnd = typeof onEnd === 'function' ? onEnd : null;
   }
 
   /**
@@ -1048,8 +1031,13 @@ export function createChart(canvas, config = {}) {
   const detachGestures = attachGestures(canvas, chart, s, recenter, setInspectTime);
 
   // Releasing the plan handle un-freezes the autoscale (see applyAutoYMax)
-  // and settles the axis around whatever dose the user landed on.
-  s._onPlanDragEnd = () => { applyAutoYMax(); chart.update('none'); };
+  // and settles the axis around whatever dose the user landed on, then hands
+  // off to planning.js for its final un-coalesced projection.
+  s._onPlanDragEnd = () => {
+    applyAutoYMax();
+    chart.update('none');
+    if (s._onPlanDragUserEnd) s._onPlanDragUserEnd();
+  };
 
   function destroy() {
     detachGestures();
@@ -1154,6 +1142,7 @@ export function createChart(canvas, config = {}) {
     setPlanPreview,
     setPlanHandle,
     setPlanDragHandler,
+    setPlanEventMarkers,
     setSteadyStateLine,
     setExitLine,
     setViewRange,

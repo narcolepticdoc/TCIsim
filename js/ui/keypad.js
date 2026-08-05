@@ -9,7 +9,7 @@
  * The keypad never touches the model directly.
  */
 
-import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, getRoundingNoteText }
+import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, formatValueStep, getRoundingNoteText }
   from '../util/units.js';
 import { DRUG_DEFS, isPumpEnabled as pumpEnabledFor } from '../util/constants.js';
 import { applyBufferKey, convertBufferUnit, bolusTimeText } from './keypad-buffer.js';
@@ -468,13 +468,18 @@ export function getEntry() {
  * convention (CLAUDE.md) — a titrated value is a proposal, so the next
  * keypress should replace it rather than append a digit to it.
  */
-export function setCanonical(canonicalValue) {
+export function setCanonical(canonicalValue, opts = {}) {
   if (!Number.isFinite(canonicalValue) || canonicalValue < 0) return;
   try {
     const disp = fromCanonical(canonicalValue, currentUnit, currentDrug,
       convTaskFor(currentType), weightCtx());
     if (!Number.isFinite(disp)) return;
-    buffer = formatValue(disp, currentUnit);
+    // Precision follows the caller's titration step, not the unit's general
+    // display convention — see formatValueStep. Without this a fentanyl Ce
+    // drag would snap to 0.1 ng/mL, most of its clinical range in one step.
+    buffer = opts.step > 0
+      ? formatValueStep(disp, currentUnit, opts.step)
+      : formatValue(disp, currentUnit);
     prefilled = true;
     updateDisplay();
   } catch (e) { /* leave the buffer alone on a conversion failure */ }

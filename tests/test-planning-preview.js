@@ -393,7 +393,66 @@ function fingerprint(model, drugId) {
       'zero rate projects a stopped pump');
   }
 
-  // ── 10. planningModeDefault setting ──────────────────────────────────────
+  // ── 10. Proposed plan's events come back for step markers ────────────────
+  console.log('\n── Proposed events ──');
+  {
+    const src = buildCase(createModel);
+    const tci = preview.project(src, 'propofol', 20, {
+      type: 'ceTarget', value: 4.5, caseStarted: true, tciDelayMin: 10 / 60, tciConfig: TCI_CFG,
+    }, { endTime: 380 });
+
+    ok(Array.isArray(tci.events) && tci.events.length > 0,
+      'a TCI retarget returns the proposed plan\'s events');
+    const futureSteps = tci.events.filter(e => e.time > tci.startTime && e.source === 'tci');
+    ok(futureSteps.length > 1,
+      `the proposal carries its own rate steps (${futureSteps.length}) — they exist nowhere else`);
+    ok(futureSteps.every(e => e.time >= tci.startTime),
+      'proposed steps all land at or after the projection start');
+
+    // Those events must be the clone's, not the source's.
+    const srcFuture = src.getEvents('propofol').filter(e => e.time > 20);
+    ok(JSON.stringify(srcFuture.map(e => e.value)) !== JSON.stringify(futureSteps.map(e => e.value)),
+      'the returned events are the proposal\'s, not the live plan\'s');
+
+    const bolus = preview.project(src, 'propofol', 20,
+      { type: 'bolus', value: 50, wasTci: true, deliveryMode: 'pump' }, { endTime: 380 });
+    ok(bolus.events.some(e => e.type === 'bolus' && Math.abs(e.time - 20) < 1e-9),
+      'a bolus proposal returns its own bolus event');
+  }
+
+  // ── 11. Step-derived formatting ──────────────────────────────────────────
+  console.log('\n── Step precision ──');
+  {
+    const { decimalsForStep, formatValueStep, formatValue, getQuantStep } =
+      await import(u('js/util/units.js'));
+
+    ok(decimalsForStep(0.05) === 2, '0.05 → 2 decimals');
+    ok(decimalsForStep(0.1) === 1, '0.1 → 1 decimal');
+    ok(decimalsForStep(1) === 0, '1 → 0 decimals');
+    ok(decimalsForStep(10) === 0, '10 → 0 decimals');
+    ok(decimalsForStep(0.005) === 3, '0.005 → 3 decimals');
+    ok(decimalsForStep(0) === 2 && decimalsForStep(NaN) === 2, 'invalid step → default 2');
+    // Float noise must not report 17 decimals.
+    ok(decimalsForStep(0.1 + 0.2) === 1, '0.1+0.2 → 1 decimal, not 17');
+
+    // The regression this exists for: ng/mL carries 1 decimal, which quantises
+    // fentanyl to 0.1 across a range that rarely passes 1 ng/mL.
+    ok(formatValue(0.87, 'ng/mL') === '0.9', 'formatValue still rounds ng/mL to 0.1 (unchanged)');
+    ok(formatValueStep(0.87, 'ng/mL', 0.05) === '0.87',
+      'formatValueStep keeps 0.87 ng/mL at the fentanyl step');
+    ok(formatValueStep(847.3, 'ng/mL', 10) === '847',
+      'formatValueStep drops decimals at the ketamine step');
+    ok(formatValueStep(3.14159, 'mcg/mL', 0.1) === '3.1', 'propofol Ce rounds to its 0.1 grid');
+    ok(formatValueStep(1.234, 'ng/mL', 0) === formatValue(1.234, 'ng/mL'),
+      'a non-positive step falls back to formatValue');
+
+    // The steps the planning titrate buttons actually read.
+    ok(getQuantStep('fentanyl', 'ceTarget', 'ng/mL') === 0.05, 'fentanyl Ce step is 0.05 ng/mL');
+    ok(getQuantStep('ketamine', 'ceTarget', 'ng/mL') === 10, 'ketamine Ce step is 10 ng/mL');
+    ok(getQuantStep('propofol', 'ceTarget', 'mcg/mL') === 0.1, 'propofol Ce step is 0.1 mcg/mL');
+  }
+
+  // ── 12. planningModeDefault setting ──────────────────────────────────────
   console.log('\n── Setting ──');
   {
     _store.clear();

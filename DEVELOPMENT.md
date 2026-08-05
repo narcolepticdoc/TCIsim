@@ -4,6 +4,98 @@
 
 ## Session History
 
+### Planning mode: first test-note round (v0.6.1) — Interim
+
+Six items from testing v0.6 on real devices. Five were real; the sixth was a
+wording puzzle worth recording.
+
+**Phone layout was broken in both orientations, for one root cause.** The split
+switched on `max-width: 860px`, and a phone in landscape is 844×390 — wide
+enough to miss the tablet path, so it stacked, and short enough that stacking
+left the chart **75 px**. Measured, 844×390: chart 75 / entry 261. Portrait was
+the same mistake from the other side — nothing guaranteed the chart a share, so
+the keypad's intrinsic height won at 387 vs 405.
+
+The fix is to stop treating "small" as one thing. **Landscape and portrait have
+opposite scarce axes**: landscape is short and wide, so it must stay side by
+side and buy chart width by compacting the entry column; portrait is tall and
+narrow, so it stacks with the chart holding a `min-height` floor while the entry
+shrinks and scrolls. Breakpoints now key off `orientation` and (for the compact
+variant) `max-height`, never `max-width`. After: 844×390 → chart 345 side by
+side; 390×844 → 480 / 257; iPad portrait → 865 / 261.
+
+**The drag was fighting two brakes, and the second one was the real bug.** A
+40 ms throttle capped it at 25 Hz — but `keypad.setCanonical` also fires
+`onChange`, which went through the 180 ms keystroke debounce, and that timer
+*restarts on every change*. During a continuous drag it therefore never expired:
+the curve did not redraw at all until the finger stopped. Now the drag coalesces
+on `requestAnimationFrame` and calls `recompute()` directly, with
+`handleEntryChange` skipping the debounce while `dragging`.
+
+The throttle turned out to be unfounded. Measured, warm-seeded from the previous
+frame's answer:
+
+| | ms per solve | clones |
+|---|---|---|
+| cold seed (fixed) | 3.24 | 4.3 |
+| **warm seed (previous dose)** | **2.66** | 4.1 |
+| reprojection | 1.12 | — |
+
+So ~3.8 ms per frame against a 16 ms budget. The original 12 ms estimate assumed
+the bracket search would grow from scratch each time; seeding it from the current
+dose means it starts inside the bracket. Verified in the browser: **29 distinct
+curve redraws across a 400 ms drag**, against zero before.
+
+**Crossover dots on the proposal, with times.** The plugin already found the
+downward crossing of the redose/emergence lines for the committed trajectory; it
+now runs over `plan-preview-ce` as well. The dots are also labelled with the
+crossing time in the axis's current units — a dot says the drug gets there, the
+label says when, which is the number being planned around. Background drugs
+deliberately get dots without labels; three or four would crowd the plot.
+
+This forced a small extraction: the plugin needs `fmtXTick`, which lived in
+`chart/index.js`, which imports the plugins. `js/ui/chart/time-format.js` now
+holds `fmtTick` / `fmtXTick` / `xAxisTitle` plus a new `fmtTimeLabel` (adds the
+"min" suffix that a bare number next to a concentration would otherwise lack;
+h:mm and clock time are self-evident and don't get one).
+
+**Proposed TCI plans drew as a bare curve.** The scheme a retarget generates
+lives on the preview clone, so `chart-bridge`'s marker path — which reads the
+live model and gates on the ⚑ toggle — had nothing to show. `project()` now
+returns the clone's events, planning classifies them through the same
+`classifyFutureEvents` (exported from chart-bridge rather than copied), and the
+plugin draws them against `plan-preview-ce`, ignoring the toggle: seeing the
+scheme *is* the reason to preview a target.
+
+Two details found by looking at the render. The whole event list must be
+classified, not the future slice — rate steps are labelled increase/decrease
+against the preceding rate, so starting mid-sequence mislabels the first one.
+But the *past* markers must then be dropped before drawing, or the plugin's
+binary search clamps them to the preview's first sample and stacks them against
+the left edge at the wrong height. Caught in a screenshot, not by a test.
+
+**Ce titration granularity.** The report: fentanyl thresholds "jump in 0.1 ng/mL
+steps", described as both "too granular" and "too fine". Those readings
+contradict, so the numbers decided it: fentanyl rarely exceeds 1 ng/mL, and a
+0.1 step gives ten increments across the entire clinical range. That is too
+coarse however it's phrased, and the cause was `UNIT_DECIMALS['ng/mL'] = 1`
+truncating every dragged value.
+
+Bumping that constant globally would have been wrong — one decimal is right for
+ketamine at 800 ng/mL. Instead Ce steps are declared per drug in
+`DRUG_TASK_UNITS.ceTarget.quantSteps` (propofol 0.1 µg/mL, fentanyl 0.05 ng/mL,
+ketamine 10 ng/mL), and `formatValueStep` derives display precision from the
+step rather than the unit. One rule serves both ends of the range. Only values
+*set* by stepping or dragging use it; readouts and history keep `formatValue`.
+
+Adding those steps broke two unit tests that had used ceTarget as their
+canonical "task with no quantSteps" example — updated to assert the new
+per-drug steps, with a unit-outside-the-task case taking over the null role.
+`getQuantizeConfig` only reads bolus/rate steps, so the planner is untouched.
+
+Verified in Chromium at three viewports plus the full interaction set; 0 console
+errors. Suite 1042 → 1065.
+
 ### Dose planning mode (v0.6) — Interim
 
 Requested as: *"an optional planning mode that could be invoked from the dose entry

@@ -351,8 +351,10 @@ console.log('\n===== Quantization In Display Units =====\n');
 
   // --- No quantStep (fallback) ---
   {
-    // ceTarget mcg/mL has no quantSteps table — quantize should pass through
-    const q = quantizeInDisplay(3.14159, 'mcg/mL', 'propofol', 'ceTarget', ctx);
+    // A unit with no entry in the task's quantSteps table passes through
+    // untouched. (ceTarget gained steps in 0.6 for planning-mode titration,
+    // so it is no longer the step-less case.)
+    const q = quantizeInDisplay(3.14159, 'mL/h', 'propofol', 'ceTarget', ctx);
     near(q, 3.14159, 1e-12, 'No quantStep returns value unchanged');
   }
 
@@ -393,7 +395,13 @@ console.log('\n===== Quantization In Display Units =====\n');
     ok(getQuantStep('propofol', 'bolus', 'mcg/kg') === 10, 'propofol bolus mcg/kg step = 10');
     ok(getQuantStep('fentanyl', 'rate', 'mcg/kg/min') === 0.01, 'fentanyl rate mcg/kg/min step = 0.01');
     ok(getQuantStep('ketamine', 'bolus', 'mg/kg') === 0.1, 'ketamine bolus mg/kg step = 0.1');
-    ok(getQuantStep('propofol', 'ceTarget', 'mcg/mL') === null, 'ceTarget has no step (returns null)');
+    // Ce steps drive planning-mode titration (± buttons and drag precision).
+    // They are per-drug on purpose: ng/mL spans fentanyl's sub-1 range and
+    // ketamine's hundreds, so one step could not serve both.
+    ok(getQuantStep('propofol', 'ceTarget', 'mcg/mL') === 0.1, 'propofol ceTarget step = 0.1 mcg/mL');
+    ok(getQuantStep('fentanyl', 'ceTarget', 'ng/mL') === 0.05, 'fentanyl ceTarget step = 0.05 ng/mL');
+    ok(getQuantStep('ketamine', 'ceTarget', 'ng/mL') === 10, 'ketamine ceTarget step = 10 ng/mL');
+    ok(getQuantStep('propofol', 'ceTarget', 'mL/h') === null, 'a unit outside the task returns null');
   }
 
   // --- Weight-dependent quantization: same display-unit grid, different canonical values ---

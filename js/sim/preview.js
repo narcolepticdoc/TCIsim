@@ -265,6 +265,11 @@ export function createPreview() {
       peak: findPeak(points),
       anchor: anchorPoint(points, action, startTime),
       startTime,
+      // The proposed plan's own events. A TCI retarget emits a whole scheme of
+      // rate steps that exists only on the clone, so the caller needs them to
+      // draw step markers on the proposal — there is nothing in the live model
+      // to read them from.
+      events: clone.getEvents(drugId),
     };
   }
 
