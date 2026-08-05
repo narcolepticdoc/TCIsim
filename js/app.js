@@ -30,6 +30,7 @@ import { createTciModal } from './app/tci-modal.js';
 import { createSession } from './app/session.js';
 import { initPortraitLayout, syncPortraitLayout } from './app/portrait-layout.js';
 import { createChartBridge } from './app/chart-bridge.js';
+import { createPlanning } from './app/planning.js';
 import { initCompartmentViz } from './ui/compartment-viz.js';
 import { _writeHidden } from './ui/patient-modal.js';
 import * as patientSync from './sync/patient-sync.js';
@@ -55,6 +56,38 @@ let tciModal = null;
 let session = null;
 let chartBridge = null;
 let compartmentViz = null;
+let planning = null;
+
+/**
+ * Time a new entry lands at: the running clock, or this drug's own pre-start
+ * clock while the case hasn't started. Shared by the keypad's onConfirm and
+ * by planning mode, so a projection is anchored where the commit will land.
+ */
+function entryTime(drugId) {
+  return controls.isCaseStarted() ? timer.getElapsedMinutes() : getPreStartClock(drugId);
+}
+
+/**
+ * Decide how a bolus is actually delivered.
+ *
+ * No pump means IV push. A redose threshold means push too — but only when
+ * no infusion is running, and "running" has to account for the mode change
+ * the bolus itself triggers: a bolus out of TCI, or out of 'none' on a
+ * TCI-capable drug with a pump, drops the drug into manual first.
+ *
+ * onConfirm and planning mode both call this, so the projected curve and the
+ * committed one can never disagree about the delivery duration.
+ */
+function resolveBolusDeliveryMode(drugId, requested) {
+  const pumpOn = isPumpEnabled(drugId);
+  if (!pumpOn) return 'push';
+  const m = mode.get(drugId);
+  const willBeManual = m === 'tci' || m === 'manual' ||
+    (m === 'none' && !NO_TCI_DRUGS.has(drugId));
+  const hasThreshold = mode.getIntermittentThreshold(drugId) > 0;
+  if (hasThreshold && !willBeManual) return 'push';
+  return requested || 'pump';
+}
 
 // ---- Screen Navigation ----
 
@@ -409,6 +442,24 @@ function boot() {
   // Create TCI modal controller
   tciModal = createTciModal({ model, timer, mode, refreshChart, closeModal, addAnnotation });
 
+  // Dose planning mode (chart + live dose entry on its own screen)
+  planning = createPlanning({
+    getModel: () => model,
+    getChart: () => chart,
+    getSelectedDrug: () => selectedDrug,
+    getEntryTime: () => entryTime(selectedDrug),
+    isCaseStarted: () => controls.isCaseStarted(),
+    getTciMode: () => (setup.getTciMode ? setup.getTciMode() : 'cet-emulation'),
+    getTciDelayMin: () => tciModal.getLastDelay() / 60,
+    resolveBolusDeliveryMode,
+    mode, keypad, chartBridge, settings,
+    showScreen,
+    teleportChart,
+    getChartHome: () => chartAreaHomeParent,
+    refreshChart,
+  });
+  planning.initListeners();
+
   // Create session controller (save/restore/new case)
   session = createSession({
     getModel: () => model,
@@ -738,14 +789,16 @@ function boot() {
     getExitCe: () => mode.getExitCe(selectedDrug),
     getIntermittentThreshold: () => mode.getIntermittentThreshold(selectedDrug),
     isPumpEnabled: () => isPumpEnabled(selectedDrug),
+    onChange: (entry) => planning && planning.handleEntryChange(entry),
+    onPlan: () => planning && planning.enter(),
+    // "Default to planning mode" sends supported entries straight there
+    // instead of showing the modal first. Never before the case screen
+    // exists — there is no chart to plan against.
+    autoPlan: () => !!settings.getSettings().planningModeDefault && !!chart,
     onConfirm(type, canonicalValue, displayText, deliveryMode, extras) {
-      let t;
-      if (controls.isCaseStarted()) {
-        t = timer.getElapsedMinutes();
-      } else {
-        // Pre-start plan mode: each drug has its own clock so multi-drug events can overlap
-        t = getPreStartClock(selectedDrug);
-      }
+      // Running clock, or this drug's own pre-start clock so multi-drug
+      // pre-case events can overlap. Same helper planning mode anchors on.
+      let t = entryTime(selectedDrug);
 
       if (type === 'ceTarget') {
         const tciMode = setup.getTciMode ? setup.getTciMode() : 'cet-emulation';
@@ -823,10 +876,9 @@ function boot() {
           // TCI-capable drug with pump: bolus from 'none' implies manual mode
           mode.set(selectedDrug, 'manual');
         }
-        // No pump, or threshold set + no infusion → always IV Push; otherwise respect keypad choice
-        const hasThreshold = mode.getIntermittentThreshold(selectedDrug) > 0;
-        const isInfusing = mode.get(selectedDrug) === 'manual';
-        const dm = (!pumpOn || (hasThreshold && !isInfusing)) ? 'push' : (deliveryMode || 'pump');
+        // No pump, or threshold set + no infusion → always IV Push; otherwise
+        // respect the keypad's choice. Shared with planning mode's preview.
+        const dm = resolveBolusDeliveryMode(selectedDrug, deliveryMode);
         const label = dm === 'push' ? 'IV Push' : 'Pump Bolus';
         model.addBolus(selectedDrug, t, canonicalValue, `${label} ${displayText}`, {
           deliveryMode: dm,

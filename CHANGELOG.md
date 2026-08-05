@@ -11,6 +11,34 @@
 
 ---
 
+## [0.6] — 2026-08-05
+
+Feature — **dose planning mode**: see a dose on the chart before you commit it.
+
+- **Dose entry can now be planned rather than guessed.** Until now the loop was commit-then-look: type a number, hit the confirm button, and only then find out what it did. The fast modal is unchanged and still the default, but it gains a **Plan** button that opens a screen splitting the chart against the dose entry surface — drug panel and history hidden — where the projected concentration curve redraws live as you type. The proposal is drawn bright over the committed curve, which dims back to a reference, so the comparison is the point rather than a guess.
+- **Three ways to arrive at a number.** Type it; step it with **± buttons** that move along the drug's own quantize grid (so 47 mcg of fentanyl steps to 50, not 48, and press-and-hold repeats); or **drag a handle on the proposal itself** and let the app back-solve the dose that reaches the concentration you dragged to. The handle sits on the dose's own peak for a bolus, at +30 min for a rate, and on the target line for a TCI target — where dragging simply *is* setting the target.
+- **Supported for every dose entry**: bolus, manual rate, TCI target, redose threshold and emergence Ce. The two threshold entries move their line live without touching the curve.
+- **Confirm commits exactly as the modal would.** The planning screen's Confirm / IV Push / Clear delegate to the modal's own buttons rather than reimplementing them, so the TCI delay modal, the push-vs-pump split, and the last-dose memory all behave identically. **Cancel returns to the modal with the typed value intact.**
+- **Optional default.** Settings → Simulation → *Open dose entry in planning mode* sends every supported entry straight there; Cancel remains the way back to quick entry.
+
+Under the hood:
+
+- **Projections run on a throwaway clone of the case, never the live model** (`js/sim/preview.js`). A clone carrying a full TCI plan costs ~0.8 ms, so it is rebuilt on every keystroke rather than mutating and reverting — `addBolus` merges into an in-flight bolus and rewrites its value, so `deleteEvent` was never a safe undo. Verified byte-identical to the source across all three drugs, and the source event list is unchanged after 25 projections, a replan and a back-solve.
+- **The projection replays the same mutations the commit path performs**, so what you drag to is what you get: measured agreement with the committed curve is within 5·10⁻¹³ µg/mL. `resolveBolusDeliveryMode()` is now shared between `app.js onConfirm` and the preview so the two cannot disagree about delivery duration.
+- **Sampling only uses steps the engine caches.** `engine.getExpm()` caches its matrix exponential for dt ∈ {0.1, 1, 10, 60} min only; the chart's own 10/60 step is not one of them and costs 81 ms for a 12 h curve against 0.79 ms at step 1. The preview samples the first 20 minutes at 0.1 min — fine enough to resolve a bolus peak — then 1 min to the horizon. Bolus and rate projections land at ~2 ms; a TCI target replan is ~25 ms, which is why it gets a longer debounce (260 ms against 180 ms).
+- **The back-solve is a bracketed secant search.** Ce is strictly increasing in dose (linear system, non-negative input), so a bracket always exists; secant is tried first and falls back to the bracket midpoint whenever it would step outside. Lands within 0.5% in ≤12 iterations.
+- **Layout reuses the analysis screen's approach**: a separate `.screen` with the `.chart-area` node teleported in, keeping the live chart instance, its y-calibration, inspect cursor and gesture bindings. The keypad box is likewise *moved* into the entry column rather than cloned — its digit keys are bound once at boot.
+- The y-axis autoscale freezes for the duration of a handle drag, so the proposal's own curve can't grow the axis and slide out from under the finger dragging it.
+- Dragging a dose to zero keeps drawing the baseline curve and its handle, so the handle can't be stranded off the bottom of the chart with no way back up.
+
+Fixes found while building this:
+
+- **Selecting a drug with no events could blank the chart.** `setCurveData`'s autoscale computed its maximum from the curve and the target line alone, so a drug with neither — fentanyl or ketamine before their first dose, with no propofol target set — produced `y.max = 0` and an empty plot with no axis ticks. The autoscale is now floored at the drug's default axis maximum, and the plan-preview curve counts toward it so an overshooting proposal stays on screen.
+
+New: `js/sim/preview.js`, `js/app/planning.js`, `js/ui/chart/plugins/plan-handle.js`, `tests/test-planning-preview.js` (63 tests; suite 979 → 1042). `session.js restore()` and the preview clone now share one event-rehydration helper so the two rebuild paths cannot drift.
+
+---
+
 ## [0.5.49.1] — 2026-07-30
 
 Fix — background crossover dots now appear only when the decay projection is a real forecast.

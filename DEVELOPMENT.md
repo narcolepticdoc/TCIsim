@@ -4,6 +4,133 @@
 
 ## Session History
 
+### Dose planning mode (v0.6) — Interim
+
+Requested as: *"an optional planning mode that could be invoked from the dose entry
+modal"* — the sim could visualise a decision already made, but not help make one.
+The fast modal stays exactly as it is ("this works very well in practice"); planning
+mode is a deliberate step up from it.
+
+Scope agreed up front: bolus, rate, TCI target, redose threshold and emergence Ce.
+The history event editor was explicitly excluded — it is a parallel implementation
+(`event-editor.js`) and previewing an *edit in place* is a different problem from
+previewing an append.
+
+**Layout: a fourth `.screen`, not a body class.** The obvious approach — a
+`body.planning-mode` class hiding `.drug-panel` and `#panel-history` — needs
+overrides inside three separate media queries, because `.sim-main` is flex-column
+on phones, flex-row on tablets, and a grid in tablet portrait where
+`.sim-content` becomes `display:contents` and stops being a box at all. The
+analysis screen already solved this: give it its own screen and teleport the
+`.chart-area` node in. The live chart instance survives with its y-calibration,
+inspect cursor and gesture bindings intact (gestures bind to
+`canvas.parentElement`, which travels with the node). The keypad box is moved the
+same way — never cloned, since `keypad.init()` binds the digit keys once at boot
+via `querySelectorAll`.
+
+**The preview runs on a clone, and that decision was measured.** Six strategies
+were timed against a case carrying a full cet-emulation plan:
+
+| strategy | ms |
+|---|---|
+| build a throwaway clone + replay 23 events | **0.77** |
+| clone + addBolus + `computeCurve(0,720,10/60)` | 77.1 |
+| clone + addBolus + `computeCurve(60,240,10/60)` | 30.3 |
+| **clone + addBolus + `computeCurve(60,240,1)`** | **1.38** |
+| in-place `getStateAtTime` → 180× `advance(1,R)` → `replayDrug` | 0.70 |
+| in-place at 0.25-min sampling | 13.8 |
+
+Two conclusions. **Building the clone is not the cost — sampling is.**
+`engine.getExpm()` caches its Padé approximant for dt ∈ {0.1, 1, 10, 60} min and
+nothing else, and `engine.reset()` clears that cache at the start of every replay,
+so the chart's own 10/60 step recomputes a matrix exponential *per sample* — 81 ms
+for a 12 h curve against 0.79 ms at step 1. The preview therefore samples in two
+cached segments: 0.1 min over the first 20 minutes (enough to resolve a bolus
+peak) then 1 min to the horizon.
+
+And **the in-place pattern is not usable here**, despite being marginally
+cheapest. `computeDecayTrajectory`'s snapshot-and-advance ignores every event
+already queued in the future — which is precisely the case whenever a TCI plan is
+running, i.e. the situation this feature exists to serve.
+
+The clone is rebuilt on *every* projection rather than mutated and reverted.
+`addBolus` merges into an in-flight bolus and rewrites the existing event's value
+(`events/actions.js`), so `deleteEvent` was never a correct undo; `addRate` and
+`addPause` defer to the bolus end and delete the paired system rate-restore. At
+0.8 ms, rebuilding is cheaper than getting the undo right and removes the whole
+class of bug.
+
+**Preview must equal commit, so the commit logic is shared, not copied.**
+`applyAction()` replays what `app.js onConfirm` does — `clearAfter` out of TCI,
+`planTCI` from the delay offset, the pre-case rewind to t=0. The one piece that
+could not safely be re-derived is the bolus delivery mode: `onConfirm` evaluates
+`isInfusing` *after* flipping the drug to manual, so a drug in TCI with a redose
+threshold set resolves to `pump`, while the keypad's own `pushOnly` (computed
+before the flip, for the "Administer" label) says `push`. Rather than duplicate
+that subtlety, `resolveBolusDeliveryMode()` was extracted in app.js and is now
+called by both. Measured agreement between projection and commit: **5·10⁻¹³
+µg/mL**.
+
+**Back-solving the drag.** Ce is strictly increasing in dose (linear system,
+non-negative input), so a bracket always exists and bisection always converges;
+secant is tried first for speed and falls back to the bracket midpoint whenever it
+would step outside, which stops it running away on the flat tail. Lands within
+0.5% in ≤12 iterations (~1 ms each).
+
+The handle's anchor and the solver's objective go through one function
+(`anchorPoint`) because they must agree — otherwise dragging chases a number the
+solver isn't targeting. The distinction that matters: a bolus is judged on its
+peak **within the fine window**, not the global maximum of the projection. With a
+drug left infusing, the global maximum is just the far end of the chart and has
+nothing to do with the dose being entered. Caught in testing when the handle
+reported a peak of 4.12 µg/mL at t=380 for a bolus given at t=20; pinned by a test
+asserting the two are genuinely different values.
+
+**Three problems found by driving the real app** (Playwright, Chromium; the CDN
+Chart.js stack vendored locally since the browser has no proxy):
+
+1. *No handle drawn at all.* `anchorPoint` returns `{time, Ce}` and the handle spec
+   read `.ce`. The readout used `.Ce` and worked, which masked it.
+2. *The axis rescaled under the finger.* Including the proposal in the autoscale is
+   right — an overshooting dose must stay on screen, it carries the control
+   surface — but recomputing it mid-drag made the curve shrink away as the user
+   pulled it up. The autoscale now freezes for the duration of a drag and settles
+   on release.
+3. *Dragging to the floor stranded the user.* A dose solved to 0 cleared the
+   preview and with it the handle, leaving nothing to drag back up. Zero is now a
+   real projected value — it draws the baseline ("TCI stopped here, nothing
+   given") and keeps its anchor. A 0 mg bolus event is still never fabricated; a
+   zero *rate* is a genuine instruction and does insert one.
+
+**Pre-existing bug surfaced, and fixed.** Selecting a drug with no events blanked
+the chart entirely: `setCurveData`'s autoscale took its maximum from the curve and
+the target line only, so fentanyl before its first dose with no propofol target set
+gave `Math.ceil(0 × 1.3) = 0` — an empty plot with no axis ticks. Independent of
+this feature (the autoscale knows nothing about planning), but planning mode makes
+it acute, since planning a first fentanyl dose is exactly when you have no events.
+Floored at the drug's default axis max. Confirmed against a pre-change build,
+which only escaped it because `setCurveData` runs *before* `setTargetLine` in
+`refresh()` and so still saw the outgoing drug's target propping the maximum up.
+
+Verified end-to-end in the browser across bolus / rate / TCI target / emergence /
+fentanyl (×1000 y-scale): preview renders and tracks typing, ± steps on the
+quantize grid, drag solves both directions (55 → 149.3 mg up, → 0 down, back up by
+±), committed curve dims to 0.28 alpha and restores, Cancel reopens the modal with
+the buffer intact, Confirm produces the curve that was previewed, zero console
+errors.
+
+Tests: `tests/test-planning-preview.js`, 63 tests — clone fidelity per drug,
+non-destructiveness under 25 projections, preview-equals-commit for five action
+shapes, the cached-step sampling contract and segment join, anchor semantics,
+solver round-trip and clamps, line tasks, zero-dose behaviour, and the new
+setting's validation. Suite 979 → 1042, all green.
+
+Known limitation, deliberately left: `applyAction` mirrors `app.js onConfirm`,
+which cannot be imported into a Node test (it needs a live DOM). The tests pin
+applyAction's own semantics, so a regression in `preview.js` is caught — but a
+change to `onConfirm` that drifts away from them is not. The two carry pointers to
+each other and must be read together.
+
 ### Chart: ghost crossover dots only when the projection is real (v0.5.49.1) — Interim
 
 Refinement of v0.5.49, from a good catch: when a background drug's infusion is
