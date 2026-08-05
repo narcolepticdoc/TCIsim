@@ -10,6 +10,7 @@ import { fromCanonical, getDefaultUnit, getPrefKey, formatValue, getAllowedUnits
 import { alphaToHex } from '../../util/color.js';
 
 import { createState } from './state.js';
+import { fmtTick, fmtXTick, xAxisTitle } from './time-format.js';
 import { buildAnnotations } from './annotations.js';
 import { attachGestures } from './gestures.js';
 import { createTargetLabelPlugin } from './plugins/target-label.js';
@@ -17,6 +18,7 @@ import { createCursorDotsPlugin } from './plugins/cursor-dots.js';
 import { createInspectDotsPlugin } from './plugins/inspect-dots.js';
 import { createCrossoverDotsPlugin } from './plugins/crossover-dots.js';
 import { createInspectHandlePlugin } from './plugins/inspect-handle.js';
+import { createPlanHandlePlugin } from './plugins/plan-handle.js';
 import { createReadoutPanelPlugin } from './plugins/readout-panel.js';
 import { createEventMarkersPlugin } from './plugins/event-markers.js';
 
@@ -35,40 +37,6 @@ const BASE_FONTS = {
   legend: 10,
 };
 
-/**
- * Format an axis tick value. Chart.js's auto-computed min/max can produce
- * floating-point noise like 30.00000000000002; snap to 3 decimals and drop
- * the decimal entirely on integers so ticks read cleanly.
- */
-function fmtTick(v) {
-  if (!Number.isFinite(v)) return '';
-  const r = Math.round(v * 1000) / 1000;
-  return Number.isInteger(r) ? r.toString() : r.toFixed(1);
-}
-
-// Format an x-axis tick (sim minutes) per the selected time-axis mode.
-// Dedicated to the x-axis — the y-axes keep using the generic fmtTick.
-// Mirrors the elapsed/real-time formatting in history.js fmtTime.
-function fmtXTick(v, mode, wallClockStartMs) {
-  if (!Number.isFinite(v)) return '';
-  if (mode === 'rt' && wallClockStartMs != null) {
-    const d = new Date(wallClockStartMs + v * 60000);
-    return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
-  }
-  if (mode === 'hmin' || (mode === 'rt' && wallClockStartMs == null)) {
-    const totalMin = Math.round(v);
-    const sign = totalMin < 0 ? '-' : '';
-    const a = Math.abs(totalMin);
-    return sign + Math.floor(a / 60) + ':' + String(a % 60).padStart(2, '0');
-  }
-  return fmtTick(v);
-}
-
-function xAxisTitle(mode) {
-  if (mode === 'hmin') return 'Time (h:min)';
-  if (mode === 'rt') return 'Clock time';
-  return 'Time (min)';
-}
 
 /**
  * Read theme-derived chart colors from the document's CSS custom properties.
@@ -220,6 +188,41 @@ export function createChart(canvas, config = {}) {
     order: 0,
   });
 
+  // Plan-preview datasets — the proposed dose's Ce/Cp, drawn while planning
+  // mode is open and the user is typing/dragging a dose that hasn't been
+  // committed. Same colours as the live traces (this IS the same drug), but
+  // drawn on top while the committed traces dim back, so the eye reads the
+  // proposal as the foreground and the current plan as the reference.
+  const planCeDsIdx = datasets.length;
+  datasets.push({
+    label: 'Ce (proposed)',
+    role: 'plan-preview-ce',
+    data: [],
+    borderColor: initialDrugColor,
+    backgroundColor: 'transparent',
+    borderWidth: 3,
+    pointRadius: 0,
+    tension: 0.1,
+    fill: false,
+    spanGaps: false,
+    order: -1, // above every committed trace
+  });
+
+  const planCpDsIdx = datasets.length;
+  datasets.push({
+    label: 'Cp (proposed)',
+    role: 'plan-preview-cp',
+    data: [],
+    borderColor: COLORS.cp,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    pointRadius: 0,
+    tension: 0.1,
+    fill: false,
+    spanGaps: false,
+    order: -1,
+  });
+
   // Per-drug ghost Ce datasets — peripheral-awareness traces for every
   // non-selected drug that has events. Each runs against its own hidden
   // Y-axis (yGhost_<drugId>) so the line height matches the user's
@@ -341,8 +344,11 @@ export function createChart(canvas, config = {}) {
             // Hide ghost datasets from the legend — both the
             // pre-reconcile purple dashed line and the per-drug ghost
             // traces are self-explanatory next to the live Ce. A
-            // persistent legend entry would just add clutter.
-            filter: (item) => !/(pre-reconcile|ghost)/i.test(item.text || ''),
+            // persistent legend entry would just add clutter. Same for the
+            // plan-preview traces — they only exist inside planning mode,
+            // which titles itself, and an always-present "(proposed)" entry
+            // would be a permanent lie on the main screen.
+            filter: (item) => !/(pre-reconcile|ghost|proposed)/i.test(item.text || ''),
           },
         },
         tooltip: {
@@ -433,12 +439,44 @@ export function createChart(canvas, config = {}) {
       createInspectDotsPlugin(s),
       createCrossoverDotsPlugin(s),
       createInspectHandlePlugin(s),
+      createPlanHandlePlugin(s),
       createReadoutPanelPlugin(s),
       createEventMarkersPlugin(s),
     ],
   });
 
   // ---- Public API ----
+
+  /**
+   * Y-axis maximum for the current data, when the user hasn't pinned one.
+   *
+   * Floored at the drug's default axis max so selecting a drug that has no
+   * events yet cannot collapse the axis to zero and blank the chart — which
+   * it used to, whenever no target line was set to prop the maximum up.
+   *
+   * The plan-preview curve counts toward the maximum as well: a proposed dose
+   * that overshoots the committed one must stay on screen, or the drag handle
+   * would be somewhere above the plot area with no way to grab it.
+   */
+  function autoYMax() {
+    let peak = s.targetCe || 0;
+    for (const idx of [cpDsIdx, ceDsIdx, planCeDsIdx, planCpDsIdx]) {
+      if (idx < 0) continue;
+      for (const point of datasets[idx].data) if (point.y > peak) peak = point.y;
+    }
+    return Math.max(Math.ceil(peak * 1.3), s.yDefaultMax || 10);
+  }
+
+  /**
+   * Re-apply the auto Y max unless the user has pinned one by dragging the
+   * axis — or is mid-drag on the plan handle, where rescaling would move the
+   * curve out from under their finger on every frame. gestures.js re-applies
+   * it on release.
+   */
+  function applyAutoYMax() {
+    if (s.yMaxManual !== null || s._planDragging) return;
+    chart.options.scales.y.max = autoYMax();
+  }
 
   function setCurveData(curveData) {
     let dsIdx = 0;
@@ -464,12 +502,7 @@ export function createChart(canvas, config = {}) {
     // Re-applying live data here (e.g. on every refresh) must not
     // touch the ghost slot, which is what the index above guarantees.
 
-    if (s.yMaxManual === null && curveData.length > 0) {
-      const maxCp = Math.max(...curveData.map(p => p.Cp));
-      const maxCe = Math.max(...curveData.map(p => p.Ce));
-      const maxConc = Math.max(maxCp, maxCe, s.targetCe || 0);
-      chart.options.scales.y.max = Math.ceil(maxConc * 1.3);
-    }
+    if (curveData.length > 0) applyAutoYMax();
 
     chart.options.scales.x.min = s.viewMin;
     chart.options.scales.x.max = s.viewMax;
@@ -580,6 +613,113 @@ export function createChart(canvas, config = {}) {
     chart.update('none');
   }
 
+  // ---- Planning mode ----
+
+  /**
+   * How far the committed Ce/Cp traces fade back while a proposed dose is
+   * on the chart. Low enough that the proposal clearly leads, high enough
+   * that the comparison — the whole point of showing both — still reads.
+   */
+  const PLAN_DIM = 0.28;
+
+  /** Fill alpha as a fraction of line alpha (the historical `18` hex byte). */
+  const FILL_RATIO = 0x18 / 0xff;
+
+  /**
+   * Repaint the committed Ce/Cp traces from their three inputs: the drug
+   * colour, the user's Cp-opacity setting, and whether a plan preview is up.
+   *
+   * Everything that touches those colours routes through here rather than
+   * writing borderColor itself. Two reasons: setCpOpacity and setDrugColor
+   * both early-return on an unchanged value (the bridge calls them every
+   * frame), so a dim applied outside this function would be sticky in one
+   * direction and unrecoverable in the other; and the bridge pushes
+   * setCpOpacity ~60×/s, which would otherwise erase the dim immediately.
+   */
+  function _applyCommittedColors() {
+    const k = s.planPreviewActive ? PLAN_DIM : 1;
+    if (cfg.showCp && cpDsIdx >= 0) {
+      const a = s.cpOpacity * k;
+      datasets[cpDsIdx].borderColor = COLORS.cp + alphaToHex(a);
+      datasets[cpDsIdx].backgroundColor = COLORS.cp + alphaToHex(a * FILL_RATIO);
+    }
+    if (cfg.showCe && ceDsIdx >= 0 && s.drugColor) {
+      datasets[ceDsIdx].borderColor = s.drugColor + alphaToHex(k);
+      datasets[ceDsIdx].backgroundColor = s.drugColor + alphaToHex(k * FILL_RATIO);
+    }
+  }
+
+  /**
+   * Push the proposed-dose curve. `points` are `[{time, Cp, Ce}]` already
+   * y-scaled by the bridge; null/empty clears the preview and un-dims the
+   * committed traces.
+   *
+   * Signature-guarded like every other per-frame setter (CLAUDE.md
+   * invariant), but the active flag is compared too so entering and leaving
+   * planning mode always repaints even when the points happen to match.
+   */
+  function setPlanPreview(points) {
+    const has = !!(points && points.length > 0);
+    const sig = has
+      ? `${points.length}|${points[0].time}|${points[points.length - 1].time}|${points[points.length - 1].Ce.toFixed(4)}`
+      : '';
+    if (sig === s.planPreviewSig && has === s.planPreviewActive) return;
+    s.planPreviewSig = sig;
+    s.planPreviewActive = has;
+
+    datasets[planCeDsIdx].data = has ? points.map(p => ({ x: p.time, y: p.Ce })) : [];
+    datasets[planCpDsIdx].data = has && cfg.showCp
+      ? points.map(p => ({ x: p.time, y: p.Cp }))
+      : [];
+    if (has && s.drugColor) datasets[planCeDsIdx].borderColor = s.drugColor;
+
+    _applyCommittedColors();
+    // A proposal that overshoots the committed curve has to stay on screen —
+    // its drag handle is the control surface.
+    applyAutoYMax();
+    chart.update('none');
+  }
+
+  /**
+   * Step markers for the proposed plan. Same `{time, kind, past}` shape as
+   * setEventAnnotations, but drawn against the preview curve. Signature-guarded
+   * like the rest — planning.js pushes these on every reprojection.
+   */
+  function setPlanEventMarkers(markers) {
+    const list = Array.isArray(markers) ? markers : [];
+    const sig = list.map(m => `${m.time}:${m.kind}`).join('|');
+    if (sig === s.planEventMarkersSig) return;
+    s.planEventMarkersSig = sig;
+    s.planEventMarkers = list;
+    chart.update('none');
+  }
+
+  /**
+   * Position the vertical drag handle, or clear it with null.
+   * `spec` is `{ time, ce }` in chart units — the point the user grabs to
+   * retitrate the dose.
+   */
+  function setPlanHandle(spec) {
+    const next = (spec && Number.isFinite(spec.time) && Number.isFinite(spec.ce))
+      ? { time: spec.time, ce: spec.ce }
+      : null;
+    const cur = s.planHandle;
+    if (!next && !cur) return;
+    if (next && cur && next.time === cur.time && next.ce === cur.ce) return;
+    s.planHandle = next;
+    chart.update('none');
+  }
+
+  /**
+   * Register the callbacks the vertical handle drag reports to.
+   * `onDrag` receives the dragged Ce in CHART units; planning.js converts back.
+   * `onEnd` fires on release, after the axis has settled.
+   */
+  function setPlanDragHandler(onDrag, onEnd) {
+    s._onPlanDrag = typeof onDrag === 'function' ? onDrag : null;
+    s._onPlanDragUserEnd = typeof onEnd === 'function' ? onEnd : null;
+  }
+
   /**
    * Re-tint the foreground Ce trace to match the active drug's color.
    * Idempotent — bridge calls every frame (CLAUDE.md self-heal invariant).
@@ -590,9 +730,8 @@ export function createChart(canvas, config = {}) {
     if (!def || !def.color) return;
     if (s.drugColor === def.color) return;
     s.drugColor = def.color;
-    const ce = datasets[ceDsIdx];
-    ce.borderColor = def.color;
-    ce.backgroundColor = def.color + '18';
+    datasets[planCeDsIdx].borderColor = def.color;
+    _applyCommittedColors();
     chart.update('none');
   }
 
@@ -876,6 +1015,8 @@ export function createChart(canvas, config = {}) {
       delete chart.options.scales.y.max;
       chart.options.scales.y.suggestedMax = suggestedMax || 10;
     }
+    // Remembered as the floor for setCurveData's autoscale — see there.
+    s.yDefaultMax = suggestedMax || 10;
 
     // Re-tint the foreground Ce trace to the new drug's color and
     // re-evaluate ghost visibility so the new drug's own ghost is hidden
@@ -889,6 +1030,15 @@ export function createChart(canvas, config = {}) {
   // Attach gestures (Y-axis drag, double-tap recenter)
   const detachGestures = attachGestures(canvas, chart, s, recenter, setInspectTime);
 
+  // Releasing the plan handle un-freezes the autoscale (see applyAutoYMax)
+  // and settles the axis around whatever dose the user landed on, then hands
+  // off to planning.js for its final un-coalesced projection.
+  s._onPlanDragEnd = () => {
+    applyAutoYMax();
+    chart.update('none');
+    if (s._onPlanDragUserEnd) s._onPlanDragUserEnd();
+  };
+
   function destroy() {
     detachGestures();
     chart.destroy();
@@ -899,10 +1049,7 @@ export function createChart(canvas, config = {}) {
     const clamped = Math.max(0.1, Math.min(1.0, opacity));
     if (s.cpOpacity === clamped) return;
     s.cpOpacity = clamped;
-    const ds = datasets[0];
-    const a = Math.round(clamped * 255).toString(16).padStart(2, '0');
-    ds.borderColor = COLORS.cp + a;
-    ds.backgroundColor = COLORS.cp + Math.round(clamped * 0x18).toString(16).padStart(2, '0');
+    _applyCommittedColors();
     chart.update('none');
   }
 
@@ -954,6 +1101,18 @@ export function createChart(canvas, config = {}) {
     return s.eventAnnotationsEnabled;
   }
 
+  /**
+   * Show/hide the crossing-time label beside each crossover dot. The dots
+   * themselves are unaffected — the label is the part that adds clutter, and
+   * it is off by default.
+   */
+  function setCrossoverLabels(on) {
+    const v = !!on;
+    if (s.crossoverLabels === v) return;
+    s.crossoverLabels = v;
+    chart.update('none');
+  }
+
   function setEventMarkerSize(px) {
     const clamped = Math.max(4, Math.min(16, Math.round(px)));
     if (s.eventMarkerSize === clamped) return;
@@ -992,6 +1151,10 @@ export function createChart(canvas, config = {}) {
     setReconciliationRegion,
     setGhostCurve,
     setEmergenceTrajectory,
+    setPlanPreview,
+    setPlanHandle,
+    setPlanDragHandler,
+    setPlanEventMarkers,
     setSteadyStateLine,
     setExitLine,
     setViewRange,
@@ -1008,6 +1171,7 @@ export function createChart(canvas, config = {}) {
     setOverlayOpacity,
     setEventAnnotations,
     toggleEventAnnotations,
+    setCrossoverLabels,
     setEventMarkerSize,
     setFontScale,
     setDrugColor,

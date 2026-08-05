@@ -96,6 +96,17 @@ export function createEventList() {
     return state.engines[drugId] || null;
   }
 
+  /**
+   * Read back a drug's registered delivery config. Returns null when the
+   * drug was never registered. Used by the planning-mode preview clone so
+   * it inherits the concentration/bolus rate THIS case was planned under
+   * rather than re-reading the live global pump settings.
+   */
+  function getDrugConfig(drugId) {
+    const c = state.drugConfigs[drugId];
+    return c ? { ...c } : null;
+  }
+
   function getDrugIds() {
     return Object.keys(state.engines);
   }
@@ -122,6 +133,7 @@ export function createEventList() {
     registerEngine,
     registerDrugConfig,
     getEngine,
+    getDrugConfig,
     getDrugIds,
     getBolusDelivery: delivery.getBolusDelivery,
 

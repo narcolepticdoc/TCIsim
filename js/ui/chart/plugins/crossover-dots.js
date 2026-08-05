@@ -18,6 +18,11 @@
  */
 
 import { DRUG_DEFS } from '../../../util/constants.js';
+import { fmtTimeLabel } from '../time-format.js';
+
+/** Leader offset from the dot to the near corner of its time label. */
+const LEAD_X = 10;
+const LEAD_Y = 14;
 
 /**
  * Find the x-value where a sorted {x, y} point array first crosses `thr` going
@@ -50,8 +55,18 @@ export function createCrossoverDotsPlugin(s) {
 
       const ctx = ch.ctx;
 
-      /** Draw one dot where `traj` crosses `thr`, on the given y scale. */
-      const draw = (traj, yScl, thr, fill, ring, alpha) => {
+      const labelFg = (cs.getPropertyValue('--chart-label-fg').trim() || '#ffffff');
+      const labelBg = (cs.getPropertyValue('--bg-deep').trim() || '#0b1120');
+      const fontPx = Math.round(10 * (s.fontScale || 1));
+
+      /**
+       * Draw one dot where `traj` crosses `thr`, on the given y scale.
+       *
+       * `label` adds the crossing TIME beside the dot, in whatever units the
+       * x-axis is currently showing — a dot on its own says "it gets there",
+       * the label says when, which is the number a clinician actually wants.
+       */
+      const draw = (traj, yScl, thr, fill, ring, alpha, label) => {
         if (!yScl || thr === null || !(thr > 0)) return;
         const x = downwardCrossingX(traj, thr);
         if (x === null) return;
@@ -67,14 +82,75 @@ export function createCrossoverDotsPlugin(s) {
         ctx.strokeStyle = ring;
         ctx.lineWidth = 1.5;
         ctx.stroke();
+
+        if (label && s.crossoverLabels) {
+          const text = fmtTimeLabel(x, s.timeAxisMode, s.wallClockStartMs);
+          if (text) {
+            ctx.font = `600 ${fontPx}px ui-monospace, monospace`;
+            ctx.textBaseline = 'middle';
+            const w = ctx.measureText(text).width;
+            const boxW = w + 6;
+            const boxH = fontPx + 6;
+
+            // Offset up and to the right, on a short leader, rather than
+            // butted against the dot. A label level with the dot sits on the
+            // threshold line it belongs to and on whatever curve is passing
+            // through; lifting it clear leaves both readable, and the leader
+            // keeps the association unambiguous.
+            let bx = px + LEAD_X;
+            let by = py - LEAD_Y - boxH;
+            // Fold back over the dot at the plot edges instead of clipping.
+            if (bx + boxW > ca.right) bx = px - LEAD_X - boxW;
+            if (by < ca.top) by = py + LEAD_Y;
+            bx = Math.max(ca.left, Math.min(bx, ca.right - boxW));
+
+            // Leader from the dot's edge to the nearest corner of the box.
+            const anchorX = bx < px ? bx + boxW : bx;
+            const anchorY = by < py ? by + boxH : by;
+            ctx.globalAlpha = alpha * 0.7;
+            ctx.strokeStyle = fill;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(anchorX, anchorY);
+            ctx.stroke();
+
+            ctx.globalAlpha = alpha * 0.85;
+            ctx.fillStyle = labelBg;
+            if (typeof ctx.roundRect === 'function') {
+              ctx.beginPath();
+              ctx.roundRect(bx, by, boxW, boxH, 3);
+              ctx.fill();
+            } else {
+              ctx.fillRect(bx, by, boxW, boxH);
+            }
+            ctx.globalAlpha = alpha;
+            ctx.strokeStyle = fill;
+            ctx.lineWidth = 1;
+            if (typeof ctx.roundRect === 'function') ctx.stroke();
+            ctx.fillStyle = labelFg;
+            ctx.textAlign = 'left';
+            ctx.fillText(text, bx + 3, by + boxH / 2);
+          }
+        }
         ctx.restore();
       };
 
       // Foreground drug — solid dots on the main y scale.
       const traj = ch.data.datasets.find(ds => ds.role === 'emergence-traj');
       if (traj && traj.data && traj.data.length >= 2) {
-        draw(traj.data, ch.scales.y, s.thresholdCe, amber, '#ffffff', 1);
-        draw(traj.data, ch.scales.y, s.exitCe, red, '#ffffff', 1);
+        draw(traj.data, ch.scales.y, s.thresholdCe, amber, '#ffffff', 1, true);
+        draw(traj.data, ch.scales.y, s.exitCe, red, '#ffffff', 1, true);
+      }
+
+      // Proposed dose (planning mode) — the same two crossings read off the
+      // curve being dragged, so the effect of a dose on time-to-redose and
+      // time-to-emergence is visible while choosing it. Drawn only while a
+      // preview is up; the dataset is empty otherwise.
+      const plan = ch.data.datasets.find(ds => ds.role === 'plan-preview-ce');
+      if (s.planPreviewActive && plan && plan.data && plan.data.length >= 2) {
+        draw(plan.data, ch.scales.y, s.thresholdCe, amber, '#ffffff', 1, true);
+        draw(plan.data, ch.scales.y, s.exitCe, red, '#ffffff', 1, true);
       }
 
       // Background drugs — ghosted dots, gated on the same toggle that reveals
@@ -88,8 +164,10 @@ export function createCrossoverDotsPlugin(s) {
         if (!g || !g.traj || g.traj.length < 2) continue;
         const gScl = ch.scales['yGhost_' + drugId];
         const ring = (DRUG_DEFS[drugId] && DRUG_DEFS[drugId].color) || '#ffffff';
-        draw(g.traj, gScl, g.thresholdCe, amber, ring, s.ghostOpacity);
-        draw(g.traj, gScl, g.exitCe, red, ring, s.ghostOpacity);
+        // No time labels on background drugs — three or four of them would
+        // crowd the plot, and the foreground is where the decision is made.
+        draw(g.traj, gScl, g.thresholdCe, amber, ring, s.ghostOpacity, false);
+        draw(g.traj, gScl, g.exitCe, red, ring, s.ghostOpacity, false);
       }
     },
   };

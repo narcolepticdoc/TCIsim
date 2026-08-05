@@ -25,7 +25,7 @@ const $ = id => document.getElementById(id);
  * "resume" marker is only used when the new rate matches the prior rate
  * (or when no prior rate has ever been set).
  */
-function classifyFutureEvents(events, now) {
+export function classifyFutureEvents(events, now) {
   let currentRate = 0;
   let lastNonZeroRate = 0;
   const out = [];
@@ -94,6 +94,21 @@ export function createChartBridge({
   // RT toggle restores this so turning real-time off never destroys the chart's
   // min-vs-h:min tick choice.
   let lastNonRtMode = 'min';
+
+  // Threshold values being previewed in planning mode, or null. The decay
+  // trajectory below normally reads committed `mode` state — which is 0 while
+  // a threshold is being set for the FIRST time, so no trajectory was drawn
+  // and the crossover dots had nothing to sit on. Editing an existing
+  // threshold happened to work because the old value was still non-zero.
+  let planThresholds = null;
+
+  /**
+   * Preview thresholds for the decay trajectory.
+   * @param {{exitCe?: number, thresholdCe?: number}|null} o - canonical mcg/mL
+   */
+  function setPlanThresholds(o) {
+    planThresholds = o || null;
+  }
 
   // Opacity / marker-size / font-scale setters are idempotent inside the chart
   // (early-return when the value matches) so we can call them every frame without
@@ -411,8 +426,10 @@ export function createChartBridge({
       // the line visible while the pump is paused (e.g. after lowering the target),
       // which is exactly the decay it projects. Scaled to match the live Ce dataset.
       if (model && chart.setEmergenceTrajectory) {
-        const exitCe   = mode.getExitCe(selectedDrug);
-        const redoseCe = mode.getIntermittentThreshold(selectedDrug);
+        const exitCe   = planThresholds && planThresholds.exitCe != null
+          ? planThresholds.exitCe : mode.getExitCe(selectedDrug);
+        const redoseCe = planThresholds && planThresholds.thresholdCe != null
+          ? planThresholds.thresholdCe : mode.getIntermittentThreshold(selectedDrug);
         const conc = model.getConcentrationsAt(selectedDrug, t);
         const targets = [exitCe, redoseCe].filter(v => v > 0);
         const target = targets.length ? Math.min(...targets) : 0;
@@ -455,6 +472,7 @@ export function createChartBridge({
       chart.setNomogramOpacity(s.nomogramOpacity ?? 1.0);
       chart.setOverlayOpacity(s.overlayOpacity ?? 1.0);
       chart.setEventMarkerSize(s.eventMarkerSize ?? 7);
+      if (chart.setCrossoverLabels) chart.setCrossoverLabels(!!s.crossoverTimeLabels);
       // Ce drift band: visible only when the Appearance toggle is on AND
       // the active drug has a TCI target set. Null hides it.
       if (typeof chart.setCeToleranceBand === 'function') {
@@ -524,5 +542,5 @@ export function createChartBridge({
 
   function getLastNonRtMode() { return lastNonRtMode; }
 
-  return { getConfig, computeEffectOverlay, refresh, onFrame, getLastNonRtMode };
+  return { getConfig, computeEffectOverlay, refresh, onFrame, getLastNonRtMode, setPlanThresholds };
 }

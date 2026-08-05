@@ -13,7 +13,7 @@
  * caches, and the page reloads onto the new version.
  */
 
-const VERSION = '0.5.49.1';
+const VERSION = '0.6.1.2';
 const CACHE_NAME = `tcisim-v${VERSION}`;
 
 const PRECACHE_URLS = [
@@ -27,6 +27,7 @@ const PRECACHE_URLS = [
   'js/version.js',
   'js/app.js',
   'js/app/chart-bridge.js',
+  'js/app/planning.js',
   'js/app/portrait-layout.js',
   'js/app/session.js',
   'js/app/settings-ui.js',
@@ -51,6 +52,7 @@ const PRECACHE_URLS = [
   'js/sim/events/query.js',
   'js/sim/events/replay.js',
   'js/sim/simtiva-reference.js',
+  'js/sim/preview.js',
   'js/sim/simulation.js',
   'js/sim/tci-planner.js',
   'js/sim/tci/cet-conservative.js',
@@ -71,11 +73,13 @@ const PRECACHE_URLS = [
   'js/ui/chart/plugins/event-markers.js',
   'js/ui/chart/plugins/inspect-dots.js',
   'js/ui/chart/plugins/inspect-handle.js',
+  'js/ui/chart/plugins/plan-handle.js',
   'js/ui/chart/plugins/readout-panel.js',
   'js/ui/chart/plugins/target-label.js',
   'js/ui/chart/rate-format.js',
   'js/ui/chart/shapes.js',
   'js/ui/chart/state.js',
+  'js/ui/chart/time-format.js',
   'js/ui/compartment-viz.js',
   'js/ui/controls.js',
   'js/ui/drug-panel.js',

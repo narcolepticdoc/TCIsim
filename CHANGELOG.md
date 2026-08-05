@@ -11,6 +11,73 @@
 
 ---
 
+## [0.6.1.2] — 2026-08-05
+
+Crossing-time labels get an on-chart toggle and move off the dot.
+
+- **New chart button (⏱) toggles the crossing-time labels** without opening Settings — it belongs with the other in-case display toggles (events, ghosts, time axis) rather than two taps away. Same shape as the ghost-trace toggle: the button is the in-case control, the Settings → Appearance checkbox is the same value, and both write one persisted key. The checkbox now re-seeds when the Settings panel opens, following the pattern the time-axis control already used, so the two can't drift out of step.
+- **Labels sit up and to the right of their dot on a short leader**, instead of butted against it. A label level with the dot sat on the threshold line it belongs to *and* on whatever curve was passing through; lifting it clear leaves all three readable. It folds back over the dot at the plot edges rather than clipping, and drops below when there's no room above.
+
+Changed: `js/ui/chart/plugins/crossover-dots.js`, `js/app.js`, `js/app/settings-ui.js`, `index.html`.
+
+---
+
+## [0.6.1.1] — 2026-08-05
+
+Planning mode, second test round: crossover labels made optional, drag handle moved off the curve, and a first-time threshold now draws its dots.
+
+- **Crossover time labels are now opt-in and off by default.** They answer a real question but add a lot of ink to a chart that already carries four bands, two threshold lines and a cursor. Settings → Appearance → *Label crossover dots with the crossing time*. The dots themselves are unchanged — only the label is behind the toggle.
+- **The drag handle no longer sits on the point it controls.** A 44×56 touch target — and a finger — parked on the proposal's peak covered exactly the part being judged. The handle now rides the **left edge** of the plot at the same height, with a dashed tie-line out to a small marker at the anchor, so the connection stays legible while the curve stays visible. Left rather than right because the right edge carries the target/threshold label pills, which a threshold handle would share a y with exactly; the 46 px inset clears the y-axis drag zone.
+- **Setting a threshold for the first time now renders its crossover dots.** The dots sit on the "Ce if stopped" decay trajectory, which `chart-bridge` builds from **committed** mode state — zero while a threshold is being set for the first time, so no trajectory was drawn and the dots had nothing to sit on. Editing an *existing* threshold happened to work only because the old value was still non-zero. Planning mode now publishes the value being previewed for the trajectory to use, and releases it on exit. Verified: trajectory length 0 → 101 points while previewing a first emergence Ce of 1.5 µg/mL.
+
+Changed: `js/ui/chart/plugins/plan-handle.js`, `js/ui/chart/plugins/crossover-dots.js`, `js/app/chart-bridge.js` (`setPlanThresholds`), `js/app/planning.js`, `js/ui/chart/index.js` (`setCrossoverLabels`), `js/ui/settings.js`, `js/app/settings-ui.js`, `index.html`. Suite 1065 → 1069.
+
+---
+
+## [0.6.1] — 2026-08-05
+
+Planning mode, from first test notes: layout fixes at phone sizes, a genuinely smooth drag, crossover dots on the proposal, plan step markers, and per-drug Ce titration steps.
+
+- **Phone landscape had no chart.** The split switched on `max-width: 860px`, which catches a phone in landscape — wide, but only ~390 px tall. Stacking it there left the chart **75 px**. The breakpoints now switch on **orientation**, never width: landscape stays side by side and buys chart width by compacting the entry column; portrait stacks. Height is the scarce axis in landscape, width the scarce one in portrait, and each layout now spends the axis it has.
+- **Portrait gave the chart less than half the screen** — 387 px against the entry's 405 px, because the keypad's intrinsic height won. The chart now holds a floor of 52 vh (50 vh on narrow phones) and the entry column shrinks and scrolls instead of pushing it down. Measured after: **480 px chart against 257 px entry** on a 390×844 phone, 865 against 261 on iPad portrait.
+- **The drag now redraws every frame.** Two things were fighting it: a 40 ms throttle that capped updates at 25 Hz, and — worse — `setCanonical` firing the 180 ms keystroke debounce, which restarted on every drag frame, so the curve did not move at all until the finger stopped. Drag updates now coalesce on `requestAnimationFrame` and bypass the debounce entirely. The throttle was pure pessimism: a back-solve is **~2.7 ms** warm-seeded from the previous frame's answer (~4 clones), plus ~1.1 ms to reproject. Measured over a 400 ms drag: **29 distinct curve redraws**, against zero before.
+- **Crossover dots now appear on the proposed curve**, marking where it descends through the redose and emergence thresholds — the same amber/red dots the committed trajectory already had.
+- **Crossover dots are now labelled with the crossing time**, in whatever units the x-axis is showing (minutes, h:mm, or clock time). A dot says the drug gets there; the label says when, which is the number being planned around. Foreground only — labelling every background drug's dots would crowd the plot.
+- **A proposed TCI plan now shows its rate-step markers.** The scheme a retarget generates lives on the preview clone, so nothing on the chart could read it and the plan being chosen drew as a bare curve. Preview markers render against the proposal and ignore the ⚑ toggle, since seeing the scheme *is* the reason to preview a target. Steps that predate the projection are excluded — they have no curve to sit on.
+- **Ce titration is per-drug now.** Fentanyl thresholds jumped in 0.1 ng/mL steps — most of the drug's clinical range in one press — because `ng/mL` carries one decimal, which is right for ketamine at 800 ng/mL and useless below 1. Ce steps are now declared per drug (**propofol 0.1 µg/mL, fentanyl 0.05 ng/mL, ketamine 10 ng/mL**) and the displayed precision follows the step rather than the unit. Fentanyl now steps 1.00 → 1.05 → 1.10 and drags continuously at 0.01.
+
+Changed: `index.html` (planning breakpoints), `js/app/planning.js`, `js/ui/chart/plugins/crossover-dots.js`, `js/ui/chart/plugins/event-markers.js`, `js/ui/chart/index.js`, `js/ui/keypad.js`, `js/util/units.js` (`decimalsForStep`, `formatValueStep`), `js/util/constants.js` (ceTarget `quantSteps`). New `js/ui/chart/time-format.js` — the axis formatters, extracted so plugins can label times the way the axis does without importing `chart/index.js`, which imports them. Suite 1042 → 1065.
+
+---
+
+## [0.6] — 2026-08-05
+
+Feature — **dose planning mode**: see a dose on the chart before you commit it.
+
+- **Dose entry can now be planned rather than guessed.** Until now the loop was commit-then-look: type a number, hit the confirm button, and only then find out what it did. The fast modal is unchanged and still the default, but it gains a **Plan** button that opens a screen splitting the chart against the dose entry surface — drug panel and history hidden — where the projected concentration curve redraws live as you type. The proposal is drawn bright over the committed curve, which dims back to a reference, so the comparison is the point rather than a guess.
+- **Three ways to arrive at a number.** Type it; step it with **± buttons** that move along the drug's own quantize grid (so 47 mcg of fentanyl steps to 50, not 48, and press-and-hold repeats); or **drag a handle on the proposal itself** and let the app back-solve the dose that reaches the concentration you dragged to. The handle sits on the dose's own peak for a bolus, at +30 min for a rate, and on the target line for a TCI target — where dragging simply *is* setting the target.
+- **Supported for every dose entry**: bolus, manual rate, TCI target, redose threshold and emergence Ce. The two threshold entries move their line live without touching the curve.
+- **Confirm commits exactly as the modal would.** The planning screen's Confirm / IV Push / Clear delegate to the modal's own buttons rather than reimplementing them, so the TCI delay modal, the push-vs-pump split, and the last-dose memory all behave identically. **Cancel returns to the modal with the typed value intact.**
+- **Optional default.** Settings → Simulation → *Open dose entry in planning mode* sends every supported entry straight there; Cancel remains the way back to quick entry.
+
+Under the hood:
+
+- **Projections run on a throwaway clone of the case, never the live model** (`js/sim/preview.js`). A clone carrying a full TCI plan costs ~0.8 ms, so it is rebuilt on every keystroke rather than mutating and reverting — `addBolus` merges into an in-flight bolus and rewrites its value, so `deleteEvent` was never a safe undo. Verified byte-identical to the source across all three drugs, and the source event list is unchanged after 25 projections, a replan and a back-solve.
+- **The projection replays the same mutations the commit path performs**, so what you drag to is what you get: measured agreement with the committed curve is within 5·10⁻¹³ µg/mL. `resolveBolusDeliveryMode()` is now shared between `app.js onConfirm` and the preview so the two cannot disagree about delivery duration.
+- **Sampling only uses steps the engine caches.** `engine.getExpm()` caches its matrix exponential for dt ∈ {0.1, 1, 10, 60} min only; the chart's own 10/60 step is not one of them and costs 81 ms for a 12 h curve against 0.79 ms at step 1. The preview samples the first 20 minutes at 0.1 min — fine enough to resolve a bolus peak — then 1 min to the horizon. Bolus and rate projections land at ~2 ms; a TCI target replan is ~25 ms, which is why it gets a longer debounce (260 ms against 180 ms).
+- **The back-solve is a bracketed secant search.** Ce is strictly increasing in dose (linear system, non-negative input), so a bracket always exists; secant is tried first and falls back to the bracket midpoint whenever it would step outside. Lands within 0.5% in ≤12 iterations.
+- **Layout reuses the analysis screen's approach**: a separate `.screen` with the `.chart-area` node teleported in, keeping the live chart instance, its y-calibration, inspect cursor and gesture bindings. The keypad box is likewise *moved* into the entry column rather than cloned — its digit keys are bound once at boot.
+- The y-axis autoscale freezes for the duration of a handle drag, so the proposal's own curve can't grow the axis and slide out from under the finger dragging it.
+- Dragging a dose to zero keeps drawing the baseline curve and its handle, so the handle can't be stranded off the bottom of the chart with no way back up.
+
+Fixes found while building this:
+
+- **Selecting a drug with no events could blank the chart.** `setCurveData`'s autoscale computed its maximum from the curve and the target line alone, so a drug with neither — fentanyl or ketamine before their first dose, with no propofol target set — produced `y.max = 0` and an empty plot with no axis ticks. The autoscale is now floored at the drug's default axis maximum, and the plan-preview curve counts toward it so an overshooting proposal stays on screen.
+
+New: `js/sim/preview.js`, `js/app/planning.js`, `js/ui/chart/plugins/plan-handle.js`, `tests/test-planning-preview.js` (63 tests; suite 979 → 1042). `session.js restore()` and the preview clone now share one event-rehydration helper so the two rebuild paths cannot drift.
+
+---
+
 ## [0.5.49.1] — 2026-07-30
 
 Fix — background crossover dots now appear only when the decay projection is a real forecast.

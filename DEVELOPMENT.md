@@ -4,6 +4,322 @@
 
 ## Session History
 
+### Crossing-time labels: on-chart toggle + leader placement (v0.6.1.2) — Interim
+
+Two refinements to the labels added in 0.6.1 and made optional in 0.6.1.1.
+
+**The toggle belongs on the chart.** Burying it in Settings meant two taps and a
+modal to answer "when does this cross?" — a question you ask *while* looking at
+the chart. New `⏱` button in the chart-controls strip, alongside the events,
+ghosts and time-axis toggles it's a sibling of.
+
+It follows the ghost-trace toggle exactly: the chart button is the in-case
+control, the Settings checkbox is the same value rendered in the panel, and both
+write one persisted key (`crossoverTimeLabels`). That two-surface arrangement has
+a known failure mode — `initSettingsUI` populates its controls once at boot, so
+a value changed from the chart afterwards leaves the checkbox stale. Caught it in
+testing (button on, checkbox still reading false). The fix was already sitting
+in `settings-ui.js`: the time-axis segmented control re-seeds itself in the
+settings-open handler for precisely this reason, so the checkbox joined it there.
+Worth remembering as a rule — **any setting with an on-chart counterpart must
+re-seed on open**, or the two surfaces silently disagree.
+
+**Label placement.** Butted against the dot, a label lands on the threshold line
+it belongs to and on whatever curve passes through that point — three things
+overlapping at the one pixel the eye is drawn to. It now offsets up-and-right on
+a short leader drawn from the dot to the box's near corner, which keeps the
+association explicit while leaving the line and curve legible underneath.
+
+Two placement fallbacks, both verified by zooming a real crossing into the
+corners: it folds to the left of the dot when the box would overflow the right
+edge (crossings often sit near it), and drops below when there is no room above.
+The box is finally clamped inside the plot area so neither fallback can push it
+out.
+
+### Planning mode: second test-note round (v0.6.1.1) — Interim
+
+Three items. Two are refinements of things added last round; the third is a
+genuine bug with an instructive shape.
+
+**Crossover labels are opt-in now.** Added last round on request, then reported
+as "a lot of visual clutter" — both true. The chart already carries four BIS
+bands, two threshold lines, a cursor, event markers and now a preview curve, so
+a persistent text box per dot is a lot to add unconditionally. New setting
+`crossoverTimeLabels` (Appearance tab), **default off**, pushed from the bridge
+every frame like the other display settings. Only the label is gated; the dots
+stay. Default-off was the call because the reported problem *is* the current
+default — leaving it on would ship the complaint.
+
+**The handle was covering the thing it controls.** It sat on the anchor point
+— the proposal's peak — which is precisely the part being judged, under a
+44×56 touch target and a finger. It now parks at a fixed inset from the plot's
+**left** edge at the same height, with a dashed tie-line out to a small marker
+at the anchor.
+
+Left rather than right for two reasons: `target-label.js` draws its
+target/threshold pills against the right edge, and a threshold handle shares
+those pills' y exactly, so a right-side handle would land on top of one every
+time. The 46 px inset is chosen so the 44 px-wide hit region clears the 20 px
+y-axis drag zone `gestures.js` reserves along the left edge — they would
+otherwise fight, and the plan handle would win (it captures first), silently
+eating the y-rescale gesture.
+
+**First-time thresholds drew no dots; editing an existing one worked.** That
+asymmetry is the whole diagnosis. The dots are interpolated off the
+`emergence-traj` dataset, which `chart-bridge.onFrame` builds from **committed**
+`mode` state:
+
+```js
+const exitCe   = mode.getExitCe(selectedDrug);
+const redoseCe = mode.getIntermittentThreshold(selectedDrug);
+const target   = targets.length ? Math.min(...targets) : 0;
+const showTrajectory = target > 0 && ...
+```
+
+Setting a threshold for the first time leaves both at 0 → `target = 0` → no
+trajectory → nothing for a dot to sit on. Editing an existing one only appeared
+to work because the *old* value was still non-zero and kept the trajectory
+alive; the dot was being placed on a curve computed toward the previous target.
+
+Planning mode now publishes the previewed value through a new
+`chartBridge.setPlanThresholds({exitCe|thresholdCe})`, which `onFrame` prefers
+over committed state, and clears it on every non-line recompute and on exit.
+Measured: trajectory 0 → 101 points while previewing a first emergence Ce of
+1.5 µg/mL.
+
+Worth noting the general shape — this is the second bug this feature has thrown
+up from the same root: planning mode shows *proposed* state, but several chart
+inputs are computed from *committed* state by a per-frame loop that knows
+nothing about planning. The proposed TCI markers (0.6.1) were the first. Both
+were fixed by handing the bridge an explicit override rather than letting
+planning write to the chart directly, which would have been erased on the next
+frame. Any future "planning shows the old value" report should be checked
+against that list first.
+
+Verified in Chromium: first-time threshold draws trajectory + dot + label;
+labels absent by default and present with the setting on; handle at left+46 with
+the peak unobstructed and a drag from the new position still solving (60 → 149
+mg). 0 console errors. Suite 1065 → 1069.
+
+### Planning mode: first test-note round (v0.6.1) — Interim
+
+Six items from testing v0.6 on real devices. Five were real; the sixth was a
+wording puzzle worth recording.
+
+**Phone layout was broken in both orientations, for one root cause.** The split
+switched on `max-width: 860px`, and a phone in landscape is 844×390 — wide
+enough to miss the tablet path, so it stacked, and short enough that stacking
+left the chart **75 px**. Measured, 844×390: chart 75 / entry 261. Portrait was
+the same mistake from the other side — nothing guaranteed the chart a share, so
+the keypad's intrinsic height won at 387 vs 405.
+
+The fix is to stop treating "small" as one thing. **Landscape and portrait have
+opposite scarce axes**: landscape is short and wide, so it must stay side by
+side and buy chart width by compacting the entry column; portrait is tall and
+narrow, so it stacks with the chart holding a `min-height` floor while the entry
+shrinks and scrolls. Breakpoints now key off `orientation` and (for the compact
+variant) `max-height`, never `max-width`. After: 844×390 → chart 345 side by
+side; 390×844 → 480 / 257; iPad portrait → 865 / 261.
+
+**The drag was fighting two brakes, and the second one was the real bug.** A
+40 ms throttle capped it at 25 Hz — but `keypad.setCanonical` also fires
+`onChange`, which went through the 180 ms keystroke debounce, and that timer
+*restarts on every change*. During a continuous drag it therefore never expired:
+the curve did not redraw at all until the finger stopped. Now the drag coalesces
+on `requestAnimationFrame` and calls `recompute()` directly, with
+`handleEntryChange` skipping the debounce while `dragging`.
+
+The throttle turned out to be unfounded. Measured, warm-seeded from the previous
+frame's answer:
+
+| | ms per solve | clones |
+|---|---|---|
+| cold seed (fixed) | 3.24 | 4.3 |
+| **warm seed (previous dose)** | **2.66** | 4.1 |
+| reprojection | 1.12 | — |
+
+So ~3.8 ms per frame against a 16 ms budget. The original 12 ms estimate assumed
+the bracket search would grow from scratch each time; seeding it from the current
+dose means it starts inside the bracket. Verified in the browser: **29 distinct
+curve redraws across a 400 ms drag**, against zero before.
+
+**Crossover dots on the proposal, with times.** The plugin already found the
+downward crossing of the redose/emergence lines for the committed trajectory; it
+now runs over `plan-preview-ce` as well. The dots are also labelled with the
+crossing time in the axis's current units — a dot says the drug gets there, the
+label says when, which is the number being planned around. Background drugs
+deliberately get dots without labels; three or four would crowd the plot.
+
+This forced a small extraction: the plugin needs `fmtXTick`, which lived in
+`chart/index.js`, which imports the plugins. `js/ui/chart/time-format.js` now
+holds `fmtTick` / `fmtXTick` / `xAxisTitle` plus a new `fmtTimeLabel` (adds the
+"min" suffix that a bare number next to a concentration would otherwise lack;
+h:mm and clock time are self-evident and don't get one).
+
+**Proposed TCI plans drew as a bare curve.** The scheme a retarget generates
+lives on the preview clone, so `chart-bridge`'s marker path — which reads the
+live model and gates on the ⚑ toggle — had nothing to show. `project()` now
+returns the clone's events, planning classifies them through the same
+`classifyFutureEvents` (exported from chart-bridge rather than copied), and the
+plugin draws them against `plan-preview-ce`, ignoring the toggle: seeing the
+scheme *is* the reason to preview a target.
+
+Two details found by looking at the render. The whole event list must be
+classified, not the future slice — rate steps are labelled increase/decrease
+against the preceding rate, so starting mid-sequence mislabels the first one.
+But the *past* markers must then be dropped before drawing, or the plugin's
+binary search clamps them to the preview's first sample and stacks them against
+the left edge at the wrong height. Caught in a screenshot, not by a test.
+
+**Ce titration granularity.** The report: fentanyl thresholds "jump in 0.1 ng/mL
+steps", described as both "too granular" and "too fine". Those readings
+contradict, so the numbers decided it: fentanyl rarely exceeds 1 ng/mL, and a
+0.1 step gives ten increments across the entire clinical range. That is too
+coarse however it's phrased, and the cause was `UNIT_DECIMALS['ng/mL'] = 1`
+truncating every dragged value.
+
+Bumping that constant globally would have been wrong — one decimal is right for
+ketamine at 800 ng/mL. Instead Ce steps are declared per drug in
+`DRUG_TASK_UNITS.ceTarget.quantSteps` (propofol 0.1 µg/mL, fentanyl 0.05 ng/mL,
+ketamine 10 ng/mL), and `formatValueStep` derives display precision from the
+step rather than the unit. One rule serves both ends of the range. Only values
+*set* by stepping or dragging use it; readouts and history keep `formatValue`.
+
+Adding those steps broke two unit tests that had used ceTarget as their
+canonical "task with no quantSteps" example — updated to assert the new
+per-drug steps, with a unit-outside-the-task case taking over the null role.
+`getQuantizeConfig` only reads bolus/rate steps, so the planner is untouched.
+
+Verified in Chromium at three viewports plus the full interaction set; 0 console
+errors. Suite 1042 → 1065.
+
+### Dose planning mode (v0.6) — Interim
+
+Requested as: *"an optional planning mode that could be invoked from the dose entry
+modal"* — the sim could visualise a decision already made, but not help make one.
+The fast modal stays exactly as it is ("this works very well in practice"); planning
+mode is a deliberate step up from it.
+
+Scope agreed up front: bolus, rate, TCI target, redose threshold and emergence Ce.
+The history event editor was explicitly excluded — it is a parallel implementation
+(`event-editor.js`) and previewing an *edit in place* is a different problem from
+previewing an append.
+
+**Layout: a fourth `.screen`, not a body class.** The obvious approach — a
+`body.planning-mode` class hiding `.drug-panel` and `#panel-history` — needs
+overrides inside three separate media queries, because `.sim-main` is flex-column
+on phones, flex-row on tablets, and a grid in tablet portrait where
+`.sim-content` becomes `display:contents` and stops being a box at all. The
+analysis screen already solved this: give it its own screen and teleport the
+`.chart-area` node in. The live chart instance survives with its y-calibration,
+inspect cursor and gesture bindings intact (gestures bind to
+`canvas.parentElement`, which travels with the node). The keypad box is moved the
+same way — never cloned, since `keypad.init()` binds the digit keys once at boot
+via `querySelectorAll`.
+
+**The preview runs on a clone, and that decision was measured.** Six strategies
+were timed against a case carrying a full cet-emulation plan:
+
+| strategy | ms |
+|---|---|
+| build a throwaway clone + replay 23 events | **0.77** |
+| clone + addBolus + `computeCurve(0,720,10/60)` | 77.1 |
+| clone + addBolus + `computeCurve(60,240,10/60)` | 30.3 |
+| **clone + addBolus + `computeCurve(60,240,1)`** | **1.38** |
+| in-place `getStateAtTime` → 180× `advance(1,R)` → `replayDrug` | 0.70 |
+| in-place at 0.25-min sampling | 13.8 |
+
+Two conclusions. **Building the clone is not the cost — sampling is.**
+`engine.getExpm()` caches its Padé approximant for dt ∈ {0.1, 1, 10, 60} min and
+nothing else, and `engine.reset()` clears that cache at the start of every replay,
+so the chart's own 10/60 step recomputes a matrix exponential *per sample* — 81 ms
+for a 12 h curve against 0.79 ms at step 1. The preview therefore samples in two
+cached segments: 0.1 min over the first 20 minutes (enough to resolve a bolus
+peak) then 1 min to the horizon.
+
+And **the in-place pattern is not usable here**, despite being marginally
+cheapest. `computeDecayTrajectory`'s snapshot-and-advance ignores every event
+already queued in the future — which is precisely the case whenever a TCI plan is
+running, i.e. the situation this feature exists to serve.
+
+The clone is rebuilt on *every* projection rather than mutated and reverted.
+`addBolus` merges into an in-flight bolus and rewrites the existing event's value
+(`events/actions.js`), so `deleteEvent` was never a correct undo; `addRate` and
+`addPause` defer to the bolus end and delete the paired system rate-restore. At
+0.8 ms, rebuilding is cheaper than getting the undo right and removes the whole
+class of bug.
+
+**Preview must equal commit, so the commit logic is shared, not copied.**
+`applyAction()` replays what `app.js onConfirm` does — `clearAfter` out of TCI,
+`planTCI` from the delay offset, the pre-case rewind to t=0. The one piece that
+could not safely be re-derived is the bolus delivery mode: `onConfirm` evaluates
+`isInfusing` *after* flipping the drug to manual, so a drug in TCI with a redose
+threshold set resolves to `pump`, while the keypad's own `pushOnly` (computed
+before the flip, for the "Administer" label) says `push`. Rather than duplicate
+that subtlety, `resolveBolusDeliveryMode()` was extracted in app.js and is now
+called by both. Measured agreement between projection and commit: **5·10⁻¹³
+µg/mL**.
+
+**Back-solving the drag.** Ce is strictly increasing in dose (linear system,
+non-negative input), so a bracket always exists and bisection always converges;
+secant is tried first for speed and falls back to the bracket midpoint whenever it
+would step outside, which stops it running away on the flat tail. Lands within
+0.5% in ≤12 iterations (~1 ms each).
+
+The handle's anchor and the solver's objective go through one function
+(`anchorPoint`) because they must agree — otherwise dragging chases a number the
+solver isn't targeting. The distinction that matters: a bolus is judged on its
+peak **within the fine window**, not the global maximum of the projection. With a
+drug left infusing, the global maximum is just the far end of the chart and has
+nothing to do with the dose being entered. Caught in testing when the handle
+reported a peak of 4.12 µg/mL at t=380 for a bolus given at t=20; pinned by a test
+asserting the two are genuinely different values.
+
+**Three problems found by driving the real app** (Playwright, Chromium; the CDN
+Chart.js stack vendored locally since the browser has no proxy):
+
+1. *No handle drawn at all.* `anchorPoint` returns `{time, Ce}` and the handle spec
+   read `.ce`. The readout used `.Ce` and worked, which masked it.
+2. *The axis rescaled under the finger.* Including the proposal in the autoscale is
+   right — an overshooting dose must stay on screen, it carries the control
+   surface — but recomputing it mid-drag made the curve shrink away as the user
+   pulled it up. The autoscale now freezes for the duration of a drag and settles
+   on release.
+3. *Dragging to the floor stranded the user.* A dose solved to 0 cleared the
+   preview and with it the handle, leaving nothing to drag back up. Zero is now a
+   real projected value — it draws the baseline ("TCI stopped here, nothing
+   given") and keeps its anchor. A 0 mg bolus event is still never fabricated; a
+   zero *rate* is a genuine instruction and does insert one.
+
+**Pre-existing bug surfaced, and fixed.** Selecting a drug with no events blanked
+the chart entirely: `setCurveData`'s autoscale took its maximum from the curve and
+the target line only, so fentanyl before its first dose with no propofol target set
+gave `Math.ceil(0 × 1.3) = 0` — an empty plot with no axis ticks. Independent of
+this feature (the autoscale knows nothing about planning), but planning mode makes
+it acute, since planning a first fentanyl dose is exactly when you have no events.
+Floored at the drug's default axis max. Confirmed against a pre-change build,
+which only escaped it because `setCurveData` runs *before* `setTargetLine` in
+`refresh()` and so still saw the outgoing drug's target propping the maximum up.
+
+Verified end-to-end in the browser across bolus / rate / TCI target / emergence /
+fentanyl (×1000 y-scale): preview renders and tracks typing, ± steps on the
+quantize grid, drag solves both directions (55 → 149.3 mg up, → 0 down, back up by
+±), committed curve dims to 0.28 alpha and restores, Cancel reopens the modal with
+the buffer intact, Confirm produces the curve that was previewed, zero console
+errors.
+
+Tests: `tests/test-planning-preview.js`, 63 tests — clone fidelity per drug,
+non-destructiveness under 25 projections, preview-equals-commit for five action
+shapes, the cached-step sampling contract and segment join, anchor semantics,
+solver round-trip and clamps, line tasks, zero-dose behaviour, and the new
+setting's validation. Suite 979 → 1042, all green.
+
+Known limitation, deliberately left: `applyAction` mirrors `app.js onConfirm`,
+which cannot be imported into a Node test (it needs a live DOM). The tests pin
+applyAction's own semantics, so a regression in `preview.js` is caught — but a
+change to `onConfirm` that drifts away from them is not. The two carry pointers to
+each other and must be read together.
+
 ### Chart: ghost crossover dots only when the projection is real (v0.5.49.1) — Interim
 
 Refinement of v0.5.49, from a good catch: when a background drug's infusion is

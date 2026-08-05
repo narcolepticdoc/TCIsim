@@ -187,6 +187,100 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
     restorePan();
   }
 
+  // ── Plan-handle drag (vertical) ─────────────────────────────────────────
+  // Planning mode's retitrate handle. Same capture-phase / pan-disable
+  // machinery as the inspect handle above, but reading Y instead of X: the
+  // handle's pixel position maps back to a concentration, and planning.js
+  // back-solves the dose that reaches it. Hit region is published by the
+  // planHandle plugin on `s._planHandleHit`.
+
+  let planDragActive = false;
+
+  function isOnPlanHandle(clientX, clientY) {
+    const h = s._planHandleHit;
+    if (!h) return false;
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    return x >= h.left && x <= h.right && y >= h.top && y <= h.bottom;
+  }
+
+  function yToCe(clientY) {
+    const yScl = chart.scales.y;
+    const ca = chart.chartArea;
+    if (!yScl || !ca) return null;
+    const rect = canvas.getBoundingClientRect();
+    const raw = clientY - rect.top;
+    const clamped = Math.max(ca.top, Math.min(ca.bottom, raw));
+    const ce = yScl.getValueForPixel(clamped);
+    return Number.isFinite(ce) && ce >= 0 ? ce : null;
+  }
+
+  function reportPlanDrag(clientY) {
+    const fn = s._onPlanDrag;
+    if (!fn) return;
+    const ce = yToCe(clientY);
+    if (ce != null) fn(ce);
+  }
+
+  // The y-axis autoscale is frozen for the duration of a drag. Without it the
+  // proposal's own curve would grow the axis on every frame and slide out from
+  // under the finger that is dragging it.
+  function beginPlanDrag() {
+    planDragActive = true;
+    s._planDragging = true;
+    disablePan();
+  }
+  function endPlanDrag() {
+    planDragActive = false;
+    s._planDragging = false;
+    restorePan();
+    if (typeof s._onPlanDragEnd === 'function') s._onPlanDragEnd();
+  }
+
+  function handlePlanTouchStart(e) {
+    if (!s._onPlanDrag) return;
+    if (e.touches.length !== 1) return;
+    if (!isOnPlanHandle(e.touches[0].clientX, e.touches[0].clientY)) return;
+    beginPlanDrag();
+    reportPlanDrag(e.touches[0].clientY);
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+  function handlePlanTouchMove(e) {
+    if (!planDragActive) return;
+    if (e.touches.length !== 1) { endPlanDrag(); return; }
+    reportPlanDrag(e.touches[0].clientY);
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+  function handlePlanTouchEnd(e) {
+    if (!planDragActive) return;
+    endPlanDrag();
+    // Swallow the terminating touchend, as the inspect handle does, so
+    // Chart.js can't synthesize a click out of the release.
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+
+  function handlePlanMouseDown(e) {
+    if (!s._onPlanDrag) return;
+    if (e.button !== 0) return;
+    if (!isOnPlanHandle(e.clientX, e.clientY)) return;
+    beginPlanDrag();
+    reportPlanDrag(e.clientY);
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }
+  function handlePlanMouseMove(e) {
+    if (!planDragActive) return;
+    reportPlanDrag(e.clientY);
+  }
+  function handlePlanMouseUp() {
+    if (!planDragActive) return;
+    endPlanDrag();
+  }
+
   // Capture phase on the canvas PARENT so our listener fires during the actual
   // ancestor-capture phase — before any target-phase listeners on the canvas
   // itself (including Chart.js / hammerjs). On the target element, all
@@ -194,6 +288,19 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
   // capture:true directly on canvas would still run AFTER Chart.js's
   // earlier-registered hammer listeners. Binding on the parent dodges that.
   const captureTarget = canvas.parentElement || canvas;
+  // Plan handle binds FIRST. Both handles stopImmediatePropagation on a hit,
+  // and on the same element listeners run in registration order — so if the
+  // proposal's handle happens to land on top of the inspect handle near the
+  // bottom of the plot, retitrating wins. That's the right precedence: the
+  // handle only exists at all while the user is actively planning a dose.
+  captureTarget.addEventListener('touchstart', handlePlanTouchStart, { passive: false, capture: true });
+  captureTarget.addEventListener('touchmove',  handlePlanTouchMove,  { passive: false, capture: true });
+  captureTarget.addEventListener('touchend',   handlePlanTouchEnd,   { capture: true });
+  captureTarget.addEventListener('touchcancel', handlePlanTouchEnd,  { capture: true });
+  captureTarget.addEventListener('mousedown',  handlePlanMouseDown,  { capture: true });
+  window.addEventListener('mousemove', handlePlanMouseMove);
+  window.addEventListener('mouseup',   handlePlanMouseUp);
+
   captureTarget.addEventListener('touchstart', handleInspectTouchStart, { passive: false, capture: true });
   captureTarget.addEventListener('touchmove',  handleInspectTouchMove,  { passive: false, capture: true });
   captureTarget.addEventListener('touchend',   handleInspectTouchEnd,   { capture: true });
@@ -218,5 +325,12 @@ export function attachGestures(canvas, chart, s, recenter, setInspectTime) {
     captureTarget.removeEventListener('mousedown',  handleInspectMouseDown,  { capture: true });
     window.removeEventListener('mousemove', handleInspectMouseMove);
     window.removeEventListener('mouseup',   handleInspectMouseUp);
+    captureTarget.removeEventListener('touchstart', handlePlanTouchStart, { capture: true });
+    captureTarget.removeEventListener('touchmove',  handlePlanTouchMove,  { capture: true });
+    captureTarget.removeEventListener('touchend',   handlePlanTouchEnd,   { capture: true });
+    captureTarget.removeEventListener('touchcancel', handlePlanTouchEnd,  { capture: true });
+    captureTarget.removeEventListener('mousedown',  handlePlanMouseDown,  { capture: true });
+    window.removeEventListener('mousemove', handlePlanMouseMove);
+    window.removeEventListener('mouseup',   handlePlanMouseUp);
   };
 }

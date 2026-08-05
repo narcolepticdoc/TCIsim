@@ -8,25 +8,36 @@ export function createEventMarkersPlugin(s) {
   return {
     id: 'futureEventMarkers',
     afterDraw(ch) {
-      if (!s.eventAnnotationsEnabled || !s.eventMarkers.length) return;
+      // Planning mode draws the PROPOSED plan's steps instead of the committed
+      // ones, and does so regardless of the ⚑ toggle: the whole point of
+      // previewing a TCI target is seeing the scheme it would produce, which
+      // exists nowhere else on screen. Committed markers stay behind the
+      // toggle as before.
+      const planning = s.planPreviewActive && s.planEventMarkers && s.planEventMarkers.length > 0;
+      const markers = planning
+        ? s.planEventMarkers
+        : (s.eventAnnotationsEnabled ? s.eventMarkers : null);
+      if (!markers || !markers.length) return;
+
       const xScl = ch.scales.x;
       const yScl = ch.scales.y;
       const ca = ch.chartArea;
       if (!xScl || !yScl || !ca) return;
 
-      // Match the foreground Ce dataset by role tag — borderColor matching
-      // would falsely target a per-drug ghost whose class hue happens to
-      // coincide with the previous hardcoded Ce color.
+      // Match the curve the markers belong to by role tag — borderColor
+      // matching would falsely target a per-drug ghost whose class hue happens
+      // to coincide with the previous hardcoded Ce color.
+      const wantRole = planning ? 'plan-preview-ce' : 'ce';
       let ceData = null;
       for (const ds of ch.data.datasets) {
-        if (ds.role === 'ce') { ceData = ds.data; break; }
+        if (ds.role === wantRole) { ceData = ds.data; break; }
       }
       if (!ceData || ceData.length === 0) return;
 
       const ctx = ch.ctx;
       const R = s.eventMarkerSize;
 
-      for (const m of s.eventMarkers) {
+      for (const m of markers) {
         const cx = xScl.getPixelForValue(m.time);
         if (cx < ca.left || cx > ca.right) continue;
 

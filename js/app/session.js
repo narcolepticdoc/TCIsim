@@ -8,6 +8,7 @@
 import { setPumpSettings, getPumpSettings, isPumpEnabled, DRUG_IDS, DRUG_DEFS } from '../util/constants.js';
 import { fromCanonical, getDefaultUnit, formatValue, getPrefKey, getSetupDefaultUnit } from '../util/units.js';
 import * as persist from '../ui/persist.js';
+import { rehydrateEvents } from '../sim/preview.js';
 
 const $ = id => document.getElementById(id);
 
@@ -151,27 +152,10 @@ export function createSession({
       model.setPatient(saved.patient);
       setConfirmedPatient(saved.patient);
 
-      // Replay saved events (skip system-generated rate-restore events)
-      if (saved.events) {
-        for (const [drugId, drugEvents] of Object.entries(saved.events)) {
-          for (const evt of drugEvents) {
-            // Skip system events (rate restores after bolus) — addBolus generates these
-            if (evt.source === 'system') continue;
-            if (evt.type === 'rate') {
-              model.addRate(drugId, evt.time, evt.value, evt.annotation || '', {
-                source: evt.source || 'manual', // preserve 'tci' tag so the badge survives restore
-              });
-            } else if (evt.type === 'bolus') {
-              model.addBolus(drugId, evt.time, evt.value, evt.annotation || '', {
-                deliveryMode: evt.deliveryMode || 'pump', // default for old saved cases
-                source: evt.source || 'manual',
-              });
-            } else if (evt.type === 'pause') {
-              model.addPause(drugId, evt.time, evt.annotation || '');
-            }
-          }
-        }
-      }
+      // Replay saved events. Shared with the planning-mode preview clone
+      // (js/sim/preview.js) so the two rebuild paths cannot drift — it skips
+      // system rate-restores, which addBolus regenerates.
+      if (saved.events) rehydrateEvents(model, saved.events);
 
       // Whole-timeline re-anchor: the rebuild above delivered every bolus at
       // the current global pump rate. If this case was saved under a different

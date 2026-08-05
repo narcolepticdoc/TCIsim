@@ -953,6 +953,10 @@
     .modal-actions button{padding:9px 22px;border:none;border-radius:var(--radius-sm);font-family:var(--font-display);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
     .modal-btn-cancel{background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border-subtle)}
     .modal-btn-cancel:hover{background:var(--bg-hover);color:var(--text-primary)}
+    /* Plan — a step sideways into planning mode, not a commit. Outlined so it
+       never competes with the confirm button for the "this is the action" read. */
+    .modal-btn-plan{background:transparent;color:var(--blue);border:1px solid var(--blue)}
+    .modal-btn-plan:hover{background:rgba(59,130,246,.14);color:var(--text-primary)}
     .modal-btn-confirm-target{background:var(--amber);color:#000}
     .modal-btn-confirm-target:hover{background:#d97706}
     .modal-btn-confirm-rate{background:var(--purple);color:#fff}
@@ -1144,6 +1148,104 @@
       #cv-svg .cv-box-conc{font-size:17px}
       #cv-svg .cv-box-amt{font-size:12.5px}
       #cv-svg .cv-flow-label{font-size:12.5px;stroke-width:4px}
+    }
+
+    /* ==== PLANNING SCREEN (self-contained) ====
+       Its own .screen, like the analysis screen, so the chart can be
+       teleported in without fighting .sim-main — which is flex-column on
+       phones, flex-row on tablets, and a grid (with .sim-content on
+       display:contents) in tablet portrait. Drug panel and history simply
+       aren't part of this screen. */
+    #planning-screen{flex-direction:column}
+    .planning-topbar{display:flex;align-items:center;gap:12px;padding:6px 12px;background:var(--bg-card);border-bottom:1px solid var(--border-subtle);flex-shrink:0}
+    .planning-topbar h2{margin:0;font-family:var(--font-display);font-size:14px;font-weight:600;color:var(--drug-color,var(--text-primary));letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+    .planning-topbar .planning-spacer{flex:1}
+    .planning-readout{display:flex;gap:14px;font-family:var(--font-mono);font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden}
+    .planning-readout .pr-item{display:flex;gap:5px;align-items:baseline}
+    .planning-readout .pr-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+    .planning-readout .pr-value{color:var(--text-primary)}
+    .btn-planning-cancel{background:none;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-secondary);font-family:var(--font-mono);font-size:12px;padding:5px 12px;cursor:pointer;transition:all .15s;white-space:nowrap}
+    .btn-planning-cancel:hover{color:var(--text-primary);border-color:var(--blue);background:rgba(59,130,246,.08)}
+    .btn-planning-confirm{background:var(--blue-dim);border:1px solid var(--blue);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-display);font-size:13px;font-weight:600;padding:6px 20px;cursor:pointer;transition:all .15s;white-space:nowrap}
+    .btn-planning-confirm:hover{background:rgba(59,130,246,.28)}
+    .btn-planning-confirm:disabled{opacity:.4;cursor:default}
+    .btn-planning-push,.btn-planning-clear{border-radius:var(--radius-sm);font-family:var(--font-display);font-size:12.5px;font-weight:500;padding:6px 14px;cursor:pointer;transition:all .15s;white-space:nowrap}
+    .btn-planning-push{background:transparent;color:#a78bfa;border:1px solid #a78bfa}
+    .btn-planning-push:hover{background:rgba(167,139,250,.16)}
+    .btn-planning-clear{background:transparent;color:var(--red);border:1px solid var(--red)}
+    .btn-planning-clear:hover{background:rgba(239,68,68,.14)}
+
+    .planning-main{flex:1;display:flex;min-height:0;min-width:0;overflow:hidden}
+    .planning-chart-host{flex:1 1 0;min-height:0;min-width:0;display:flex;position:relative}
+    .planning-chart-host>.chart-area{flex:1;min-height:0;min-width:0}
+    .planning-entry{flex:0 0 auto;width:352px;display:flex;flex-direction:column;gap:6px;padding:8px;background:var(--bg-card);border-left:1px solid var(--border-subtle);overflow-y:auto}
+
+    /* Titrate row — steps by the drug's own quantize grid. */
+    .planning-titrate{display:flex;align-items:center;justify-content:center;gap:12px;flex-shrink:0}
+    .plan-step-btn{width:56px;height:40px;background:var(--bg-hover);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:22px;line-height:1;cursor:pointer;transition:all .12s;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+    .plan-step-btn:hover{border-color:var(--blue);background:rgba(59,130,246,.12)}
+    .plan-step-btn:active{background:rgba(59,130,246,.24)}
+    .plan-step-label{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);min-width:88px;text-align:center}
+
+    /* The keypad box, hosted inline instead of inside its modal overlay. */
+    .modal-keypad.keypad-inline{max-width:none;width:100%;box-shadow:none;background:transparent;border:none;padding:0;margin:0}
+    .modal-keypad.keypad-inline>h3{display:none}
+    /* Every commit action moves to the planning topbar. Leaving the box's own
+       row visible would give two competing sets of the same buttons — and the
+       box's set would fire onConfirm while the screen was still detached. */
+    .modal-keypad.keypad-inline .modal-actions{display:none}
+
+    /* The split switches on ORIENTATION, never on width. A phone in landscape
+       is wide but only ~390px tall: stacking it there leaves the chart ~75px
+       and effectively no chart at all. Height is the scarce axis in landscape,
+       width the scarce one in portrait, so each gets the split that spends the
+       axis it has. */
+
+    /* Portrait: chart on top, and it keeps the majority — the entry column
+       shrinks and scrolls rather than pushing the chart down. Without the
+       explicit basis the keypad's intrinsic height wins and the chart ends up
+       the smaller half. */
+    @media (orientation:portrait){
+      .planning-main{flex-direction:column}
+      .planning-chart-host{flex:1 1 auto;min-height:52vh}
+      .planning-entry{width:100%;flex:0 1 auto;max-height:46vh;border-left:none;border-top:1px solid var(--border-subtle)}
+      /* Full viewport width here, so the keypad's row layout fits and is
+         shorter than the stacked one the narrow-modal rule would impose. */
+      .modal-keypad.keypad-inline .keypad-layout{flex-direction:row}
+      .modal-keypad.keypad-inline .keypad-right{width:212px;flex-shrink:0}
+    }
+
+    /* Short landscape (phones, small tablets in landscape): stay side by side
+       and buy the chart width by compacting the entry column. */
+    @media (orientation:landscape) and (max-height:560px){
+      .planning-entry{width:min(320px,44vw);padding:6px;gap:4px}
+      .planning-topbar{padding:3px 8px;gap:8px}
+      .planning-topbar h2{font-size:11px}
+      .planning-readout{font-size:10.5px;gap:9px}
+      .planning-readout .pr-label{font-size:9px}
+      .btn-planning-confirm{padding:5px 14px;font-size:12px}
+      .btn-planning-cancel,.btn-planning-push,.btn-planning-clear{padding:4px 10px;font-size:11px}
+      .planning-titrate{gap:6px}
+      .plan-step-btn{width:44px;height:32px;font-size:18px}
+      .plan-step-label{min-width:62px;font-size:10px}
+      .modal-keypad.keypad-inline .keypad-layout{flex-direction:row;gap:8px}
+      .modal-keypad.keypad-inline .keypad-right{width:min(168px,22vw);flex-shrink:0}
+      .modal-keypad.keypad-inline .keypad-display{min-height:34px;font-size:20px;padding:5px 8px}
+      .modal-keypad.keypad-inline .key{font-size:14px;padding:5px 0}
+      .modal-keypad.keypad-inline .keypad-conversion,
+      .modal-keypad.keypad-inline .keypad-bolus-time{font-size:10px}
+    }
+
+    /* Narrow portrait phones — same idea, less of everything. */
+    @media (orientation:portrait) and (max-width:560px){
+      .planning-topbar{gap:8px;padding:5px 8px;flex-wrap:wrap}
+      .planning-topbar h2{font-size:12px}
+      .planning-readout{font-size:11px;gap:10px}
+      .plan-step-btn{width:48px;height:36px;font-size:19px}
+      .planning-chart-host{min-height:50vh}
+      .planning-entry{max-height:48vh}
+      .modal-keypad.keypad-inline .keypad-right{width:min(200px,52vw)}
+      .modal-keypad.keypad-inline .keypad-display{min-height:40px;font-size:22px}
     }
   </style>
 </head>
@@ -1516,6 +1618,7 @@
               <button class="chart-btn" id="btn-chart-tooltip" title="Toggle crosshair values">ⓘ</button>
               <button class="chart-btn" id="btn-chart-events" title="Toggle future event markers (TCI)">⚑</button>
               <button class="chart-btn" id="btn-chart-ghosts" title="Toggle ghost traces of other drugs">∿</button>
+              <button class="chart-btn" id="btn-chart-crosstimes" title="Toggle crossing-time labels on threshold dots">&#9201;</button>
               <button class="chart-btn chart-btn-sm" id="btn-chart-timeaxis" title="X-axis time scale (min / h:min / real time)">min</button>
               <button class="chart-btn" id="btn-chart-expand" title="Expand chart">⤢</button>
             </div>
@@ -1570,6 +1673,32 @@
           <h3 id="cv-drug-title">Compartment Flow</h3>
         </div>
         <svg id="cv-svg" viewBox="0 0 600 420" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========== PLANNING SCREEN (chart + live dose entry) =========== -->
+  <div id="planning-screen" class="screen">
+    <div class="planning-topbar">
+      <button class="btn-planning-cancel" id="btn-planning-cancel" type="button">&larr; Cancel</button>
+      <h2 id="planning-title">Plan Dose</h2>
+      <div class="planning-readout" id="planning-readout"></div>
+      <div class="planning-spacer"></div>
+      <button class="btn-planning-clear" id="btn-planning-clear" type="button" style="display:none">Clear</button>
+      <button class="btn-planning-push" id="btn-planning-push" type="button" style="display:none">IV Push</button>
+      <button class="btn-planning-confirm" id="btn-planning-confirm" type="button">Confirm</button>
+    </div>
+    <div class="planning-main">
+      <div class="planning-chart-host" id="planning-chart-host">
+        <!-- .chart-area DOM node is teleported here on entry, returned on exit -->
+      </div>
+      <div class="planning-entry" id="planning-entry-host">
+        <div class="planning-titrate">
+          <button class="plan-step-btn" id="btn-plan-down" type="button" aria-label="Decrease dose">&minus;</button>
+          <span class="plan-step-label" id="plan-step-label"></span>
+          <button class="plan-step-btn" id="btn-plan-up" type="button" aria-label="Increase dose">+</button>
+        </div>
+        <!-- .modal-keypad is teleported here on entry, returned on exit -->
       </div>
     </div>
   </div>
@@ -1671,6 +1800,7 @@
       </div>
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="keypad-cancel-btn">Cancel</button>
+        <button id="keypad-plan-btn" class="modal-btn-plan" style="display:none" title="Open planning mode — see this dose on the chart before committing">Plan &#10530;</button>
         <button id="keypad-clear-btn" class="modal-btn-danger" style="display:none">Clear</button>
         <button id="keypad-push-btn" class="modal-btn-confirm-push" style="display:none">IV Push</button>
         <button id="keypad-confirm-btn" class="modal-btn-confirm-target">Set Target</button>
@@ -2024,6 +2154,12 @@
                 <span id="set-exit-band-val">±2.5%</span>
               </div>
             </div>
+            <div class="settings-row">
+              <label class="settings-check">
+                <input type="checkbox" id="set-planning-default">
+                Open dose entry in planning mode
+              </label>
+            </div>
           </div>
           <div class="settings-pane" id="pane-appearance">
             <div class="settings-row">
@@ -2065,6 +2201,12 @@
               <label class="settings-check">
                 <input type="checkbox" id="set-show-ce-band">
                 Show Ce drift band
+              </label>
+            </div>
+            <div class="settings-row">
+              <label class="settings-check">
+                <input type="checkbox" id="set-crossover-labels">
+                Label crossover dots with the crossing time
               </label>
             </div>
             <div class="settings-row">

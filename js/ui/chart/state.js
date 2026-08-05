@@ -53,15 +53,42 @@ export function createState(cfg) {
     nomogramOpacity: 1.0,
     cpOpacity: 1.0,
     fontScale: 1.0,
+    // Label threshold-crossing dots with the crossing time (user setting).
+    crossoverLabels: false,
     eventMarkers: [],
     eventAnnotationsEnabled: false,
     eventMarkerSize: 7,
     inspectTime: null,
     inspectEnabled: false,
+    // ---- Planning mode ----
+    // Signature of the last plan-preview payload (mirrors ghostCurveSig).
+    planPreviewSig: '',
+    // True while a proposed-dose curve is on the chart. Dims the committed
+    // Ce/Cp traces so the proposal reads as the foreground — see
+    // _applyCommittedColors() in index.js.
+    planPreviewActive: false,
+    // Step markers for the PROPOSED plan (planning mode). Same shape as
+    // eventMarkers, but positioned against the preview curve and drawn
+    // regardless of the event-annotation toggle.
+    planEventMarkers: [],
+    planEventMarkersSig: '',
+    // Where the drag handle sits: { time, ce } in CHART units (already
+    // y-scaled), or null when planning mode isn't driving a handle.
+    planHandle: null,
+    _planHandleHit: null,
+    // Set by gestures.js for the duration of a handle drag. Freezes the
+    // y-axis autoscale so the curve doesn't move under the user's finger.
+    _planDragging: false,
+    _onPlanDrag: null,
+    _onPlanDragEnd: null,
+    _onPlanDragUserEnd: null,
     rateValues: [],
     patientWeightKg: null,
     pdModel: null,
     yMaxManual: null,
+    // Default Y max for the current drug (from switchDrug's suggestedMax).
+    // Floors the autoscale so a drug with no events can't blank the chart.
+    yDefaultMax: 10,
     // X-axis time-scale display: 'min' (sim minutes), 'hmin' (h:mm), or
     // 'rt' (wall-clock). wallClockStartMs anchors 'rt' — epoch ms for sim t=0,
     // pushed each frame by the bridge from timer.getWallClockStart().

@@ -104,6 +104,8 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   const markerSizeSlider  = $('set-event-marker-size');
   const markerSizeVal     = $('set-event-marker-size-val');
   const showCeBandChk     = $('set-show-ce-band');
+  const planningDefChk    = $('set-planning-default');
+  const crossLabelsChk    = $('set-crossover-labels');
   const textSizeGroup     = $('set-text-size');
   const textSizeBtns      = textSizeGroup ? [...textSizeGroup.querySelectorAll('.seg-btn')] : [];
   const themeGroup        = $('set-theme');
@@ -143,6 +145,8 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   if (markerSizeSlider)  markerSizeSlider.value        = (savedSettings.eventMarkerSize ?? 7);
   if (markerSizeVal)     markerSizeVal.textContent     = (savedSettings.eventMarkerSize ?? 7) + ' px';
   if (showCeBandChk)     showCeBandChk.checked         = savedSettings.showCeBand ?? false;
+  if (planningDefChk)    planningDefChk.checked        = savedSettings.planningModeDefault ?? false;
+  if (crossLabelsChk)    crossLabelsChk.checked        = savedSettings.crossoverTimeLabels ?? false;
   let currentTextSize = savedSettings.textSize ?? 'normal';
   for (const btn of textSizeBtns) btn.classList.toggle('active', btn.dataset.size === currentTextSize);
   applyTextSize(currentTextSize);
@@ -182,6 +186,8 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
     const textSize          = currentTextSize;
     const theme             = currentTheme;
     const showCeBand        = showCeBandChk ? showCeBandChk.checked : false;
+    const planningModeDefault = planningDefChk ? planningDefChk.checked : false;
+    const crossoverTimeLabels = crossLabelsChk ? crossLabelsChk.checked : false;
     const timeAxisMode      = currentTimeAxis;
     if (prepVal)         prepVal.textContent         = prepSec           + 's';
     if (alertVal)        alertVal.textContent        = alertSec          + 's';
@@ -195,7 +201,7 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
     if (overlayVal)      overlayVal.textContent      = overlayPct        + '%';
     if (ghostOpacVal)    ghostOpacVal.textContent    = ghostOpacPct      + '%';
     if (markerSizeVal)   markerSizeVal.textContent   = eventMarkerSize   + ' px';
-    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode });
+    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode, planningModeDefault, crossoverTimeLabels });
   }
 
   prepSlider.addEventListener('input',    saveAll);
@@ -214,6 +220,8 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   if (ghostOpacSlider)   ghostOpacSlider.addEventListener('input',   saveAll);
   if (markerSizeSlider)  markerSizeSlider.addEventListener('input',  saveAll);
   if (showCeBandChk)     showCeBandChk.addEventListener('change',    saveAll);
+  if (planningDefChk)    planningDefChk.addEventListener('change',   saveAll);
+  if (crossLabelsChk)    crossLabelsChk.addEventListener('change',   saveAll);
   for (const btn of textSizeBtns) {
     btn.addEventListener('click', () => {
       const size = btn.dataset.size;
@@ -381,10 +389,12 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   const btnSettingsClose = $('btn-settings-close');
   if (btnSettingsOpen)  btnSettingsOpen.addEventListener('click',  () => {
     syncMaxPumpRateSelect(); // reflect current pump rate (may have changed via case restore)
-    // Re-seed the time-axis segmented control from the saved setting — it may
-    // have been changed from the on-chart button since this modal was built.
-    currentTimeAxis = getSettings().timeAxisMode ?? 'min';
+    // Re-seed the controls that have an on-chart counterpart — they may have
+    // been changed from the chart since this modal was built.
+    const cur = getSettings();
+    currentTimeAxis = cur.timeAxisMode ?? 'min';
     for (const b of timeAxisBtns) b.classList.toggle('active', b.dataset.mode === currentTimeAxis);
+    if (crossLabelsChk) crossLabelsChk.checked = !!cur.crossoverTimeLabels;
     $('modal-settings').classList.add('open');
   });
   if (btnSettingsClose) btnSettingsClose.addEventListener('click', () => $('modal-settings').classList.remove('open'));

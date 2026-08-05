@@ -9,7 +9,7 @@
  * The keypad never touches the model directly.
  */
 
-import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, getRoundingNoteText }
+import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, formatValueStep, getRoundingNoteText }
   from '../util/units.js';
 import { DRUG_DEFS, isPumpEnabled as pumpEnabledFor } from '../util/constants.js';
 import { applyBufferKey, convertBufferUnit, bolusTimeText } from './keypad-buffer.js';
@@ -39,6 +39,16 @@ let currentRoundOverride = null; // bool when ceTarget modal exposes the round-i
 //   - confirm/Clear route to customSession.onDone instead of the global onConfirm
 // Cleared by close(), and defensively by show().
 let customSession = null;      // { onDone, getWeightKg }
+// Planning-mode hooks (js/app/planning.js). onChange fires on every buffer
+// edit so the planning screen can redraw its preview; onPlan opens planning
+// mode; autoPlan decides whether show() should skip the modal and go there
+// directly (the "default to planning mode" setting).
+let onChange = null;           // (entry) => void
+let onPlan = null;             // () => void
+let autoPlan = null;           // (type) => bool
+// Where the keypad box lives when it is NOT hosted inside the planning
+// screen. Captured on first attachTo() so detach() can always put it back.
+let keypadHome = null;
 
 const TITLES = {
   ceTarget: 'Set Ce Target',
@@ -74,6 +84,9 @@ export function init(opts = {}) {
   getExitCe = opts.getExitCe || (() => 0);
   getIntermittentThreshold = opts.getIntermittentThreshold || (() => 0);
   isPumpEnabled = opts.isPumpEnabled || (() => true);
+  onChange = opts.onChange || null;
+  onPlan = opts.onPlan || null;
+  autoPlan = opts.autoPlan || null;
 
   // Wire keypad buttons (numeric keys).
   // pointerdown (not click) so rapid taps register reliably — synthesized
@@ -119,10 +132,16 @@ export function init(opts = {}) {
     if (onConfirm) onConfirm(currentType, 0, '', 'clear');
   });
 
+  const btnPlan = $('keypad-plan-btn');
+  if (btnPlan) btnPlan.addEventListener('click', () => { if (onPlan) onPlan(); });
+
   const roundCb = $('keypad-round-in-display');
   if (roundCb) roundCb.addEventListener('change', () => {
     currentRoundOverride = roundCb.checked;
     updateRoundNote();
+    // The rounding grid changes what the plan looks like, so a live preview
+    // has to hear about it too.
+    emitChange();
   });
 }
 
@@ -266,7 +285,17 @@ export function show(type) {
     } catch (e) {}
   }
 
+  // The Plan button is an in-case affordance: it commits through onConfirm,
+  // which a custom (setup starting-dose) session never reaches.
+  const planBtn = $('keypad-plan-btn');
+  if (planBtn) planBtn.style.display = onPlan ? '' : 'none';
+
   updateDisplay();
+
+  // "Default to planning mode" — go straight there rather than showing the
+  // modal first and then replacing it, which would flash.
+  if (autoPlan && onPlan && autoPlan(type)) { onPlan(); return; }
+
   $('modal-keypad').classList.add('open');
 }
 
@@ -319,6 +348,9 @@ export function showCustom({ drugId, task, title, value, unit, getWeightKg, onDo
   // Clear removes the entry — only offered when one exists
   const clearBtn = $('keypad-clear-btn');
   if (clearBtn) clearBtn.style.display = hasValue ? '' : 'none';
+  // No planning mode out of case — there is no curve to plan against.
+  const planBtn = $('keypad-plan-btn');
+  if (planBtn) planBtn.style.display = 'none';
 
   updateDisplay();
   $('modal-keypad').classList.add('open');
@@ -341,8 +373,8 @@ function weightCtx() {
 function setUnit(u) {
   const prev = currentUnit;
   currentUnit = u;
-  const unitTask = (currentType === 'intermittent' || currentType === 'exitCe') ? 'ceTarget' : currentType;
-  const convTask = (currentType === 'intermittent' || currentType === 'exitCe') ? 'ceTarget' : currentType;
+  const unitTask = convTaskFor(currentType);
+  const convTask = unitTask;
   // Custom sessions never touch the in-case working unit-pref keys —
   // template entries carry their own unit.
   const prefKey = customSession ? null : getPrefKey(currentDrug, unitTask);
@@ -390,7 +422,111 @@ function renderUnitToggle(allowed) {
   });
 }
 
+/**
+ * Task used for unit conversion. `intermittent` and `exitCe` are both Ce
+ * values and borrow the ceTarget unit table.
+ */
+function convTaskFor(type) {
+  return (type === 'intermittent' || type === 'exitCe') ? 'ceTarget' : type;
+}
+
+/** Would this bolus be forced to an IV push regardless of the pump? */
+function isPushOnlyBolus() {
+  if (customSession) return !pumpEnabledFor(currentDrug);
+  return !isPumpEnabled() || (getIntermittentThreshold() > 0 && getMode() !== 'manual');
+}
+
+/**
+ * Snapshot of what the user currently has entered, in both display and
+ * canonical units. `canonical` is null when the buffer isn't a usable number.
+ */
+export function getEntry() {
+  const task = convTaskFor(currentType);
+  const v = parseFloat(buffer);
+  let canonical = null;
+  if (Number.isFinite(v) && v >= 0) {
+    try { canonical = toCanonical(v, currentUnit, currentDrug, task, weightCtx()).value; }
+    catch (e) { canonical = null; }
+  }
+  return {
+    type: currentType,
+    drugId: currentDrug,
+    task,
+    unit: currentUnit,
+    buffer,
+    value: Number.isFinite(v) ? v : null,
+    canonical,
+    roundOverride: currentType === 'ceTarget' ? currentRoundOverride : null,
+    pushOnly: currentType === 'bolus' ? isPushOnlyBolus() : false,
+  };
+}
+
+/**
+ * Write a canonical value into the buffer, formatted in the current display
+ * unit. Used by planning mode's ± buttons and drag handle, both of which
+ * think in canonical units. Re-arms `prefilled`, matching the unit-toggle
+ * convention (CLAUDE.md) — a titrated value is a proposal, so the next
+ * keypress should replace it rather than append a digit to it.
+ */
+export function setCanonical(canonicalValue, opts = {}) {
+  if (!Number.isFinite(canonicalValue) || canonicalValue < 0) return;
+  try {
+    const disp = fromCanonical(canonicalValue, currentUnit, currentDrug,
+      convTaskFor(currentType), weightCtx());
+    if (!Number.isFinite(disp)) return;
+    // Precision follows the caller's titration step, not the unit's general
+    // display convention — see formatValueStep. Without this a fentanyl Ce
+    // drag would snap to 0.1 ng/mL, most of its clinical range in one step.
+    buffer = opts.step > 0
+      ? formatValueStep(disp, currentUnit, opts.step)
+      : formatValue(disp, currentUnit);
+    prefilled = true;
+    updateDisplay();
+  } catch (e) { /* leave the buffer alone on a conversion failure */ }
+}
+
+/** Notify the planning screen that the entry changed. */
+function emitChange() {
+  if (!onChange) return;
+  try { onChange(getEntry()); }
+  catch (e) { console.error('[TCI Sim] Keypad onChange failed:', e); }
+}
+
+/**
+ * Move the keypad box out of its modal overlay and into `hostEl` — the
+ * planning screen's entry column. The box is MOVED, never cloned: the digit
+ * keys are bound once at init() by querySelectorAll, so a copy would be dead.
+ */
+export function attachTo(hostEl) {
+  const box = document.querySelector('.modal-keypad');
+  if (!box || !hostEl) return false;
+  if (!keypadHome) keypadHome = box.parentElement;
+  hostEl.appendChild(box);
+  box.classList.add('keypad-inline');
+  $('modal-keypad')?.classList.remove('open');
+  return true;
+}
+
+/**
+ * Put the keypad box back in its overlay.
+ * @param {Object} [opts]
+ * @param {boolean} [opts.reopen] - also re-show the modal (planning cancelled)
+ */
+export function detach({ reopen = false } = {}) {
+  const box = document.querySelector('.modal-keypad');
+  if (!box || !keypadHome) return;
+  keypadHome.appendChild(box);
+  box.classList.remove('keypad-inline');
+  const overlay = $('modal-keypad');
+  if (overlay) overlay.classList.toggle('open', !!reopen);
+}
+
 function updateDisplay() {
+  renderDisplay();
+  emitChange();
+}
+
+function renderDisplay() {
   // Main value display
   const el = $('keypad-value');
   if (el) {
@@ -412,8 +548,7 @@ function updateDisplay() {
 
   try {
     const ctx = weightCtx();
-    // 'intermittent' and 'exitCe' use ceTarget units for conversion
-    const convTask = (currentType === 'intermittent' || currentType === 'exitCe') ? 'ceTarget' : currentType;
+    const convTask = convTaskFor(currentType);
     const canonical = toCanonical(v, currentUnit, currentDrug, convTask, ctx);
 
     // Show conversion to other allowed units
@@ -448,12 +583,7 @@ function updateDisplay() {
 function updateBolusTime(doseMg) {
   const bt = $('keypad-bolus-time');
   if (!bt) return;
-  // Custom sessions have no in-case mode/threshold state — pump availability
-  // for the entry's own drug decides pump-vs-push display.
-  const pushOnly = customSession
-    ? !pumpEnabledFor(currentDrug)
-    : !isPumpEnabled() || (getIntermittentThreshold() > 0 && getMode() !== 'manual');
-  bt.textContent = bolusTimeText(doseMg, currentDrug, { pushOnly });
+  bt.textContent = bolusTimeText(doseMg, currentDrug, { pushOnly: isPushOnlyBolus() });
 }
 
 function confirm(deliveryMode) {
@@ -476,9 +606,7 @@ function confirm(deliveryMode) {
 
   try {
     const ctx = { weightKg: patient.weight };
-    // 'intermittent' and 'exitCe' use ceTarget units for conversion
-    const convTask = (currentType === 'intermittent' || currentType === 'exitCe') ? 'ceTarget' : currentType;
-    const canonical = toCanonical(v, currentUnit, currentDrug, convTask, ctx);
+    const canonical = toCanonical(v, currentUnit, currentDrug, convTaskFor(currentType), ctx);
 
     // Build a human-readable display string for the annotation
     let displayText = `${buffer} ${currentUnit}`;

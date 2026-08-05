@@ -264,6 +264,38 @@ export function formatValue(value, unit) {
 }
 
 /**
+ * Decimal places needed to write `step` exactly (0.05 → 2, 0.1 → 1, 10 → 0).
+ * Capped at 4; falls back to 2 for a non-positive or non-finite step.
+ */
+export function decimalsForStep(step) {
+  if (!Number.isFinite(step) || step <= 0) return 2;
+  if (step >= 1) return 0;
+  // toPrecision first so float noise (0.1+0.2 → 0.30000000000000004) doesn't
+  // report 17 decimals.
+  const s = step.toPrecision(12).replace(/0+$/, '');
+  const dot = s.indexOf('.');
+  return dot < 0 ? 0 : Math.min(4, s.length - dot - 1);
+}
+
+/**
+ * Format a value at the precision its TITRATION STEP implies, rather than the
+ * unit's general display precision.
+ *
+ * The two differ where a unit spans very different clinical ranges. `ng/mL`
+ * carries 1 decimal — right for ketamine at 800 ng/mL, but it quantises
+ * fentanyl to 0.1 ng/mL steps across a range that rarely passes 1, which is
+ * far too coarse to titrate against. Driving the precision from the drug's own
+ * step gives fentanyl 0.05 (2 dp) and ketamine 10 (0 dp) from one rule.
+ *
+ * Only used where a value is being *set* by stepping or dragging. Readouts and
+ * history keep formatValue's per-unit convention.
+ */
+export function formatValueStep(value, unit, step) {
+  if (!(step > 0)) return formatValue(value, unit);
+  return parseFloat(value.toFixed(decimalsForStep(step))).toString();
+}
+
+/**
  * Format a value with its unit as a single token that never wraps between the
  * number and the unit (non-breaking space). Use anywhere a "value unit" pair
  * is displayed in flowing text — e.g. the event-log notations.
