@@ -389,10 +389,12 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   const btnSettingsClose = $('btn-settings-close');
   if (btnSettingsOpen)  btnSettingsOpen.addEventListener('click',  () => {
     syncMaxPumpRateSelect(); // reflect current pump rate (may have changed via case restore)
-    // Re-seed the time-axis segmented control from the saved setting — it may
-    // have been changed from the on-chart button since this modal was built.
-    currentTimeAxis = getSettings().timeAxisMode ?? 'min';
+    // Re-seed the controls that have an on-chart counterpart — they may have
+    // been changed from the chart since this modal was built.
+    const cur = getSettings();
+    currentTimeAxis = cur.timeAxisMode ?? 'min';
     for (const b of timeAxisBtns) b.classList.toggle('active', b.dataset.mode === currentTimeAxis);
+    if (crossLabelsChk) crossLabelsChk.checked = !!cur.crossoverTimeLabels;
     $('modal-settings').classList.add('open');
   });
   if (btnSettingsClose) btnSettingsClose.addEventListener('click', () => $('modal-settings').classList.remove('open'));

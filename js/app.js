@@ -233,6 +233,8 @@ function initSimScreen(patient) {
   // fresh chart's button so the user's preference survives New Case.
   const btnGhosts = $('btn-chart-ghosts');
   if (btnGhosts) btnGhosts.classList.toggle('active', !!settings.getSettings().ghostTracesEnabled);
+  const btnCrossTimes = $('btn-chart-crosstimes');
+  if (btnCrossTimes) btnCrossTimes.classList.toggle('active', !!settings.getSettings().crossoverTimeLabels);
   const btnExpand = $('btn-chart-expand');
   if (btnExpand) {
     btnExpand.classList.remove('active');
@@ -1125,6 +1127,17 @@ function boot() {
     // Push fresh ghost curves immediately so toggling on doesn't wait
     // for the next refresh trigger (e.g. an event edit or rAF tick).
     chartBridge.refresh();
+  });
+  // Crossing-time labels on the threshold dots. Same shape as the ghost
+  // toggle: the chart button is the in-case control, the Settings checkbox is
+  // the same value in the settings panel, and both write one persisted key.
+  const btnChartCrossTimes = $('btn-chart-crosstimes');
+  if (btnChartCrossTimes) btnChartCrossTimes.addEventListener('click', () => {
+    const cur = settings.getSettings();
+    const enabled = !cur.crossoverTimeLabels;
+    settings.setSettings({ ...cur, crossoverTimeLabels: enabled });
+    btnChartCrossTimes.classList.toggle('active', enabled);
+    // chart-bridge onFrame pushes the flag to the chart on the next frame.
   });
   // On-chart x-axis time-scale cycle: min → h:min → real time → min. Persists
   // via the settings store (single source of truth, shared with the Settings →

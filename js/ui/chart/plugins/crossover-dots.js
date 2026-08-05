@@ -20,6 +20,10 @@
 import { DRUG_DEFS } from '../../../util/constants.js';
 import { fmtTimeLabel } from '../time-format.js';
 
+/** Leader offset from the dot to the near corner of its time label. */
+const LEAD_X = 10;
+const LEAD_Y = 14;
+
 /**
  * Find the x-value where a sorted {x, y} point array first crosses `thr` going
  * downward (from above to at/below). Returns null when there is no such crossing.
@@ -85,19 +89,40 @@ export function createCrossoverDotsPlugin(s) {
             ctx.font = `600 ${fontPx}px ui-monospace, monospace`;
             ctx.textBaseline = 'middle';
             const w = ctx.measureText(text).width;
-            // Flip to the left of the dot when the label would overflow the
-            // plot — crossings often sit near the right edge.
-            const right = px + 8 + w + 6 <= ca.right;
-            const bx = right ? px + 8 : px - 8 - w - 6;
-            const by = py - fontPx / 2 - 3;
+            const boxW = w + 6;
+            const boxH = fontPx + 6;
+
+            // Offset up and to the right, on a short leader, rather than
+            // butted against the dot. A label level with the dot sits on the
+            // threshold line it belongs to and on whatever curve is passing
+            // through; lifting it clear leaves both readable, and the leader
+            // keeps the association unambiguous.
+            let bx = px + LEAD_X;
+            let by = py - LEAD_Y - boxH;
+            // Fold back over the dot at the plot edges instead of clipping.
+            if (bx + boxW > ca.right) bx = px - LEAD_X - boxW;
+            if (by < ca.top) by = py + LEAD_Y;
+            bx = Math.max(ca.left, Math.min(bx, ca.right - boxW));
+
+            // Leader from the dot's edge to the nearest corner of the box.
+            const anchorX = bx < px ? bx + boxW : bx;
+            const anchorY = by < py ? by + boxH : by;
+            ctx.globalAlpha = alpha * 0.7;
+            ctx.strokeStyle = fill;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(anchorX, anchorY);
+            ctx.stroke();
+
             ctx.globalAlpha = alpha * 0.85;
             ctx.fillStyle = labelBg;
             if (typeof ctx.roundRect === 'function') {
               ctx.beginPath();
-              ctx.roundRect(bx, by, w + 6, fontPx + 6, 3);
+              ctx.roundRect(bx, by, boxW, boxH, 3);
               ctx.fill();
             } else {
-              ctx.fillRect(bx, by, w + 6, fontPx + 6);
+              ctx.fillRect(bx, by, boxW, boxH);
             }
             ctx.globalAlpha = alpha;
             ctx.strokeStyle = fill;
@@ -105,7 +130,7 @@ export function createCrossoverDotsPlugin(s) {
             if (typeof ctx.roundRect === 'function') ctx.stroke();
             ctx.fillStyle = labelFg;
             ctx.textAlign = 'left';
-            ctx.fillText(text, bx + 3, by + (fontPx + 6) / 2);
+            ctx.fillText(text, bx + 3, by + boxH / 2);
           }
         }
         ctx.restore();

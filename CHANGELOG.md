@@ -11,6 +11,17 @@
 
 ---
 
+## [0.6.1.2] — 2026-08-05
+
+Crossing-time labels get an on-chart toggle and move off the dot.
+
+- **New chart button (⏱) toggles the crossing-time labels** without opening Settings — it belongs with the other in-case display toggles (events, ghosts, time axis) rather than two taps away. Same shape as the ghost-trace toggle: the button is the in-case control, the Settings → Appearance checkbox is the same value, and both write one persisted key. The checkbox now re-seeds when the Settings panel opens, following the pattern the time-axis control already used, so the two can't drift out of step.
+- **Labels sit up and to the right of their dot on a short leader**, instead of butted against it. A label level with the dot sat on the threshold line it belongs to *and* on whatever curve was passing through; lifting it clear leaves all three readable. It folds back over the dot at the plot edges rather than clipping, and drops below when there's no room above.
+
+Changed: `js/ui/chart/plugins/crossover-dots.js`, `js/app.js`, `js/app/settings-ui.js`, `index.html`.
+
+---
+
 ## [0.6.1.1] — 2026-08-05
 
 Planning mode, second test round: crossover labels made optional, drag handle moved off the curve, and a first-time threshold now draws its dots.

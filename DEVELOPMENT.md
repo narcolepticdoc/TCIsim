@@ -4,6 +4,38 @@
 
 ## Session History
 
+### Crossing-time labels: on-chart toggle + leader placement (v0.6.1.2) — Interim
+
+Two refinements to the labels added in 0.6.1 and made optional in 0.6.1.1.
+
+**The toggle belongs on the chart.** Burying it in Settings meant two taps and a
+modal to answer "when does this cross?" — a question you ask *while* looking at
+the chart. New `⏱` button in the chart-controls strip, alongside the events,
+ghosts and time-axis toggles it's a sibling of.
+
+It follows the ghost-trace toggle exactly: the chart button is the in-case
+control, the Settings checkbox is the same value rendered in the panel, and both
+write one persisted key (`crossoverTimeLabels`). That two-surface arrangement has
+a known failure mode — `initSettingsUI` populates its controls once at boot, so
+a value changed from the chart afterwards leaves the checkbox stale. Caught it in
+testing (button on, checkbox still reading false). The fix was already sitting
+in `settings-ui.js`: the time-axis segmented control re-seeds itself in the
+settings-open handler for precisely this reason, so the checkbox joined it there.
+Worth remembering as a rule — **any setting with an on-chart counterpart must
+re-seed on open**, or the two surfaces silently disagree.
+
+**Label placement.** Butted against the dot, a label lands on the threshold line
+it belongs to and on whatever curve passes through that point — three things
+overlapping at the one pixel the eye is drawn to. It now offsets up-and-right on
+a short leader drawn from the dot to the box's near corner, which keeps the
+association explicit while leaving the line and curve legible underneath.
+
+Two placement fallbacks, both verified by zooming a real crossing into the
+corners: it folds to the left of the dot when the box would overflow the right
+edge (crossings often sit near it), and drops below when there is no room above.
+The box is finally clamped inside the plot area so neither fallback can push it
+out.
+
 ### Planning mode: second test-note round (v0.6.1.1) — Interim
 
 Three items. Two are refinements of things added last round; the third is a
