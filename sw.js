@@ -13,7 +13,7 @@
  * caches, and the page reloads onto the new version.
  */
 
-const VERSION = '0.6.1.2';
+const VERSION = '0.6.2';
 const CACHE_NAME = `tcisim-v${VERSION}`;
 
 const PRECACHE_URLS = [
@@ -53,6 +53,7 @@ const PRECACHE_URLS = [
   'js/sim/events/replay.js',
   'js/sim/simtiva-reference.js',
   'js/sim/preview.js',
+  'js/sim/redose.js',
   'js/sim/simulation.js',
   'js/sim/tci-planner.js',
   'js/sim/tci/cet-conservative.js',

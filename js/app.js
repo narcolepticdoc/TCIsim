@@ -22,7 +22,8 @@ import * as reconcileModal from './ui/reconcile-modal.js';
 import { createChart } from './ui/chart.js';
 import { bolusDeliveryMinutes, APP_VERSION, DRUG_IDS, DRUG_DEFS, isPumpEnabled, getPumpSettings } from './util/constants.js';
 import { hexToRgba } from './util/color.js';
-import { getQuantizeConfig } from './util/units.js';
+import { getQuantizeConfig, getWorkingUnit, fromCanonical, formatValue } from './util/units.js';
+import { findRedoseBolus } from './sim/redose.js';
 import * as persist from './ui/persist.js';
 import * as settings from './ui/settings.js';
 import { initSettingsUI } from './app/settings-ui.js';
@@ -87,6 +88,77 @@ function resolveBolusDeliveryMode(drugId, requested) {
   const hasThreshold = mode.getIntermittentThreshold(drugId) > 0;
   if (hasThreshold && !willBeManual) return 'push';
   return requested || 'pump';
+}
+
+/**
+ * Give a bolus: the whole side-effect set, in one place.
+ *
+ * A bolus is not just an event — it ends a TCI plan, moves the drug to manual,
+ * annotates why, picks pump-vs-push, and (pre-case) advances that drug's own
+ * clock by the delivery duration. The keypad's onConfirm and the one-touch
+ * Redose button both need every one of those, and a second copy is exactly how
+ * they would drift apart.
+ *
+ * @param {string} drugId
+ * @param {number} canonicalMg
+ * @param {string} displayText   - e.g. "100 mcg", for the history row
+ * @param {'pump'|'push'} [requestedMode]
+ */
+function commitBolus(drugId, canonicalMg, displayText, requestedMode) {
+  const t = entryTime(drugId);
+  const pumpOn = isPumpEnabled(drugId);
+
+  // In TCI, a manual bolus wipes the forward plan and drops to manual.
+  if (mode.get(drugId) === 'tci') {
+    model.clearAfter(drugId, t);
+    mode.set(drugId, 'manual');
+    addAnnotation({ heading: 'TCI Ended', sub: 'Manual Bolus' }, drugId);
+  } else if (mode.get(drugId) === 'none' && !NO_TCI_DRUGS.has(drugId) && pumpOn) {
+    // TCI-capable drug with pump: bolus from 'none' implies manual mode
+    mode.set(drugId, 'manual');
+  }
+
+  const dm = resolveBolusDeliveryMode(drugId, requestedMode);
+  const label = dm === 'push' ? 'IV Push' : 'Pump Bolus';
+  model.addBolus(drugId, t, canonicalMg, `${label} ${displayText}`, { deliveryMode: dm });
+
+  // Advance this drug's clock by its bolus delivery duration
+  if (!controls.isCaseStarted()) {
+    const deliveryMin = dm === 'push'
+      ? 10 / 60  // 10 seconds
+      : bolusDeliveryMinutes(canonicalMg, drugId);
+    advancePreStartClock(drugId, deliveryMin);
+  }
+  return dm;
+}
+
+/**
+ * The dose the Redose button offers for a drug, or null when it should hide.
+ *
+ * Hidden in TCI mode by design: a bolus there ends the running plan, and that
+ * is far too large a consequence for a control whose entire point is that it
+ * takes one unconsidered tap.
+ *
+ * @returns {{ canonicalMg: number, deliveryMode: string, label: string }|null}
+ */
+function getRedoseDose(drugId) {
+  if (!model) return null;
+  if (mode.get(drugId) === 'tci') return null;
+  const last = findRedoseBolus(model.getEvents(drugId));
+  if (!last) return null;
+  try {
+    const unit = getWorkingUnit(drugId, 'bolus');
+    const weightKg = model.getPatient()?.weight || 70;
+    const disp = fromCanonical(last.value, unit, drugId, 'bolus', { weightKg });
+    if (!Number.isFinite(disp)) return null;
+    return {
+      canonicalMg: last.value,
+      deliveryMode: last.deliveryMode,
+      label: `${formatValue(disp, unit)} ${unit}`,
+    };
+  } catch (e) {
+    return null;
+  }
 }
 
 // ---- Screen Navigation ----
@@ -233,8 +305,6 @@ function initSimScreen(patient) {
   // fresh chart's button so the user's preference survives New Case.
   const btnGhosts = $('btn-chart-ghosts');
   if (btnGhosts) btnGhosts.classList.toggle('active', !!settings.getSettings().ghostTracesEnabled);
-  const btnCrossTimes = $('btn-chart-crosstimes');
-  if (btnCrossTimes) btnCrossTimes.classList.toggle('active', !!settings.getSettings().crossoverTimeLabels);
   const btnExpand = $('btn-chart-expand');
   if (btnExpand) {
     btnExpand.classList.remove('active');
@@ -780,6 +850,19 @@ function boot() {
         history.setBolusOnly(!isPumpEnabled(drugId) || (hasThreshold && newMode !== 'manual'));
       }
     },
+    getRedoseDose,
+  });
+
+  // One-touch redose. No keypad and no planning mode even when
+  // planningModeDefault is on — a single tap giving the dose is the point of
+  // the control, and mode.js has already hidden it wherever that would be
+  // more consequence than a tap should carry.
+  const btnRedose = $('btn-redose');
+  if (btnRedose) btnRedose.addEventListener('click', () => {
+    const dose = getRedoseDose(selectedDrug);
+    if (!dose) return;
+    commitBolus(selectedDrug, dose.canonicalMg, dose.label, dose.deliveryMode);
+    refreshChart();
   });
 
   // Initialize keypad
@@ -868,30 +951,8 @@ function boot() {
         refreshChart();   // updates the exit line with correct yScale
         return;
       } else if (type === 'bolus') {
-        const pumpOn = isPumpEnabled(selectedDrug);
-        // Bolus — if in TCI, clear forward plan first, then bolus
-        if (mode.get(selectedDrug) === 'tci') {
-          model.clearAfter(selectedDrug, t);
-          mode.set(selectedDrug, 'manual');
-          addAnnotation({ heading: 'TCI Ended', sub: 'Manual Bolus' }, selectedDrug);
-        } else if (mode.get(selectedDrug) === 'none' && !NO_TCI_DRUGS.has(selectedDrug) && pumpOn) {
-          // TCI-capable drug with pump: bolus from 'none' implies manual mode
-          mode.set(selectedDrug, 'manual');
-        }
-        // No pump, or threshold set + no infusion → always IV Push; otherwise
-        // respect the keypad's choice. Shared with planning mode's preview.
-        const dm = resolveBolusDeliveryMode(selectedDrug, deliveryMode);
-        const label = dm === 'push' ? 'IV Push' : 'Pump Bolus';
-        model.addBolus(selectedDrug, t, canonicalValue, `${label} ${displayText}`, {
-          deliveryMode: dm,
-        });
-        // Advance this drug's clock by its bolus delivery duration
-        if (!controls.isCaseStarted()) {
-          const deliveryMin = dm === 'push'
-            ? 10 / 60  // 10 seconds
-            : bolusDeliveryMinutes(canonicalValue, selectedDrug);
-          advancePreStartClock(selectedDrug, deliveryMin);
-        }
+        // Every side effect lives in commitBolus, shared with the Redose button.
+        commitBolus(selectedDrug, canonicalValue, displayText, deliveryMode);
       }
 
       refreshChart();
@@ -1127,17 +1188,6 @@ function boot() {
     // Push fresh ghost curves immediately so toggling on doesn't wait
     // for the next refresh trigger (e.g. an event edit or rAF tick).
     chartBridge.refresh();
-  });
-  // Crossing-time labels on the threshold dots. Same shape as the ghost
-  // toggle: the chart button is the in-case control, the Settings checkbox is
-  // the same value in the settings panel, and both write one persisted key.
-  const btnChartCrossTimes = $('btn-chart-crosstimes');
-  if (btnChartCrossTimes) btnChartCrossTimes.addEventListener('click', () => {
-    const cur = settings.getSettings();
-    const enabled = !cur.crossoverTimeLabels;
-    settings.setSettings({ ...cur, crossoverTimeLabels: enabled });
-    btnChartCrossTimes.classList.toggle('active', enabled);
-    // chart-bridge onFrame pushes the flag to the chart on the next frame.
   });
   // On-chart x-axis time-scale cycle: min → h:min → real time → min. Persists
   // via the settings store (single source of truth, shared with the Settings →

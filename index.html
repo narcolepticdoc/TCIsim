@@ -512,6 +512,10 @@
     .btn-ctrl-bolus{background:rgba(109,40,217,.2);color:var(--text-secondary)}
     .btn-ctrl-bolus:hover{background:rgba(109,40,217,.35)}
     .btn-ctrl-bolus.active-mode{background:#6d28d9;color:#fff;box-shadow:0 0 0 2px var(--purple)}
+    /* Redose — a bolus-family action, in the same violet as the keypad's IV
+       Push, so it reads as related to Add Bolus without competing with it. */
+    .btn-ctrl-redose{background:rgba(167,139,250,.18);color:#c4b5fd;border:1px solid rgba(167,139,250,.5)}
+    .btn-ctrl-redose:hover{background:rgba(167,139,250,.34);color:#fff}
     .btn-ctrl-exit{background:rgba(220,38,38,.2);color:var(--text-secondary)}
     .btn-ctrl-exit:hover{background:rgba(220,38,38,.35)}
     .btn-ctrl-exit.active-mode{background:#dc2626;color:#fff;box-shadow:0 0 0 2px #dc2626}
@@ -1618,7 +1622,6 @@
               <button class="chart-btn" id="btn-chart-tooltip" title="Toggle crosshair values">ⓘ</button>
               <button class="chart-btn" id="btn-chart-events" title="Toggle future event markers (TCI)">⚑</button>
               <button class="chart-btn" id="btn-chart-ghosts" title="Toggle ghost traces of other drugs">∿</button>
-              <button class="chart-btn" id="btn-chart-crosstimes" title="Toggle crossing-time labels on threshold dots">&#9201;</button>
               <button class="chart-btn chart-btn-sm" id="btn-chart-timeaxis" title="X-axis time scale (min / h:min / real time)">min</button>
               <button class="chart-btn" id="btn-chart-expand" title="Expand chart">⤢</button>
             </div>
@@ -1647,6 +1650,7 @@
       <div class="ctrl-divider"></div>
       <button class="btn-ctrl btn-ctrl-rate" id="btn-rate">Set Rate</button>
       <button class="btn-ctrl btn-ctrl-bolus" id="btn-bolus">Add Bolus</button>
+      <button class="btn-ctrl btn-ctrl-redose" id="btn-redose" style="display:none" title="Repeat the last bolus given for this drug">Redose</button>
       <button class="btn-ctrl btn-ctrl-pause is-stopped" id="btn-pause">Start</button>
     </div>
   </div>

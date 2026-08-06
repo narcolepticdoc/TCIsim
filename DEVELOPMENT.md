@@ -4,6 +4,75 @@
 
 ## Session History
 
+### Redose button, plan-marker fix, ⏱ removal (v0.6.2) — Interim
+
+**The ⏱ chart button lasted one version.** Added in 0.6.1.2 on the reasoning that
+"when does this cross?" is a question you ask while looking at the chart; removed
+here because once the labels moved onto leaders they stopped being the clutter
+that made a quick toggle feel necessary. Worth recording as a small lesson: the
+toggle was solving for a legibility problem, and fixing the legibility removed
+the need for the toggle. The setting and its checkbox stay.
+
+**The bolus marker was my own regression, one version old.** 0.6.1 taught the
+preview to return the clone's events so a TCI retarget could show its rate
+steps. A *bolus* proposal's own event comes back through the same channel, gets
+classified `kind: 'bolus'`, and is drawn with the double-arrow glyph that means
+"a scheduled bolus is coming" — which a dose you are about to commit by hand is
+not. Markers now render for `ceTarget` proposals only.
+
+The general shape is the one flagged in 0.6.1.1: **planning mode reuses chart
+machinery built for committed state, and the mismatch surfaces as a small
+visual lie.** Third instance now. The distinction that resolves all three is
+whether the thing being drawn has any *other* representation on screen — a TCI
+scheme's rate steps don't, so they need markers; a bolus's effect is the curve
+itself, so a marker adds only a false implication.
+
+**Redose button.** Repeats the last hand-entered bolus for a drug in one tap,
+labelled with the dose it will give.
+
+Three decisions, all taken with the user, all narrowing rather than widening:
+
+- *Source: this case's event list, not `tci_lastBolus_`.* The persisted key would
+  make the button live from case start, but it survives across cases — offering
+  a dose from a previous patient. "Last dose given" should mean given, here.
+- *TCI-sourced boluses excluded.* After leaving TCI the newest bolus is usually
+  the planner's loading dose. Repeating a computed 155 mg as though the user
+  chose it is wrong twice: they never picked the number, and it was sized for
+  induction from zero, not a top-up.
+- *Hidden entirely in TCI mode.* A bolus there ends the running plan. That is far
+  too large a consequence for a control whose entire value is that it takes one
+  unconsidered tap, so the button is absent rather than guarded — safe by
+  construction instead of safe by confirmation.
+
+`commitBolus()` was extracted in app.js because a bolus is not just an event: it
+ends TCI, moves the drug to manual, annotates why, resolves pump-vs-push, and
+pre-case advances that drug's own clock by the delivery duration. The Redose
+button is the second caller, which is exactly the point where duplicating that
+set stops being safe. Same reasoning as `resolveBolusDeliveryMode` in 0.6.
+
+Label freshness goes through one line in `chart-bridge.refresh()` —
+`mode.refreshUI(selectedDrug)`. Every path that adds, edits, deletes, reconciles
+or restores a bolus already ends there. The alternative, refreshing in `onFrame`,
+would re-scan the event list ~60×/s for a value that only changes on mutation.
+
+`getWorkingUnit()` added to units.js: the saved-display-unit lookup was
+copy-pasted in five places and the redose label needed a sixth. Migrated the
+byte-identical copies (`drug-panel/step-bar.js` ×2, `settings.js`
+`_getPreferredUnit`); left `keypad.js`, `event-editor.js` and `tci-modal.js`,
+whose surrounding logic differs.
+
+**One observation from testing that is not a bug.** Two Redose taps a second
+apart produce *one* bolus of double the dose, not two events — `addBolus` merges
+into an in-flight delivery, and a 100 mcg fentanyl push takes ~2 s to run. That
+is the documented merge invariant and physically correct (the drug really does
+go in over one window), and the keypad path behaves identically. Verified the
+ordinary case separately: doses at 0, 20 and 45 min produce three distinct
+events with the label steady at `Redose 100 mcg` throughout.
+
+Verified in Chromium at 1280×900 plus phone landscape (844×390) and portrait
+(390×844) — control bar fits on one row at both, no overflow. 0 console errors.
+Suite 1069 → 1099.
+
 ### Crossing-time labels: on-chart toggle + leader placement (v0.6.1.2) — Interim
 
 Two refinements to the labels added in 0.6.1 and made optional in 0.6.1.1.

@@ -104,6 +104,27 @@ export function getPrefKey(drugId, task) {
 }
 
 /**
+ * Resolve the *working* (in-case) display unit for a drug/task: the value the
+ * user last selected if it is still a legal unit for that task, otherwise the
+ * static default.
+ *
+ * This is the unit anything showing a dose back to the user should format in —
+ * the drug panel's step bar, warning popups, the planning-mode readouts, the
+ * redose button. Reads through a try/catch because a locked-down or full
+ * localStorage must degrade to the default rather than throw mid-render.
+ */
+export function getWorkingUnit(drugId, task) {
+  const key = getPrefKey(drugId, task);
+  if (key) {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved && getAllowedUnits(drugId, task).includes(saved)) return saved;
+    } catch (e) { /* fall through to the default */ }
+  }
+  return getDefaultUnit(drugId, task);
+}
+
+/**
  * Get the localStorage preference key for a drug/task's *setup default* unit.
  *
  * Distinct from the working key (`getPrefKey`) so the new-case setup screen

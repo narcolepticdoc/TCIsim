@@ -300,6 +300,14 @@ export function createChartBridge({
     // Update history panel
     history.render(selectedDrug);
 
+    // Control-bar state that depends on the event list — currently the Redose
+    // button's dose and visibility. Every path that adds, edits, deletes,
+    // reconciles or restores a bolus ends here, so one call covers them all;
+    // refreshUI is cheap and idempotent (it already runs on every drug-card
+    // click). Doing this per-frame in onFrame would re-scan the event list
+    // ~60x/s for a value that only changes on mutation.
+    mode.refreshUI(selectedDrug);
+
     // Auto-save state
     save();
   }
