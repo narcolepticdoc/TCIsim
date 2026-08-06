@@ -6,7 +6,7 @@
  * countdown sourced from the approach cache instead.
  */
 
-import { fromCanonical, formatValue, getAllowedUnits, getDefaultUnit, getPrefKey } from '../../util/units.js';
+import { fromCanonical, formatValue, getWorkingUnit } from '../../util/units.js';
 import { fmtCountdown } from './formatters.js';
 import { getSettings, displayedSecToEvent } from '../settings.js';
 
@@ -23,28 +23,12 @@ function fmtNextEvtLabel(ctx, evt, drugId) {
     }
     const weight = ctx.model.getPatient().weight;
     if (evt.type === 'rate') {
-      const prefKey = getPrefKey(drugId, 'rate');
-      let unit = getDefaultUnit(drugId, 'rate');
-      if (prefKey) {
-        try {
-          const saved = localStorage.getItem(prefKey);
-          const allowed = getAllowedUnits(drugId, 'rate');
-          if (saved && allowed.includes(saved)) unit = saved;
-        } catch (e) {}
-      }
+      const unit = getWorkingUnit(drugId, 'rate');
       const v = fromCanonical(evt.value, unit, drugId, 'rate', { weightKg: weight });
       return `Rate \u2192 ${formatValue(v, unit)} ${unit}`;
     }
     if (evt.type === 'bolus') {
-      const prefKey = getPrefKey(drugId, 'bolus');
-      let unit = getDefaultUnit(drugId, 'bolus');
-      if (prefKey) {
-        try {
-          const saved = localStorage.getItem(prefKey);
-          const allowed = getAllowedUnits(drugId, 'bolus');
-          if (saved && allowed.includes(saved)) unit = saved;
-        } catch (e) {}
-      }
+      const unit = getWorkingUnit(drugId, 'bolus');
       const v = fromCanonical(evt.value, unit, drugId, 'bolus', { weightKg: weight });
       const label = evt.deliveryMode === 'push' ? 'IV Push' : 'Bolus';
       return `${label} ${formatValue(v, unit)} ${unit}`;

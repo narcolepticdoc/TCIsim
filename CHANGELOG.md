@@ -11,6 +11,27 @@
 
 ---
 
+## [0.6.2] — 2026-08-06
+
+One-touch redose, a plan-marker fix, and the crossing-time toggle moves back to Settings only.
+
+- **New Redose button beside Add Bolus.** It reads the dose it will give — `Redose 100 mcg` — and a single tap gives it, with the same delivery mode (pump or IV push) as the dose it repeats. Built for intermittent opioid/ketamine dosing, where the number is one you just used and a modal round-trip is pure friction.
+  - It repeats **the last bolus you entered by hand for that drug in this case**. TCI loading doses are deliberately never offered: after dropping out of TCI the most recent bolus is usually the planner's induction dose, and repeating a computed 155 mg as though you'd chosen it is wrong twice over — you never picked that number, and it was sized for induction from zero rather than a top-up.
+  - **Hidden while the drug is in TCI mode.** A bolus there ends the running plan, which is far too large a consequence for a control whose whole point is that it takes one unconsidered tap. It reappears the moment the drug is in manual, intermittent or no mode.
+  - Hidden until there is something to repeat, and its label follows the case — give a different dose, or edit or delete one in the history, and the button updates.
+- **A bolus previewed in planning mode no longer draws a TCI-style step marker.** Regression from 0.6.1: the preview returns the proposal's events so a TCI retarget can show its rate steps, but a bolus proposal's own event came back too and was drawn with the same double-arrow glyph a *scheduled* TCI bolus uses — implying a queued event that doesn't exist. Markers now render for TCI target proposals only; a manual bolus or rate is already fully described by the curve's own inflection.
+- **The ⏱ chart button is gone.** With the labels on leaders they read well enough that the Settings → Appearance checkbox is sufficient, and the chart-controls strip was crowded. The setting, the checkbox and its re-seed-on-open are unchanged.
+
+Under the hood:
+
+- `commitBolus()` in `js/app.js` now owns every side effect of giving a bolus — the TCI→manual transition and its annotation, the pump-vs-push resolution, the history label, and the pre-case clock advance. The keypad's `onConfirm` and the Redose button both call it, so the two cannot drift.
+- `findRedoseBolus()` (`js/sim/redose.js`) is a pure function over an event list, so the dose-selection rules are testable without a DOM.
+- `getWorkingUnit(drugId, task)` added to `js/util/units.js` — resolving the user's saved display unit was copy-pasted in five places and the redose label needed a sixth. `drug-panel/step-bar.js` and `settings.js` now use it.
+
+New: `js/sim/redose.js`, `tests/test-redose.js` (30 tests; suite 1069 → 1099).
+
+---
+
 ## [0.6.1.2] — 2026-08-05
 
 Crossing-time labels get an on-chart toggle and move off the dot.

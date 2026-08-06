@@ -223,22 +223,31 @@ export function createPlanning(deps) {
       time: p.time, Ce: p.Ce * yScale, Cp: p.Cp * yScale,
     })));
 
-    // Step markers for the proposal. A TCI retarget emits a whole scheme whose
-    // events exist only on the preview clone, so without this the plan being
-    // chosen shows as a bare curve with no indication of when the pump changes.
+    // Step markers, for a TCI retarget ONLY. A retarget emits a whole scheme
+    // whose events exist only on the preview clone, so without markers the plan
+    // being chosen shows as a bare curve with no indication of when the pump
+    // changes. A manual bolus or rate is the opposite case: the curve's own
+    // inflection already describes it completely, and the marker glyph means
+    // "a scheduled event is coming" — which a dose about to be committed by
+    // hand is not. Drawing one there implies a queued event that doesn't exist.
     if (chart.setPlanEventMarkers) {
-      // The WHOLE event list goes in, not just the future slice: rate steps are
-      // classified as increase/decrease against the preceding rate, so starting
-      // the walk mid-sequence would mislabel the first one. The nudged `now`
-      // keeps events landing exactly at startTime reading as upcoming rather
-      // than dimmed-past.
-      // …then keep only the ones the proposal actually contains. A marker
-      // before the projection starts has no curve to sit on — the binary
-      // search would clamp it to the preview's first sample and stack it
-      // against the left edge at the wrong height.
-      chart.setPlanEventMarkers(
-        classifyFutureEvents(result.events || [], result.startTime - 1e-6)
-          .filter(m => !m.past));
+      if (entry.type !== 'ceTarget') {
+        chart.setPlanEventMarkers([]);
+      } else {
+        // The WHOLE event list goes in, not just the future slice: rate steps
+        // are classified as increase/decrease against the preceding rate, so
+        // starting the walk mid-sequence would mislabel the first one. The
+        // nudged `now` keeps events landing exactly at startTime reading as
+        // upcoming rather than dimmed-past.
+        //
+        // …then keep only the ones the proposal actually contains. A marker
+        // before the projection starts has no curve to sit on — the binary
+        // search would clamp it to the preview's first sample and stack it
+        // against the left edge at the wrong height.
+        chart.setPlanEventMarkers(
+          classifyFutureEvents(result.events || [], result.startTime - 1e-6)
+            .filter(m => !m.past));
+      }
     }
 
     // A TCI target's handle rides its own target line, which is the value

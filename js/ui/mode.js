@@ -28,6 +28,9 @@ let intermittentThresholds = {}; // { drugId: number } — Ce redose threshold (
 let exitCeTargets = {}; // { drugId: number } — Ce threshold for emergence / exit (persists across modes)
 let exitCeLabels = {};  // { drugId: string } — display label for the button (e.g. "0.2 ng/mL")
 let onModeChange = null;
+// () => ({ label } | null) — the dose the Redose button offers for a drug, or
+// null to hide it. Supplied by app.js because mode.js has no model access.
+let getRedoseDose = null;
 
 /** Drugs that support TCI (Ce targeting). All others use intermittent/manual only. */
 const TCI_CAPABLE_DRUGS = new Set(['propofol', 'remifentanil']);
@@ -39,6 +42,7 @@ const TCI_CAPABLE_DRUGS = new Set(['propofol', 'remifentanil']);
  */
 export function init(opts = {}) {
   onModeChange = opts.onModeChange || null;
+  getRedoseDose = opts.getRedoseDose || null;
 }
 
 /**
@@ -265,6 +269,21 @@ function updateModeUI(drugId) {
     } else {
       ml.textContent = 'NO MODE';
       ml.className = 'mode-label no-mode';
+    }
+  }
+
+  // Redose — offered whenever there is a hand-entered bolus to repeat. The
+  // dep returns null in TCI mode (a bolus there would end the plan) and when
+  // the drug has had no manual bolus yet, so the button simply isn't there
+  // until repeating a dose is both possible and safe.
+  const rd = $('btn-redose');
+  if (rd) {
+    const dose = getRedoseDose ? getRedoseDose(resolvedDrug) : null;
+    if (dose) {
+      rd.textContent = `Redose ${dose.label}`;
+      rd.style.display = '';
+    } else {
+      rd.style.display = 'none';
     }
   }
 

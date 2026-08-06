@@ -13,7 +13,7 @@
  * Call reset() on new case to clear state and dismiss all popups.
  */
 
-import { fromCanonical, formatValue, getDefaultUnit, getAllowedUnits, getPrefKey } from '../util/units.js';
+import { fromCanonical, formatValue, getWorkingUnit } from '../util/units.js';
 import { unlockAudio, playAlert } from './alert-sound.js';
 
 const STORAGE_KEY = 'tci-warn-settings';
@@ -418,13 +418,13 @@ function _fmtEventDesc(evt, drugId) {
     const ctx     = patient ? { weightKg: patient.weight } : {};
 
     if (evt.type === 'rate') {
-      const unit       = _getPreferredUnit(drugId, 'rate');
+      const unit       = getWorkingUnit(drugId, 'rate');
       const displayVal = fromCanonical(evt.value, unit, drugId, 'rate', ctx);
       return `Rate → ${formatValue(displayVal, unit)} ${unit}`;
     }
 
     if (evt.type === 'bolus') {
-      const unit       = _getPreferredUnit(drugId, 'bolus');
+      const unit       = getWorkingUnit(drugId, 'bolus');
       const displayVal = fromCanonical(evt.value, unit, drugId, 'bolus', ctx);
       const label      = evt.deliveryMode === 'push' ? 'IV Push' : 'Bolus';
       return `${label} ${formatValue(displayVal, unit)} ${unit}`;
@@ -434,18 +434,6 @@ function _fmtEventDesc(evt, drugId) {
   return evt.annotation || 'Event';
 }
 
-/** Read the user's persisted unit preference, falling back to default. */
-function _getPreferredUnit(drugId, task) {
-  const prefKey = getPrefKey(drugId, task);
-  if (prefKey) {
-    try {
-      const saved   = localStorage.getItem(prefKey);
-      const allowed = getAllowedUnits(drugId, task);
-      if (saved && allowed.includes(saved)) return saved;
-    } catch (e) {}
-  }
-  return getDefaultUnit(drugId, task);
-}
 
 function _fmtCountdown(minutes) {
   if (!isFinite(minutes) || minutes <= 0) return '0:00';
