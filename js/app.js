@@ -123,6 +123,12 @@ function commitBolus(drugId, canonicalMg, displayText, requestedMode) {
   const label = dm === 'push' ? 'IV Push' : 'Pump Bolus';
   model.addBolus(drugId, t, canonicalMg, `${label} ${displayText}`, { deliveryMode: dm });
 
+  // If this drug is under its redose threshold, this dose is the response to
+  // that alert: quiet it while the dose takes effect. settings re-arms it if Ce
+  // turns over still under the threshold, so an inadequate top-up cannot
+  // silence the panel for the rest of the case.
+  settings.noteRedoseDose(drugId, t);
+
   // Advance this drug's clock by its bolus delivery duration
   if (!controls.isCaseStarted()) {
     const deliveryMin = dm === 'push'

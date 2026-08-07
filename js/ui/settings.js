@@ -68,12 +68,29 @@ const _zeroChimeFired = new Set();
 // Active popups — eventId → HTMLElement
 const _activePopups = new Map();
 
-// drugId → elapsed minutes at which Ce fell below the intermittent redose
-// threshold. Fires the chime once on the above→below transition, and is the
-// single record of *when* the crossing happened — the Next Up panel latches its
-// persistent "redose due" row off this same edge, so the row and the chime
-// cannot disagree about whether a crossing occurred.
-const _belowThresholdSince = new Map();
+// Redose-threshold state, per drug. Present only while Ce is at or below the
+// threshold; deleted when Ce climbs back above it.
+//
+//   since   — elapsed minutes the "redose due" count-up measures from: the
+//             crossing, or the most recent dose once one has been given.
+//   gen     — how many times this drug has crossed. Folded into the Next Up
+//             item key so acknowledging one crossing cannot silence the next.
+//   dosedAt — minutes of a dose given while still below threshold, else null.
+//             While set, the panel stays quiet: the dose is still taking effect.
+//   peakCe  — highest Ce seen since that dose. Once Ce falls away from the peak
+//             and we are *still* under the threshold, the dose was not enough
+//             and the alert re-arms. Tracking the peak rather than the previous
+//             sample is what makes this work at any decay rate — a per-frame
+//             delta on a slow decay is far too small to detect reliably.
+const _belowThreshold = new Map();
+
+// Survives the above→below delete, so generations keep increasing across a case.
+const _redoseGen = new Map();
+
+// Fraction below the post-dose peak that counts as "Ce has turned over".
+const REARM_DROP = 0.005;
+
+const _num = v => (typeof v === 'number' && isFinite(v)) ? v : null;
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
@@ -221,7 +238,8 @@ export function reset() {
   _prepSoundFired.clear();
   _alertFired.clear();
   _zeroChimeFired.clear();
-  _belowThresholdSince.clear();
+  _belowThreshold.clear();
+  _redoseGen.clear();
   document.querySelectorAll('.drug-card.warn-prep').forEach(el => el.classList.remove('warn-prep'));
   const topbar = document.querySelector('.sim-topbar');
   if (topbar) topbar.classList.remove('warn-header');
@@ -229,32 +247,99 @@ export function reset() {
 
 /**
  * Call each frame for each intermittent drug.
- * Fires a one-shot chime on the above→below threshold transition and records
- * the crossing time. Clears state on the below→above transition so the next
- * drop re-fires (and produces a fresh crossing time).
+ *
+ * Owns the whole redose-threshold lifecycle:
+ *   above→below   — new occurrence, stamp the crossing, chime once.
+ *   below→above   — clear; the next drop starts a fresh occurrence.
+ *   still below   — if a dose has been given, watch for Ce to turn over. Once it
+ *                   falls away from its post-dose peak while still under the
+ *                   threshold, that dose was not enough: re-arm, counting from
+ *                   the dose, and chime again.
+ *
+ * The re-arm is the whole point. "A dose clears it for good" meant an
+ * inadequate top-up silenced the panel for the rest of the case while the
+ * patient sat under the threshold — the app knew (the drug card still said
+ * "Below Redose Threshold") but the alert had gone.
  *
  * @param {string} drugId
  * @param {boolean} isBelow — Ce is at or below the redose threshold
  * @param {number} [t] — current elapsed minutes, stamped on the transition
+ * @param {number} [ce] — current Ce, for post-dose peak detection
  */
-export function checkBelowThreshold(drugId, isBelow, t) {
-  const wasBelow = _belowThresholdSince.has(drugId);
-  if (isBelow && !wasBelow) {
-    _belowThresholdSince.set(drugId, (typeof t === 'number' && isFinite(t)) ? t : 0);
+export function checkBelowThreshold(drugId, isBelow, t, ce) {
+  const now = _num(t) ?? 0;
+  const s = _belowThreshold.get(drugId);
+
+  if (!isBelow) {
+    if (s) _belowThreshold.delete(drugId);
+    return;
+  }
+
+  if (!s) {
+    const gen = (_redoseGen.get(drugId) || 0) + 1;
+    _redoseGen.set(drugId, gen);
+    _belowThreshold.set(drugId,
+      { since: now, gen, dosedAt: null, peakCe: null });
     if (getSettings().redoseSound) playAlert('redose');
-  } else if (!isBelow && wasBelow) {
-    _belowThresholdSince.delete(drugId);
+    return;
+  }
+
+  // Still below, with a dose settling: has Ce peaked and started back down?
+  if (s.dosedAt !== null) {
+    const c = _num(ce);
+    if (c !== null) {
+      if (s.peakCe === null || c > s.peakCe) {
+        s.peakCe = c;
+      } else if (c < s.peakCe * (1 - REARM_DROP)) {
+        s.since = s.dosedAt;
+        s.dosedAt = null;
+        s.peakCe = null;
+        if (getSettings().redoseSound) playAlert('redose');
+      }
+    }
   }
 }
 
 /**
- * Elapsed minutes at which this drug last crossed below its redose threshold,
- * or null if it is currently above it. Consumed by js/ui/next-up.js to place a
- * persistent "redose due" row at the moment of the crossing.
+ * Record a dose given for a drug that is currently below its redose threshold.
+ * Silences the "redose due" alert while the dose takes effect;
+ * `checkBelowThreshold` re-arms it if Ce turns over still under the threshold.
+ *
+ * No-op (returns false) when the drug is not below threshold — an ordinary
+ * bolus has nothing to acknowledge.
+ */
+export function noteRedoseDose(drugId, t) {
+  const s = _belowThreshold.get(drugId);
+  if (!s) return false;
+  s.dosedAt = _num(t) ?? 0;
+  s.peakCe = null;
+  return true;
+}
+
+/**
+ * Elapsed minutes the "redose due" count-up should measure from — the crossing,
+ * or the most recent dose once one has been given. Null when the drug is above
+ * its threshold.
  */
 export function getBelowSince(drugId) {
-  const v = _belowThresholdSince.get(drugId);
-  return (typeof v === 'number') ? v : null;
+  const s = _belowThreshold.get(drugId);
+  return s ? s.since : null;
+}
+
+/**
+ * How many times this drug has crossed below its threshold this case. Folded
+ * into the Next Up item key so an acknowledgement cannot leak across
+ * occurrences — the key is otherwise a per-drug slot that never goes away, so
+ * `liveKeys` pruning can never release it.
+ */
+export function getRedoseGeneration(drugId) {
+  return _redoseGen.get(drugId) || 0;
+}
+
+/** True while a dose is still taking effect, so the alert stays quiet. */
+export function isRedoseDoseSettling(drugId) {
+  const s = _belowThreshold.get(drugId);
+  return !!(s && s.dosedAt !== null);
 }
 
 // ── Per-frame check (call every rAF frame) ────────────────────────────────────

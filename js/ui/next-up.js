@@ -26,7 +26,8 @@ import { DRUG_DEFS } from '../util/constants.js';
 import { inkOnWhite } from '../util/color.js';
 import { formatEventAction } from '../util/event-label.js';
 import { collectUpcoming, liveKeys } from '../sim/upcoming.js';
-import { getSettings, displayedSecToEvent, getBelowSince } from './settings.js';
+import { getSettings, displayedSecToEvent, getBelowSince,
+         getRedoseGeneration, isRedoseDoseSettling } from './settings.js';
 import { fmtCountdown, fmtCeSmart } from './drug-panel/formatters.js';
 import { getMilestones, getEmergenceArrival } from './drug-panel.js';
 
@@ -285,10 +286,17 @@ function _collectMilestones(t) {
   const out = [];
   // KIND_META is the single source of truth for whether a kind demands action;
   // the collector reads it off each milestone so the alarm cannot disagree.
-  const push = (drugId, kind, time, ce, latched = false) => out.push({
-    drugId, kind, time, ce, latched,
+  const push = (drugId, kind, time, ce, latched = false, occurrence = null) => out.push({
+    drugId, kind, time, ce, latched, occurrence,
     actionable: KIND_META[kind]?.actionable === true,
   });
+
+  // Redose is the one recurring milestone, so its acknowledgement state has to be
+  // scoped to the occurrence. The token is the crossing generation plus whether
+  // this is the crossing itself or the approach to the next one — four distinct
+  // states, none of which can inherit a stale mute from another.
+  const redoseOccurrence = (drugId, latched) =>
+    `${getRedoseGeneration(drugId)}${latched ? 'c' : 'p'}`;
 
   for (const drugId of _getDrugIds()) {
     let ms, em;
@@ -301,13 +309,20 @@ function _collectMilestones(t) {
     // self-acknowledge the way an event they created at the clock does. Only a
     // bolus (handled in collectUpcoming) or a tap clears it.
     if (ms.belowThreshold) {
-      const since = getBelowSince(drugId);
-      // No recorded crossing (e.g. a case restored already below threshold):
-      // latch from now rather than dropping the alarm entirely.
-      push(drugId, 'redose', since !== null ? since : t, ms.ce, true);
+      // Quiet while a dose is taking effect. settings re-arms this if Ce turns
+      // over still under the threshold, so an inadequate dose cannot silence it
+      // for the rest of the case.
+      if (!isRedoseDoseSettling(drugId)) {
+        const since = getBelowSince(drugId);
+        // No recorded crossing (e.g. a case restored already below threshold):
+        // latch from now rather than dropping the alarm entirely.
+        push(drugId, 'redose', since !== null ? since : t, ms.ce, true,
+             redoseOccurrence(drugId, true));
+      }
     } else if (ms.kind && ms.arrivalMin !== null && ms.arrivalMin > t) {
       // Still approaching: redose threshold, TCI target, or default emergence.
-      push(drugId, ms.kind, ms.arrivalMin, ms.ce);
+      push(drugId, ms.kind, ms.arrivalMin, ms.ce, false,
+           ms.kind === 'redose' ? redoseOccurrence(drugId, false) : null);
     }
     if (ms.ssArrivalMin !== null && ms.ssArrivalMin > t) {
       push(drugId, 'ss', ms.ssArrivalMin, ms.ssCe);

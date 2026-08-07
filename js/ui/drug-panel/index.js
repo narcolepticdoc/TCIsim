@@ -116,7 +116,7 @@ function update() {
     // ── Approach line ─────────────────────────────────────────────
     if (caseStarted) {
       updateApproachLine(ctx, dId, t, m, Ce, ceTarget, rate);
-      settings.checkBelowThreshold(dId, threshold > 0 && Ce <= ceTarget, t);
+      settings.checkBelowThreshold(dId, threshold > 0 && Ce <= ceTarget, t, Ce);
     } else {
       const el = ctx.$(dId + '-approach');
       if (el) el.innerHTML = '';

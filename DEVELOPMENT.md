@@ -4,6 +4,67 @@
 
 ## Session History
 
+### Redose alert: re-arm after an inadequate dose (v0.6.4.4) — Interim
+
+**A decision I flagged, accepted, and then had to reverse — worth recording
+honestly.** In 0.6.4.2 I asked what should clear a latched threshold alarm and
+offered "any bolus, but re-arm if still low" against "any bolus, cleared for
+good". The user chose the latter; I noted at the time that a too-small dose would
+leave no alarm, and shipped it. Two versions later that is exactly the report:
+"let fentanyl drop below the redose threshold and then bolus, and it doesn't set
+an alert for the next redose."
+
+The lesson is not "the user chose wrong". It is that **I offered a
+false symmetry.** The two options were not comparable risks: one fails by nagging
+you for a minute, the other fails by going silent about an under-dosed patient for
+the rest of the case. When the failure modes are that asymmetric, presenting them
+as a preference is the mistake — the safe option should have been the
+recommendation with the other flagged as a trade-off, or better, I should have
+asked how long the quiet period should be rather than whether one should exist.
+
+Reproducing it showed it was worse than reported: the panel had **no rows at
+all**, while the fentanyl card still read `Below Redose Threshold 2.0`. The app
+knew; only the alert had gone. Silent-failure-toward-under-treatment is the worst
+direction this feature can fail in.
+
+**Why "cleared for good" needed no extra state — and why that was the tell.**
+The 0.6.4.2 note is smug about this: because the latch is stamped at the crossing,
+a *later* crossing carries a later timestamp the old bolus no longer satisfies, so
+"cleared for good" is free. True, and irrelevant — it quietly assumes there
+*will* be a later crossing. When Ce never climbs back above the threshold there is
+no new crossing, and the elegance becomes a permanent mute. An invariant that
+holds only under an unstated assumption is worth less than one that costs a field.
+
+**The fix required moving a rule out of the pure collector, which I resisted at
+first.** `collectUpcoming` decided "a bolus at/after the crossing clears it",
+which was nicely unit-tested. But the real question is *was that dose enough?*,
+and no amount of event-list inspection answers it — it needs Ce's direction. So
+the rule moved to `js/ui/settings.js`, which already owns the threshold edge and
+the chime. Purity is worth defending until the pure module cannot see the
+information; then keeping it there just means encoding a wrong answer cleanly.
+The test coverage did not have to be sacrificed: `settings.js` is DOM-free enough
+to drive from Node (`playAlert` no-ops without an unlocked AudioContext), so the
+state machine got its own 28-assertion suite.
+
+**Peak-relative, not a timer.** Re-arm triggers when Ce falls 0.5 % below its
+post-dose peak while still under threshold. The first instinct was a fixed grace
+period, but fentanyl and ketamine peak at very different rates, so any constant is
+wrong for one of them. Tracking the peak also sidesteps a subtler trap: comparing
+against the *previous* sample cannot work, because on a slow decay the per-frame
+delta is far below any usable epsilon. Measured: re-arms 60–90 s after a fentanyl
+push, which is where fentanyl's peak effect actually is.
+
+**The second bug was mine outright, and the same shape as one I already fixed.**
+Acknowledgement keys were `drugId:kind` — a per-drug slot. `liveKeys` pruning can
+only release a key when it stops being live, and a recurring forecast's slot never
+does, so a mute stuck permanently: the next redose countdown was born
+`[ACKED]`, dimmed, unable to alarm. This is the third time in this feature that
+**an identity chosen for convenience turned out to span more than one occurrence
+of the thing it names** (see also `seenFuture` and the `render(t = 0)` bug). Keys
+now carry an occurrence token, and `milestoneKey()` is exported so `liveKeys()`
+and the collector cannot drift apart on identity — a mismatch there breaks pruning
+silently, which is the failure class this whole version is about.
+
 ### Next Up: an overdue item owns the clock (v0.6.4.3) — Interim
 
 **A screenshot made the design error obvious in a way description hadn't.** A

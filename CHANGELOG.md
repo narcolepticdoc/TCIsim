@@ -11,6 +11,22 @@
 
 ---
 
+## [0.6.4.4] — 2026-08-07
+
+Two bugs in the redose alert, both reported from real use, both silent failures.
+
+- **Fixed: a redose too small to lift Ce back above the threshold silenced the panel for the rest of the case.** Reported as "let fentanyl drop below the redose threshold, then bolus, and it doesn't set an alert for the next redose". Worse than described: the panel showed **no rows at all** while the patient sat under the threshold — the drug card still read `Below Redose Threshold 2.0`, so the app knew and the alert had simply gone.
+
+  This was the documented consequence of the "a dose clears it for good" rule chosen in 0.6.4.2: with Ce never climbing back above the threshold there is no fresh crossing, so the original crossing stayed cleared by that dose forever. A dose now silences the alert only **while it is taking effect**, and re-arms once Ce falls away from its post-dose peak while still under the threshold — counting from that dose, so it reads as a comment on what you just gave. Peak-relative rather than a fixed timer, so it tracks each drug's own onset: verified re-arming ~60–90 s after a fentanyl push, which is where fentanyl's peak actually falls.
+- **Fixed: one tap silenced a drug's redose alarm for the whole case.** Acknowledgement keys were `drugId:kind` — a per-drug *slot*, not an occurrence. Because that slot never leaves `liveKeys`, the muted entry could never be pruned, so the *next* redose countdown was born already acknowledged: permanently dimmed, and unable to raise the alarm when it came due. Keys now carry an occurrence token (the crossing generation plus whether the item is the crossing or the approach to the next one), so stale acknowledgements fall out of scope on their own.
+
+Under the hood:
+
+- `js/ui/settings.js` owns the whole redose occurrence lifecycle: `checkBelowThreshold(drugId, isBelow, t, ce)` now takes Ce and detects the post-dose turnover, plus `noteRedoseDose()`, `getRedoseGeneration()`, `isRedoseDoseSettling()`. `app.js commitBolus()` reports each dose.
+- **`collectUpcoming` no longer decides whether a dose dealt with a crossing.** "Was that dose enough?" needs Ce's direction, which an event list cannot answer, so the rule moved out of the pure collector to where the information lives. The collector keeps only curation.
+- `milestoneKey()` is exported from `js/sim/upcoming.js` so `liveKeys()` and the collector cannot disagree about an item's identity — a mismatch there silently breaks pruning.
+- New `tests/test-redose-latch.mjs` — 28 assertions driving the real state machine: the crossing, a dose going quiet, no re-arm while Ce climbs, no re-arm on a sub-0.5% wobble, re-arm on a real turnover, a second inadequate dose repeating the cycle from its own time, and generations incrementing only on a genuine new crossing. 1187 tests total.
+
 ## [0.6.4.3] — 2026-08-07
 
 - **Fixed: the countdown skipped past a missed item, so the alarm looked like it belonged to the next one.** A missed TCI rate change left the panel pulsing red with its row in place, but the clock jumped ahead to the next item — reading `13:38` in amber, labelled `FENTANYL — REDOSE DUE`, while the red border was really about propofol. `_renderClock` selected its head with an explicit `!i.elapsed`, so an outstanding item could never own the clock.
