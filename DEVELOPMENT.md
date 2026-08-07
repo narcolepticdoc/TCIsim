@@ -4,6 +4,29 @@
 
 ## Session History
 
+### Next Up: drug-coloured names (v0.6.4.1) — Interim
+
+The drug name was `--text-muted`, i.e. styled as a caption above the verb. Wrong
+emphasis: on a cross-drug list the drug is the first thing you need to resolve,
+not supporting detail. Now full-brightness in the drug's own colour, tying the
+label to the row's left edge.
+
+**Why this needed more than a one-line colour swap.** The drug-card `.drug-name`
+deliberately uses `--text-primary` rather than `--drug-color`, and that is not an
+oversight — the palette is tuned for a dark UI. Propofol's `#facc15` scores
+**1.53:1** against the light theme's white card. Keying the name to the raw drug
+colour would have fixed a dim label in dark theme by shipping an illegible one in
+light. The codebase already knows this shape: the `--purple-bright` comment in
+the light-theme block notes it was left equal to `--purple` because "on a white
+card the darker violet already is the correct ink."
+
+So `inkOnWhite()` (`js/util/color.js`) walks HSL lightness down, nudging
+saturation up to keep the hue identifiable, until the colour clears a WCAG target
+against white. Both inks go onto the row as inline custom properties and CSS
+picks per theme — deliberately, because the list only re-renders when its row
+*set* changes, so computing one ink at render time would leave stale colours after
+a runtime theme switch.
+
 ### Next Up: milestone horizon fix + row time toggle (v0.6.4) — Interim
 
 **The bug: one horizon for two kinds of thing that aren't alike.** 0.6.3 shipped

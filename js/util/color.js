@@ -68,6 +68,44 @@ export function lighten(hex, amount = 0.25) {
   return rgbToHex(r2, g2, b2);
 }
 
+/** WCAG relative luminance of [r,g,b] in 0–255. */
+function relLuminance(r, g, b) {
+  const ch = (v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+}
+
+/**
+ * Darken `hex` just enough to read as text on a near-white background.
+ *
+ * The drug palette is tuned for a dark UI: propofol's canary yellow and
+ * ketamine's amber carry plenty of contrast on `#0f172a` and almost none on
+ * `#ffffff`. This walks HSL lightness down (nudging saturation up to keep the
+ * hue identifiable) until the colour clears `targetRatio` against white, so a
+ * drug stays recognisable by hue in both themes without going illegible in one.
+ *
+ * Returns `hex` unchanged when it already passes.
+ *
+ * @param {string} hex — `#rrggbb`
+ * @param {number} [targetRatio=4.5] — WCAG contrast ratio against white
+ */
+export function inkOnWhite(hex, targetRatio = 4.5) {
+  const [r0, g0, b0] = hexToRgb(hex);
+  const contrast = (r, g, b) => 1.05 / (relLuminance(r, g, b) + 0.05);
+  if (contrast(r0, g0, b0) >= targetRatio) return rgbToHex(r0, g0, b0);
+
+  const [h, s] = rgbToHsl(r0, g0, b0);
+  let best = [r0, g0, b0];
+  for (let l = 0.5; l >= 0.12; l -= 0.02) {
+    const [r, g, b] = hslToRgb(h, Math.min(1, s + 0.1), l);
+    best = [r, g, b];
+    if (contrast(r, g, b) >= targetRatio) break;
+  }
+  return rgbToHex(best[0], best[1], best[2]);
+}
+
 /**
  * Convert `#rrggbb` to `rgba(r,g,b,a)` with the given alpha (0–1).
  */

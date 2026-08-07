@@ -11,6 +11,11 @@
 
 ---
 
+## [0.6.4.1] — 2026-08-07
+
+- **Drug names on the Next Up list are now full-brightness and drug-coloured**, matching the colour on the row's left edge. They were `--text-muted`, which read as a caption when the drug is actually the first thing you need to identify on the row. Also up to 11px / weight 700.
+- The drug palette is tuned for the dark UI — propofol's canary yellow scores 1.53:1 against a white card, so using it directly would have traded a dim label in one theme for an illegible one in the other. New `inkOnWhite()` in `js/util/color.js` walks HSL lightness down (nudging saturation up to hold the hue) until the colour clears 4.5:1 against white. Both inks are set as inline custom properties on each row and light theme selects the corrected one in CSS, so a runtime theme switch needs no re-render — the list only rebuilds when its rows change. Measured in-browser: dark 11.6 / 8.3 / 4.8, light 4.6 / 4.7 / 5.1 for propofol / ketamine / fentanyl.
+
 ## [0.6.4] — 2026-08-07
 
 Fixes the Next Up panel hiding threshold crossings, and adds a time-display toggle for its list.

@@ -23,6 +23,7 @@
  */
 
 import { DRUG_DEFS } from '../util/constants.js';
+import { inkOnWhite } from '../util/color.js';
 import { formatEventAction } from '../util/event-label.js';
 import { collectUpcoming, liveKeys } from '../sim/upcoming.js';
 import { getSettings, displayedSecToEvent } from './settings.js';
@@ -427,9 +428,15 @@ function _buildRow(item) {
   const meta  = KIND_META[item.kind] || { cls: '' };
   const cls   = ['nu-row', meta.cls, item.elapsed ? 'nu-elapsed' : '',
                  _isActionable(item) ? 'nu-act' : 'nu-info'].filter(Boolean).join(' ');
-  const color = DRUG_DEFS[item.drugId]?.color || 'var(--text-secondary)';
+  // Two inks per row: the palette colour for the dark UI it was tuned for, and a
+  // darkened one for the light theme. Both are emitted so a runtime theme switch
+  // is picked up by CSS alone — the list only re-renders when its rows change.
+  const color = DRUG_DEFS[item.drugId]?.color || null;
+  const vars = color
+    ? `--nu-drug:${_esc(color)};--nu-drug-ink:${_esc(inkOnWhite(color))}`
+    : '';
 
-  return `<div class="${cls}" data-key="${_esc(item.key)}" style="--nu-drug:${_esc(color)}">` +
+  return `<div class="${cls}" data-key="${_esc(item.key)}" style="${vars}">` +
            `<div class="nu-main">` +
              `<span class="nu-drug">${_esc(_drugName(item.drugId))}</span>` +
              `<span class="nu-verb">${_esc(_verbFor(item))}</span>` +
