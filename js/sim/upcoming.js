@@ -41,6 +41,22 @@ export const DEFAULT_HUD_CFG = {
 const TIME_EPS = 0.0001;
 
 /**
+ * Stable identity for a milestone, used for acknowledgement state.
+ *
+ * `drugId:kind` alone is a per-drug *slot*, not an occurrence — and a slot for a
+ * recurring forecast never leaves `liveKeys`, so `cleared`/muted entries against
+ * it can never be pruned. One tap then silenced that drug's redose for the rest
+ * of the case. Callers pass an `occurrence` token (js/ui/next-up.js uses the
+ * crossing generation plus whether it is latched) so each occurrence gets its
+ * own identity and stale acknowledgements fall out of scope naturally.
+ */
+export function milestoneKey(ms) {
+  const base = `${ms.drugId}:${ms.kind}`;
+  return (ms.occurrence != null && ms.occurrence !== '')
+    ? `${base}#${ms.occurrence}` : base;
+}
+
+/**
  * Classify events into marker kinds by walking one drug's list forward while
  * tracking the running rate. Skips system-generated events (e.g. rate-restore
  * after a bolus). Tags each marker as past or future so the chart can render
@@ -169,20 +185,19 @@ export function collectUpcoming({ events = [], now = 0, milestones = [],
   // ── Clinical milestones ────────────────────────────────────────────────────
   for (const ms of milestones) {
     if (!ms) continue;
-    const key = `${ms.drugId}:${ms.kind}`;
+    const key = milestoneKey(ms);
     if (isCleared(key)) continue;
     const drugEvents = byDrug.get(ms.drugId) || [];
 
     // A `latched` milestone is one that has already happened and stays until the
     // user deals with it — a crossed redose threshold. Everything else is a
     // forecast, and a forecast in the past is simply stale.
+    //
+    // Whether a dose has dealt with it is deliberately NOT decided here: "was
+    // that dose enough?" needs Ce's direction, which the event list cannot
+    // answer. js/ui/settings.js owns it (checkBelowThreshold / noteRedoseDose)
+    // and simply stops passing the milestone while a dose is settling.
     if (ms.latched) {
-      // Giving a bolus at or after the crossing *is* dealing with it, so the
-      // alarm clears without a tap. Because the latch is stamped at the moment
-      // of the crossing, a later crossing carries a later timestamp that this
-      // bolus no longer satisfies — "cleared for good" needs no extra state.
-      const dosed = drugEvents.some(e => e.type === 'bolus' && e.time >= ms.time - TIME_EPS);
-      if (dosed) continue;
       candidates.push({
         key, drugId: ms.drugId, time: ms.time, kind: ms.kind,
         actionable: ms.actionable === true, elapsed: true, latched: true,
@@ -258,6 +273,6 @@ export function collectUpcoming({ events = [], now = 0, milestones = [],
 export function liveKeys(events = [], milestones = []) {
   const keys = new Set();
   for (const e of events) if (e && e.id) keys.add(e.id);
-  for (const m of milestones) if (m) keys.add(`${m.drugId}:${m.kind}`);
+  for (const m of milestones) if (m) keys.add(milestoneKey(m));
   return keys;
 }

@@ -393,7 +393,11 @@ console.log('\n===== Next Up curation (js/sim/upcoming.js) =====\n');
     'elapsed rows, latched included, are time-sorted');
 }
 
-// ── A bolus clears a latched crossing ─────────────────────────────────────────
+// ── Whether a dose dealt with it is NOT the collector's call ──────────────────
+// "Was that dose enough?" needs Ce's direction, which an event list cannot
+// answer. js/ui/settings.js owns it and stops passing the milestone while a dose
+// settles — see tests/test-redose-latch.mjs. The collector must therefore emit a
+// latched milestone regardless of what boluses exist.
 {
   const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3,
                actionable: true, latched: true };
@@ -401,51 +405,47 @@ console.log('\n===== Next Up curation (js/sim/upcoming.js) =====\n');
   const items = collectUpcoming({
     events: [dose], now: 25, milestones: [ms], seenFuture: new Set(),
   });
-  eqArr(keys(items), [], 'a bolus after the crossing clears it without a tap');
-}
-
-{
-  const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3,
-               actionable: true, latched: true };
-  const dose = ev('ketamine', 20, 'bolus', 50, 'manual');
-  const items = collectUpcoming({
-    events: [dose], now: 25, milestones: [ms], seenFuture: new Set(),
-  });
-  eqArr(keys(items), [], 'a bolus exactly at the crossing clears it');
-}
-
-{
-  // The crossing is re-stamped on each fresh above→below transition, so an
-  // earlier dose cannot pre-clear a later crossing.
-  const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3,
-               actionable: true, latched: true };
-  const dose = ev('ketamine', 8, 'bolus', 50, 'manual');
-  const items = collectUpcoming({
-    events: [dose], now: 25, milestones: [ms], seenFuture: new Set(),
-  });
   eqArr(keys(items), ['ketamine:redose'],
-    'a bolus BEFORE the crossing does not clear it');
+    'a latched crossing is emitted even with a later bolus — settings decides, not the collector');
+}
+
+// ── Acknowledgement keys are scoped to the occurrence ────────────────────────
+// Regression: `drugId:kind` is a per-drug slot that never leaves liveKeys, so a
+// cleared/muted entry against it could never be pruned and one tap silenced that
+// drug's redose for the rest of the case.
+{
+  const ms = { drugId: 'fentanyl', kind: 'redose', time: 20, ce: 0.001,
+               actionable: true, latched: true, occurrence: '2c' };
+  const items = collectUpcoming({ events: [], now: 25, milestones: [ms] });
+  eqArr(keys(items), ['fentanyl:redose#2c'], 'an occurrence token is folded into the key');
 }
 
 {
-  // Another drug's bolus is irrelevant.
-  const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3,
-               actionable: true, latched: true };
-  const dose = ev('fentanyl', 22, 'bolus', 0.1, 'manual');
-  const items = collectUpcoming({ events: [dose], now: 25, milestones: [ms] });
-  ok(keys(items).includes('ketamine:redose'),
-    'a bolus of a different drug does not clear the crossing');
-}
-
-{
-  // A rate change is not a dose.
-  const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3,
-               actionable: true, latched: true };
-  const rate = ev('ketamine', 22, 'rate', 2, 'manual');
+  // A stale acknowledgement from an earlier occurrence must not suppress this one.
+  const ms = { drugId: 'fentanyl', kind: 'redose', time: 20, ce: 0.001,
+               actionable: true, latched: true, occurrence: '2c' };
   const items = collectUpcoming({
-    events: [rate], now: 25, milestones: [ms], seenFuture: new Set(),
+    events: [], now: 25, milestones: [ms],
+    cleared: new Set(['fentanyl:redose#1c', 'fentanyl:redose']),
   });
-  eqArr(keys(items), ['ketamine:redose'], 'a rate change does not clear the crossing');
+  eqArr(keys(items), ['fentanyl:redose#2c'],
+    'clearing occurrence 1 does not suppress occurrence 2');
+}
+
+{
+  const ms = { drugId: 'fentanyl', kind: 'redose', time: 20, ce: 0.001,
+               actionable: true, latched: true, occurrence: '2c' };
+  const items = collectUpcoming({
+    events: [], now: 25, milestones: [ms], cleared: new Set(['fentanyl:redose#2c']),
+  });
+  eqArr(keys(items), [], 'clearing THIS occurrence does suppress it');
+}
+
+{
+  // liveKeys must agree with the key the collector builds, or pruning misfires.
+  const live = liveKeys([], [{ drugId: 'fentanyl', kind: 'redose', occurrence: '2c' }]);
+  ok(live.has('fentanyl:redose#2c') && !live.has('fentanyl:redose'),
+    'liveKeys uses the same occurrence-scoped key');
 }
 
 {
