@@ -156,6 +156,38 @@ console.log('\n===== Next Up curation (js/sim/upcoming.js) =====\n');
     'the elapsed cap keeps the most recent misses');
 }
 
+// ── Elapsed ordering is a contract, not an accident ───────────────────────────
+// js/ui/next-up.js picks the clock's overdue head with a plain `.find()` over the
+// returned list, so "the oldest overdue item owns the clock" depends on elapsed
+// items leading, ascending. Pin it here rather than leaving it to sort order.
+{
+  const a = ev('propofol', 22, 'rate', 6, 'tci');   // oldest miss
+  const b = ev('fentanyl', 26, 'bolus', 0.1, 'tci');
+  const c = ev('ketamine', 28, 'bolus', 20, 'tci');
+  const future = ev('propofol', 35, 'rate', 5, 'tci');
+  const seen = new Set([a.id, b.id, c.id, future.id]);
+  // Deliberately unsorted input, and not in drug order either.
+  const items = collectUpcoming({
+    events: [c, future, a, b], now: 30, seenFuture: seen,
+  });
+  eqArr(keys(items), [a.id, b.id, c.id, future.id],
+    'elapsed items lead in ascending time order, then the future ones');
+  ok(items[0].elapsed === true && items[0].time === 22,
+    'the first item is the OLDEST elapsed one — the clock relies on this');
+}
+
+{
+  // Same guarantee when a latched crossing is mixed in with pump misses.
+  const miss = ev('propofol', 26, 'rate', 6, 'tci');
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 21, ce: 0.3,
+               actionable: true, latched: true };
+  const items = collectUpcoming({
+    events: [miss], now: 30, milestones: [ms], seenFuture: new Set([miss.id]),
+  });
+  eqArr(items.map(i => i.time), [21, 26],
+    'a latched crossing sorts among the misses by time, oldest first');
+}
+
 // ── Only genuinely-pending items can be reported as missed ────────────────────
 {
   // The user presses Stop Pump: a pause is written at the clock. It was never

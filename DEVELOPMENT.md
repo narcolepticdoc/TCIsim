@@ -4,6 +4,54 @@
 
 ## Session History
 
+### Next Up: an overdue item owns the clock (v0.6.4.3) — Interim
+
+**A screenshot made the design error obvious in a way description hadn't.** A
+missed TCI rate change: panel pulsing red, the rate-change row present — and the
+clock reading `13:38` in *amber*, labelled `FENTANYL — REDOSE DUE`. Two
+independent signals pointing at different items, so the red border looked like it
+belonged to a fentanyl redose thirteen minutes away.
+
+The cause was one clause. `_renderClock` selected its head with an explicit
+`!i.elapsed`, so an outstanding item could never own the clock. And because
+`nu-clock-due` fired only on `rem <= 0`, the digits stayed amber inside a red
+panel — the one place the colour has to agree, and it didn't.
+
+Worth noting I had *asked* about this case and got the wrong answer from my own
+framing. In 0.6.4.2 I offered "when an overdue item is the only thing left, what
+should the clock show?" and the user chose "leave as-is". That question described
+the benign case. The real problem is an overdue item **alongside** a later one,
+where the clock actively contradicts the alarm. The lesson is about how I framed
+the option, not about the user changing their mind: **when asking about a display
+conflict, describe the conflicting state, not the quiet one.**
+
+**The trap.** `_remSec` routes pump events through `displayedSecToEvent`, which
+ends in `Math.max(0, rawSec - reactionDelaySec)` for `source:'tci'` events. A
+count-up derived from it freezes at `-0:00` — precisely for a missed TCI rate step,
+precisely when the user has a reaction delay configured. The count-up uses raw
+`t - item.time`, and the browser verification runs the whole scenario a second time
+at `reactionDelaySec = 2 s` specifically to catch a regression there. That clamp
+exists for good reasons on the countdown path; it is simply wrong on the count-up
+path, and the two share a helper.
+
+**Two consistency debts paid off.** Missed pump rows said `missed` while crossed
+thresholds counted up, so the clock could display `-2:14` for a row reading
+`missed`; both now count up and the two branches of `_rowTimeText` collapsed into
+one. And the ordering the new head-selection depends on — elapsed items leading,
+ascending — is now pinned by tests rather than being an accident of sort order.
+"Oldest overdue owns the clock" is a contract now.
+
+**`MISSED ·` is applied narrowly**, only to a scheduled step the user did not
+perform. A latched threshold keeps `FENTANYL — REDOSE DUE`, preserving the
+distinction settled in 0.6.4.2: the patient crossed a line; nobody failed to act.
+Verified both label paths in the browser rather than assuming the branch worked.
+
+**The glyph budget held, and I measured it anyway.** The leading `-` pushes the
+worst case to 8 glyphs. The per-length `--nu-fit` sizing built in 0.6.4.2 absorbed
+it with no CSS change — but that budget is exactly what broke silently in 0.6.4, so
+it was re-measured with the render frozen rather than reasoned about: 3–6% headroom
+everywhere, `-12h 05m` at 53px in a 280px column and 43px in a 226px one.
+
 ### Next Up: latched threshold crossings + fit-to-width clock (v0.6.4.2) — Interim
 
 **A self-clearing alarm was the sharpest signal yet that a design was wrong.**

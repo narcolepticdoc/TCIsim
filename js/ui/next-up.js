@@ -407,9 +407,22 @@ function _renderClock(t) {
   if (!clockEl) return;
 
   const { reactionDelaySec } = getSettings();
-  // The clock tracks the next thing needing a human. If nothing is actionable,
-  // fall back to the head forecast so the panel isn't blank.
-  const head = _items.find(i => _isActionable(i) && !i.elapsed)
+
+  // An outstanding item owns the clock and counts *up*. Skipping ahead to the
+  // next thing while the panel pulses red made the alarm look like it belonged
+  // to that next item — the clock and the alarm have to name the same thing.
+  // `collectUpcoming` returns elapsed items first in ascending time order, so
+  // this picks the oldest, i.e. the most overdue.
+  // Acknowledging the alarm (muting) hands the clock back to the forward view;
+  // the dimmed row stays as the reminder, so an unacknowledged-but-uncleared row
+  // can't hold the clock for the rest of the case.
+  const overdue = _items.find(i =>
+    i.elapsed && _isActionable(i) && !_alarmMuted.has(i.key));
+
+  // Otherwise: the next thing needing a human, falling back to the head forecast
+  // so the panel isn't blank.
+  const head = overdue
+            || _items.find(i => _isActionable(i) && !i.elapsed)
             || _items.find(i => !i.elapsed)
             || null;
 
@@ -423,17 +436,32 @@ function _renderClock(t) {
     return;
   }
 
-  const rem = _remSec(head, t, reactionDelaySec);
-  const txt = rem > 0 ? fmtHudCountdown(rem / 60) : 'NOW';
+  let txt, due;
+  if (head === overdue) {
+    // Raw elapsed, deliberately NOT _remSec: that routes pump events through
+    // displayedSecToEvent, which floors at 0 for TCI events once a reaction
+    // delay is configured — a count-up built on it freezes at -0:00.
+    txt = '-' + fmtHudCountdown(Math.max(0, t - head.time));
+    due = true;
+  } else {
+    const rem = _remSec(head, t, reactionDelaySec);
+    txt = rem > 0 ? fmtHudCountdown(rem / 60) : 'NOW';
+    due = rem <= 0;
+  }
   if (clockEl.textContent !== txt) clockEl.textContent = txt;
-  clockEl.classList.toggle('nu-clock-due', rem <= 0);
+  clockEl.classList.toggle('nu-clock-due', due);
   // Publish the glyph count so CSS can pick the largest size that still fits the
   // column — the clock is monospaced with tabular figures, so width is exactly
   // proportional to length. See the .nu-clock width budget in index.html.
   _setClockLen(clockEl, txt);
 
   if (labelEl) {
-    const lbl = `${_drugName(head.drugId)} — ${_verbFor(head)}`;
+    // "MISSED" only for a scheduled step the user didn't perform. A latched
+    // threshold crossing is not a failure to act — the patient crossed a line —
+    // and its verb ("Redose due") already reads correctly beside a count-up.
+    const missed = head === overdue && head.evt;
+    const lbl = (missed ? 'MISSED · ' : '')
+              + `${_drugName(head.drugId)} — ${_verbFor(head)}`;
     if (labelEl.textContent !== lbl) labelEl.textContent = lbl;
   }
 }
@@ -567,11 +595,11 @@ function _rowTimeText(item, t, reactionDelaySec) {
     const rt = fmtRealTime(item.time);
     if (rt) return rt;
   }
-  // A latched crossing counts *up*: how long the redose has been outstanding.
-  // A missed pump step keeps saying "missed" — a step you skipped and a
-  // threshold the patient crossed are different claims, so they read differently.
-  if (item.latched) return '-' + fmtHudCountdown(Math.max(0, t - item.time));
-  if (item.elapsed) return 'missed';
+  // Anything outstanding counts *up*: how long it has been waiting. Matches the
+  // clock, which tracks the oldest overdue item in the same form. (The two used
+  // to disagree — a latched crossing counted up while a missed pump step said
+  // "missed", so the clock could show -2:14 for a row reading "missed".)
+  if (item.elapsed) return '-' + fmtHudCountdown(Math.max(0, t - item.time));
   const rem = _remSec(item, t, reactionDelaySec);
   return rem > 0 ? fmtHudCountdown(rem / 60) : 'now';
 }

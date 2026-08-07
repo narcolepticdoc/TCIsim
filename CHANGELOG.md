@@ -11,6 +11,22 @@
 
 ---
 
+## [0.6.4.3] — 2026-08-07
+
+- **Fixed: the countdown skipped past a missed item, so the alarm looked like it belonged to the next one.** A missed TCI rate change left the panel pulsing red with its row in place, but the clock jumped ahead to the next item — reading `13:38` in amber, labelled `FENTANYL — REDOSE DUE`, while the red border was really about propofol. `_renderClock` selected its head with an explicit `!i.elapsed`, so an outstanding item could never own the clock.
+
+  An unacknowledged outstanding item now **owns the clock and counts up** (`-2:14`), in red, labelled `MISSED · PROPOFOL — SET RATE`. The clock and the alarm finally name the same thing. Where several are outstanding it tracks the **oldest**.
+- **Acknowledging hands the clock back.** Tap the panel and the alarm silences, the dimmed row stays as the reminder, and the clock resumes its forward-looking job — an acknowledged-but-uncleared row can't hold the display for the rest of the case.
+- **Overdue rows count up too.** A missed pump step used to read `missed` while a crossed threshold counted up, so the clock could show `-2:14` for a row saying `missed`. Both now count up in `IN` mode; `ET`/`RT` still show absolute times.
+- The clock also went **red** only at `rem <= 0` before, so a missed item left amber digits inside a red-bordered panel — the one place the colour has to agree. It now turns red whenever the head is overdue.
+
+Under the hood:
+
+- The count-up deliberately uses raw `t - item.time`, **not** `_remSec`. That routes pump events through `displayedSecToEvent`, which ends in `Math.max(0, rawSec - reactionDelaySec)` for `source:'tci'` events — so a count-up built on it freezes at `-0:00` for exactly the missed-TCI-step case, once a reaction delay is configured. Verified in-browser at `reactionDelaySec = 2 s`.
+- `MISSED ·` is applied only to a scheduled pump step the user didn't perform. A latched threshold crossing keeps `FENTANYL — REDOSE DUE`: the patient crossed a line rather than the user failing to act, and the verb already reads correctly beside a count-up.
+- `tests/test-upcoming.mjs` gains three assertions pinning the ordering the new head-selection relies on — elapsed items lead, ascending, oldest first, including when a latched crossing is mixed among pump misses. "Oldest overdue owns the clock" is now a contract rather than an accident of sort order.
+- The leading `-` pushes the clock's worst case to 8 glyphs (`-12h 05m`). The per-length `--nu-fit` sizing added in 0.6.4.2 absorbed it with no CSS change; re-measured with the render frozen across four viewport/text-scale combinations, every string fits with 3–6% headroom (`-12h 05m` renders at 53px in a 280px column, 43px in a 226px one).
+
 ## [0.6.4.2] — 2026-08-07
 
 - **Fixed: a crossed redose threshold cleared itself from Next Up.** The row vanished at the exact moment the redose chime fired for it, so the app alarmed audibly about something it had just removed from the screen. Three things had to go wrong together: `approach.js` stops reporting a `kind`/`arrivalMin` once `Ce <= threshold`; both `_collectMilestones` and `collectUpcoming` filtered milestones to `time > now`; and the rebuild then pruned the key from the acknowledgement sets, so even the muted/cleared state was forgotten.
