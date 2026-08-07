@@ -27,6 +27,7 @@ const $ = id => document.getElementById(id);
  *   timer: object,
  *   mode: object,
  *   settings: object,
+ *   nextUp: object,
  *   controls: object,
  *   setup: object,
  *   initSimScreen: Function,
@@ -39,7 +40,7 @@ export function createSession({
   getModel, getConfirmedPatient, setConfirmedPatient,
   getSelectedDrug, getAnnotations, setAnnotations,
   getChart, destroyChart,
-  timer, mode, settings, controls, setup,
+  timer, mode, settings, nextUp, controls, setup,
   initSimScreen, showScreen, addAnnotation, refreshChart,
 }) {
 
@@ -273,6 +274,7 @@ export function createSession({
     setConfirmedPatient(null);
     setAnnotations([]);
     settings.reset();
+    if (nextUp) nextUp.reset();
 
     // Destroy chart
     destroyChart();

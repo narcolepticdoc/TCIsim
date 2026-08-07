@@ -19,10 +19,11 @@ import { isPumpEnabled } from '../../util/constants.js';
 import { fmtCe, fmtCeHTML, fmtCeSmart, fmtRateInline, fmtRateInlineHTML, bisColor, isInBolusPhase, fmtCountdown,
          TCI_FRACTION_DEFAULT, SS_SLOPE_DEFAULT, EXIT_BAND_DEFAULT } from './formatters.js';
 import { setCurveData, updateApproachLine, _getApproachCache,
-         getPlateauRegion, getSteadyStateCe, invalidateAll,
+         getPlateauRegion, getSteadyStateCe, getMilestones, invalidateAll,
          _estimateTimeToTarget } from './approach.js';
 import { updateStepBar, _intermittentBarPct } from './step-bar.js';
-import { updateExitReadout, invalidateAll as invalidateExitReadout } from './exit-readout.js';
+import { updateExitReadout, getEmergenceArrival,
+         invalidateAll as invalidateExitReadout } from './exit-readout.js';
 
 // ── Shared context — populated by init(), read by all sub-modules ──
 
@@ -271,7 +272,8 @@ function update() {
 
 // ── Public API (re-exported through the shim) ────────────────────
 
-export { setCurveData, _estimateTimeToTarget, getPlateauRegion, getSteadyStateCe };
+export { setCurveData, _estimateTimeToTarget, getPlateauRegion, getSteadyStateCe,
+         getMilestones, getEmergenceArrival };
 
 /** Force an immediate update (after a model mutation). */
 export function forceUpdate() {

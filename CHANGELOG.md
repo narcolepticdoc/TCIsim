@@ -11,6 +11,33 @@
 
 ---
 
+## [0.6.3] — 2026-08-07
+
+A second view for the Events panel: **Next Up**, a heads-up display of what needs doing next.
+
+- **Log / Next Up toggle at the top of the Events panel.** The Log is unchanged — the same chronological record, same Add Event / Edit / notes / ET-RT controls. Next Up answers the opposite question: a full-width countdown clock over a short list of upcoming interventions, sized to be read from across the room rather than scanned at the screen.
+- **The list is cross-drug.** The Log shows one drug at a time; Next Up interleaves propofol, fentanyl and ketamine in time order, because the thing you need next is whichever comes first, not whichever tile happens to be selected.
+- **It lists things that need a human, not everything that happens.** Rate changes, boluses, pauses and restarts, plus redose-threshold, target, steady-state, plateau and emergence forecasts. Automatic rate-restores after a bolus (`source: 'system'`) never appear — nobody has to do anything about them.
+- **Escalation, and one tap to silence it.** Amber pulse when an intervention enters the Prep window (Settings → Notifications, default 30 s), red pulse when it is due. A tap anywhere on the panel silences the current alarm; the *next* item to escalate re-arms it, so silencing one thing never mutes the one after it. A dot on the Next Up and History tabs shows the alarm from the Log view or the Chart tab, where the pulsing panel is off screen.
+- **Nothing is acknowledged twice.** Pressing "Got it" on a warning popup clears that row from Next Up. The popups themselves are unchanged.
+- **A missed intervention doesn't vanish.** An item that goes by unacknowledged stays on the list, dimmed, marked `missed`, until you tap it. Only genuinely-pending items can be missed — an event you create at the clock (a bolus, Stop Pump) was never outstanding and is never reported back at you as a failure.
+
+**Forecasts are suppressed rather than shown as lies.** Two guards, both deliberate:
+
+- The Emerge readout on a drug card is a *counter-factual* while the pump runs — "if you stopped now, Ce reaches 1.0 in 42 min". That is useful on a card and false on a list of things that are going to happen, so Emergence appears only once the pump is actually stopped.
+- Steady-state and plateau forecasts assume the current rate holds. Any forecast with a scheduled pump event landing before it is dropped, because that event will invalidate it.
+
+The consequence is that the four clinical forecasts appear less often than the pump events do. That is the intended trade: a quiet panel that is right beats a full one that isn't.
+
+Under the hood:
+
+- `js/sim/upcoming.js` — new. `collectUpcoming()` does selection and curation only and returns raw event objects, so it holds no display-unit, localStorage or DOM dependency and the curation rules are unit-tested directly (`tests/test-upcoming.mjs`, 33 assertions). `classifyFutureEvents` moved here from `chart-bridge.js` and is re-exported from its old path: the chart's event flags and the panel's rows now share one rate-direction rule instead of two copies. Horizon 20 min, 6 future rows, 3 elapsed rows, with a 2 min group window that keeps a cluster intact across the horizon so a pause never shows without its restart.
+- `js/util/event-label.js` — new. `formatEventAction()` replaces the near-duplicate `_fmtEventDesc` (`settings.js`) and `fmtNextEvtLabel` (`step-bar.js`); a `variant` parameter reproduces both existing strings byte-for-byte and adds the HUD's split verb/value form.
+- `js/ui/next-up.js` — new. The view, the alarm state machine and the acknowledgement sets. The list rebuilds on a 500 ms throttle and on model mutation; the countdown renders every frame from cached arrival times, the same cache-and-tick pattern `approach.js` uses. No per-frame model calls.
+- `approach.js` and `exit-readout.js` gained `getMilestones(drugId)` / `getEmergenceArrival(drugId)`. Both read caches the rAF loop already fills for **every** drug, so the four forecasts cost no extra prediction work — they were already being computed, just rendered into three different card slots. The approach cache now carries machine-readable `kind` / `*Ce` fields alongside its HTML prefixes; nothing parses the prefixes.
+- `settings.init()` takes an optional `onDismiss(evtId)`, fired from `dismiss()`.
+- The clock is sized in `cqw` against its own container, not `vw`. The Events panel is a ~200–300 px column beside the chart at ≥1020 px and full-width on a phone; a viewport-relative size overflows the narrow case at the larger text scales.
+
 ## [0.6.2] — 2026-08-06
 
 One-touch redose, a plan-marker fix, and the crossing-time toggle moves back to Settings only.

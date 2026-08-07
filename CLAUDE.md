@@ -25,6 +25,8 @@ The engine (`js/pk/engine.js`) stores compartment amounts as a `Float64Array[5]`
 - **`DRUG_IDS` is the iteration source of truth** (`js/util/constants.js`) — multi-drug loops in `app.js`, `session.js`, `chart-bridge.js` consume it. `remifentanil` is in `DRUG_DEFS` but not `DRUG_IDS` (no PK model yet).
 - **Chart setters are idempotent; the bridge calls them unconditionally.** `setCpOpacity`/`setNomogramOpacity`/`setOverlayOpacity`/`setEventMarkerSize`/`setFontScale` early-return on unchanged values, and `chart-bridge.js onFrame` pushes settings every frame with no cache. This makes chart recreation (New Case) self-healing. Do not reintroduce bridge-level `last*` caches on these setters.
 - **Keypad unit toggles convert, they don't clear.** `keypad.js`, `event-editor.js`, `patient-modal.js` round-trip the buffer through `toCanonical → fromCanonical` on unit change and re-arm `prefilled = true`.
+- **The Next Up panel never promises a counter-factual.** `exit-readout.js` answers "if you stopped now" while the pump runs, and SS/plateau assume the current rate holds. `js/ui/next-up.js` therefore surfaces Emergence only when `getEmergenceArrival().isIdle`, and `collectUpcoming` drops any milestone with a scheduled pump event before it. Do not relax either guard to make the list fuller.
+- **Only genuinely-pending items can be reported as `missed`.** `collectUpcoming` gates elapsed rows on the caller's `seenFuture` set — an event the user creates at the clock (manual bolus, Stop Pump) was never outstanding. This is not a `source` filter: a manually-added *future* event can genuinely be missed.
 - **`pharmacology.js` is GPL-3.0.** Never import, bundle, or copy code from `/mnt/project/pharmacology.js`. Reference only.
 
 ## Code Map
@@ -38,11 +40,13 @@ js/sim/       events/  event list: replay, query, CRUD, actions (findActiveBolus
               tci/     planners (stepped, cet, cet-conservative, emulation) +
                        shared.js (DEFAULT_SCHEME_CONFIG, makeQuantizers)
               simulation.js (facade), simtiva-reference.js (clean-room eigenvalue math)
+              upcoming.js (pure: classifyFutureEvents + Next Up curation)
 js/util/      constants.js (DRUG_DEFS, DRUG_IDS, DRUG_TASK_UNITS, pump settings,
-              PUMP_MANDATORY), units.js (conversion + quantize), math.js
+              PUMP_MANDATORY), units.js (conversion + quantize), math.js,
+              event-label.js (formatEventAction — one formatter, 3 variants)
 js/ui/        chart/ (index, annotations, gestures, plugins/), drug-panel/,
               settings, keypad, event-editor, patient-modal, setup, history,
-              mode, timer, controls, persist, alert-sound
+              next-up (Next Up HUD), mode, timer, controls, persist, alert-sound
 js/sync/      cloud sync: patient pull, case/template push-pull, dose templates
 js/app.js     entry point + wiring; js/app/ has settings-ui, tci-modal, session,
               chart-bridge (per-frame updates), portrait-layout

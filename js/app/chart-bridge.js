@@ -9,49 +9,15 @@
 
 import { ceForBIS } from '../pk/pd.js';
 import { DRUG_IDS } from '../util/constants.js';
+import { classifyFutureEvents } from '../sim/upcoming.js';
 
 const $ = id => document.getElementById(id);
 
-/**
- * Classify TCI events into chart-marker kinds by walking the full event
- * list forward while tracking the running rate. Skips system-generated events
- * (e.g. rate-restore after a bolus). Tags each marker as past or future so
- * the chart can render past events dimmed.
- *
- * Classification compares each rate event against the last *non-zero* rate,
- * not the instantaneous running rate. This way a rate event that follows a
- * pause is labelled by its direction relative to the pre-pause level
- * (decrease/increase) rather than always being called "resume". A true
- * "resume" marker is only used when the new rate matches the prior rate
- * (or when no prior rate has ever been set).
- */
-export function classifyFutureEvents(events, now) {
-  let currentRate = 0;
-  let lastNonZeroRate = 0;
-  const out = [];
-  for (const e of events) {
-    if (e.source === 'system') continue;
-    const past = e.time <= now;
-    if (e.type === 'pause' || (e.type === 'rate' && e.value === 0)) {
-      out.push({ time: e.time, kind: 'stop', past });
-      currentRate = 0;
-    } else if (e.type === 'rate' && e.value > 0) {
-      const ref = lastNonZeroRate;
-      let kind = null;
-      if (ref === 0)                  kind = 'resume';   // first rate ever set
-      else if (e.value > ref)         kind = 'increase';
-      else if (e.value < ref)         kind = 'decrease';
-      else if (currentRate === 0)     kind = 'resume';   // equal to prior, after a pause
-      // else: equal to prior with no pause → no-op, skip
-      if (kind) out.push({ time: e.time, kind, past });
-      currentRate = e.value;
-      lastNonZeroRate = e.value;
-    } else if (e.type === 'bolus') {
-      out.push({ time: e.time, kind: 'bolus', past });
-    }
-  }
-  return out;
-}
+// classifyFutureEvents lives in js/sim/upcoming.js alongside the HUD's
+// collector — both interpret the event list and must apply the same
+// rate-direction rule. Re-exported here so js/app/planning.js keeps its
+// historical import path.
+export { classifyFutureEvents };
 
 // ---- Per-Drug Chart Configuration ----
 // yScale: multiply canonical mcg/mL curve values before passing to chart
@@ -76,12 +42,13 @@ const CHART_DRUG_CONFIG = {
  *   drugPanel: object,
  *   history: object,
  *   settings: object,
+ *   nextUp: object,
  *   save: Function,
  * }} deps
  */
 export function createChartBridge({
   getChart, getModel, timer, getSelectedDrug,
-  mode, drugPanel, history, settings, save,
+  mode, drugPanel, history, settings, nextUp, save,
 }) {
   // Throttle state — replaces properties previously glued onto the chart object
   let lastCursorUpdate = 0;
@@ -297,8 +264,10 @@ export function createChartBridge({
     const exitCeVal = mode.getExitCe(selectedDrug);
     chart.setExitLine(exitCeVal > 0 ? exitCeVal * yScale : null);
 
-    // Update history panel
+    // Update both Events-panel views. Next Up is cross-drug, so it repaints on
+    // any drug's mutation, not just the selected one.
     history.render(selectedDrug);
+    if (nextUp) nextUp.render(timer.getElapsedMinutes());
 
     // Control-bar state that depends on the event list — currently the Redose
     // button's dose and visibility. Every path that adds, edits, deletes,
@@ -536,6 +505,9 @@ export function createChartBridge({
     }
     // Check for upcoming events requiring advance warning
     if (t > 0) settings.check(t);
+    // Next Up panel: rebuilds its list on an internal 500 ms throttle and
+    // re-renders the countdown every frame from its cache.
+    if (nextUp && t > 0) nextUp.onFrame(t);
   }
 
   // The settings UI dispatches `tci:theme-change` after swapping
