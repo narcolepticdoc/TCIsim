@@ -1027,6 +1027,7 @@ function boot() {
     getPatient: () => model ? model.getPatient() : { weight: 70 },
     getDrugIds: () => DRUG_IDS,
     getWallClockStart: () => timer.getWallClockStart(),
+    getElapsedMinutes: () => timer.getElapsedMinutes(),
   });
 
   // Events-panel sub-toggle: Log (retrospective) / Next Up (prospective).

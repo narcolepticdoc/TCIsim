@@ -11,6 +11,18 @@
 
 ---
 
+## [0.6.4.2] — 2026-08-07
+
+- **Fixed: a crossed redose threshold cleared itself from Next Up.** The row vanished at the exact moment the redose chime fired for it, so the app alarmed audibly about something it had just removed from the screen. Three things had to go wrong together: `approach.js` stops reporting a `kind`/`arrivalMin` once `Ce <= threshold`; both `_collectMilestones` and `collectUpcoming` filtered milestones to `time > now`; and the rebuild then pruned the key from the acknowledgement sets, so even the muted/cleared state was forgotten.
+
+  A crossing now **latches**. It persists, pulses red, and its time column counts *up* from the crossing (`-3:20`) so you can see how overdue it is. Tap the panel to acknowledge the alarm — the row stays, dimmed. Tap the row to clear it. A crossing happens *to* the patient rather than being something the user did, so it never self-acknowledges the way an event created at the clock does.
+- **Giving a bolus clears it, with no tap.** Any bolus for that drug at or after the crossing. It clears immediately rather than waiting for Ce to climb back, so you aren't nagged through the minute or two of redistribution. Because the latch is stamped at the moment of the crossing, a later crossing carries a later timestamp that the old bolus no longer satisfies — "cleared for good" needs no extra state.
+- **Latched crossings get their own row budget**, exempt from the elapsed lookback (a crossing 40 min old is still outstanding) and from `maxElapsed` (three missed pump steps would otherwise evict the one row that is actively alarming).
+- **The main countdown no longer clips past one hour.** Two fixes:
+  - `H:MM:SS` became `5h 02m`. Seconds on a five-hour prediction are precision the model does not have, and a ticking seconds field claims otherwise. It also bounds the string at 7 glyphs.
+  - The clock is now sized **as large as the string allows**, per string, instead of one fixed factor. The face is monospaced with tabular figures, so width is exactly `glyphs × advance`; `next-up.js` publishes the glyph count as `data-len` and CSS carries the per-length fit ceiling in `--nu-fit`. Your text-size choice remains the upper bound. Measured across four viewport/scale combinations with the render frozen: every reachable string fits with 3–9% headroom, and in the ≥1020px split layout the same box now renders `9:59` at 108px where `12h 05m` gets 61.5px.
+- **Fixed: tapping a row to clear it could resurrect already-performed actions as `missed`.** `nextUp.render()` defaulted its time argument to 0, so the row-tap handler rebuilt against a zero clock — which makes every event in the case look pending, poisoning the `seenFuture` set. It now defaults to the live clock.
+
 ## [0.6.4.1] — 2026-08-07
 
 - **Drug names on the Next Up list are now full-brightness and drug-coloured**, matching the colour on the row's left edge. They were `--text-muted`, which read as a caption when the drug is actually the first thing you need to identify on the row. Also up to 11px / weight 700.

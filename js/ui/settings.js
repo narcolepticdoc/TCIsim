@@ -68,9 +68,12 @@ const _zeroChimeFired = new Set();
 // Active popups — eventId → HTMLElement
 const _activePopups = new Map();
 
-// Tracks which drugIds are currently below their intermittent redose threshold.
-// Used to fire the chime once on the above→below transition.
-const _belowThresholdActive = new Set();
+// drugId → elapsed minutes at which Ce fell below the intermittent redose
+// threshold. Fires the chime once on the above→below transition, and is the
+// single record of *when* the crossing happened — the Next Up panel latches its
+// persistent "redose due" row off this same edge, so the row and the chime
+// cannot disagree about whether a crossing occurred.
+const _belowThresholdSince = new Map();
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
@@ -218,7 +221,7 @@ export function reset() {
   _prepSoundFired.clear();
   _alertFired.clear();
   _zeroChimeFired.clear();
-  _belowThresholdActive.clear();
+  _belowThresholdSince.clear();
   document.querySelectorAll('.drug-card.warn-prep').forEach(el => el.classList.remove('warn-prep'));
   const topbar = document.querySelector('.sim-topbar');
   if (topbar) topbar.classList.remove('warn-header');
@@ -226,17 +229,32 @@ export function reset() {
 
 /**
  * Call each frame for each intermittent drug.
- * Fires a one-shot chime on the above→below threshold transition.
- * Clears state on the below→above transition so the next drop re-fires.
+ * Fires a one-shot chime on the above→below threshold transition and records
+ * the crossing time. Clears state on the below→above transition so the next
+ * drop re-fires (and produces a fresh crossing time).
+ *
+ * @param {string} drugId
+ * @param {boolean} isBelow — Ce is at or below the redose threshold
+ * @param {number} [t] — current elapsed minutes, stamped on the transition
  */
-export function checkBelowThreshold(drugId, isBelow) {
-  const wasBelow = _belowThresholdActive.has(drugId);
+export function checkBelowThreshold(drugId, isBelow, t) {
+  const wasBelow = _belowThresholdSince.has(drugId);
   if (isBelow && !wasBelow) {
-    _belowThresholdActive.add(drugId);
+    _belowThresholdSince.set(drugId, (typeof t === 'number' && isFinite(t)) ? t : 0);
     if (getSettings().redoseSound) playAlert('redose');
   } else if (!isBelow && wasBelow) {
-    _belowThresholdActive.delete(drugId);
+    _belowThresholdSince.delete(drugId);
   }
+}
+
+/**
+ * Elapsed minutes at which this drug last crossed below its redose threshold,
+ * or null if it is currently above it. Consumed by js/ui/next-up.js to place a
+ * persistent "redose due" row at the moment of the crossing.
+ */
+export function getBelowSince(drugId) {
+  const v = _belowThresholdSince.get(drugId);
+  return (typeof v === 'number') ? v : null;
 }
 
 // ── Per-frame check (call every rAF frame) ────────────────────────────────────
