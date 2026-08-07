@@ -34,7 +34,13 @@ const $ = id => document.getElementById(id);
 let _model            = null;
 let _getPatient       = null;
 let _getDrugIds       = null;
+let _getWallClockStart = null;
 let _active           = false;  // is the Next Up sub-view the visible one?
+
+// Time display for the list only — the clock above it is always a countdown.
+const ROW_TIME_MODES = ['countdown', 'et', 'rt'];
+const ROW_TIME_KEY   = 'tci-pref-nextup-time-mode';
+let _rowTimeMode = 'countdown';
 
 // Acknowledgement state — UI-side only, cleared on new case.
 const _clearedKeys = new Set();  // rows the user has dismissed
@@ -77,6 +83,22 @@ export function init(opts = {}) {
   _model      = opts.model || null;
   _getPatient = opts.getPatient || (() => null);
   _getDrugIds = opts.getDrugIds || (() => []);
+  _getWallClockStart = opts.getWallClockStart || (() => null);
+
+  try {
+    const saved = localStorage.getItem(ROW_TIME_KEY);
+    if (saved && ROW_TIME_MODES.includes(saved)) _rowTimeMode = saved;
+  } catch (e) {}
+  _syncTimeButton();
+
+  const btnTime = $('btn-nu-time');
+  if (btnTime) {
+    btnTime.addEventListener('click', (e) => {
+      // Its own control — must not double as the tap-to-silence target.
+      e.stopPropagation();
+      cycleRowTimeMode();
+    });
+  }
 
   const view = $('hv-view-next');
   if (view) {
@@ -112,6 +134,7 @@ export function reset() {
   _lastRebuild = -1e9;
   _lastRenderedSig = '';
   _applyAlarmClasses('none');
+  _syncTimeButton();
   const list = $('nu-list');
   if (list) list.innerHTML = '';
   const clock = $('nu-clock');
@@ -138,6 +161,31 @@ export function markCleared(key) {
 
 /** Current panel alarm level: 'none' | 'prep' | 'due'. */
 export function getAlarmLevel() { return _alarmLevel; }
+
+/**
+ * Cycle the list's time display: countdown → case time → real time.
+ * The clock above the list is always a countdown — that is the whole point of
+ * it — so this only affects the rows.
+ */
+export function cycleRowTimeMode() {
+  const i = ROW_TIME_MODES.indexOf(_rowTimeMode);
+  _rowTimeMode = ROW_TIME_MODES[(i + 1) % ROW_TIME_MODES.length];
+  try { localStorage.setItem(ROW_TIME_KEY, _rowTimeMode); } catch (e) {}
+  _syncTimeButton();
+  return _rowTimeMode;
+}
+
+export function getRowTimeMode() { return _rowTimeMode; }
+
+function _syncTimeButton() {
+  const btn = $('btn-nu-time');
+  if (!btn) return;
+  const map = { countdown: 'nu-t-cd', et: 'nu-t-et', rt: 'nu-t-rt' };
+  for (const [mode, cls] of Object.entries(map)) {
+    const el = btn.querySelector('.' + cls);
+    if (el) el.classList.toggle('active', mode === _rowTimeMode);
+  }
+}
 
 // ── Per-frame driver ──────────────────────────────────────────────────────────
 
@@ -216,6 +264,12 @@ function _rebuild(t) {
  */
 function _collectMilestones(t) {
   const out = [];
+  // KIND_META is the single source of truth for whether a kind demands action;
+  // the collector reads it off each milestone so the alarm cannot disagree.
+  const push = (drugId, kind, time, ce) => out.push({
+    drugId, kind, time, ce, actionable: KIND_META[kind]?.actionable === true,
+  });
+
   for (const drugId of _getDrugIds()) {
     let ms, em;
     try { ms = getMilestones(drugId); } catch (e) { continue; }
@@ -223,18 +277,18 @@ function _collectMilestones(t) {
 
     // Single-line forecast: redose threshold, TCI target, or default emergence.
     if (ms.kind && ms.arrivalMin !== null && ms.arrivalMin > t) {
-      out.push({ drugId, kind: ms.kind, time: ms.arrivalMin, ce: ms.ce });
+      push(drugId, ms.kind, ms.arrivalMin, ms.ce);
     }
     if (ms.ssArrivalMin !== null && ms.ssArrivalMin > t) {
-      out.push({ drugId, kind: 'ss', time: ms.ssArrivalMin, ce: ms.ssCe });
+      push(drugId, 'ss', ms.ssArrivalMin, ms.ssCe);
     }
     if (ms.platKind && ms.platArrivalMin !== null && ms.platArrivalMin > t) {
-      out.push({ drugId, kind: ms.platKind, time: ms.platArrivalMin, ce: ms.platCe });
+      push(drugId, ms.platKind, ms.platArrivalMin, ms.platCe);
     }
     // User-configured Emerge threshold, pump stopped only.
     if (em && em.isIdle && em.arrivalMin !== null && em.arrivalMin > t
         && !out.some(o => o.drugId === drugId && o.kind === 'emergence')) {
-      out.push({ drugId, kind: 'emergence', time: em.arrivalMin, ce: em.exitCe });
+      push(drugId, 'emergence', em.arrivalMin, em.exitCe);
     }
   }
   return out;
@@ -339,7 +393,7 @@ function _renderClock(t) {
   }
 
   const rem = _remSec(head, t, reactionDelaySec);
-  const txt = rem > 0 ? fmtCountdown(rem / 60) : 'NOW';
+  const txt = rem > 0 ? fmtHudCountdown(rem / 60) : 'NOW';
   if (clockEl.textContent !== txt) clockEl.textContent = txt;
   clockEl.classList.toggle('nu-clock-due', rem <= 0);
 
@@ -387,7 +441,43 @@ function _buildRow(item) {
          `</div>`;
 }
 
-/** Patch the per-row countdowns in place — every frame, no innerHTML churn. */
+/**
+ * Countdown for the HUD.
+ *
+ * `fmtCountdown` renders bare minutes, which is right for a pump step a few
+ * minutes out but reads as "300:00" for a ketamine redose threshold five hours
+ * away. Roll over to H:MM:SS past the hour. Kept local rather than changed in
+ * formatters.js, where the drug cards rely on the existing form.
+ */
+function fmtHudCountdown(minutes) {
+  if (!isFinite(minutes) || minutes <= 0) return '0:00';
+  if (minutes < 60) return fmtCountdown(minutes);
+  const totalSec = Math.round(minutes * 60);
+  const h = Math.floor(totalSec / 3600);
+  const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+  const s = String(totalSec % 60).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
+/** Elapsed case time of an absolute event time, as H:MM:SS. */
+function fmtCaseTime(minutes) {
+  const totalSec = Math.max(0, Math.round(minutes * 60));
+  const h = Math.floor(totalSec / 3600);
+  const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+  const s = String(totalSec % 60).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
+/** Wall-clock time of an absolute event time, as H:MM:SS. Null without a start. */
+function fmtRealTime(minutes) {
+  const start = _getWallClockStart ? _getWallClockStart() : null;
+  if (!start) return null;
+  const d = new Date(start.getTime() + minutes * 60000);
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}` +
+         `:${String(d.getSeconds()).padStart(2, '0')}`;
+}
+
+/** Patch the per-row times in place — every frame, no innerHTML churn. */
 function _renderRowTimes(t) {
   const { reactionDelaySec } = getSettings();
   const list = $('nu-list');
@@ -395,12 +485,21 @@ function _renderRowTimes(t) {
   for (const el of list.querySelectorAll('.nu-time')) {
     const item = _items.find(i => i.key === el.dataset.key);
     if (!item) continue;
-    const rem = _remSec(item, t, reactionDelaySec);
-    const txt = item.elapsed ? 'missed'
-              : rem > 0 ? fmtCountdown(rem / 60)
-              : 'now';
+    const txt = _rowTimeText(item, t, reactionDelaySec);
     if (el.textContent !== txt) el.textContent = txt;
   }
+}
+
+function _rowTimeText(item, t, reactionDelaySec) {
+  if (_rowTimeMode === 'et') return fmtCaseTime(item.time);
+  if (_rowTimeMode === 'rt') {
+    // No wall-clock start (pre-case) — fall back rather than blank the column.
+    const rt = fmtRealTime(item.time);
+    if (rt) return rt;
+  }
+  if (item.elapsed) return 'missed';
+  const rem = _remSec(item, t, reactionDelaySec);
+  return rem > 0 ? fmtHudCountdown(rem / 60) : 'now';
 }
 
 // ── Label helpers ─────────────────────────────────────────────────────────────

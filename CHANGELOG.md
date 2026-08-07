@@ -11,6 +11,24 @@
 
 ---
 
+## [0.6.4] — 2026-08-07
+
+Fixes the Next Up panel hiding threshold crossings, and adds a time-display toggle for its list.
+
+- **Fixed: fentanyl and ketamine redose-threshold crossings never appeared on Next Up.** Only propofol's pump steps showed. Two mechanisms in 0.6.3 conspired: forecasts were selected under the same 20 min horizon as pump events, and they shared the same 6-row cap — so a dense propofol TCI plan consumed the budget and anything past 20 min was cut off. A threshold crossing is exactly the case where distance is normal: fentanyl's lands ~20–25 min out and ketamine's hundreds of minutes out, because that is how slowly their Ce decays.
+
+  Pump events and forecasts are now selected **independently**, then merged and time-sorted. Pump plans keep the tight horizon and 6-row cap — a TCI scheme queues dozens of steps over hours, and without a tight horizon the panel becomes a second event log. Forecasts are sparse (at most one per drug per kind), so they get their own unlimited horizon and their own 4-row cap. The drugs that have *nothing else* scheduled are precisely the ones the old rule silenced.
+- **A forecast can now raise the alarm.** "Redose due" is a real intervention, so it escalates like a pump event; steady state, plateau, target and emergence still only inform. `KIND_META` in `next-up.js` stays the single source of truth for which is which — the collector reads the flag off each milestone rather than hardcoding it, so the list and the alarm cannot disagree.
+- **New IN / ET / RT toggle at the bottom of the Next Up list.** Cycles the times in the rows between countdown, case time and real (wall-clock) time. **The clock above the list is always a countdown** — that is what it is for. The setting persists and syncs under `tci-pref-nextup-time-mode`.
+- **Long countdowns roll over to H:MM:SS.** A ketamine threshold five hours out read as `300:00`. Past the hour the clock and the rows now show `5:00:12`. Kept local to the HUD; the drug cards' existing `fmtCountdown` form is unchanged.
+
+Under the hood:
+
+- `DEFAULT_HUD_CFG` gains `milestoneHorizonMin` (`Infinity`) and `maxMilestones` (4). The selection loop in `collectUpcoming` splits on `item.evt === null`, so grouping and the horizon break still apply to pump events only — a forecast can no longer be smuggled in early by the group window, nor cut off late by another drug's dense plan.
+- `tests/test-upcoming.mjs` grows to 42 assertions, including a regression case reproducing the reported shape: a dense propofol plan plus two distant threshold crossings must leave all three drugs represented and time-sorted.
+
+Known limitation, unchanged: `predictTrough`'s 480 min lookahead means a threshold set so low that Ce would take longer than 8 h to reach it yields no forecast at all — on the drug card as well as here. Realistic thresholds resolve well inside that window.
+
 ## [0.6.3] — 2026-08-07
 
 A second view for the Events panel: **Next Up**, a heads-up display of what needs doing next.
