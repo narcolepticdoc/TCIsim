@@ -26,7 +26,7 @@ import { DRUG_DEFS } from '../util/constants.js';
 import { inkOnWhite } from '../util/color.js';
 import { formatEventAction } from '../util/event-label.js';
 import { collectUpcoming, liveKeys } from '../sim/upcoming.js';
-import { getSettings, displayedSecToEvent } from './settings.js';
+import { getSettings, displayedSecToEvent, getBelowSince } from './settings.js';
 import { fmtCountdown, fmtCeSmart } from './drug-panel/formatters.js';
 import { getMilestones, getEmergenceArrival } from './drug-panel.js';
 
@@ -36,6 +36,18 @@ let _model            = null;
 let _getPatient       = null;
 let _getDrugIds       = null;
 let _getWallClockStart = null;
+let _getElapsedMinutes = null;
+
+/** Live clock, falling back to the last rebuild rather than to zero. */
+function _now() {
+  if (_getElapsedMinutes) {
+    try {
+      const t = _getElapsedMinutes();
+      if (typeof t === 'number' && isFinite(t)) return t;
+    } catch (e) {}
+  }
+  return _lastRebuild > -1e8 ? _lastRebuild : 0;
+}
 let _active           = false;  // is the Next Up sub-view the visible one?
 
 // Time display for the list only — the clock above it is always a countdown.
@@ -85,6 +97,7 @@ export function init(opts = {}) {
   _getPatient = opts.getPatient || (() => null);
   _getDrugIds = opts.getDrugIds || (() => []);
   _getWallClockStart = opts.getWallClockStart || (() => null);
+  _getElapsedMinutes = opts.getElapsedMinutes || null;
 
   try {
     const saved = localStorage.getItem(ROW_TIME_KEY);
@@ -214,9 +227,14 @@ export function onFrame(t) {
 
 /**
  * Rebuild the list now — call after a model mutation (from refreshChart).
- * @param {number} t — current elapsed minutes.
+ *
+ * `t` defaults to the live clock, never to 0. A rebuild against a zero clock
+ * makes every event in the case look pending, which poisons `_seenFuture` and
+ * brings already-performed actions back as "missed".
+ *
+ * @param {number} [t] — current elapsed minutes.
  */
-export function render(t = 0) {
+export function render(t = _now()) {
   if (!_model) return;
   _lastRebuild = t;
   _rebuild(t);
@@ -267,8 +285,9 @@ function _collectMilestones(t) {
   const out = [];
   // KIND_META is the single source of truth for whether a kind demands action;
   // the collector reads it off each milestone so the alarm cannot disagree.
-  const push = (drugId, kind, time, ce) => out.push({
-    drugId, kind, time, ce, actionable: KIND_META[kind]?.actionable === true,
+  const push = (drugId, kind, time, ce, latched = false) => out.push({
+    drugId, kind, time, ce, latched,
+    actionable: KIND_META[kind]?.actionable === true,
   });
 
   for (const drugId of _getDrugIds()) {
@@ -276,8 +295,18 @@ function _collectMilestones(t) {
     try { ms = getMilestones(drugId); } catch (e) { continue; }
     try { em = getEmergenceArrival(drugId); } catch (e) { em = null; }
 
-    // Single-line forecast: redose threshold, TCI target, or default emergence.
-    if (ms.kind && ms.arrivalMin !== null && ms.arrivalMin > t) {
+    // Redose threshold already crossed. Latched at the moment of the crossing so
+    // the row persists and keeps alarming — the crossing is something that
+    // happened *to* the patient, not an action the user took, so it must not
+    // self-acknowledge the way an event they created at the clock does. Only a
+    // bolus (handled in collectUpcoming) or a tap clears it.
+    if (ms.belowThreshold) {
+      const since = getBelowSince(drugId);
+      // No recorded crossing (e.g. a case restored already below threshold):
+      // latch from now rather than dropping the alarm entirely.
+      push(drugId, 'redose', since !== null ? since : t, ms.ce, true);
+    } else if (ms.kind && ms.arrivalMin !== null && ms.arrivalMin > t) {
+      // Still approaching: redose threshold, TCI target, or default emergence.
       push(drugId, ms.kind, ms.arrivalMin, ms.ce);
     }
     if (ms.ssArrivalMin !== null && ms.ssArrivalMin > t) {
@@ -387,6 +416,7 @@ function _renderClock(t) {
   if (!head) {
     if (clockEl.textContent !== '--:--') clockEl.textContent = '--:--';
     clockEl.classList.remove('nu-clock-due');
+    _setClockLen(clockEl, '--:--');
     if (labelEl && labelEl.textContent !== 'Nothing scheduled') {
       labelEl.textContent = 'Nothing scheduled';
     }
@@ -397,6 +427,10 @@ function _renderClock(t) {
   const txt = rem > 0 ? fmtHudCountdown(rem / 60) : 'NOW';
   if (clockEl.textContent !== txt) clockEl.textContent = txt;
   clockEl.classList.toggle('nu-clock-due', rem <= 0);
+  // Publish the glyph count so CSS can pick the largest size that still fits the
+  // column — the clock is monospaced with tabular figures, so width is exactly
+  // proportional to length. See the .nu-clock width budget in index.html.
+  _setClockLen(clockEl, txt);
 
   if (labelEl) {
     const lbl = `${_drugName(head.drugId)} — ${_verbFor(head)}`;
@@ -427,6 +461,7 @@ function _renderList() {
 function _buildRow(item) {
   const meta  = KIND_META[item.kind] || { cls: '' };
   const cls   = ['nu-row', meta.cls, item.elapsed ? 'nu-elapsed' : '',
+                 item.latched ? 'nu-latched' : '',
                  _isActionable(item) ? 'nu-act' : 'nu-info'].filter(Boolean).join(' ');
   // Two inks per row: the palette colour for the dark UI it was tuned for, and a
   // darkened one for the light theme. Both are emitted so a runtime theme switch
@@ -453,17 +488,35 @@ function _buildRow(item) {
  *
  * `fmtCountdown` renders bare minutes, which is right for a pump step a few
  * minutes out but reads as "300:00" for a ketamine redose threshold five hours
- * away. Roll over to H:MM:SS past the hour. Kept local rather than changed in
- * formatters.js, where the drug cards rely on the existing form.
+ * away. Past the hour, switch to `5h 02m`.
+ *
+ * Seconds are dropped deliberately, not just for width: a five-hour prediction
+ * does not carry second-level precision, and a ticking seconds field claims it
+ * does. It also bounds the string at 7 characters (`12h 05m`), which the clock's
+ * width budget depends on — see the .nu-clock rules in index.html.
+ *
+ * Kept local rather than changed in formatters.js, where the drug cards rely on
+ * the existing form.
  */
 function fmtHudCountdown(minutes) {
   if (!isFinite(minutes) || minutes <= 0) return '0:00';
   if (minutes < 60) return fmtCountdown(minutes);
-  const totalSec = Math.round(minutes * 60);
-  const h = Math.floor(totalSec / 3600);
-  const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
-  const s = String(totalSec % 60).padStart(2, '0');
-  return `${h}:${m}:${s}`;
+  const totalMin = Math.round(minutes);
+  const h = Math.floor(totalMin / 60);
+  const m = String(totalMin % 60).padStart(2, '0');
+  return `${h}h ${m}m`;
+}
+
+/**
+ * Publish the clock's glyph count as `data-len`, clamped to the range the CSS
+ * defines a fit factor for. CSS cannot count characters, and the clock's width
+ * is exactly `glyphs × advance` because the face is monospaced with tabular
+ * figures — so the glyph count is all CSS needs to pick a size that fills the
+ * column without overflowing it.
+ */
+function _setClockLen(el, txt) {
+  const n = Math.max(3, Math.min(8, String(txt).length));
+  if (el.dataset.len !== String(n)) el.dataset.len = String(n);
 }
 
 /** Elapsed case time of an absolute event time, as H:MM:SS. */
@@ -484,14 +537,24 @@ function fmtRealTime(minutes) {
          `:${String(d.getSeconds()).padStart(2, '0')}`;
 }
 
-/** Patch the per-row times in place — every frame, no innerHTML churn. */
+/**
+ * Patch per-row state in place every frame — no innerHTML churn.
+ *
+ * Covers the time column and the acknowledged flag. The flag has to live here
+ * rather than in _buildRow: muting an alarm does not change the row *set*, so
+ * _renderList's signature guard would skip the rebuild.
+ */
 function _renderRowTimes(t) {
   const { reactionDelaySec } = getSettings();
   const list = $('nu-list');
   if (!list) return;
-  for (const el of list.querySelectorAll('.nu-time')) {
-    const item = _items.find(i => i.key === el.dataset.key);
+  for (const row of list.querySelectorAll('.nu-row')) {
+    const key  = row.dataset.key;
+    const item = _items.find(i => i.key === key);
     if (!item) continue;
+    row.classList.toggle('nu-acked', _alarmMuted.has(key));
+    const el = row.querySelector('.nu-time');
+    if (!el) continue;
     const txt = _rowTimeText(item, t, reactionDelaySec);
     if (el.textContent !== txt) el.textContent = txt;
   }
@@ -504,6 +567,10 @@ function _rowTimeText(item, t, reactionDelaySec) {
     const rt = fmtRealTime(item.time);
     if (rt) return rt;
   }
+  // A latched crossing counts *up*: how long the redose has been outstanding.
+  // A missed pump step keeps saying "missed" — a step you skipped and a
+  // threshold the patient crossed are different claims, so they read differently.
+  if (item.latched) return '-' + fmtHudCountdown(Math.max(0, t - item.time));
   if (item.elapsed) return 'missed';
   const rem = _remSec(item, t, reactionDelaySec);
   return rem > 0 ? fmtHudCountdown(rem / 60) : 'now';

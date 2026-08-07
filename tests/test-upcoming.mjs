@@ -313,6 +313,128 @@ console.log('\n===== Next Up curation (js/sim/upcoming.js) =====\n');
     'and the distant forecast sorts to the end');
 }
 
+// ── Latched crossings persist until dealt with ────────────────────────────────
+// Regression: a crossed redose threshold used to vanish from the panel at the
+// exact moment the chime fired for it. A crossing happens *to* the patient, so
+// it must not self-acknowledge the way an event the user creates at the clock does.
+{
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3,
+               actionable: true, latched: true };
+  const items = collectUpcoming({ events: [], now: 35, milestones: [ms] });
+  eqArr(keys(items), ['ketamine:redose'], 'a latched crossing in the past is kept');
+  ok(items[0].elapsed === true && items[0].latched === true,
+    'and it is flagged elapsed + latched');
+  ok(items[0].actionable === true, 'a latched redose is actionable, so it alarms');
+}
+
+{
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3 };
+  const items = collectUpcoming({ events: [], now: 35, milestones: [ms] });
+  eqArr(keys(items), [], 'a NON-latched milestone in the past is still dropped');
+}
+
+{
+  // Surviving the elapsed lookback matters: a crossing 40 min old is still
+  // outstanding, whereas a pump step missed 40 min ago is water under the bridge.
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 5, ce: 0.3,
+               actionable: true, latched: true };
+  const items = collectUpcoming({ events: [], now: 45, milestones: [ms] });
+  eqArr(keys(items), ['ketamine:redose'],
+    'a latched crossing is exempt from elapsedLookbackMin');
+}
+
+{
+  // …and must not be evicted by a full complement of pump misses.
+  const evts = [];
+  for (let i = 1; i <= 5; i++) evts.push(ev('propofol', 30 + i, 'bolus', 10, 'tci'));
+  const seen = new Set(evts.map(e => e.id));
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 32, ce: 0.3,
+               actionable: true, latched: true };
+  const items = collectUpcoming({
+    events: evts, now: 40, milestones: [ms], seenFuture: seen,
+  });
+  ok(keys(items).includes('ketamine:redose'),
+    'a latched crossing survives a full maxElapsed of pump misses');
+  ok(items.filter(i => !i.latched).length === DEFAULT_HUD_CFG.maxElapsed,
+    'and the pump misses are still capped at maxElapsed independently');
+  eqArr(items.map(i => i.time), [32, 33, 34, 35],
+    'elapsed rows, latched included, are time-sorted');
+}
+
+// ── A bolus clears a latched crossing ─────────────────────────────────────────
+{
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3,
+               actionable: true, latched: true };
+  const dose = ev('ketamine', 22, 'bolus', 50, 'manual');
+  const items = collectUpcoming({
+    events: [dose], now: 25, milestones: [ms], seenFuture: new Set(),
+  });
+  eqArr(keys(items), [], 'a bolus after the crossing clears it without a tap');
+}
+
+{
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3,
+               actionable: true, latched: true };
+  const dose = ev('ketamine', 20, 'bolus', 50, 'manual');
+  const items = collectUpcoming({
+    events: [dose], now: 25, milestones: [ms], seenFuture: new Set(),
+  });
+  eqArr(keys(items), [], 'a bolus exactly at the crossing clears it');
+}
+
+{
+  // The crossing is re-stamped on each fresh above→below transition, so an
+  // earlier dose cannot pre-clear a later crossing.
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3,
+               actionable: true, latched: true };
+  const dose = ev('ketamine', 8, 'bolus', 50, 'manual');
+  const items = collectUpcoming({
+    events: [dose], now: 25, milestones: [ms], seenFuture: new Set(),
+  });
+  eqArr(keys(items), ['ketamine:redose'],
+    'a bolus BEFORE the crossing does not clear it');
+}
+
+{
+  // Another drug's bolus is irrelevant.
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3,
+               actionable: true, latched: true };
+  const dose = ev('fentanyl', 22, 'bolus', 0.1, 'manual');
+  const items = collectUpcoming({ events: [dose], now: 25, milestones: [ms] });
+  ok(keys(items).includes('ketamine:redose'),
+    'a bolus of a different drug does not clear the crossing');
+}
+
+{
+  // A rate change is not a dose.
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3,
+               actionable: true, latched: true };
+  const rate = ev('ketamine', 22, 'rate', 2, 'manual');
+  const items = collectUpcoming({
+    events: [rate], now: 25, milestones: [ms], seenFuture: new Set(),
+  });
+  eqArr(keys(items), ['ketamine:redose'], 'a rate change does not clear the crossing');
+}
+
+{
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3,
+               actionable: true, latched: true };
+  const items = collectUpcoming({
+    events: [], now: 25, milestones: [ms], cleared: new Set(['ketamine:redose']),
+  });
+  eqArr(keys(items), [], 'tapping the row (cleared) removes a latched crossing');
+}
+
+{
+  // Latched rows sort ahead of anything still upcoming.
+  const step = ev('propofol', 30, 'rate', 6, 'tci');
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 20, ce: 0.3,
+               actionable: true, latched: true };
+  const items = collectUpcoming({ events: [step], now: 25, milestones: [ms] });
+  eqArr(keys(items), ['ketamine:redose', step.id],
+    'latched crossings lead, future items follow');
+}
+
 {
   // The horizon is still honoured when a caller sets a finite one.
   const ms = { drugId: 'ketamine', kind: 'redose', time: 300, ce: 0.5 };

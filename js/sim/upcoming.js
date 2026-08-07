@@ -112,11 +112,15 @@ function _walkDrugEvents(events, now) {
  *                 each element carrying `.drug`. Need not be pre-sorted.
  * @param {number} args.now — elapsed minutes.
  * @param {Array}  [args.milestones] — predicted clinical events supplied by the
- *                 caller as `{ drugId, kind, time, ce, actionable? }`. Selected
- *                 under `milestoneHorizonMin` / `maxMilestones`, independently of
- *                 the pump-event horizon. Set `actionable: true` for a forecast
- *                 that is itself an intervention (a redose becoming due) so it
- *                 can raise the panel alarm; the rest only inform.
+ *                 caller as `{ drugId, kind, time, ce, actionable?, latched? }`.
+ *                 Selected under `milestoneHorizonMin` / `maxMilestones`,
+ *                 independently of the pump-event horizon. Set `actionable: true`
+ *                 for a forecast that is itself an intervention (a redose becoming
+ *                 due) so it can raise the panel alarm; the rest only inform.
+ *                 Set `latched: true` for one that has *already happened* and must
+ *                 persist until dealt with (a crossed redose threshold): its
+ *                 `time` is the moment of the crossing, it is returned as
+ *                 `elapsed`, and a bolus at or after that time clears it.
  * @param {Set}    [args.cleared] — item keys the user has already dismissed.
  * @param {Set}    [args.seenFuture] — keys that were still in the future on an
  *                 earlier pass. When supplied, only these can be reported as
@@ -163,19 +167,40 @@ export function collectUpcoming({ events = [], now = 0, milestones = [],
   }
 
   // ── Clinical milestones ────────────────────────────────────────────────────
-  // A forecast that assumes the current rate holds is void once a scheduled
-  // pump event lands before it, so drop those rather than promise them.
   for (const ms of milestones) {
-    if (!ms || !(ms.time > now)) continue;
+    if (!ms) continue;
     const key = `${ms.drugId}:${ms.kind}`;
     if (isCleared(key)) continue;
     const drugEvents = byDrug.get(ms.drugId) || [];
+
+    // A `latched` milestone is one that has already happened and stays until the
+    // user deals with it — a crossed redose threshold. Everything else is a
+    // forecast, and a forecast in the past is simply stale.
+    if (ms.latched) {
+      // Giving a bolus at or after the crossing *is* dealing with it, so the
+      // alarm clears without a tap. Because the latch is stamped at the moment
+      // of the crossing, a later crossing carries a later timestamp that this
+      // bolus no longer satisfies — "cleared for good" needs no extra state.
+      const dosed = drugEvents.some(e => e.type === 'bolus' && e.time >= ms.time - TIME_EPS);
+      if (dosed) continue;
+      candidates.push({
+        key, drugId: ms.drugId, time: ms.time, kind: ms.kind,
+        actionable: ms.actionable === true, elapsed: true, latched: true,
+        evt: null, milestone: ms,
+      });
+      continue;
+    }
+
+    if (!(ms.time > now)) continue;
+    // A forecast that assumes the current rate holds is void once a scheduled
+    // pump event lands before it, so drop those rather than promise them.
     const preempted = drugEvents.some(e =>
       e.source !== 'system' && e.time > now + TIME_EPS && e.time < ms.time);
     if (preempted) continue;
     candidates.push({
       key, drugId: ms.drugId, time: ms.time, kind: ms.kind,
-      actionable: ms.actionable === true, elapsed: false, evt: null, milestone: ms,
+      actionable: ms.actionable === true, elapsed: false, latched: false,
+      evt: null, milestone: ms,
     });
   }
 
@@ -183,9 +208,21 @@ export function collectUpcoming({ events = [], now = 0, milestones = [],
   const elapsed = candidates.filter(i => i.elapsed).sort((a, b) => a.time - b.time);
   const future  = candidates.filter(i => !i.elapsed).sort((a, b) => a.time - b.time);
 
-  // Keep the most recent unacknowledged items — an unbounded backlog would push
-  // the actual next intervention off the panel.
-  const keptElapsed = elapsed.slice(-c.maxElapsed);
+  // Elapsed pump events: keep the most recent unacknowledged ones — an unbounded
+  // backlog would push the actual next intervention off the panel.
+  const keptMisses = elapsed
+    .filter(i => !i.latched)
+    .slice(-c.maxElapsed);
+
+  // Latched crossings get their own budget. They must survive both
+  // `elapsedLookbackMin` (a crossing 40 min old is still outstanding) and
+  // `maxElapsed` (three pump misses would otherwise evict the one row that is
+  // actively alarming).
+  const keptLatched = elapsed
+    .filter(i => i.latched)
+    .slice(0, c.maxMilestones);
+
+  const keptElapsed = [...keptMisses, ...keptLatched].sort((a, b) => a.time - b.time);
 
   // Pump events: tight horizon, walked in order so the group window can bridge
   // a cluster, and stop at the first item that fails both tests.
