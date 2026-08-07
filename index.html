@@ -520,11 +520,24 @@
     .nu-clock-label{margin-top:4px;font-family:var(--font-display);font-size:13px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.04em;line-height:1.25}
     .nu-list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
     .nu-empty{text-align:center;color:var(--text-muted);font-size:13px;padding-top:24px}
+    /* Row-time toggle — same visual language as the Log's ET/RT button. Only the
+       list obeys it; the clock above is always a countdown. */
+    .nu-actions{display:flex;justify-content:flex-end;padding:4px 0 0;flex-shrink:0}
+    .nu-actions .nu-action-time{font-family:var(--font-mono);font-size:12px;padding:6px 10px}
+    .nu-actions .nu-action-time span{color:var(--text-muted);transition:color .15s}
+    .nu-actions .nu-action-time span.active{color:var(--text-primary);font-weight:600}
+    .nu-actions .nu-action-time .t-sep{color:var(--border-subtle);margin:0 3px}
     /* Rows carry the drug's identity colour on the left edge — the same channel
        history.js uses for event category, one level up in size. */
     .nu-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:var(--bg-card);border-radius:var(--radius-sm);border-left:3px solid var(--nu-drug,transparent)}
     .nu-main{display:flex;flex-direction:column;gap:1px;min-width:0}
-    .nu-drug{font-family:var(--font-display);font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;line-height:1.2}
+    /* The drug name is an identity label, not a caption — full-brightness ink in
+       the drug's own colour, matching the row's left edge. The palette is tuned
+       for the dark UI, so light theme swaps in the contrast-corrected ink that
+       next-up.js derives via inkOnWhite(); both are set inline on the row, which
+       is why a runtime theme switch needs no re-render. */
+    .nu-drug{font-family:var(--font-display);font-size:11px;font-weight:700;color:var(--nu-drug,var(--text-secondary));text-transform:uppercase;letter-spacing:.06em;line-height:1.2}
+    :root[data-theme="light"] .nu-drug{color:var(--nu-drug-ink,var(--nu-drug,var(--text-secondary)))}
     .nu-verb{font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--text-primary);line-height:1.2}
     .nu-side{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex-shrink:0}
     .nu-value{font-family:var(--font-mono);font-size:13px;color:var(--text-primary);white-space:nowrap;line-height:1.2}
@@ -624,6 +637,7 @@
       body.text-lg .nu-value{font-size:15px}
       body.text-lg .nu-time{font-size:18px}
       body.text-lg .nu-empty{font-size:15px}
+      body.text-lg .nu-action-time{font-size:13px}
       body.text-lg .sim-topbar .app-name{font-size:12.5px}
       body.text-lg .patient-summary{font-size:12.5px}
       body.text-lg .elapsed-timer{font-size:18px}
@@ -664,6 +678,7 @@
       body.text-xl .nu-value{font-size:16.5px}
       body.text-xl .nu-time{font-size:20px}
       body.text-xl .nu-empty{font-size:16.5px}
+      body.text-xl .nu-action-time{font-size:14.5px}
       body.text-xl .sim-topbar .app-name{font-size:14px}
       body.text-xl .patient-summary{font-size:14px}
       body.text-xl .elapsed-timer{font-size:20px}
@@ -754,6 +769,7 @@
       body.text-xxl .nu-value{font-size:18px}
       body.text-xxl .nu-time{font-size:22px}
       body.text-xxl .nu-empty{font-size:18px}
+      body.text-xxl .nu-action-time{font-size:16px}
       body.text-xxl .sim-topbar .app-name{font-size:17px}
       body.text-xxl .patient-summary{font-size:17px}
       body.text-xxl .elapsed-timer{font-size:28px}
@@ -1730,6 +1746,9 @@
               <div class="nu-clock-label" id="nu-clock-label"></div>
             </div>
             <div class="nu-list" id="nu-list"></div>
+            <div class="nu-actions">
+              <button class="evt-action-btn nu-action-time" id="btn-nu-time" title="Time shown in the list: countdown / case time / real time"><span class="nu-t-cd active">IN</span><span class="t-sep">/</span><span class="nu-t-et">ET</span><span class="t-sep">/</span><span class="nu-t-rt">RT</span></button>
+            </div>
           </div>
         </div>
       </div>

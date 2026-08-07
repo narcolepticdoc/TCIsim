@@ -37,6 +37,7 @@ export function prefsManifest() {
     'tci-pref-quantizeInDisplay',       // round-TCI-plan-in-display-units flag
     'tci-pump-max-rate',                // global pump bolus rate (mL/h)
     'tci-pref-history-show-notations',  // history notations toggle
+    'tci-pref-nextup-time-mode',        // Next Up list time display: countdown / ET / RT
     'tci-sim-units',                    // metric / imperial
     'tci-mode',                         // setup default TCI planning mode
     'tci-opioid',                       // setup opioid co-administration default

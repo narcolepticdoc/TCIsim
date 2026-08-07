@@ -188,7 +188,11 @@ Two-tier advance warnings for upcoming pump events (`source:'tci'` and `source:'
 
 **Next Up** (`next-up.js`) — a prospective, cross-drug heads-up display: a countdown clock over a curated list of interventions.
 
-- **Curation** is `collectUpcoming()` in `js/sim/upcoming.js` — pure, DOM-free and unit-tested (`tests/test-upcoming.mjs`). It selects and orders items and returns raw event objects; all label formatting stays in the view via `js/util/event-label.js`. Defaults: 20 min horizon, 6 future rows, 3 elapsed rows, and a 2 min group window that keeps a cluster intact across the horizon so a pause never appears without its restart.
+- **Curation** is `collectUpcoming()` in `js/sim/upcoming.js` — pure, DOM-free and unit-tested (`tests/test-upcoming.mjs`). It selects and orders items and returns raw event objects; all label formatting stays in the view via `js/util/event-label.js`.
+  - **Pump events**: 20 min horizon, 6 rows, plus a 2 min group window that keeps a cluster intact across the horizon so a pause never appears without its restart. The tight horizon exists because a TCI scheme queues dozens of steps over hours.
+  - **Forecasts**: selected independently under `milestoneHorizonMin` (unlimited) and `maxMilestones` (4), then merged and time-sorted with the events. Forecasts are sparse and legitimately distant, so sharing the pump budget hid the drugs that had nothing else scheduled (fixed in 0.6.4).
+  - Elapsed-unacknowledged: 3 rows, 10 min lookback, gated on `seenFuture`.
+- **Row times** obey an IN / ET / RT toggle (`#btn-nu-time`, persisted under `tci-pref-nextup-time-mode` and in `prefsManifest()`); the clock is always a countdown.
 - **Milestones** are not predicted here. `approach.js getMilestones()` and `exit-readout.js getEmergenceArrival()` read caches the drug-panel rAF loop already fills for every drug in `DRUG_IDS`, so the forecasts cost no extra engine work.
 - **Two honesty guards** (see CLAUDE.md invariants): Emergence only when the pump is idle, and no milestone that a scheduled pump event would preempt.
 - **Alarm** reuses `prepSec` / `alertSec` and `displayedSecToEvent`, so the panel, the drug-card pulse and the popups never disagree. Amber at prep, red when due; a tap mutes only the keys currently alarming, so the next item to escalate re-arms the pulse.

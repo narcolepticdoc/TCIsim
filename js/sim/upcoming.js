@@ -15,11 +15,24 @@
  * No DOM, no module state, no engine calls.
  */
 
-/** Tuning for the Next Up panel's curation. */
+/**
+ * Tuning for the Next Up panel's curation.
+ *
+ * Pump events and clinical forecasts are selected under **separate** horizons,
+ * and the difference is not arbitrary. A pump plan is dense — a TCI scheme
+ * queues dozens of rate steps over hours — so it needs a tight horizon to stay
+ * a heads-up display instead of a second event log. A forecast is sparse: at
+ * most one per drug per kind, and the interesting ones are genuinely distant
+ * (a ketamine redose threshold sits 200–600 min out because its Ce decay is
+ * that slow). Applying the pump horizon to forecasts hides exactly the drugs
+ * that have nothing else scheduled.
+ */
 export const DEFAULT_HUD_CFG = {
-  horizonMin:          20,  // don't look further ahead than this…
+  horizonMin:          20,  // pump events: don't look further ahead than this…
   groupWindowMin:      2,   // …except to keep a tight cluster together
-  maxItems:            6,   // hard cap on future rows
+  maxItems:            6,   // hard cap on future pump-event rows
+  milestoneHorizonMin: Infinity, // forecasts: distance is the point, not the problem
+  maxMilestones:       4,   // …but never more than this many
   elapsedLookbackMin:  10,  // how far back to surface unacknowledged items
   maxElapsed:          3,   // hard cap on elapsed-uncleared rows
 };
@@ -99,8 +112,11 @@ function _walkDrugEvents(events, now) {
  *                 each element carrying `.drug`. Need not be pre-sorted.
  * @param {number} args.now — elapsed minutes.
  * @param {Array}  [args.milestones] — predicted clinical events supplied by the
- *                 caller as `{ drugId, kind, time, ce }`. Informational: they
- *                 never count as actionable.
+ *                 caller as `{ drugId, kind, time, ce, actionable? }`. Selected
+ *                 under `milestoneHorizonMin` / `maxMilestones`, independently of
+ *                 the pump-event horizon. Set `actionable: true` for a forecast
+ *                 that is itself an intervention (a redose becoming due) so it
+ *                 can raise the panel alarm; the rest only inform.
  * @param {Set}    [args.cleared] — item keys the user has already dismissed.
  * @param {Set}    [args.seenFuture] — keys that were still in the future on an
  *                 earlier pass. When supplied, only these can be reported as
@@ -159,7 +175,7 @@ export function collectUpcoming({ events = [], now = 0, milestones = [],
     if (preempted) continue;
     candidates.push({
       key, drugId: ms.drugId, time: ms.time, kind: ms.kind,
-      actionable: false, elapsed: false, evt: null, milestone: ms,
+      actionable: ms.actionable === true, elapsed: false, evt: null, milestone: ms,
     });
   }
 
@@ -171,17 +187,28 @@ export function collectUpcoming({ events = [], now = 0, milestones = [],
   // the actual next intervention off the panel.
   const keptElapsed = elapsed.slice(-c.maxElapsed);
 
-  const keptFuture = [];
+  // Pump events: tight horizon, walked in order so the group window can bridge
+  // a cluster, and stop at the first item that fails both tests.
+  const keptEvents = [];
   for (const item of future) {
-    if (keptFuture.length >= c.maxItems) break;
+    if (item.evt === null) continue;
+    if (keptEvents.length >= c.maxItems) break;
     const withinHorizon = (item.time - now) <= c.horizonMin;
-    const last = keptFuture[keptFuture.length - 1];
+    const last = keptEvents[keptEvents.length - 1];
     // Group window: a cluster stays intact even when it straddles the horizon,
     // so a pause never appears without the restart that follows it.
     const withinGroup = last && (item.time - last.time) <= c.groupWindowMin;
     if (!withinHorizon && !withinGroup) break;
-    keptFuture.push(item);
+    keptEvents.push(item);
   }
+
+  // Forecasts: selected independently, so a distant threshold crossing is not
+  // cut off by the pump horizon — nor by an unrelated drug's dense plan.
+  const keptMilestones = future
+    .filter(i => i.milestone !== null && (i.time - now) <= c.milestoneHorizonMin)
+    .slice(0, c.maxMilestones);
+
+  const keptFuture = [...keptEvents, ...keptMilestones].sort((a, b) => a.time - b.time);
 
   return [...keptElapsed, ...keptFuture];
 }

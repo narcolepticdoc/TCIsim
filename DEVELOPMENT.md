@@ -4,6 +4,93 @@
 
 ## Session History
 
+### Next Up: drug-coloured names (v0.6.4.1) — Interim
+
+The drug name was `--text-muted`, i.e. styled as a caption above the verb. Wrong
+emphasis: on a cross-drug list the drug is the first thing you need to resolve,
+not supporting detail. Now full-brightness in the drug's own colour, tying the
+label to the row's left edge.
+
+**Why this needed more than a one-line colour swap.** The drug-card `.drug-name`
+deliberately uses `--text-primary` rather than `--drug-color`, and that is not an
+oversight — the palette is tuned for a dark UI. Propofol's `#facc15` scores
+**1.53:1** against the light theme's white card. Keying the name to the raw drug
+colour would have fixed a dim label in dark theme by shipping an illegible one in
+light. The codebase already knows this shape: the `--purple-bright` comment in
+the light-theme block notes it was left equal to `--purple` because "on a white
+card the darker violet already is the correct ink."
+
+So `inkOnWhite()` (`js/util/color.js`) walks HSL lightness down, nudging
+saturation up to keep the hue identifiable, until the colour clears a WCAG target
+against white. Both inks go onto the row as inline custom properties and CSS
+picks per theme — deliberately, because the list only re-renders when its row
+*set* changes, so computing one ink at render time would leave stale colours after
+a runtime theme switch.
+
+### Next Up: milestone horizon fix + row time toggle (v0.6.4) — Interim
+
+**The bug: one horizon for two kinds of thing that aren't alike.** 0.6.3 shipped
+a single `horizonMin` (20 min) and a single `maxItems` (6) applied to the merged
+future list. Reported symptom: on a loaded case, propofol's next set-rate counted
+down correctly but the fentanyl and ketamine threshold crossings never appeared.
+
+Two mechanisms, and it took the browser probe to separate them:
+
+1. The selection loop walked the merged sorted list and `break`ed at the first
+   item failing horizon-or-group. Fentanyl's crossing at ~22 min sat just past
+   the horizon, so it was cut — along with everything behind it.
+2. `maxItems: 6` was consumed entirely by propofol's dense TCI plan, so even
+   ketamine's crossing at ~18 min — *inside* the horizon — lost its slot.
+
+The conceptual error was treating pump events and clinical forecasts as one
+population. They have opposite density profiles: **a pump plan is dense** (a TCI
+scheme queues dozens of rate steps over hours, which is exactly why the tight
+horizon exists — without it the panel degenerates into a second event log),
+while **a forecast is sparse** (at most one per drug per kind) and its distance
+is a property of the drug, not a sign it's irrelevant. Ketamine's redose
+threshold sits hundreds of minutes out because its Ce decay is genuinely that
+slow. The old rule therefore silenced precisely the drugs that had nothing else
+scheduled and most needed the heads-up.
+
+Fix: select the two populations independently under their own horizon and cap,
+then merge and time-sort. Grouping and the horizon break still apply to pump
+events only, which also closes the inverse hole — a forecast can't be smuggled
+in early via the group window.
+
+**A diagnostic trap worth recording.** My first reproduction "failed to fix" the
+ketamine row, and I nearly went looking for a second bug. The cause was my own
+test input: I entered a ketamine redose threshold of `0.3` while the keypad was
+in **ng/mL**, giving 0.0003 mcg/mL — a threshold Ce sat 4170× above, which
+`predictTrough` cannot reach even with a 5000 min lookahead, so it returned null
+and there was legitimately no forecast to show. The tell was that the *drug card*
+was blank too: when a symptom appears on a surface you didn't touch, suspect the
+input before the change. With a realistic 300 ng/mL it resolves at ~20 min and
+all three drugs appear.
+
+That does leave a real, pre-existing limitation: `predictTrough`'s default 480
+min lookahead means an unreachably-low threshold produces silence rather than a
+"never reached" state — on the drug card as much as here. Left alone
+deliberately; changing the default would alter drug-card behaviour nobody has
+complained about.
+
+**Redose became the first actionable forecast.** Every milestone was
+`actionable: false` in the collector while `KIND_META` in the view already said
+`redose: actionable: true` — the two could disagree, and did. Rather than
+duplicate the table into the pure module, the collector now reads an
+`actionable` flag off each milestone and `_collectMilestones` sets it from
+`KIND_META`. One source of truth, no import from view into sim.
+
+**Row time toggle.** IN / ET / RT for the list only. The clock stays a countdown
+unconditionally — it is the one element whose entire purpose is "how long have I
+got", and making it switchable would have been a category error. Reuses the
+Log's ET/RT button idiom so the two views read as siblings. The click handler
+must `stopPropagation`, since the whole panel is the tap-to-silence target.
+
+**Long countdowns.** `fmtCountdown` renders bare minutes, which is right for a
+pump step and absurd for a five-hour forecast (`300:00`). Added a HUD-local
+H:MM:SS rollover past the hour rather than changing the shared formatter, which
+the drug cards depend on in its current form.
+
 ### Next Up — interventions heads-up display (v0.6.3) — Interim
 
 **Almost none of this was new computation.** The starting assumption was that a

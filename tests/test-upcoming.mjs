@@ -197,7 +197,8 @@ console.log('\n===== Next Up curation (js/sim/upcoming.js) =====\n');
   const ms = { drugId: 'propofol', kind: 'ss', time: 12, ce: 3.2 };
   const items = collectUpcoming({ events: [], now: 0, milestones: [ms] });
   eqArr(keys(items), ['propofol:ss'], 'a milestone with no pump events is kept');
-  ok(items[0].actionable === false, 'milestones are never actionable');
+  ok(items[0].actionable === false,
+    'a milestone without an explicit actionable flag only informs');
 }
 
 {
@@ -240,6 +241,85 @@ console.log('\n===== Next Up curation (js/sim/upcoming.js) =====\n');
   const past = { drugId: 'propofol', kind: 'ss', time: 4, ce: 3.2 };
   const items = collectUpcoming({ events: [], now: 10, milestones: [past] });
   eqArr(keys(items), [], 'an already-arrived milestone is not listed');
+}
+
+{
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 300, ce: 0.5, actionable: true };
+  const items = collectUpcoming({ events: [], now: 0, milestones: [ms] });
+  ok(items.length === 1 && items[0].actionable === true,
+    'a milestone marked actionable is reported actionable');
+}
+
+// ── Milestones are selected under their own horizon ───────────────────────────
+// Regression: v0.6.3 applied the 20 min pump horizon to forecasts too, so
+// fentanyl and ketamine redose-threshold crossings — which sit hundreds of
+// minutes out because their Ce decay is that slow — never appeared at all.
+{
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 300, ce: 0.5, actionable: true };
+  const items = collectUpcoming({ events: [], now: 0, milestones: [ms] });
+  eqArr(keys(items), ['ketamine:redose'],
+    'a forecast 300 min out is kept despite the 20 min pump horizon');
+}
+
+{
+  // The bug as reported: propofol's dense plan plus two distant threshold
+  // crossings. Every drug must be represented.
+  const evts = [];
+  for (let i = 1; i <= 4; i++) evts.push(ev('propofol', i * 5, 'rate', 8 - i * 0.2, 'tci'));
+  evts.push(ev('propofol', 173, 'rate', 7.5, 'tci'));   // beyond the horizon
+  const milestones = [
+    { drugId: 'fentanyl', kind: 'redose', time: 95,  ce: 0.8, actionable: true },
+    { drugId: 'ketamine', kind: 'redose', time: 310, ce: 0.5, actionable: true },
+  ];
+  const items = collectUpcoming({ events: evts, now: 0, milestones });
+  const drugs = [...new Set(items.map(i => i.drugId))].sort();
+  eqArr(drugs, ['fentanyl', 'ketamine', 'propofol'],
+    'all three drugs appear when two have only distant threshold crossings');
+  eqArr(items.map(i => i.time), [5, 10, 15, 20, 95, 310],
+    'the merged list stays time-sorted across events and forecasts');
+}
+
+{
+  // Independent selection: a pump event stopping at the horizon does not stop
+  // the forecast scan. Different drugs, so the preemption guard is not in play.
+  const near = ev('propofol', 19.5, 'rate', 6, 'tci');
+  const far  = ev('propofol', 60,   'rate', 5, 'tci');   // past the pump horizon
+  const ms   = { drugId: 'ketamine', kind: 'redose', time: 90, ce: 0.5, actionable: true };
+  const items = collectUpcoming({ events: [near, far], now: 0, milestones: [ms] });
+  eqArr(keys(items), [near.id, 'ketamine:redose'],
+    'the pump horizon drops a distant event but not a more distant forecast');
+}
+
+{
+  const milestones = [];
+  for (let i = 0; i < 8; i++) {
+    milestones.push({ drugId: 'propofol', kind: 'k' + i, time: 30 + i, ce: 1 });
+  }
+  const items = collectUpcoming({ events: [], now: 0, milestones });
+  ok(items.length === DEFAULT_HUD_CFG.maxMilestones,
+    `forecasts are capped at maxMilestones (${DEFAULT_HUD_CFG.maxMilestones}), got ${items.length}`);
+}
+
+{
+  // maxItems bounds pump events only — a full event list must not squeeze the
+  // forecasts out, or the reported bug comes back whenever a plan is dense.
+  const evts = [];
+  for (let i = 1; i <= 10; i++) evts.push(ev('propofol', i, 'bolus', 10, 'manual'));
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 300, ce: 0.5, actionable: true };
+  const items = collectUpcoming({ events: evts, now: 0, milestones: [ms] });
+  ok(items.length === DEFAULT_HUD_CFG.maxItems + 1,
+    'a saturated event list still leaves room for forecasts');
+  ok(items[items.length - 1].key === 'ketamine:redose',
+    'and the distant forecast sorts to the end');
+}
+
+{
+  // The horizon is still honoured when a caller sets a finite one.
+  const ms = { drugId: 'ketamine', kind: 'redose', time: 300, ce: 0.5 };
+  const items = collectUpcoming({
+    events: [], now: 0, milestones: [ms], cfg: { milestoneHorizonMin: 120 },
+  });
+  eqArr(keys(items), [], 'a finite milestoneHorizonMin still filters');
 }
 
 // ── Unsorted input ────────────────────────────────────────────────────────────
