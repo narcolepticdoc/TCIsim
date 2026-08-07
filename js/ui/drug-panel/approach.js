@@ -45,12 +45,15 @@ function _getApproachCache(drugId) {
     _approachCache[drugId] = {
       // Single-line modes (TCI, intermittent, emergence)
       prefix: '', arrivalMin: null, staticText: '',
+      kind: null, milestoneCe: null,   // machine-readable twin of prefix
       // Manual mode: SS line (line 1)
       ssPrefix: '', ssArrivalMin: null, ssStaticText: '',
       lockedSsCeSS: null,
       ssLine: null,   // Ce_ss for chart annotation
+      ssCe: null,
       // Manual mode: plateau line (line 2)
       platPrefix: '', platArrivalMin: null, platStaticText: '',
+      platKind: null, platCe: null,
       lockedPlateauCe: null, lockedExitMin: null,
       plateauRegion: null,
       // Cache invalidation
@@ -78,10 +81,13 @@ export function _estimateTimeToTarget(curve, t, Ce, ceTarget, fraction) {
 }
 
 function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS, lockedPlateauCe, lockedExitMin, curve, ssSlopeTol, tciFraction, exitBandPct) {
-  const noData = { prefix: '', arrivalMin: null, staticText: '',
+  // `kind` / `*Ce` are the machine-readable twins of the HTML `*prefix` strings.
+  // The Next Up panel reads these; nothing parses the prefixes.
+  const noData = { prefix: '', arrivalMin: null, staticText: '', kind: null, milestoneCe: null,
     ssPrefix: '', ssArrivalMin: null, ssStaticText: '',
-    newLockedSsCeSS: null, ssLine: null,
+    newLockedSsCeSS: null, ssLine: null, ssCe: null,
     platPrefix: '', platArrivalMin: null, platStaticText: '',
+    platKind: null, platCe: null,
     newLockedPlateauCe: null, newLockedExitMin: null, plateauRegion: null };
 
   // Redose threshold — compute countdown whenever threshold is set.
@@ -99,7 +105,8 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
         const result = ctx.model.predictTrough(drugId, t, ceTarget);
         if (result && result.time !== null && result.time > t) {
           const ceStr = `<span class="appr-val">${fmtCeSmart(ceTarget, drugId)}</span>`;
-          redose = { prefix: `Redose Threshold ${ceStr} in `, arrivalMin: result.time };
+          redose = { prefix: `Redose Threshold ${ceStr} in `, arrivalMin: result.time,
+                     kind: 'redose', milestoneCe: ceTarget };
         }
       } catch (e) {}
     }
@@ -113,6 +120,8 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
       noData.prefix = redose.prefix || '';
       noData.arrivalMin = redose.arrivalMin || null;
       noData.staticText = redose.staticText || '';
+      noData.kind = redose.kind || null;
+      noData.milestoneCe = redose.milestoneCe ?? null;
     }
   }
 
@@ -128,6 +137,7 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
         return { ...noData,
           prefix: `Emergence <span class="appr-val">${smartDecimal(EMERGENCE_CE)}</span> in `,
           arrivalMin: result.time,
+          kind: 'emergence', milestoneCe: EMERGENCE_CE,
         };
       }
     } catch (e) {}
@@ -147,6 +157,7 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
       return { ...noData,
         prefix: `Target → <span class="appr-val">${smartDecimal(ceTarget)}</span> in `,
         arrivalMin: t + dt,
+        kind: 'target', milestoneCe: ceTarget,
       };
     }
     return { ...noData,
@@ -171,6 +182,7 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
       } else if (ssResult.timeToSsMin > 0.5) {
         result.ssPrefix = `Steady State ${ceStr} in `;
         result.ssArrivalMin = t + ssResult.timeToSsMin;
+        result.ssCe = displayCe;
       } else {
         result.ssStaticText = `Steady State ${ceStr}`;
       }
@@ -196,11 +208,15 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
       if (platResult.entryMin > 0.5) {
         result.platPrefix = `Plateau ≈ ${ceStr} in `;
         result.platArrivalMin = t + platResult.entryMin;
+        result.platKind = 'plateau-in';
+        result.platCe = displayCe;
       } else if (platResult.exitMin !== null && platResult.exitMin > 0.5) {
         const exitAbs = lockedExitMin !== null ? lockedExitMin : t + platResult.exitMin;
         result.platPrefix = 'Exit Plateau in ';
         result.platArrivalMin = exitAbs;
         result.newLockedExitMin = t + platResult.exitMin;
+        result.platKind = 'plateau-out';
+        result.platCe = displayCe;
       } else {
         result.platStaticText = `Plateau ≈ ${ceStr}`;
       }
@@ -216,6 +232,7 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
       return { ...noData,
         prefix: `Target → <span class="appr-val">${smartDecimal(ceTarget)}</span> in `,
         arrivalMin: t + dt,
+        kind: 'target', milestoneCe: ceTarget,
       };
     }
   }
@@ -268,18 +285,23 @@ export function updateApproachLine(ctx, drugId, t, m, Ce, ceTarget, rate) {
     cache.prefix          = data.prefix;
     cache.arrivalMin      = data.arrivalMin;
     cache.staticText      = data.staticText;
+    cache.kind            = data.kind;
+    cache.milestoneCe     = data.milestoneCe;
 
     // Manual mode: SS line
     cache.ssPrefix        = data.ssPrefix;
     cache.ssArrivalMin    = data.ssArrivalMin;
     cache.ssStaticText    = data.ssStaticText;
     cache.ssLine          = data.ssLine;
+    cache.ssCe            = data.ssCe;
 
     // Manual mode: plateau line
     cache.platPrefix      = data.platPrefix;
     cache.platArrivalMin  = data.platArrivalMin;
     cache.platStaticText  = data.platStaticText;
     cache.plateauRegion   = data.plateauRegion;
+    cache.platKind        = data.platKind;
+    cache.platCe          = data.platCe;
 
     cache.computedVersion = _curveVersion;
     cache.mode            = m;
@@ -359,6 +381,34 @@ export function updateApproachLine(ctx, drugId, t, m, Ce, ceTarget, rate) {
 export function getPlateauRegion(drugId) {
   const c = _approachCache[drugId];
   return c ? c.plateauRegion : null;
+}
+
+/**
+ * Return this drug's live milestone forecasts for the Next Up panel.
+ *
+ * Read straight from the cache the rAF loop already fills for every drug —
+ * no extra prediction work. Arrival times are absolute elapsed minutes;
+ * `null` means "no forecast in this mode".
+ *
+ * @returns {{kind: ?string, arrivalMin: ?number, ce: ?number,
+ *            ssArrivalMin: ?number, ssCe: ?number,
+ *            platKind: ?string, platArrivalMin: ?number, platCe: ?number}}
+ */
+export function getMilestones(drugId) {
+  const c = _approachCache[drugId];
+  if (!c) return { kind: null, arrivalMin: null, ce: null,
+                   ssArrivalMin: null, ssCe: null,
+                   platKind: null, platArrivalMin: null, platCe: null };
+  return {
+    kind: c.kind ?? null,
+    arrivalMin: c.arrivalMin ?? null,
+    ce: c.milestoneCe ?? null,
+    ssArrivalMin: c.ssArrivalMin ?? null,
+    ssCe: c.ssCe ?? null,
+    platKind: c.platKind ?? null,
+    platArrivalMin: c.platArrivalMin ?? null,
+    platCe: c.platCe ?? null,
+  };
 }
 
 /** Return the analytical steady-state Ce for a drug (for chart SS line). */

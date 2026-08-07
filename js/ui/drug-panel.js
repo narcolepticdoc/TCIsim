@@ -16,5 +16,7 @@ export {
   _estimateTimeToTarget,
   getPlateauRegion,
   getSteadyStateCe,
+  getMilestones,
+  getEmergenceArrival,
   forceUpdate,
 } from './drug-panel/index.js';

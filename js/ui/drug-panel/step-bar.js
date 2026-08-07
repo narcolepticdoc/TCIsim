@@ -6,7 +6,7 @@
  * countdown sourced from the approach cache instead.
  */
 
-import { fromCanonical, formatValue, getWorkingUnit } from '../../util/units.js';
+import { formatEventAction } from '../../util/event-label.js';
 import { fmtCountdown } from './formatters.js';
 import { getSettings, displayedSecToEvent } from '../settings.js';
 
@@ -16,25 +16,9 @@ import { getSettings, displayedSecToEvent } from '../settings.js';
  * Respects the user's persisted unit preference (same as fmtRateInline).
  */
 function fmtNextEvtLabel(ctx, evt, drugId) {
-  if (!evt || evt.source === 'system') return null;
-  try {
-    if (evt.type === 'pause' || (evt.type === 'rate' && evt.value === 0)) {
-      return 'Pause';
-    }
-    const weight = ctx.model.getPatient().weight;
-    if (evt.type === 'rate') {
-      const unit = getWorkingUnit(drugId, 'rate');
-      const v = fromCanonical(evt.value, unit, drugId, 'rate', { weightKg: weight });
-      return `Rate \u2192 ${formatValue(v, unit)} ${unit}`;
-    }
-    if (evt.type === 'bolus') {
-      const unit = getWorkingUnit(drugId, 'bolus');
-      const v = fromCanonical(evt.value, unit, drugId, 'bolus', { weightKg: weight });
-      const label = evt.deliveryMode === 'push' ? 'IV Push' : 'Bolus';
-      return `${label} ${formatValue(v, unit)} ${unit}`;
-    }
-  } catch (e) {}
-  return null;
+  let weight;
+  try { weight = ctx.model.getPatient().weight; } catch (e) {}
+  return formatEventAction(evt, drugId, { weightKg: weight, variant: 'short' });
 }
 
 /**

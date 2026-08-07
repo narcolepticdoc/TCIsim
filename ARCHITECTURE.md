@@ -177,3 +177,20 @@ Two-tier advance warnings for upcoming pump events (`source:'tci'` and `source:'
 **Audio:** `alert-sound.js` holds a single persistent `AudioContext`. `unlockAudio()` is registered as a one-shot `click` listener in `settings.init()` to satisfy browser autoplay policy. Three levels: `info` (single 880 Hz), `warning` (880/880/1100 Hz), `urgent` (alternating 1200/900 Hz).
 
 **Settings:** Stored in localStorage under `'tci-warn-settings'`. Four fields: `prepSec` (default 30), `prepSound` (default false), `alertSec` (default 10), `alertSound` (default true). Accessible via the ⚙ gear button in the topbar.
+
+**Acknowledgement fan-out:** `settings.init()` accepts an optional `onDismiss(evtId)`, fired from `dismiss()`. `js/app.js` wires it to `nextUp.markCleared` so pressing "Got it" also clears that row from the Next Up panel. Acknowledgement is never written back to the model — it lives only in UI-side `Set`s.
+
+## Events Panel — two views (`js/ui/history.js`, `js/ui/next-up.js`)
+
+`#panel-history` holds a sub-toggle (`.hv-toggle`) over two `.hv-view` containers, mirroring the `.content-view` idiom one level down. Nesting rather than adding a third `.content-view` avoids the three separate layout regimes (`setView`'s `<1020px` guard, the `≥1020px` blanket `.content-view{display:flex}`, and the portrait-≥700px `display:contents` grid) that a peer panel would each need handling for.
+
+**Log** (`history.js`) — the retrospective record, one drug at a time, plus the Add Event / Edit / notes / ET-RT action bar.
+
+**Next Up** (`next-up.js`) — a prospective, cross-drug heads-up display: a countdown clock over a curated list of interventions.
+
+- **Curation** is `collectUpcoming()` in `js/sim/upcoming.js` — pure, DOM-free and unit-tested (`tests/test-upcoming.mjs`). It selects and orders items and returns raw event objects; all label formatting stays in the view via `js/util/event-label.js`. Defaults: 20 min horizon, 6 future rows, 3 elapsed rows, and a 2 min group window that keeps a cluster intact across the horizon so a pause never appears without its restart.
+- **Milestones** are not predicted here. `approach.js getMilestones()` and `exit-readout.js getEmergenceArrival()` read caches the drug-panel rAF loop already fills for every drug in `DRUG_IDS`, so the forecasts cost no extra engine work.
+- **Two honesty guards** (see CLAUDE.md invariants): Emergence only when the pump is idle, and no milestone that a scheduled pump event would preempt.
+- **Alarm** reuses `prepSec` / `alertSec` and `displayedSecToEvent`, so the panel, the drug-card pulse and the popups never disagree. Amber at prep, red when due; a tap mutes only the keys currently alarming, so the next item to escalate re-arms the pulse.
+- **Cadence:** list rebuild on a 500 ms throttle plus every model mutation (`refreshChart`); the countdown renders each frame from cached arrival times — the same cache-and-tick pattern `approach.js` uses. No per-frame model calls.
+- `classifyFutureEvents` lives in `js/sim/upcoming.js` and is re-exported from `chart-bridge.js` for its historical import path, so the chart's event flags and the panel's rows share one rate-direction rule.

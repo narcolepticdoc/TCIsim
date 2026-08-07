@@ -4,6 +4,87 @@
 
 ## Session History
 
+### Next Up — interventions heads-up display (v0.6.3) — Interim
+
+**Almost none of this was new computation.** The starting assumption was that a
+"what's coming" panel would need its own prediction layer. It doesn't. The
+drug-panel rAF loop already iterates every drug in `DRUG_IDS` and calls
+`updateApproachLine` and `updateExitReadout` for each, so target arrival, redose
+threshold, steady state, plateau entry/exit and emergence are *already* computed
+60×/s for all three drugs — they were just being rendered into three different
+slots on one card at a time. And `model.getEvents()` with no argument already
+returns the flat, time-sorted, cross-drug array. The whole feature reduced to two
+cache accessors, one curation function, and a view.
+
+Worth recording as a pattern: **before adding a prediction layer, check whether
+the display layer is already predicting.** The per-drug caches exist for
+render-stability reasons (they were built to stop countdowns flickering), and
+that made them incidentally into a whole-case forecast store.
+
+**The honest-forecast problem, and why the panel is quieter than asked for.**
+The request was for four clinical events on the list. All four are real
+predictions, but two of them mean something different from "this will happen":
+
+- `exit-readout` answers a **counter-factual** while the pump runs — *if you
+  stopped now*, Ce reaches the Emerge threshold in N minutes. On a drug card,
+  next to a running infusion, the framing is obvious. On a list headed "what
+  happens next" it reads as a promise. So Emergence is surfaced only when the
+  cache is in idle mode (`rate == 0`), where it is an actual forecast.
+- Steady-state and plateau assume the current rate holds. A scheduled TCI step
+  before the predicted arrival voids them, so those are dropped.
+
+Net effect: the forecasts appear noticeably less often than the pump events.
+That was a deliberate trade and it's the sort of thing to re-litigate only with
+a new display convention — e.g. an explicit "projected, assumes no changes"
+treatment — rather than by relaxing the guards.
+
+**Two bugs the browser caught that the unit tests could not.** Both were found by
+driving the real app with Playwright, and both were behavioural rather than
+computational:
+
+1. *The user's own Stop Pump came back as a `missed` intervention.* Stop Pump
+   writes a `pause` at the clock and clears the forward plan; `time <= now`
+   made it elapsed, and the panel reported it as something they had failed to
+   do. The fix is a `seenFuture` set: an item can only be reported missed if it
+   was still pending on an earlier pass. An event created at or behind the clock
+   was never outstanding. Note this is *not* solvable by filtering on `source` —
+   a manually-added future event can genuinely be missed, so the discriminator
+   has to be "was this ever pending", which is history, not a field.
+2. *Tap-to-silence muted the whole list.* `silenceAlarm` added every actionable
+   item's key to the muted set, so the next intervention arrived with no alarm
+   at all — the panel went permanently quiet after one tap. It now mutes only
+   the keys actually at prep/due level, tracked in `_alarmingKeys` during the
+   per-frame alarm pass. The observable symptom took ~80 s of wall-clock to
+   appear, which is why it needed a driven browser rather than a unit test.
+
+**Navigation: a sub-toggle, not a fourth panel.** `setView` only writes panel
+`active` classes below 1020 px; at ≥1020 px `.content-view{display:flex}` reveals
+every content-view unconditionally, and the portrait-≥700 px block turns
+`.sim-content` into `display:contents` so each panel needs explicit grid
+placement. A third `.content-view` would have needed correct handling in all
+three regimes. Nesting both views inside `#panel-history` — which is always
+`display:flex; flex-direction:column` at every breakpoint — means the layout work
+was one pair of CSS rules mirroring the `.content-view` idiom one level down.
+
+**`cqw`, not `vw`, for the clock.** First pass sized it `clamp(40px,15vw,78px)`,
+which looked right on a phone and at 1180 px wide. But the Events panel is
+`flex:1; min-width:200px` beside the chart at ≥1020 px — a ~280 px column in a
+1180 px viewport — so `vw` was reading a box eight times the size of the one the
+text lives in. At the XXL text scale a five-character `19:59` would have run off
+the edge. `container-type: inline-size` on the wrapper plus `28cqw` makes the
+clock self-limiting: it now drops from 108 px to 78 px in the narrow column
+automatically. The `vw` line is left in place immediately above as the
+no-container-query fallback.
+
+**One duplication removed rather than tripled.** `_fmtEventDesc` in `settings.js`
+and `fmtNextEvtLabel` in `step-bar.js` were already near-identical display-unit
+formatters differing in two strings; the HUD needed a third. They now share
+`js/util/event-label.js` with a `variant` parameter that reproduces both original
+outputs byte-for-byte. Same reasoning applied to `classifyFutureEvents`, which
+moved from `chart-bridge.js` into `js/sim/upcoming.js` (re-exported from its old
+path so `planning.js` is untouched) so the chart's flags and the panel's rows
+cannot drift apart on rate-direction classification.
+
 ### Redose button, plan-marker fix, ⏱ removal (v0.6.2) — Interim
 
 **The ⏱ chart button lasted one version.** Added in 0.6.1.2 on the reasoning that

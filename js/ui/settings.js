@@ -13,7 +13,7 @@
  * Call reset() on new case to clear state and dismiss all popups.
  */
 
-import { fromCanonical, formatValue, getWorkingUnit } from '../util/units.js';
+import { formatEventAction } from '../util/event-label.js';
 import { unlockAudio, playAlert } from './alert-sound.js';
 
 const STORAGE_KEY = 'tci-warn-settings';
@@ -58,6 +58,7 @@ let _getDrugIds           = null;
 let _getPatient           = null;
 let _timer                = null;
 let _onMissedRecalculate  = null;
+let _onDismiss            = null;
 
 // One-shot guards — sets of event IDs that have already fired
 const _prepSoundFired = new Set();
@@ -204,6 +205,7 @@ export function init(opts = {}) {
   _getPatient          = opts.getPatient || (() => null);
   _timer               = opts.timer || null;
   _onMissedRecalculate = opts.onMissedRecalculate || null;
+  _onDismiss           = opts.onDismiss || null;
   _ensureContainer();
   // Unlock AudioContext on first user gesture anywhere in the document
   document.addEventListener('click', unlockAudio, { once: true });
@@ -328,6 +330,9 @@ export function check(t) {
 export function dismiss(evtId) {
   const el = _activePopups.get(evtId);
   if (el) { el.remove(); _activePopups.delete(evtId); }
+  // Acknowledging here is an acknowledgement everywhere — the Next Up panel
+  // clears its matching row rather than making the user tap twice.
+  if (_onDismiss) { try { _onDismiss(evtId); } catch (e) {} }
 }
 
 /** Dismiss all active popups for a specific drug (call after recalculate). */
@@ -409,29 +414,11 @@ function _showPopup(drugId, evt, t) {
 }
 
 function _fmtEventDesc(evt, drugId) {
-  try {
-    if (evt.type === 'pause' || (evt.type === 'rate' && evt.value === 0)) {
-      return 'Pause pump';
-    }
-
-    const patient = _getPatient ? _getPatient() : null;
-    const ctx     = patient ? { weightKg: patient.weight } : {};
-
-    if (evt.type === 'rate') {
-      const unit       = getWorkingUnit(drugId, 'rate');
-      const displayVal = fromCanonical(evt.value, unit, drugId, 'rate', ctx);
-      return `Rate → ${formatValue(displayVal, unit)} ${unit}`;
-    }
-
-    if (evt.type === 'bolus') {
-      const unit       = getWorkingUnit(drugId, 'bolus');
-      const displayVal = fromCanonical(evt.value, unit, drugId, 'bolus', ctx);
-      const label      = evt.deliveryMode === 'push' ? 'IV Push' : 'Bolus';
-      return `${label} ${formatValue(displayVal, unit)} ${unit}`;
-    }
-  } catch (e) {}
-
-  return evt.annotation || 'Event';
+  const patient = _getPatient ? _getPatient() : null;
+  return formatEventAction(evt, drugId, {
+    weightKg: patient ? patient.weight : undefined,
+    variant: 'long',
+  });
 }
 
 

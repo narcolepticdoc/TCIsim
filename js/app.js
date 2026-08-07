@@ -17,6 +17,7 @@ import * as keypad from './ui/keypad.js';
 import * as mode from './ui/mode.js';
 import * as drugPanel from './ui/drug-panel.js';
 import * as history from './ui/history.js';
+import * as nextUp from './ui/next-up.js';
 import * as eventEditor from './ui/event-editor.js';
 import * as reconcileModal from './ui/reconcile-modal.js';
 import { createChart } from './ui/chart.js';
@@ -497,7 +498,7 @@ function boot() {
     getModel: () => model,
     timer,
     getSelectedDrug: () => selectedDrug,
-    mode, drugPanel, history, settings,
+    mode, drugPanel, history, settings, nextUp,
     save: () => session.save(),
   });
 
@@ -550,7 +551,7 @@ function boot() {
     },
     getChart: () => chart,
     destroyChart: () => { if (chart) { chart.destroy(); chart = null; } },
-    timer, mode, settings, controls, setup,
+    timer, mode, settings, nextUp, controls, setup,
     initSimScreen, showScreen, addAnnotation, refreshChart,
   });
 
@@ -1021,6 +1022,18 @@ function boot() {
     onNotationDelete: (id) => deleteAnnotation(id),
   });
 
+  nextUp.init({
+    model,
+    getPatient: () => model ? model.getPatient() : { weight: 70 },
+    getDrugIds: () => DRUG_IDS,
+  });
+
+  // Events-panel sub-toggle: Log (retrospective) / Next Up (prospective).
+  const hvTabLog  = $('hv-tab-log');
+  const hvTabNext = $('hv-tab-next');
+  if (hvTabLog)  hvTabLog.addEventListener('click',  () => setEventsView('log'));
+  if (hvTabNext) hvTabNext.addEventListener('click', () => setEventsView('next'));
+
   // Seed the history log's time format from the persisted x-axis mode so it
   // renders correctly before the first rAF frame (no ET→RT flash on load).
   history.setTimeFormat((settings.getSettings().timeAxisMode ?? 'min') === 'rt' ? 'rt' : 'et');
@@ -1088,6 +1101,9 @@ function boot() {
     getDrugIds: () => DRUG_IDS,
     getPatient:  () => model ? model.getPatient() : null,
     timer,
+    // "Got it" on a popup is an acknowledgement everywhere — clear the matching
+    // Next Up row rather than making the user tap it a second time.
+    onDismiss: (evtId) => nextUp.markCleared(evtId),
     onMissedRecalculate: (drugId, missedEventTime) => {
       const ceTarget = mode.getCeTarget(drugId);
       if (!ceTarget) return;
@@ -1245,6 +1261,22 @@ function boot() {
 
 function closeModal(id) {
   $(id).classList.remove('open');
+}
+
+/**
+ * Switch the Events panel between the chronological Log and the Next Up
+ * heads-up display. Both live inside #panel-history, so this is independent of
+ * setView's chart/history switching and of the tablet split layout.
+ */
+function setEventsView(v) {
+  const isNext = v === 'next';
+  $('hv-tab-log')?.classList.toggle('active', !isNext);
+  $('hv-tab-next')?.classList.toggle('active', isNext);
+  $('hv-view-log')?.classList.toggle('active', !isNext);
+  $('hv-view-next')?.classList.toggle('active', isNext);
+  nextUp.setActive(isNext);
+  if (isNext) nextUp.render(timer.getElapsedMinutes());
+  else        history.scrollToNow();
 }
 
 function setView(v) {

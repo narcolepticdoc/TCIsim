@@ -161,6 +161,30 @@ export function updateExitReadout(ctx, drugId, t, Ce, caseStarted) {
   if (el.innerHTML !== html) el.innerHTML = html;
 }
 
+/**
+ * Emergence arrival for the Next Up panel.
+ *
+ * `isIdle` matters: with the pump running this readout is a **counter-factual**
+ * ("if you stopped now"), which is honest on a drug card but would be a lie on a
+ * list of things that are going to happen. Callers that promise future events
+ * must require `isIdle === true`.
+ *
+ * @returns {{arrivalMin: ?number, exitCe: number, isIdle: boolean}}
+ */
+export function getEmergenceArrival(drugId) {
+  const c = _exitReadoutCache[drugId];
+  if (!c) return { arrivalMin: null, exitCe: 0, isIdle: false };
+  const isIdle = c.lastIsIdle === true;
+  let arrivalMin = null;
+  if (isIdle && c.idleStartDecayMin !== null) {
+    arrivalMin = c.idleStartT + c.idleStartDecayMin;
+  } else if (!isIdle && c.displayedDecayMin !== null) {
+    // Counter-factual — exposed so callers can label it, never as a forecast.
+    arrivalMin = null;
+  }
+  return { arrivalMin, exitCe: c.exitCe || 0, isIdle };
+}
+
 /** Force-invalidate all exit readout caches (called after model mutation). */
 export function invalidateAll() {
   for (const k of Object.keys(_exitReadoutCache)) {
