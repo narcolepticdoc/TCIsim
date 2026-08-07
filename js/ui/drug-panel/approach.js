@@ -46,6 +46,7 @@ function _getApproachCache(drugId) {
       // Single-line modes (TCI, intermittent, emergence)
       prefix: '', arrivalMin: null, staticText: '',
       kind: null, milestoneCe: null,   // machine-readable twin of prefix
+      belowThreshold: false,           // Ce is at/below the redose threshold now
       // Manual mode: SS line (line 1)
       ssPrefix: '', ssArrivalMin: null, ssStaticText: '',
       lockedSsCeSS: null,
@@ -84,6 +85,7 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
   // `kind` / `*Ce` are the machine-readable twins of the HTML `*prefix` strings.
   // The Next Up panel reads these; nothing parses the prefixes.
   const noData = { prefix: '', arrivalMin: null, staticText: '', kind: null, milestoneCe: null,
+    belowThreshold: false,
     ssPrefix: '', ssArrivalMin: null, ssStaticText: '',
     newLockedSsCeSS: null, ssLine: null, ssCe: null,
     platPrefix: '', platArrivalMin: null, platStaticText: '',
@@ -99,7 +101,12 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
     let redose = null;
     if (Ce <= ceTarget) {
       const ceStr = `<span class="appr-val">${fmtCeSmart(ceTarget, drugId)}</span>`;
-      redose = { staticText: `<span class="appr-below">Below Redose Threshold ${ceStr}</span>` };
+      // `arrivalMin` stays null — the crossing has already happened, there is no
+      // future arrival to count down to. `belowThreshold` lets the Next Up panel
+      // latch a persistent "redose due" row off this state; the card itself keys
+      // off staticText exactly as before.
+      redose = { staticText: `<span class="appr-below">Below Redose Threshold ${ceStr}</span>`,
+                 kind: 'redose', milestoneCe: ceTarget, belowThreshold: true };
     } else {
       try {
         const result = ctx.model.predictTrough(drugId, t, ceTarget);
@@ -122,6 +129,7 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
       noData.staticText = redose.staticText || '';
       noData.kind = redose.kind || null;
       noData.milestoneCe = redose.milestoneCe ?? null;
+      noData.belowThreshold = redose.belowThreshold === true;
     }
   }
 
@@ -287,6 +295,7 @@ export function updateApproachLine(ctx, drugId, t, m, Ce, ceTarget, rate) {
     cache.staticText      = data.staticText;
     cache.kind            = data.kind;
     cache.milestoneCe     = data.milestoneCe;
+    cache.belowThreshold  = data.belowThreshold === true;
 
     // Manual mode: SS line
     cache.ssPrefix        = data.ssPrefix;
@@ -390,19 +399,23 @@ export function getPlateauRegion(drugId) {
  * no extra prediction work. Arrival times are absolute elapsed minutes;
  * `null` means "no forecast in this mode".
  *
- * @returns {{kind: ?string, arrivalMin: ?number, ce: ?number,
+ * `belowThreshold` reports that the redose threshold has *already* been crossed,
+ * in which case `arrivalMin` is null — there is nothing left to count down to.
+ *
+ * @returns {{kind: ?string, arrivalMin: ?number, ce: ?number, belowThreshold: boolean,
  *            ssArrivalMin: ?number, ssCe: ?number,
  *            platKind: ?string, platArrivalMin: ?number, platCe: ?number}}
  */
 export function getMilestones(drugId) {
   const c = _approachCache[drugId];
-  if (!c) return { kind: null, arrivalMin: null, ce: null,
+  if (!c) return { kind: null, arrivalMin: null, ce: null, belowThreshold: false,
                    ssArrivalMin: null, ssCe: null,
                    platKind: null, platArrivalMin: null, platCe: null };
   return {
     kind: c.kind ?? null,
     arrivalMin: c.arrivalMin ?? null,
     ce: c.milestoneCe ?? null,
+    belowThreshold: c.belowThreshold === true,
     ssArrivalMin: c.ssArrivalMin ?? null,
     ssCe: c.ssCe ?? null,
     platKind: c.platKind ?? null,

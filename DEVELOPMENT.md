@@ -4,6 +4,72 @@
 
 ## Session History
 
+### Next Up: latched threshold crossings + fit-to-width clock (v0.6.4.2) — Interim
+
+**A self-clearing alarm was the sharpest signal yet that a design was wrong.**
+The reported bug: a crossed redose threshold cleared itself. What made it
+obviously not merely incomplete is that `settings.checkBelowThreshold` fires the
+redose chime at exactly that instant — so the app was alarming audibly about a
+row it had just deleted. When two subsystems disagree that loudly, one of them
+has the wrong model of the event.
+
+Three compounding causes, any one of which alone would have dropped the row:
+`approach.js` stops reporting `kind`/`arrivalMin` once `Ce <= threshold` (it
+switches to the "Below Redose Threshold" static text); both `_collectMilestones`
+and `collectUpcoming` filtered milestones to `time > now`; and the rebuild then
+pruned the key from `_clearedKeys`/`_alarmMuted` via `liveKeys`, discarding the
+acknowledgement state too.
+
+**The conceptual fix is a category distinction, not new machinery.** Almost
+everything needed already existed: an *elapsed actionable* item persists, pulses
+red, silences on a panel tap and clears on a row tap. What was missing is that a
+threshold crossing is a **latched** event — it has already happened and stays
+until dealt with — whereas every other milestone is a *forecast*, and a forecast
+in the past is simply stale. Once `latched` existed as a concept the rest fell
+out: keep it as `elapsed`, give it its own row budget (exempt from
+`elapsedLookbackMin` and `maxElapsed`, because a crossing 40 min old is still
+outstanding and three missed pump steps must not evict the row that is actively
+alarming), and let a bolus at/after the crossing clear it.
+
+The bolus rule has a pleasing property: because the latch is stamped at the
+moment of the crossing, a *later* crossing carries a later timestamp that the old
+bolus no longer satisfies. "Cleared for good" therefore needs no extra state —
+the timestamp comparison is the state. Verified in-browser that a bolus clears
+the latch while Ce is still *below* threshold (0.476 vs 0.507), i.e. it is the
+bolus rule doing the work rather than Ce recovering.
+
+**A bug I shipped and then had to find twice.** `nextUp.render(t = 0)` — the
+row-tap handler calls `render()` with no argument, so it rebuilt against a clock
+of zero. That makes every event in the case look pending, which poisons
+`_seenFuture`, so already-performed actions come back as `missed`. The symptom
+only appeared *after* clearing a row, which is why neither the unit tests nor the
+earlier browser passes caught it: you have to tap something to trigger it. The
+lesson is narrow and worth keeping: **a defaulted clock is never safe.** `t` now
+defaults to the live clock via `_now()`, and CLAUDE.md carries the invariant.
+
+**Fit-to-width clock, and a measurement lesson.** `28cqw` was calibrated in 0.6.3
+for a 5-glyph `19:59`; in 0.6.4 I added the `H:MM:SS` rollover, making the string
+7 glyphs, without revisiting the factor. In the ≥1020px split layout that
+overflowed a 280px column by ~57px, and after the 0.6.4 horizon fix a ≥1h clock
+head is the *normal* state for ketamine — so it shipped and the user saw it.
+
+Two changes. First, drop seconds past the hour (`5h 02m`): a five-hour prediction
+does not carry second-level precision, so the shorter string is also the more
+honest one. Second, size per string rather than by one factor — the face is
+monospaced with tabular figures, so width is exactly `glyphs × advance`, and CSS
+only needs the glyph count. `next-up.js` publishes it as `data-len`; CSS holds the
+per-length fit ceiling in `--nu-fit`; the text-size tiers stay as the upper bound
+so the user's preference is still respected. The clock is now genuinely as large
+as fits: in the same 280px box, `9:59` renders at 108px and `12h 05m` at 61.5px.
+
+The measurement lesson is the durable part. My original check reported a false
+pass for two reasons: `scrollWidth` does not grow when a block's text overflows
+(so it must be a `Range` over the glyph run), and the rAF loop rewrote the string
+I had injected before the measurement ran (so the render must be frozen —
+`drugPanel.stop()` — first). Both traps are silent. The test now asserts
+`rangeWidth <= boxWidth` for every reachable string across four
+viewport/text-scale combinations.
+
 ### Next Up: drug-coloured names (v0.6.4.1) — Interim
 
 The drug name was `--text-muted`, i.e. styled as a caption above the verb. Wrong
