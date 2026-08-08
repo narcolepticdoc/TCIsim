@@ -586,9 +586,14 @@
     .nu-row.nu-latched .nu-verb{color:var(--red)}
     .nu-row.nu-latched.nu-acked .nu-verb{color:var(--text-primary)}
     /* Panel alarm — same 1.0s inset-shadow idiom as .drug-card.warn-prep, since
-       an outward shadow is clipped by the scrolling ancestor. Red wins by order. */
-    @keyframes nu-alarm-prep{0%,100%{box-shadow:inset 0 0 0 0 rgba(245,158,11,0);background-color:transparent}40%,60%{box-shadow:inset 0 0 0 3px rgba(245,158,11,.9),inset 0 0 20px rgba(245,158,11,.18);background-color:rgba(245,158,11,.08)}}
-    @keyframes nu-alarm-due{0%,100%{box-shadow:inset 0 0 0 0 rgba(239,68,68,0);background-color:transparent}40%,60%{box-shadow:inset 0 0 0 3px rgba(239,68,68,.95),inset 0 0 20px rgba(239,68,68,.22);background-color:rgba(239,68,68,.10)}}
+       an outward shadow is clipped by the scrolling ancestor. Red wins by order.
+       The peak background tint is --nu-flash-a, set on :root from the
+       "Alarm flash brightness" setting (settings-ui.js applyAlarmFlash). Only
+       the tint is settable — the inset border stays put, so 0 leaves a
+       border-only flash rather than no alarm at all. The red "due" flash runs
+       at 1.25x, preserving the ratio the two levels shipped with. */
+    @keyframes nu-alarm-prep{0%,100%{box-shadow:inset 0 0 0 0 rgba(245,158,11,0);background-color:transparent}40%,60%{box-shadow:inset 0 0 0 3px rgba(245,158,11,.9),inset 0 0 20px rgba(245,158,11,.18);background-color:rgba(245,158,11,var(--nu-flash-a,0.08))}}
+    @keyframes nu-alarm-due{0%,100%{box-shadow:inset 0 0 0 0 rgba(239,68,68,0);background-color:transparent}40%,60%{box-shadow:inset 0 0 0 3px rgba(239,68,68,.95),inset 0 0 20px rgba(239,68,68,.22);background-color:rgba(239,68,68,calc(var(--nu-flash-a,0.08) * 1.25))}}
     #hv-view-next.nu-alarm-prep{animation:nu-alarm-prep 1.0s ease-in-out infinite}
     #hv-view-next.nu-alarm-due{animation:nu-alarm-due 1.0s ease-in-out infinite}
     /* Tab badge — an alarm must be discoverable from the Log view or Chart tab,
@@ -1784,7 +1789,7 @@
             </div>
             <div class="nu-list" id="nu-list"></div>
             <div class="nu-actions">
-              <button class="evt-action-btn nu-action-time" id="btn-nu-time" title="Time shown in the list: countdown / case time / real time"><span class="nu-t-cd active">IN</span><span class="t-sep">/</span><span class="nu-t-et">ET</span><span class="t-sep">/</span><span class="nu-t-rt">RT</span></button>
+              <button class="evt-action-btn nu-action-time" id="btn-nu-time" title="Time shown in the list: countdown / case time / real time"><span class="nu-t-cd active">CD</span><span class="t-sep">/</span><span class="nu-t-et">ET</span><span class="t-sep">/</span><span class="nu-t-rt">RT</span></button>
             </div>
           </div>
         </div>
@@ -2258,6 +2263,13 @@
                 <input type="checkbox" id="set-redose-sound" checked>
                 Play chime when Ce drops below threshold
               </label>
+            </div>
+            <div class="settings-row">
+              <label>Next Up alarm — flash brightness</label>
+              <div class="settings-control">
+                <input type="range" id="set-alarm-flash" min="0" max="30" step="1" value="8">
+                <span id="set-alarm-flash-val">8%</span>
+              </div>
             </div>
             <div class="settings-row">
               <label>Status indicator — warn window (minutes before event)</label>

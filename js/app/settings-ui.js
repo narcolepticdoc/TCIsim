@@ -35,7 +35,7 @@ const exitBandToSlider = (pct) => exitBandGridPct(pct).toFixed(1);
 const exitBandLabel    = (pct) => '±' + exitBandGridPct(pct).toFixed(1).replace(/\.0$/, '') + '%';
 
 const INFO_TEXTS = {
-  notifications: 'Configure how the simulator alerts you to upcoming pump events. Prep alerts provide early visual warning with an amber pulse on drug cards. Alert popups appear closer to the event with optional sound cues. The status indicator colors the drug card edge based on event proximity.',
+  notifications: 'Configure how the simulator alerts you to upcoming pump events. Prep alerts provide early visual warning with an amber pulse on drug cards. Alert popups appear closer to the event with optional sound cues. The status indicator colors the drug card edge based on event proximity. Alarm flash brightness sets how strongly the Next Up panel tints its background when an intervention is imminent or overdue \u2014 the pulsing border is unaffected, so 0% leaves a border-only flash rather than no alarm.',
   simulation: 'Fine-tune how the simulator generates TCI plans. Max pump rate is the global delivery rate (mL/h) shared by every pumped drug; it caps the infusion rate and sets how fast boluses are delivered, and can be changed mid-case (it affects subsequent plans and boluses, not already-delivered events). Ce drift tolerance sets how far the effect-site concentration is allowed to drift from target before the planner emits a new pump rate step \u2014 lower values give tighter tracking at the cost of more frequent rate changes; higher values produce simpler plans with more visible Ce variation. The default (1.5%) is already tighter than a live clinician could hold manually. Plateau slope tolerance determines how flat the concentration curve must be to qualify as steady-state.',
   appearance: 'Adjust the visual presentation of the chart and readouts. Reducing Cp line opacity pushes the plasma concentration curve into the background so the effect-site (Ce) curve stands out more clearly. The Ce drift band highlights the \u00b1drift tolerance around each TCI target \u2014 Ce may briefly touch this boundary at planned step transitions by design. Text size enlarges the drug-panel and history informational text; it is gated to screens that have the space for it. Theme switches the entire app between dark and light color schemes.',
   sync: 'Pair this simulator with a separate scratchpad app to pull patient demographics from the cloud. Enter the 6-character code that the scratchpad app displays; both apps then share a private scratch area. On the patient setup screen, tap \u201cPull patient from cloud\u201d to fetch the latest demographics (age, sex, height, weight) \u2014 the timestamp confirms how recent they are. The same code also moves your last case and starting-dose template between devices: push the case here (or from the setup screen) and pull it on the other device within 24 hours. De-identified / training use only; do not transfer protected health information.',
@@ -50,6 +50,19 @@ function applyTextSize(size) {
   else if (size === 'xxl') cls.add('text-xxl');
   // Drug-card height may have changed — re-sync the portrait grid rows.
   try { syncPortraitLayout(); } catch (e) { /* module may not have been init'd yet */ }
+}
+
+/**
+ * Apply the Next Up alarm's flash brightness.
+ *
+ * Only the background tint is settable — the inset border stays put, so 0 gives
+ * a border-only flash rather than no alarm at all. The keyframes in index.html
+ * read `--nu-flash-a`; the red "due" flash scales it by 1.25 there, preserving
+ * the ratio the two alarm levels shipped with.
+ */
+function applyAlarmFlash(alpha) {
+  const a = (typeof alpha === 'number' && isFinite(alpha)) ? alpha : 0.08;
+  document.documentElement.style.setProperty('--nu-flash-a', String(a));
 }
 
 const THEME_META_COLORS = { dark: '#0a0f1a', light: '#f4f6fa' };
@@ -98,6 +111,8 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   const nomogramSlider    = $('set-nomogram-opacity');
   const nomogramVal       = $('set-nomogram-opacity-val');
   const overlaySlider     = $('set-overlay-opacity');
+  const alarmFlashSlider  = $('set-alarm-flash');
+  const alarmFlashVal     = $('set-alarm-flash-val');
   const overlayVal        = $('set-overlay-opacity-val');
   const ghostOpacSlider   = $('set-ghost-opacity');
   const ghostOpacVal      = $('set-ghost-opacity-val');
@@ -140,6 +155,9 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   if (nomogramVal)       nomogramVal.textContent       = Math.round((savedSettings.nomogramOpacity ?? 1.0) * 100) + '%';
   if (overlaySlider)     overlaySlider.value           = Math.round((savedSettings.overlayOpacity ?? 1.0) * 100);
   if (overlayVal)        overlayVal.textContent        = Math.round((savedSettings.overlayOpacity ?? 1.0) * 100) + '%';
+  if (alarmFlashSlider)  alarmFlashSlider.value        = Math.round((savedSettings.alarmFlashBg ?? 0.08) * 100);
+  if (alarmFlashVal)     alarmFlashVal.textContent     = Math.round((savedSettings.alarmFlashBg ?? 0.08) * 100) + '%';
+  applyAlarmFlash(savedSettings.alarmFlashBg ?? 0.08);
   if (ghostOpacSlider)   ghostOpacSlider.value         = Math.round((savedSettings.ghostOpacity ?? 0.5) * 100);
   if (ghostOpacVal)      ghostOpacVal.textContent      = Math.round((savedSettings.ghostOpacity ?? 0.5) * 100) + '%';
   if (markerSizeSlider)  markerSizeSlider.value        = (savedSettings.eventMarkerSize ?? 7);
@@ -176,6 +194,8 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
     const nomogramOpacity   = nomogramPct / 100;
     const overlayPct        = overlaySlider ? parseInt(overlaySlider.value, 10) : 100;
     const overlayOpacity    = overlayPct / 100;
+    const alarmFlashPct     = alarmFlashSlider ? parseInt(alarmFlashSlider.value, 10) : 8;
+    const alarmFlashBg      = alarmFlashPct / 100;
     const ghostOpacPct      = ghostOpacSlider ? parseInt(ghostOpacSlider.value, 10) : 50;
     const ghostOpacity      = ghostOpacPct / 100;
     // Ghost on/off lives on the chart-controls strip, not in the settings
@@ -199,9 +219,11 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
     if (cpOpacityVal)    cpOpacityVal.textContent    = cpOpacityPct      + '%';
     if (nomogramVal)     nomogramVal.textContent     = nomogramPct       + '%';
     if (overlayVal)      overlayVal.textContent      = overlayPct        + '%';
+    if (alarmFlashVal)   alarmFlashVal.textContent   = alarmFlashPct     + '%';
+    applyAlarmFlash(alarmFlashBg);
     if (ghostOpacVal)    ghostOpacVal.textContent    = ghostOpacPct      + '%';
     if (markerSizeVal)   markerSizeVal.textContent   = eventMarkerSize   + ' px';
-    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode, planningModeDefault, crossoverTimeLabels });
+    setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, alarmFlashBg, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode, planningModeDefault, crossoverTimeLabels });
   }
 
   prepSlider.addEventListener('input',    saveAll);
@@ -217,6 +239,7 @@ export function initSettingsUI({ getSettings, setSettings, onMaxPumpRateChange }
   if (cpOpacitySlider)   cpOpacitySlider.addEventListener('input',   saveAll);
   if (nomogramSlider)    nomogramSlider.addEventListener('input',    saveAll);
   if (overlaySlider)     overlaySlider.addEventListener('input',     saveAll);
+  if (alarmFlashSlider)  alarmFlashSlider.addEventListener('input',  saveAll);
   if (ghostOpacSlider)   ghostOpacSlider.addEventListener('input',   saveAll);
   if (markerSizeSlider)  markerSizeSlider.addEventListener('input',  saveAll);
   if (showCeBandChk)     showCeBandChk.addEventListener('change',    saveAll);

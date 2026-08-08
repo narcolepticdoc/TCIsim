@@ -31,6 +31,9 @@ const DEFAULTS     = {
   cpOpacity:   1.0,    // Cp line opacity (0.1–1.0)
   nomogramOpacity: 1.0, // BIS nomogram band opacity (0.1–1.0, applied as multiplier)
   overlayOpacity:  1.0, // Threshold/target line opacity (0.1–1.0)
+  alarmFlashBg: 0.08,  // Next Up alarm — peak background tint (0–0.30). The
+                       // inset border is unaffected, so 0 leaves a border-only
+                       // flash. The red "due" flash uses 1.25× this.
   ghostOpacity:    0.5, // Per-drug ghost Ce trace opacity (0.1–1.0)
   ghostTracesEnabled: false, // Show ghost Ce traces of non-selected drugs
   eventMarkerSize: 7,   // Future-event marker radius in px (4–16)
@@ -127,6 +130,10 @@ export function getSettings() {
                               && p.overlayOpacity >= 0.1 && p.overlayOpacity <= 1.0)
         ? p.overlayOpacity : DEFAULTS.overlayOpacity;
 
+      const alarmFlashBg = (typeof p.alarmFlashBg === 'number'
+                            && p.alarmFlashBg >= 0 && p.alarmFlashBg <= 0.30)
+        ? p.alarmFlashBg : DEFAULTS.alarmFlashBg;
+
       const ghostOpacity = (typeof p.ghostOpacity === 'number'
                             && p.ghostOpacity >= 0.1 && p.ghostOpacity <= 1.0)
         ? p.ghostOpacity : DEFAULTS.ghostOpacity;
@@ -175,6 +182,7 @@ export function getSettings() {
         cpOpacity,
         nomogramOpacity,
         overlayOpacity,
+        alarmFlashBg,
         ghostOpacity,
         ghostTracesEnabled,
         eventMarkerSize,
@@ -190,8 +198,8 @@ export function getSettings() {
   return { ...DEFAULTS };
 }
 
-export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode, planningModeDefault, crossoverTimeLabels }) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode, planningModeDefault, crossoverTimeLabels })); } catch (e) {}
+export function setSettings({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, alarmFlashBg, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode, planningModeDefault, crossoverTimeLabels }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ prepSec, prepSound, alertSec, alertSound, redoseSound, statusWarnMinutes, reactionDelaySec, ceTolerance, ssSlopeTol, exitBandPct, cpOpacity, nomogramOpacity, overlayOpacity, alarmFlashBg, ghostOpacity, ghostTracesEnabled, eventMarkerSize, textSize, theme, showCeBand, timeAxisMode, planningModeDefault, crossoverTimeLabels })); } catch (e) {}
 }
 
 /**

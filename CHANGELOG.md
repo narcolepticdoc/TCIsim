@@ -11,6 +11,13 @@
 
 ---
 
+## [0.6.4.5] — 2026-08-07
+
+- **Next Up alarm flash brightness is now adjustable** — Settings → Notifications, 0–30%, default 8%. Controls how strongly the panel tints its background when an intervention is imminent or overdue. The pulsing inset border is deliberately *not* settable, so 0% gives a border-only flash rather than no alarm at all. The red "due" flash runs at 1.25× the amber "prep" value, keeping the ratio the two levels shipped with; at the default this reproduces the previous appearance exactly, so nothing shifts for anyone who leaves it alone.
+- **The row-time toggle reads `CD / ET / RT`** instead of `IN / ET / RT`.
+
+Under the hood: `alarmFlashBg` in `settings.js` DEFAULTS (0–0.30 validator), a slider in the Notifications pane, and `applyAlarmFlash()` in `settings-ui.js` setting `--nu-flash-a` on `:root`. The keyframes read it via `var(--nu-flash-a, 0.08)`, so the fallback keeps the panel correct even if the applier never runs. It lives inside the existing `tci-warn-settings` blob, which `prefsManifest()` already syncs — no manifest change.
+
 ## [0.6.4.4] — 2026-08-07
 
 Two bugs in the redose alert, both reported from real use, both silent failures.
