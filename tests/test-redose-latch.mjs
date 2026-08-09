@@ -2,7 +2,7 @@
  * test-redose-latch.mjs — Redose-threshold occurrence state machine.
  *
  * Exercises the real functions in js/ui/settings.js: checkBelowThreshold,
- * noteRedoseDose, getBelowSince, getRedoseGeneration, isRedoseDoseSettling.
+ * noteRedoseDose, getBelowSince, getRedoseGeneration, isRedoseSettling.
  * They are DOM-free (playAlert no-ops without an unlocked AudioContext), so the
  * lifecycle can be driven directly here.
  *
