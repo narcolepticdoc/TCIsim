@@ -11,6 +11,18 @@
 
 ---
 
+## [0.6.4.6] — 2026-08-07
+
+- **Fixed: arming a redose threshold while Ce was still climbing toward it alarmed "Redose due" immediately.** Reported after giving fentanyl and then setting the threshold mid-upswing: the panel flashed red although Ce was about a minute from crossing *upward* and the genuine redose was ~15 min away.
+
+  Being below the threshold does not by itself mean a redose is due — Ce may simply not have got there yet. **Direction decides.** Falling into the threshold is a real crossing and alarms at once, as before. Rising toward it (or unknown, e.g. armed on the first frame) waits and watches: if Ce crosses upward the occurrence ends with no alarm ever raised; if Ce peaks below the threshold and turns over, it was never going to get there and the alert fires then.
+
+  This reuses the wait-and-watch machinery added in 0.6.4.4 for an inadequate dose — the two are the same question, "will Ce reach the threshold?", asked at different moments. `dosedAt` is accordingly renamed `quietSince` and `isRedoseDoseSettling()` to `isRedoseSettling()`, since a dose is no longer the only thing that starts the wait.
+
+  `js/pk/decay-predictor.js` has always carried a `hasBeenAbove` guard for exactly this reason, so the drug card's countdown was already direction-aware; the threshold state machine was not.
+
+`tests/test-redose-latch.mjs` grows to 37 assertions, including all four arming cases: below-and-rising (wait, then resolve silently), peaks-below (fires at the turnover), below-and-falling (fires at once), and a threshold raised above a falling Ce (fires at once). 1196 tests total.
+
 ## [0.6.4.5] — 2026-08-07
 
 - **Next Up alarm flash brightness is now adjustable** — Settings → Notifications, 0–30%, default 8%. Controls how strongly the panel tints its background when an intervention is imminent or overdue. The pulsing inset border is deliberately *not* settable, so 0% gives a border-only flash rather than no alarm at all. The red "due" flash runs at 1.25× the amber "prep" value, keeping the ratio the two levels shipped with; at the default this reproduces the previous appearance exactly, so nothing shifts for anyone who leaves it alone.

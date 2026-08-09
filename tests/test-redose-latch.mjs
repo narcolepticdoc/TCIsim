@@ -14,10 +14,13 @@
  *     over and is still under.
  *  2. Acknowledgement keys were a per-drug slot, so one tap silenced that drug's
  *     redose forever. Generations scope them to the occurrence.
+ *  3. Arming a threshold while Ce was still climbing toward it alarmed "redose
+ *     due" instantly, when in fact the dose simply had not peaked yet. Being
+ *     below the threshold only means a redose is due if Ce got there and FELL.
  */
 
 import { checkBelowThreshold, noteRedoseDose, getBelowSince,
-         getRedoseGeneration, isRedoseDoseSettling } from '../js/ui/settings.js';
+         getRedoseGeneration, isRedoseSettling } from '../js/ui/settings.js';
 
 let passed = 0, failed = 0;
 function ok(cond, msg) {
@@ -40,14 +43,16 @@ console.log('\n===== Redose latch lifecycle (js/ui/settings.js) =====\n');
   const d = drug();
   eq(getBelowSince(d), null, 'no crossing recorded before Ce drops');
   eq(getRedoseGeneration(d), 0, 'generation starts at 0');
+  checkBelowThreshold(d, false, 19, 1.1);   // above, establishes direction
   checkBelowThreshold(d, true, 20, 0.9);
   eq(getBelowSince(d), 20, 'the crossing stamps its time');
   eq(getRedoseGeneration(d), 1, 'and increments the generation');
-  ok(!isRedoseDoseSettling(d), 'nothing is settling yet');
+  ok(!isRedoseSettling(d), 'nothing is settling yet');
 }
 
 {
   const d = drug();
+  checkBelowThreshold(d, false, 19, 1.1);
   checkBelowThreshold(d, true, 20, 0.9);
   checkBelowThreshold(d, true, 21, 0.85);   // still below, no dose
   eq(getBelowSince(d), 20, 'staying below does not move the stamp');
@@ -56,49 +61,53 @@ console.log('\n===== Redose latch lifecycle (js/ui/settings.js) =====\n');
 // ── A dose silences it while it takes effect ───────────────────────────────────
 {
   const d = drug();
+  checkBelowThreshold(d, false, 19, 1.1);
   checkBelowThreshold(d, true, 20, 0.9);
   eq(noteRedoseDose(d, 22), true, 'a dose below threshold is recorded');
-  ok(isRedoseDoseSettling(d), 'the alert goes quiet while the dose acts');
+  ok(isRedoseSettling(d), 'the alert goes quiet while the dose acts');
 }
 
 {
   const d = drug();
   eq(noteRedoseDose(d, 5), false, 'a dose given while ABOVE threshold is a no-op');
-  ok(!isRedoseDoseSettling(d), 'and nothing is marked settling');
+  ok(!isRedoseSettling(d), 'and nothing is marked settling');
 }
 
 // ── Re-arm once Ce turns over, still under threshold (bug 1) ──────────────────
 {
   const d = drug();
+  checkBelowThreshold(d, false, 19, 1.10);
   checkBelowThreshold(d, true, 20, 0.90);
   noteRedoseDose(d, 22);
   // Ce climbing after the dose — must stay quiet throughout.
   checkBelowThreshold(d, true, 22.5, 0.94);
-  ok(isRedoseDoseSettling(d), 'still quiet while Ce is rising');
+  ok(isRedoseSettling(d), 'still quiet while Ce is rising');
   checkBelowThreshold(d, true, 23.0, 0.97);
   checkBelowThreshold(d, true, 23.5, 0.99);
-  ok(isRedoseDoseSettling(d), 'still quiet at the peak');
+  ok(isRedoseSettling(d), 'still quiet at the peak');
   // Ce turns over while STILL below the threshold: that dose was not enough.
   checkBelowThreshold(d, true, 24.0, 0.96);
-  ok(!isRedoseDoseSettling(d), 'Ce falling away from the peak re-arms the alert');
+  ok(!isRedoseSettling(d), 'Ce falling away from the peak re-arms the alert');
   eq(getBelowSince(d), 22, 'and the count-up measures from that dose, not the crossing');
   eq(getRedoseGeneration(d), 1, 'a re-arm is the same occurrence, not a new one');
 }
 
 {
   const d = drug();
+  checkBelowThreshold(d, false, 19, 1.10);
   checkBelowThreshold(d, true, 20, 0.90);
   noteRedoseDose(d, 22);
   // A dip smaller than REARM_DROP (0.5%) must not count as turning over.
   checkBelowThreshold(d, true, 22.5, 1.00);
   checkBelowThreshold(d, true, 23.0, 0.999);
-  ok(isRedoseDoseSettling(d), 'a sub-threshold wobble does not re-arm');
+  ok(isRedoseSettling(d), 'a sub-threshold wobble does not re-arm');
   checkBelowThreshold(d, true, 23.5, 0.99);
-  ok(!isRedoseDoseSettling(d), 'a real 1% drop does');
+  ok(!isRedoseSettling(d), 'a real 1% drop does');
 }
 
 {
   const d = drug();
+  checkBelowThreshold(d, false, 19, 1.10);
   checkBelowThreshold(d, true, 20, 0.90);
   noteRedoseDose(d, 22);
   checkBelowThreshold(d, true, 23, 0.95);
@@ -106,22 +115,23 @@ console.log('\n===== Redose latch lifecycle (js/ui/settings.js) =====\n');
   eq(getBelowSince(d), 22, 're-armed from the first dose');
   // A second, still-inadequate dose repeats the cycle from its own time.
   noteRedoseDose(d, 25);
-  ok(isRedoseDoseSettling(d), 'the second dose quiets it again');
+  ok(isRedoseSettling(d), 'the second dose quiets it again');
   checkBelowThreshold(d, true, 26, 0.94);
   checkBelowThreshold(d, true, 27, 0.89);
-  ok(!isRedoseDoseSettling(d), 'and it re-arms again');
+  ok(!isRedoseSettling(d), 'and it re-arms again');
   eq(getBelowSince(d), 25, 'now counting from the SECOND dose');
 }
 
 // ── An adequate dose ends the occurrence ──────────────────────────────────────
 {
   const d = drug();
+  checkBelowThreshold(d, false, 19, 1.10);
   checkBelowThreshold(d, true, 20, 0.90);
   noteRedoseDose(d, 22);
   // Ce climbs back above the threshold — the caller reports isBelow=false.
   checkBelowThreshold(d, false, 23, 1.4);
   eq(getBelowSince(d), null, 'rising above the threshold clears the state');
-  ok(!isRedoseDoseSettling(d), 'and nothing is settling');
+  ok(!isRedoseSettling(d), 'and nothing is settling');
   eq(getRedoseGeneration(d), 1, 'the generation persists while above');
   // The next drop is a NEW occurrence, with its own generation.
   checkBelowThreshold(d, true, 40, 0.9);
@@ -129,20 +139,69 @@ console.log('\n===== Redose latch lifecycle (js/ui/settings.js) =====\n');
   eq(getBelowSince(d), 40, 'and stamps the new crossing time');
 }
 
+// ── A threshold armed while Ce is still climbing (bug 3) ─────────────────────
+// Reported: give fentanyl, then set the threshold while Ce is on the upswing and
+// still under it — the panel alarmed "redose due" immediately, though Ce was
+// about a minute from crossing upward and the real redose was ~15 min away.
+{
+  const d = drug();
+  // No prior sample: the threshold is armed on the first frame we see this drug.
+  checkBelowThreshold(d, true, 2.5, 0.23);
+  ok(isRedoseSettling(d), 'arming below Ce with no direction yet waits rather than alarming');
+  // Ce keeps climbing and crosses upward — never a redose at all.
+  checkBelowThreshold(d, true, 3.0, 0.28);
+  ok(isRedoseSettling(d), 'still waiting while Ce climbs');
+  checkBelowThreshold(d, false, 3.5, 0.31);
+  eq(getBelowSince(d), null, 'crossing upward ends it with no alarm ever raised');
+}
+
+{
+  // Same arming, but Ce peaks below the threshold: that dose is never going to
+  // reach it, so the alert is genuinely due.
+  const d = drug();
+  checkBelowThreshold(d, true, 2.5, 0.23);
+  checkBelowThreshold(d, true, 3.5, 0.27);
+  checkBelowThreshold(d, true, 4.5, 0.28);   // peak, still under 0.3
+  ok(isRedoseSettling(d), 'quiet up to the peak');
+  checkBelowThreshold(d, true, 5.5, 0.26);   // turned over
+  ok(!isRedoseSettling(d), 'peaking below the threshold fires the alert');
+  eq(getBelowSince(d), 2.5, 'counting from when the threshold was armed');
+}
+
+{
+  // Arming while Ce is already falling is a real crossing — alarm at once, with
+  // no waiting. This is the "I want a redose now" case.
+  const d = drug();
+  checkBelowThreshold(d, false, 10, 0.40);   // above
+  checkBelowThreshold(d, true, 11, 0.29);    // falls through
+  ok(!isRedoseSettling(d), 'falling through the threshold alarms immediately');
+  eq(getBelowSince(d), 11, 'stamped at the crossing');
+}
+
+{
+  // A threshold raised above a falling Ce: below and falling, so due at once.
+  const d = drug();
+  checkBelowThreshold(d, false, 10, 0.50);
+  checkBelowThreshold(d, true, 11, 0.48);   // threshold moved up past Ce
+  ok(!isRedoseSettling(d), 'raising the threshold above a falling Ce alarms at once');
+}
+
 // ── Robustness ────────────────────────────────────────────────────────────────
 {
   const d = drug();
-  // No Ce supplied (a caller that has not wired it): must not re-arm blindly,
+  // No Ce supplied (a caller that has not wired it): must not fire blindly,
   // and must not throw.
+  checkBelowThreshold(d, false, 19);
   checkBelowThreshold(d, true, 20);
   noteRedoseDose(d, 22);
   checkBelowThreshold(d, true, 23);
   checkBelowThreshold(d, true, 24);
-  ok(isRedoseDoseSettling(d), 'without Ce samples the dose stays settling rather than flapping');
+  ok(isRedoseSettling(d), 'without Ce samples the dose stays settling rather than flapping');
 }
 
 {
   const d = drug();
+  checkBelowThreshold(d, false, 19, 1.1);
   checkBelowThreshold(d, true, NaN, 0.9);
   eq(getBelowSince(d), 0, 'a non-finite time falls back to 0 rather than NaN');
 }

@@ -78,14 +78,21 @@ const _activePopups = new Map();
 //             crossing, or the most recent dose once one has been given.
 //   gen     — how many times this drug has crossed. Folded into the Next Up
 //             item key so acknowledging one crossing cannot silence the next.
-//   dosedAt — minutes of a dose given while still below threshold, else null.
-//             While set, the panel stays quiet: the dose is still taking effect.
-//   peakCe  — highest Ce seen since that dose. Once Ce falls away from the peak
-//             and we are *still* under the threshold, the dose was not enough
-//             and the alert re-arms. Tracking the peak rather than the previous
-//             sample is what makes this work at any decay rate — a per-frame
-//             delta on a slow decay is far too small to detect reliably.
+//   quietSince — minutes at which we started waiting to see whether Ce would
+//             reach the threshold, else null. Two things start that wait: a dose
+//             given while still below, and a threshold armed while Ce is still
+//             climbing toward it. While set, the panel stays quiet.
+//   peakCe  — highest Ce seen since the wait began. Once Ce falls away from the
+//             peak and we are *still* under the threshold, it is never going to
+//             get there and the alert fires. Tracking the peak rather than the
+//             previous sample is what makes this work at any decay rate — a
+//             per-frame delta on a slow decay is far too small to detect.
 const _belowThreshold = new Map();
+
+// Previous Ce sample per drug, kept whether or not the drug is below its
+// threshold. Direction at the moment Ce first reads below is what separates
+// "fell through the threshold, redose is due" from "hasn't got there yet".
+const _lastCe = new Map();
 
 // Survives the above→below delete, so generations keep increasing across a case.
 const _redoseGen = new Map();
@@ -248,6 +255,7 @@ export function reset() {
   _zeroChimeFired.clear();
   _belowThreshold.clear();
   _redoseGen.clear();
+  _lastCe.clear();
   document.querySelectorAll('.drug-card.warn-prep').forEach(el => el.classList.remove('warn-prep'));
   const topbar = document.querySelector('.sim-topbar');
   if (topbar) topbar.classList.remove('warn-header');
@@ -275,7 +283,11 @@ export function reset() {
  * @param {number} [ce] — current Ce, for post-dose peak detection
  */
 export function checkBelowThreshold(drugId, isBelow, t, ce) {
-  const now = _num(t) ?? 0;
+  const now  = _num(t) ?? 0;
+  const c    = _num(ce);
+  const prev = _lastCe.get(drugId);
+  if (c !== null) _lastCe.set(drugId, c);
+
   const s = _belowThreshold.get(drugId);
 
   if (!isBelow) {
@@ -284,26 +296,33 @@ export function checkBelowThreshold(drugId, isBelow, t, ce) {
   }
 
   if (!s) {
+    // First frame below the threshold. Being under it does NOT by itself mean a
+    // redose is due — Ce may simply not have got there yet, which is what
+    // happens when a threshold is armed while the last dose is still climbing.
+    // Direction decides: falling means it fell through and is genuinely due;
+    // rising (or unknown) means wait and watch, exactly as after a dose.
+    const falling = (c !== null && prev != null && c < prev);
     const gen = (_redoseGen.get(drugId) || 0) + 1;
     _redoseGen.set(drugId, gen);
-    _belowThreshold.set(drugId,
-      { since: now, gen, dosedAt: null, peakCe: null });
-    if (getSettings().redoseSound) playAlert('redose');
+    _belowThreshold.set(drugId, {
+      since: now, gen,
+      quietSince: falling ? null : now,
+      peakCe:     falling ? null : c,
+    });
+    if (falling && getSettings().redoseSound) playAlert('redose');
     return;
   }
 
-  // Still below, with a dose settling: has Ce peaked and started back down?
-  if (s.dosedAt !== null) {
-    const c = _num(ce);
-    if (c !== null) {
-      if (s.peakCe === null || c > s.peakCe) {
-        s.peakCe = c;
-      } else if (c < s.peakCe * (1 - REARM_DROP)) {
-        s.since = s.dosedAt;
-        s.dosedAt = null;
-        s.peakCe = null;
-        if (getSettings().redoseSound) playAlert('redose');
-      }
+  // Waiting to see whether Ce will reach the threshold: has it peaked and
+  // started back down? If so it is never getting there — the alert is due.
+  if (s.quietSince !== null && c !== null) {
+    if (s.peakCe === null || c > s.peakCe) {
+      s.peakCe = c;
+    } else if (c < s.peakCe * (1 - REARM_DROP)) {
+      s.since = s.quietSince;
+      s.quietSince = null;
+      s.peakCe = null;
+      if (getSettings().redoseSound) playAlert('redose');
     }
   }
 }
@@ -319,7 +338,7 @@ export function checkBelowThreshold(drugId, isBelow, t, ce) {
 export function noteRedoseDose(drugId, t) {
   const s = _belowThreshold.get(drugId);
   if (!s) return false;
-  s.dosedAt = _num(t) ?? 0;
+  s.quietSince = _num(t) ?? 0;
   s.peakCe = null;
   return true;
 }
@@ -344,10 +363,14 @@ export function getRedoseGeneration(drugId) {
   return _redoseGen.get(drugId) || 0;
 }
 
-/** True while a dose is still taking effect, so the alert stays quiet. */
-export function isRedoseDoseSettling(drugId) {
+/**
+ * True while we are still waiting to see whether Ce will reach the threshold —
+ * a dose taking effect, or a threshold armed while Ce was still climbing. The
+ * alert stays quiet until this resolves.
+ */
+export function isRedoseSettling(drugId) {
   const s = _belowThreshold.get(drugId);
-  return !!(s && s.dosedAt !== null);
+  return !!(s && s.quietSince !== null);
 }
 
 // ── Per-frame check (call every rAF frame) ────────────────────────────────────
