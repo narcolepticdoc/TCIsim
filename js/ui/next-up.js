@@ -27,7 +27,7 @@ import { inkOnWhite } from '../util/color.js';
 import { formatEventAction } from '../util/event-label.js';
 import { collectUpcoming, liveKeys } from '../sim/upcoming.js';
 import { getSettings, displayedSecToEvent, getBelowSince,
-         getRedoseGeneration, isRedoseDoseSettling } from './settings.js';
+         getRedoseGeneration, isRedoseSettling } from './settings.js';
 import { fmtCountdown, fmtCeSmart } from './drug-panel/formatters.js';
 import { getMilestones, getEmergenceArrival } from './drug-panel.js';
 
@@ -309,10 +309,11 @@ function _collectMilestones(t) {
     // self-acknowledge the way an event they created at the clock does. Only a
     // bolus (handled in collectUpcoming) or a tap clears it.
     if (ms.belowThreshold) {
-      // Quiet while a dose is taking effect. settings re-arms this if Ce turns
-      // over still under the threshold, so an inadequate dose cannot silence it
-      // for the rest of the case.
-      if (!isRedoseDoseSettling(drugId)) {
+      // Quiet while Ce may still be on its way up to the threshold — a dose
+      // taking effect, or a threshold armed mid-climb. settings fires the alert
+      // once Ce turns over still under the threshold, so neither an inadequate
+      // dose nor a mid-climb arming can silence it for good.
+      if (!isRedoseSettling(drugId)) {
         const since = getBelowSince(drugId);
         // No recorded crossing (e.g. a case restored already below threshold):
         // latch from now rather than dropping the alarm entirely.
