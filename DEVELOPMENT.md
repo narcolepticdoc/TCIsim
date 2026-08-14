@@ -4,6 +4,31 @@
 
 ## Session History
 
+### History log: centre the now-boundary (v0.6.4.7) — Interim
+
+The Log tab is chronological — oldest at the top, newest at the bottom — and
+`scrollToNow()` parked the first *future* row 48 px below the panel's top edge.
+That reads as "most recent event at the top": the delivered history is pushed off
+the top of the view and the whole panel below is upcoming plan steps. During a
+case you want the opposite balance — what just happened is as relevant as what is
+next.
+
+The boundary now lands on the panel's vertical midpoint: `- lead` becomes
+`- area.clientHeight / 2`. Recent history fills the top half, upcoming events the
+bottom half.
+
+**The short-list cases needed no code.** Early on there is not enough history to
+push the boundary down to the midpoint, and the natural instinct is to guard for
+it. But the computed `scrollTop` simply goes negative and the browser clamps it to
+0, so the rows fill from the top and stop wherever they reach — exactly the wanted
+behaviour. The all-past branch is likewise untouched: the boundary sits past the
+end of the content, and both the midpoint formula and the existing
+`scrollTop = scrollHeight` clamp to the same bottom-pinned position.
+
+No separator element was added — the boundary stays implicit (the first row
+carrying `h-future`), as it has been. The function is still deliberately kept out
+of the render cadence, so nothing yanks the list while the user is reading it.
+
 ### Redose alert: re-arm after an inadequate dose (v0.6.4.4) — Interim
 
 **A decision I flagged, accepted, and then had to reverse — worth recording

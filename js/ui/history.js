@@ -489,9 +489,10 @@ export function updateDimming() {
 }
 
 /**
- * Scroll the history list to the "now" boundary so the most recent past event
- * and the upcoming future events are in view. Call after a drug swap — NOT from
- * the render cadence, so the scroll is never yanked while the user is reading.
+ * Scroll the history list so the past/future boundary sits at the vertical
+ * middle of the panel — recent history above it, upcoming events below. Call
+ * after a drug swap — NOT from the render cadence, so the scroll is never
+ * yanked while the user is reading.
  */
 export function scrollToNow() {
   const list = $('history-list');
@@ -510,13 +511,14 @@ export function scrollToNow() {
   }
 
   if (target) {
-    // Land the first future row just below the top, keeping the last past
-    // row(s) visible above for context. Rect-based so it's independent of
-    // offsetParent.
+    // Land the first future row on the panel's vertical midpoint, so the last
+    // past row(s) fill the top half and the upcoming events the bottom half.
+    // Rect-based so it's independent of offsetParent. Browser scroll clamping
+    // covers the short cases: with too little history the computed scrollTop
+    // goes negative and the list simply top-aligns.
     const areaRect = area.getBoundingClientRect();
     const rowRect = target.getBoundingClientRect();
-    const lead = Math.min(48, area.clientHeight * 0.25);
-    area.scrollTop += (rowRect.top - areaRect.top) - lead;
+    area.scrollTop += (rowRect.top - areaRect.top) - area.clientHeight / 2;
   } else {
     // All events are in the past — show the latest at the bottom.
     area.scrollTop = area.scrollHeight;
