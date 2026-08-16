@@ -17,6 +17,8 @@
 
   When there is not enough history to reach the midpoint the rows simply fill from the top as before, and a log with no future events left stays pinned to the bottom.
 
+- **Infrastructure: the Vercel serverless runtime moved from Node.js 20 to Node.js 24** (`engines.node` in `package.json`). Node 20 is end-of-life and Vercel fails new builds using it after 1 October, which would have taken the cloud-sync endpoint (`api/sync.js`) down on the next deploy. An explicit `engines.node` overrides the Vercel dashboard setting, so the pin had to change in the repo. No client-facing change — the PWA is a build-step-free static site and never runs Node.
+
 ## [0.6.4.6] — 2026-08-07
 
 - **Fixed: arming a redose threshold while Ce was still climbing toward it alarmed "Redose due" immediately.** Reported after giving fentanyl and then setting the threshold mid-upswing: the panel flashed red although Ce was about a minute from crossing *upward* and the genuine redose was ~15 min away.

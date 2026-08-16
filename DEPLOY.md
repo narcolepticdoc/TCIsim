@@ -128,7 +128,7 @@ curl 'https://<tcisim-host>/api/sync?code=ABC234'
   demographics plus dosing events / dose preferences). The endpoint is
   unauthenticated (the pairing code is the only secret) and last-writer-wins —
   de-identified / training data only.
-- **Runtime:** the Node version is pinned via `engines.node` (`20.x`) in
+- **Runtime:** the Node version is pinned via `engines.node` (`24.x`) in
   `package.json`; Vercel auto-detects `api/*.js` as Node serverless functions
   (no `vercel.json` needed). `package.json` exists only to declare
   `@upstash/redis`; it intentionally omits `"type": "module"` so the CommonJS
