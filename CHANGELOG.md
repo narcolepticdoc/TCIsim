@@ -11,6 +11,12 @@
 
 ---
 
+## [0.6.4.7] — 2026-08-14
+
+- **Changed: the event history log now opens with the past/future boundary in the middle of the panel** instead of at the top. Previously the first upcoming event was parked just below the top edge, which pushed the delivered history out of view and gave the whole panel over to the plan. Recent events now fill the top half and upcoming events the bottom half.
+
+  When there is not enough history to reach the midpoint the rows simply fill from the top as before, and a log with no future events left stays pinned to the bottom.
+
 ## [0.6.4.6] — 2026-08-07
 
 - **Fixed: arming a redose threshold while Ce was still climbing toward it alarmed "Redose due" immediately.** Reported after giving fentanyl and then setting the threshold mid-upswing: the panel flashed red although Ce was about a minute from crossing *upward* and the genuine redose was ~15 min away.
