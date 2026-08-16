@@ -17,6 +17,10 @@
 
   When there is not enough history to reach the midpoint the rows simply fill from the top as before, and a log with no future events left stays pinned to the bottom.
 
+- **Infrastructure: the Node runtime for the serverless function is no longer pinned in the repo.** `engines.node` has been removed from `package.json`; the version now follows the Vercel project's Node.js Version setting.
+
+  Prompted by Node 20 reaching end-of-life (Vercel fails builds using it after 1 October, which would have taken the cloud-sync endpoint down on the next deploy). The pin was the reason Vercel's one-click upgrade skipped this project — an explicit `engines.node` overrides the dashboard. It had been chosen back in v0.5.34.x simply as the way to select a runtime after a `vercel.json` attempt failed, never as a compatibility requirement: `api/sync.js` is plain CommonJS using `Buffer`/`JSON`, with `@upstash/redis` as its only dependency. Dropping it makes future runtime upgrades a dashboard setting rather than a commit. No client-facing change — the PWA is a build-step-free static site and never runs Node.
+
 ## [0.6.4.6] — 2026-08-07
 
 - **Fixed: arming a redose threshold while Ce was still climbing toward it alarmed "Redose due" immediately.** Reported after giving fentanyl and then setting the threshold mid-upswing: the panel flashed red although Ce was about a minute from crossing *upward* and the genuine redose was ~15 min away.

@@ -128,8 +128,15 @@ curl 'https://<tcisim-host>/api/sync?code=ABC234'
   demographics plus dosing events / dose preferences). The endpoint is
   unauthenticated (the pairing code is the only secret) and last-writer-wins —
   de-identified / training data only.
-- **Runtime:** the Node version is pinned via `engines.node` (`20.x`) in
-  `package.json`; Vercel auto-detects `api/*.js` as Node serverless functions
-  (no `vercel.json` needed). `package.json` exists only to declare
-  `@upstash/redis`; it intentionally omits `"type": "module"` so the CommonJS
-  test runner keeps working, which is why `api/sync.js` is written in CommonJS.
+- **Runtime:** the Node version is **not** pinned in the repo — it follows the
+  Vercel project's *Settings → Build and Deployment → Node.js Version*, so
+  upgrades (e.g. when a major reaches end-of-life) are a dashboard change, not a
+  commit. Do not add `engines.node` back to `package.json`: it overrides the
+  dashboard and silently opts the project out of Vercel's managed upgrades.
+  Vercel auto-detects `api/*.js` as Node serverless functions, so no
+  `vercel.json` is needed either — and note that an early `vercel.json` using
+  `functions.runtime: "nodejs20.x"` broke the build, since that key is for
+  community runtimes needing `name@version`. `package.json` exists only to
+  declare `@upstash/redis`; it intentionally omits `"type": "module"` so the
+  CommonJS test runner keeps working, which is why `api/sync.js` is written in
+  CommonJS.
