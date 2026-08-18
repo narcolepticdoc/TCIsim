@@ -26,11 +26,21 @@
  * (a ketamine redose threshold sits 200–600 min out because its Ce decay is
  * that slow). Applying the pump horizon to forecasts hides exactly the drugs
  * that have nothing else scheduled.
+ *
+ * The pump horizon is a *density* control, and a drug with one sparse step has
+ * no density to control. Late in a long case the emulation planner's
+ * maintenance steps spread out past 20 min apart, at which point the horizon
+ * stopped naming the only pump action in the case — the same inversion the
+ * milestone split fixed for forecasts, one step further in.
+ * `guaranteeNextPerDrug` is therefore a floor, not a wider horizon: each drug's
+ * first future pump event is admitted however distant, and the horizon still
+ * governs everything behind it.
  */
 export const DEFAULT_HUD_CFG = {
   horizonMin:          20,  // pump events: don't look further ahead than this…
   groupWindowMin:      2,   // …except to keep a tight cluster together
   maxItems:            6,   // hard cap on future pump-event rows
+  guaranteeNextPerDrug: true, // …but a drug's *soonest* step is never hidden
   milestoneHorizonMin: Infinity, // forecasts: distance is the point, not the problem
   maxMilestones:       4,   // …but never more than this many
   elapsedLookbackMin:  10,  // how far back to surface unacknowledged items
@@ -252,6 +262,21 @@ export function collectUpcoming({ events = [], now = 0, milestones = [],
     const withinGroup = last && (item.time - last.time) <= c.groupWindowMin;
     if (!withinHorizon && !withinGroup) break;
     keptEvents.push(item);
+  }
+
+  // Floor: a drug whose next pump event lies beyond the horizon would otherwise
+  // contribute nothing at all, and the panel would go silent about the only
+  // action that drug has scheduled. Admit that one event however distant — but
+  // only for a drug the walk above left unrepresented, so a dense plan still
+  // gets exactly the rows the horizon and `maxItems` allow it.
+  if (c.guaranteeNextPerDrug) {
+    const represented = new Set(keptEvents.map(i => i.drugId));
+    for (const item of future) {
+      if (item.evt === null) continue;
+      if (represented.has(item.drugId)) continue;
+      represented.add(item.drugId);   // one guaranteed row per drug, the soonest
+      keptEvents.push(item);
+    }
   }
 
   // Forecasts: selected independently, so a distant threshold crossing is not

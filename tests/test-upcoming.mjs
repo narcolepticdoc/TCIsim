@@ -112,6 +112,82 @@ console.log('\n===== Next Up curation (js/sim/upcoming.js) =====\n');
   eqArr(keys(items), [a.id, b.id, c.id], 'grouping chains through a cluster');
 }
 
+// ── The per-drug floor: a drug's next step is never hidden ────────────────────
+// Regression (v0.6.4.8): late in a long case the emulation planner's maintenance
+// steps spread out past the 20 min horizon, so the panel listed two distant
+// redose forecasts and said nothing about the propofol rate step 5 seconds
+// before the first of them. The horizon exists to tame a *dense* plan; a drug
+// with one sparse step has no density to tame.
+{
+  const now  = 149.8;
+  const step = ev('propofol', now + 25.45, 'rate', 1.65, 'tci');
+  const ms   = [
+    { drugId: 'fentanyl', kind: 'redose', time: now + 25.53, ce: 0.6, actionable: true },
+    { drugId: 'ketamine', kind: 'redose', time: now + 117.5, ce: 30,  actionable: true },
+  ];
+  const items = collectUpcoming({ events: [step], now, milestones: ms });
+  eqArr(keys(items), [step.id, 'fentanyl:redose', 'ketamine:redose'],
+    "a drug's only pump step is kept past the horizon, in its time slot");
+}
+
+{
+  // The floor is one row, not an extended horizon: everything behind the first
+  // step is still governed by horizonMin.
+  const first  = ev('propofol', 25, 'rate', 6, 'tci');
+  const second = ev('propofol', 40, 'rate', 5, 'tci');
+  const items = collectUpcoming({ events: [first, second], now: 0 });
+  eqArr(keys(items), [first.id],
+    'only the soonest step is guaranteed — later ones stay beyond the horizon');
+}
+
+{
+  // Per drug, so two drugs each with one distant step both get a row.
+  const p = ev('propofol', 30, 'rate', 6, 'tci');
+  const k = ev('ketamine', 50, 'bolus', 20, 'manual');
+  const items = collectUpcoming({ events: [p, k], now: 0 });
+  eqArr(keys(items), [p.id, k.id], 'the floor applies per drug');
+}
+
+{
+  // A drug the horizon already covers gets nothing extra — the dense-plan case
+  // the horizon was written for is unchanged.
+  const near = ev('propofol', 5,  'rate', 6, 'tci');
+  const far  = ev('propofol', 90, 'rate', 4, 'tci');
+  const items = collectUpcoming({ events: [near, far], now: 0 });
+  eqArr(keys(items), [near.id],
+    'a drug already represented inside the horizon gets no guaranteed row');
+}
+
+{
+  // A saturated plan still leaves the quiet drug its one row.
+  const evts = [];
+  for (let i = 1; i <= 10; i++) evts.push(ev('propofol', i, 'bolus', 10, 'manual'));
+  const k = ev('ketamine', 200, 'bolus', 20, 'manual');
+  const items = collectUpcoming({ events: [...evts, k], now: 0 });
+  ok(items.length === DEFAULT_HUD_CFG.maxItems + 1,
+    'the floor adds exactly one row to a maxItems-saturated list');
+  ok(items[items.length - 1].key === k.id, 'and it sorts to its own time slot');
+}
+
+{
+  // The floor selects from future candidates only: an elapsed item stays under
+  // the elapsed budget and must not be re-admitted as a "next event".
+  const stale = ev('ketamine', 1, 'bolus', 20, 'manual');   // 29 min ago
+  const p     = ev('propofol', 35, 'rate', 6, 'tci');
+  const items = collectUpcoming({ events: [stale, p], now: 30 });
+  eqArr(keys(items), [p.id],
+    'an item past elapsedLookbackMin is not resurrected by the floor');
+}
+
+{
+  // Opting out restores the pre-0.6.4.8 behaviour, so the floor stays a
+  // deliberate policy rather than something baked into the walk.
+  const far = ev('propofol', 90, 'rate', 4, 'tci');
+  const items = collectUpcoming({ events: [far], now: 0,
+                                  cfg: { guaranteeNextPerDrug: false } });
+  eqArr(keys(items), [], 'guaranteeNextPerDrug:false leaves the horizon absolute');
+}
+
 // ── maxItems cap ──────────────────────────────────────────────────────────────
 {
   const evts = [];

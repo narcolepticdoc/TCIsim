@@ -4,6 +4,65 @@
 
 ## Session History
 
+### Next Up: a floor under the pump horizon (v0.6.4.8) — Interim
+
+Reported from a live case at ET 2:29:49. The propofol card read `Rate → 170
+mcg/kg/min in 25:27`; Next Up listed `FENTANYL — Redose due 25:32` and
+`KETAMINE — Redose due 117:32` and nothing else. The single scheduled pump
+action in the case was absent from the panel that exists to name it, while a
+forecast **five seconds later** was present.
+
+Reproduced directly against `collectUpcoming`, which is why the module is kept
+free of DOM and localStorage:
+
+```
+collectUpcoming({ events, now: 149.8, milestones })
+  → [ 'fentanyl redose 25.53', 'ketamine redose 117.50' ]
+  → with cfg.horizonMin = 40: 'propofol rate 25.45' reappears
+```
+
+`horizonMin` is 20 min for pump events; `milestoneHorizonMin` is `Infinity` for
+forecasts. That split is v0.6.4's fix and it is still right — but it made the
+two populations' *failure modes* mirror images, and this is the mirror image
+arriving. v0.6.4's note reads "the old rule silenced precisely the drugs that
+had nothing else scheduled". Same sentence here, one step further in: the thing
+being silenced is now a pump event, not a forecast.
+
+**The horizon is a density control, and this case has no density.** Twenty
+minutes is not a claim that a step 25 min out is irrelevant — it is a budget
+against a TCI plan queueing dozens of steps over hours. Late in a long case the
+emulation planner's maintenance steps spread out until consecutive steps sit
+more than 20 min apart, and the budget starts spending itself on a plan that
+isn't dense any more.
+
+So the fix is a floor, not a wider horizon. `guaranteeNextPerDrug` admits each
+drug's **first** future pump event however distant, once, and only when the
+horizon walk left that drug unrepresented. Raising `horizonMin` to 45 would have
+fixed this screenshot and re-broken the early-case one — six rate steps in the
+first ten minutes is exactly the noise 20 min was chosen against.
+
+Three properties that made it cheap to be confident in:
+
+- **Every existing horizon test still passes untouched.** In each of them the
+  dropped event is the drug's *second* candidate (`near 5 / far 90`, the
+  `groupWindowMin` pair, the pump-vs-forecast pair), so a floor on the first one
+  cannot reach them. That is a useful signal about where the old boundary
+  actually sat — the suite had never pinned the "only one step, and it's
+  distant" case at all.
+- **No change in `next-up.js`.** The alarm level comes from `_remSec`, not from
+  list membership, so a row 25 min out is quiet until `prepSec`; `_items` stays
+  time-sorted so `_renderClock` still picks the soonest actionable item; and
+  `fmtHudCountdown` already switches to `5h 02m` past the hour, so a genuinely
+  distant guaranteed row reads correctly.
+- **The floor is a config key, not a rewrite of the walk.**
+  `guaranteeNextPerDrug: false` restores the old behaviour exactly, and there is
+  a test pinning that — the policy stays legible as policy.
+
+One test of my own was wrong before the code was: the elapsed-budget case used a
+propofol event at t=5 with `now: 30`, which `elapsedLookbackMin` drops for the
+same reason it drops the stale ketamine bolus, so the assertion would have
+passed for the wrong reason. Moving it to t=35 makes it test what it claims.
+
 ### History log: centre the now-boundary (v0.6.4.7) — Interim
 
 The Log tab is chronological — oldest at the top, newest at the bottom — and
