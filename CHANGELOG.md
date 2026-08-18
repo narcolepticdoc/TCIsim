@@ -11,6 +11,14 @@
 
 ---
 
+## [0.6.4.8] — 2026-08-18
+
+- **Fixed: the Next Up panel could stay silent about a scheduled pump step while listing two redose forecasts further away.** Reported ~2.5 h into a case: the propofol card read `Rate → 170 mcg/kg/min in 25:27`, but Next Up showed only the fentanyl redose at 25:32 and the ketamine redose at 117:32 — the one pump action in the case was missing from the panel whose job is naming it.
+
+  Pump events are selected under a 20 min horizon while clinical forecasts get an unbounded one, so a rate step at 25:27 was cut and a forecast 5 seconds later was not. The horizon is there to stop a dense TCI plan turning the panel into a second event log — but late in a long case the emulation planner's maintenance steps spread out past 20 min apart, and a drug with one sparse step has no density to control.
+
+  The horizon is unchanged; it now has a floor under it. Each drug's **soonest** future pump event is admitted however distant, once, and only when the horizon walk left that drug with no row at all. Everything behind that first step is still governed by `horizonMin`, `groupWindowMin` and `maxItems`, so a dense plan lists exactly what it did before. The guaranteed row sorts into its own time slot and cannot raise the panel alarm from distance alone — escalation still keys off `prepSec`.
+
 ## [0.6.4.7] — 2026-08-14
 
 - **Changed: the event history log now opens with the past/future boundary in the middle of the panel** instead of at the top. Previously the first upcoming event was parked just below the top edge, which pushed the delivered history out of view and gave the whole panel over to the plan. Recent events now fill the top half and upcoming events the bottom half.
