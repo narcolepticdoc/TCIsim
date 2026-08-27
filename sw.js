@@ -2,9 +2,9 @@
  * sw.js — TCI Sim service worker.
  *
  * Offline-first: precaches the full app on install (HTML, every JS module
- * under js/, the manifest, the jsdelivr Chart.js stack, and the Google
- * Fonts CSS). Each version of the app gets its own cache, keyed by the
- * VERSION constant below.
+ * under js/ including the vendored Chart.js stack, the manifest, and the
+ * Google Fonts CSS). Each version of the app gets its own cache, keyed by
+ * the VERSION constant below.
  *
  * Server-version check: VERSION must be kept in lockstep with
  * js/version.js. When the deployed sw.js bytes change, the browser detects
@@ -13,7 +13,7 @@
  * caches, and the page reloads onto the new version.
  */
 
-const VERSION = '0.6.4.10';
+const VERSION = '0.6.4.11';
 const CACHE_NAME = `tcisim-v${VERSION}`;
 
 const PRECACHE_URLS = [
@@ -115,10 +115,18 @@ const PRECACHE_URLS = [
   'js/util/math.js',
   'js/util/units.js',
 
-  'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js',
-  'https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3/dist/chartjs-plugin-annotation.min.js',
-  'https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js',
-  'https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2/dist/chartjs-plugin-zoom.min.js',
+  // The chart stack is vendored, not CDN-loaded, precisely so it lands in the
+  // MANDATORY same-origin group below. A missing annotation plugin does not
+  // throw: Chart.js renders the curves and silently drops every annotation, so
+  // the threshold lines and nomogram bands just vanish with nothing in the
+  // console. Under the old tolerant CDN precache that was one flaky jsdelivr
+  // fetch away on every version bump, because activate() deletes the previous
+  // cache first.
+  'js/vendor/chart.umd.min.js',
+  'js/vendor/chartjs-plugin-annotation.min.js',
+  'js/vendor/hammer.min.js',
+  'js/vendor/chartjs-plugin-zoom.min.js',
+
   'https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap',
 ];
 
@@ -130,8 +138,10 @@ self.addEventListener('install', (event) => {
     // that imports an export the old file doesn't have), which kills the
     // whole ES-module graph at link time. If any app file fails, abort the
     // install — the previous SW and its complete, version-consistent cache
-    // stay active until the next update attempt. Third-party CDN files stay
-    // tolerant: a flaky CDN must not take down offline support.
+    // stay active until the next update attempt. This now covers the vendored
+    // chart stack too (js/vendor/*), which used to be tolerant CDN URLs; the
+    // only remaining tolerant entry is the Google Fonts CSS, where a miss
+    // degrades typography rather than breaking rendering.
     const failures = [];
     await Promise.all(PRECACHE_URLS.map(async (url) => {
       const sameOrigin = !/^https?:/i.test(url);

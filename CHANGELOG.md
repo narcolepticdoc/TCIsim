@@ -11,6 +11,22 @@
 
 ---
 
+## [0.6.4.11] — 2026-08-27
+
+- **Fixed: every horizontal chart line could silently disappear after a version update.** Reported after restoring a case on v0.6.4.10: the Ce target, redose threshold and emergence lines were gone, and so were the BIS nomogram bands — while the drug cards still showed the values and re-setting a threshold changed nothing.
+
+  `chartjs-plugin-annotation` had not loaded. It is a classic `<script>` that self-registers against `window.Chart`, and when it is missing **nothing throws**: Chart.js builds the chart, draws all nine datasets, keeps our `plugins.annotation.annotations` config, and renders none of it. The giveaway was the target-label pills — one of our own plugins — still drawn at the right edge, pointing at lines that were not there.
+
+  The version bump was the trigger, not the cause. `activate` deletes every cache but the new one, destroying the previous version's copy of the CDN files; `install` then precached the four jsdelivr URLs *tolerantly*, so one flaky or blocked fetch left the new cache without the plugin and the install still succeeded. Every update re-ran that lottery, and a device that was offline or behind a network blocking the CDN could not recover.
+
+  **Chart.js 4.5.1, chartjs-plugin-annotation 3.1.0, Hammer.JS 2.0.7 and chartjs-plugin-zoom 2.2.0 are now vendored in `js/vendor/`** (unmodified upstream builds, all MIT — see `LICENSE-NOTES.md`) and served same-origin, which puts them in the service worker's **mandatory** precache: a failed fetch now aborts the install and leaves the working previous version in place, instead of shipping a chart that cannot draw. The app no longer needs a third-party host to render at all. Only the Google Fonts CSS stays tolerant, where a miss degrades typography rather than rendering.
+
+  A boot guard in `createChart` now throws a named error when the annotation or zoom plugin is not in `Chart.registry.plugins`, so this class of failure can never again be silent.
+
+  **If you are on the broken build:** one reload while online restores the chart — the service worker's fetch handler falls through to the network on a cache miss. Updating to this version prevents it recurring.
+
+---
+
 ## [0.6.4.10] — 2026-08-27
 
 - **Fixed: keypad prefills were rounded to a precision the user could not have entered.** Reported against a fentanyl redose threshold of 0.35 ng/mL, which reopened prefilled as `0.3` — confirming without retyping moved the threshold.

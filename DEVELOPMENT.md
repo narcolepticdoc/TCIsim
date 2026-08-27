@@ -4,6 +4,67 @@
 
 ## Session History
 
+### The chart stack comes in-house (v0.6.4.11) — Interim
+
+Reported: after restoring a case on v0.6.4.10, **all horizontal chart threshold
+lines were gone** — Ce target, redose threshold, emergence, and the BIS
+nomogram bands with them. The drug cards still showed the values, and setting a
+threshold fresh did not bring its line back.
+
+Restore was a red herring; it was simply when the user looked. Reproduced by
+blocking one script:
+
+```
+chartExists: true              datasetsDrawn: 9
+registeredPlugins: [colors, decimation, filler, legend, subtitle, title, tooltip, zoom]
+                    ^ annotation absent
+configuredAnnotations: [cursor, target, exitCe, band_0..band_3]  ← present, none drawn
+console errors: none
+```
+
+`chartjs-plugin-annotation` is a classic `<script>` that self-registers against
+`window.Chart`. When it fails to load **nothing throws**. Chart.js constructs
+the chart, draws every dataset, accepts and stores our
+`plugins.annotation.annotations` object, and renders none of it. Everything
+that is not an annotation keeps working — curves, event markers, crossover
+dots, the readout panel — so the app looks healthy.
+
+The confirming signature was the pills. `js/ui/chart/plugins/target-label.js`
+is one of ours, so the orange `6.0` and red `30.0` chips were still painted at
+the right edge, labelling lines that did not exist. A plugin of ours pointing
+at the absence of a plugin of theirs.
+
+**Why a version bump set it off.** `sw.js activate` deletes every cache except
+the new `CACHE_NAME`, so the previous version's copy of the CDN files is gone
+the moment the new SW takes over. `install` then precached the four jsdelivr
+URLs under a deliberate exemption — "a flaky CDN must not take down offline
+support" — so a failed fetch left the file out of the new cache and the install
+still reported success. That exemption was written to protect offline support,
+and it was the thing that destroyed it: every update re-ran the lottery, and a
+device offline or behind a network that blocks the CDN had no way back.
+
+The fix is to stop asking. Chart.js 4.5.1, chartjs-plugin-annotation 3.1.0,
+Hammer.JS 2.0.7 and chartjs-plugin-zoom 2.2.0 now live in `js/vendor/` as
+unmodified upstream builds (283 KB, all MIT) and load same-origin, which moves
+them into the **mandatory** precache group. A failed fetch now aborts the
+install and leaves the working previous version active — the same all-or-
+nothing rule that already protects the ES-module graph from mixed versions, for
+the same reason: a partial cache is worse than no update. Only the Google Fonts
+CSS stays tolerant, where a miss costs typography rather than rendering.
+
+Verified with jsdelivr blocked outright at the network layer: the plugins
+register, all three lines and the nomogram bands draw, and the service worker
+installs with all four `js/vendor/*` entries and no jsdelivr entries at all —
+i.e. under precisely the condition that produced the bug.
+
+`assertChartPlugins()` in `createChart` closes the diagnostic gap: a missing
+`annotation` or `zoom` registration now throws a named error, which `app.js`
+already catches and logs, instead of yielding a chart that looks fine and is
+missing half its meaning. The general lesson is the one this bug taught the
+hard way: **a dependency that fails silently needs a check at the boundary, not
+a comment.** Chart.js's tolerance of unknown plugin config is reasonable
+library behaviour; consuming it without asserting was ours.
+
 ### Keypad prefills: one formatter, two precisions (v0.6.4.10) — Interim
 
 Reported: a fentanyl redose threshold set to **0.35 ng/mL** reopens the keypad

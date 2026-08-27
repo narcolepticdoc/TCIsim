@@ -40,6 +40,25 @@ Contains four planners:
 
 The emulation planner produces results that match SimTIVA's output because it implements the same mathematical algorithm, not because it copies SimTIVA's code.
 
+## Vendored Third-Party Libraries
+
+`js/vendor/` holds unmodified upstream minified builds, served same-origin so
+the service worker can precache them as mandatory app files (a chart that
+cannot draw is not a working offline app). All four are **MIT licensed**; each
+file keeps its upstream banner comment carrying the copyright and licence
+notice.
+
+| File | Library | Version |
+|---|---|---|
+| `chart.umd.min.js` | Chart.js | 4.5.1 |
+| `chartjs-plugin-annotation.min.js` | chartjs-plugin-annotation | 3.1.0 |
+| `hammer.min.js` | Hammer.JS | 2.0.7 |
+| `chartjs-plugin-zoom.min.js` | chartjs-plugin-zoom | 2.2.0 |
+
+These are dependencies, not derived work: no TCI Sim code is copied from them
+and none of their code is copied into `js/`. To upgrade, replace the file with
+a fresh upstream build of the same name and update the version above.
+
 ## File Audit
 
 | File | Source | License Risk |
