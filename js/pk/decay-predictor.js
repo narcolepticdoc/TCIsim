@@ -79,6 +79,15 @@ export function predictTroughTime(engine, startState, startTime, troughCe, curre
   let loOffset = crossStart - startTime;
   let hiOffset = crossEnd - startTime;
 
+  // Concentration-space early exit, scaled to the target. An absolute band
+  // (this was 1e-4 µg/mL) means something different for every drug: 0.01% of a
+  // propofol emergence target, 0.33% of ketamine's, and 33% of fentanyl's. At
+  // that width bisection bailed on its first probe, so the answer collapsed
+  // onto the 0.5 min coarse grid — the fentanyl and ketamine countdowns sat
+  // still for ~30 s and then jumped 30 s. Relative makes the fast path
+  // drug-independent; the time tolerance below still governs convergence.
+  const ceTol = Math.max(Math.abs(troughCe) * 1e-4, 1e-12);
+
   for (let iter = 0; iter < 40; iter++) {
     const midOffset = (loOffset + hiOffset) / 2;
 
@@ -86,7 +95,7 @@ export function predictTroughTime(engine, startState, startTime, troughCe, curre
     engine.advance(midOffset, currentRate);
     const midCe = engine.getConcentrations().Ce;
 
-    if (Math.abs(midCe - troughCe) < 0.0001) {
+    if (Math.abs(midCe - troughCe) < ceTol) {
       engine.setState(savedState);
       return { time: startTime + midOffset, ceAtTime: midCe };
     }

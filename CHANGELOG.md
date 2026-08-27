@@ -11,6 +11,20 @@
 
 ---
 
+## [0.6.4.12] — 2026-08-27
+
+- **Fixed: the emergence countdown counted the wrong way after a bolus given with the pump off.** The drug card's `Emerge → X in M:SS` runs as a two-mode state machine: with an infusion running it re-predicts every second, and when "idle" it snapshots the decay once and ticks the display down 1 s per second, sanity-checking only every 5 s. `isIdle` was defined as *pump rate is zero* — but `getRateAtTime` walks rate and pause events only, so **boluses are invisible to it**. A bolus given with no infusion running therefore read as rate 0 for its entire delivery *and* the effect-site rise that follows, and through that window the true time-to-emergence climbs steeply while the display counted **down**, snapping back with a visible upward jump every 5 s.
+
+  Measured against ground truth at the same instant: **76 s** of error on a propofol bolus with the pump stopped, **~52 minutes** on a ketamine IV push (the normal way ketamine is given — the card read `26:38` when the honest answer was `78:15`), and **49 s** inside an ordinary TCI induction, in the rate-0 gap the plan leaves between the loading bolus and the first maintenance step.
+
+  Idle now means what the code always assumed it meant: **Ce is actually falling**. Direction decides — the same rule `settings.checkBelowThreshold` and `decay-predictor`'s `hasBeenAbove` already apply to the redose threshold. `isInBolusPhase` covers the first seconds of a bolus, where the plasma is already loaded but the effect site is still coasting down, so Ce has not yet turned. Worst error across the same scenarios is now **1.9 s** — the deadband plus rounding.
+
+  Paths that were already correct are unchanged and now pinned by test: with an infusion running the countdown tracked truth to 1.9 s across a 280-minute TCI → manual rate → boluses → stop case, even where the true value was moving 18 s per second.
+
+- **Fixed: the fentanyl and ketamine countdowns were quantised to ~30 s steps.** `predictTroughTime`'s bisection had an absolute concentration early-exit (`|Ce − target| < 1e-4` µg/mL). That band means something different for every drug: 0.01% of a propofol emergence target, 0.33% of ketamine's, and **33% of fentanyl's**. At that width bisection bailed on its first probe and the answer collapsed onto the 0.5 min coarse-scan grid — a fentanyl countdown showed **3 distinct values over 61 seconds**, sitting still and then jumping half a minute. The tolerance is now relative to the target, so the fast path is drug-independent; the same function drives the redose countdown, which was quantised identically.
+
+---
+
 ## [0.6.4.11] — 2026-08-27
 
 - **Fixed: every horizontal chart line could silently disappear after a version update.** Reported after restoring a case on v0.6.4.10: the Ce target, redose threshold and emergence lines were gone, and so were the BIS nomogram bands — while the drug cards still showed the values and re-setting a threshold changed nothing.

@@ -9,17 +9,22 @@
  *   directly from the cached decay-from-now — no per-frame `t`
  *   subtraction, so the display is truly stable at SS.
  *
- *   Idle (rate == 0): Ce is actually decaying. Snapshot decay-from-now
- *   at the Active->Idle transition; render every frame as
+ *   Idle (Ce decaying): the countdown IS the decay. Snapshot
+ *   decay-from-now at the Active->Idle transition; render every frame as
  *   `idleStartDecayMin - (t - idleStartT)` for a smooth 1 sec/sec
  *   countdown driven by the simulator clock. Periodic sanity re-predict
  *   re-baselines if cumulative drift exceeds hysteresis.
+ *
+ * Idle is decided by Ce's DIRECTION, not by the pump rate — see `rising`
+ * below. A zero rate does not mean Ce is falling: after a bolus given with
+ * no infusion running, Ce climbs for a minute or more at rate 0, and the
+ * 1 sec/sec tick-down would count the wrong way through exactly that window.
  *
  * Forced invalidations (exit-Ce change, _curveVersion bump from a bolus
  * or event edit) re-predict immediately in the current mode.
  */
 
-import { fmtCountdown, smartDecimal } from './formatters.js';
+import { fmtCountdown, smartDecimal, isInBolusPhase } from './formatters.js';
 import { getCurveVersion } from './approach.js';
 
 const _exitReadoutCache = {};
@@ -28,6 +33,9 @@ const PREDICTION_REFRESH_MS = 1000;
 const IDLE_SANITY_MS = 5000;
 const HYSTERESIS_MIN = 1.5 / 60;   // 1.5 sec — swallows bisection jitter (~0.3 s)
                                     // and the half-second rounding boundary.
+const CE_RISE_EPS = 1e-9;          // relative; ignores float-level jitter while
+                                    // still catching a real rise (~1e-3 µg/mL
+                                    // per frame during post-bolus equilibration).
 
 function _getCache(drugId) {
   if (!_exitReadoutCache[drugId]) {
@@ -44,6 +52,7 @@ function _getCache(drugId) {
       lastIdleSanityMs: 0,
       // Mode tracking
       lastIsIdle: null,
+      lastCe: null,       // previous frame's Ce — gives the direction of travel
     };
   }
   return _exitReadoutCache[drugId];
@@ -60,6 +69,13 @@ export function updateExitReadout(ctx, drugId, t, Ce, caseStarted) {
   const el = ctx.$(drugId + '-exit');
   if (!el) return;
 
+  const cache = _getCache(drugId);
+  // Sampled on every call, including the early returns below, so a readout
+  // that blanks (target cleared, emergence reached) and later comes back never
+  // resumes from a stale direction sample.
+  const prevCe = cache.lastCe;
+  cache.lastCe = Ce;
+
   const exitCe = ctx.getExitCeForDrug ? ctx.getExitCeForDrug(drugId) : 0;
   if (!exitCe || exitCe <= 0 || !caseStarted || t <= 0) {
     if (el.innerHTML !== '') el.innerHTML = '';
@@ -72,14 +88,27 @@ export function updateExitReadout(ctx, drugId, t, Ce, caseStarted) {
     return;
   }
 
-  const cache = _getCache(drugId);
   const curveVersion = getCurveVersion();
   const now = Date.now();
 
   const currentRate = ctx.model.getRateAtTime
     ? ctx.model.getRateAtTime(drugId, t)
     : 0;
-  const isIdle = !(currentRate > 0);
+  // A zero pump rate is NOT the same as a falling Ce, and only a falling Ce
+  // makes the idle tick-down valid. `getRateAtTime` walks rate/pause events
+  // only — boluses are invisible to it — so a bolus given with no infusion
+  // running reads as rate 0 for its whole delivery AND the effect-site rise
+  // that follows. Through that window the true time-to-emergence climbs
+  // steeply while a 1 sec/sec tick-down counts down, resyncing with a visible
+  // upward jump every IDLE_SANITY_MS. Direction decides, the same rule
+  // `settings.checkBelowThreshold` and `decay-predictor`'s `hasBeenAbove`
+  // already apply to the redose threshold.
+  // Ce's own direction misses the first seconds of a bolus: the plasma is
+  // already loaded while the effect site is still coasting down, so Ce falls
+  // for a moment even though the answer has jumped. isInBolusPhase covers
+  // exactly that lag; `rising` then carries the rest of the climb to the peak.
+  const rising = prevCe !== null && (Ce - prevCe) > Math.abs(prevCe) * CE_RISE_EPS;
+  const isIdle = !(currentRate > 0) && !rising && !isInBolusPhase(ctx, drugId, t);
 
   const exitCeChanged = (cache.exitCe !== exitCe);
   const versionChanged = (cache.computedVersion !== curveVersion);
