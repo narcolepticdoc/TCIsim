@@ -57,6 +57,34 @@ export function readThemeVars() {
 }
 
 /**
+ * Fail loudly when a Chart.js plugin we depend on did not register.
+ *
+ * The plugins are classic <script> tags that self-register against
+ * `window.Chart`. When one fails to load, nothing throws: Chart.js builds the
+ * chart, draws every dataset, keeps our `plugins.annotation.annotations`
+ * config — and silently renders none of it. That is how a missing annotation
+ * plugin presented as "all the horizontal threshold lines and the nomogram
+ * bands disappeared", with an empty console and the target-label pills still
+ * drawn (they are one of our own plugins) pointing at lines that were not
+ * there. One reported symptom, no diagnosable signal.
+ *
+ * Throws rather than warns: js/app.js already catches chart-creation failure
+ * and logs it, so a missing plugin surfaces as a named failure instead of a
+ * half-drawn chart. Since the stack is vendored and mandatorily precached
+ * (sw.js), reaching this means a genuinely broken deploy.
+ */
+function assertChartPlugins() {
+  const registered = Chart.registry?.plugins?.items || {};
+  const missing = ['annotation', 'zoom'].filter(id => !registered[id]);
+  if (missing.length > 0) {
+    throw new Error(
+      `Chart.js plugin(s) failed to load: ${missing.join(', ')} — ` +
+      'check js/vendor/ is being served. Annotations and gestures would ' +
+      'silently not render.');
+  }
+}
+
+/**
  * Create a TCI chart instance.
  *
  * @param {HTMLCanvasElement} canvas - The canvas element to render into
@@ -72,6 +100,7 @@ export function createChart(canvas, config = {}) {
     console.error('[TCI Sim] Cannot create chart — Chart.js not loaded');
     return null;
   }
+  assertChartPlugins();
   const cfg = {
     drugId: 'propofol',
     showCp: true,
