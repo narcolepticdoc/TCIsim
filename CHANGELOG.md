@@ -11,6 +11,32 @@
 
 ---
 
+## [0.6.4.10] — 2026-08-27
+
+- **Fixed: keypad prefills were rounded to a precision the user could not have entered.** Reported against a fentanyl redose threshold of 0.35 ng/mL, which reopened prefilled as `0.3` — confirming without retyping moved the threshold.
+
+  Every prefill formatted through `formatValue`, which rounds to a **per-unit** decimal cap that is blind to each drug's titration grid (`quantSteps`). Wherever the grid is finer than the cap, the echo was coarser than the value: fentanyl `0.35 ng/mL` → `0.3` (grid 0.05), `0.03 mcg/kg/min` → `0` (grid 0.01), `0.75 mcg/kg` → `0.8` (grid 0.25). The rounding was not even stable in one direction — the same nominal 0.35 came back as `0.3` or `0.4` depending on which arithmetic produced it.
+
+  It reached past the reported field. **Editing a fentanyl rate event** prefilled `0`, so saving with no other change zeroed the rate; and **toggling units** ran the same formatter, so a rate expressed in mcg/h could flatten to `0` on the way to mcg/kg/min.
+
+  New `formatValueEntry` takes the **finer** of the unit's cap and the drug's grid — echoing a value back can no longer lose precision, and a wide grid (propofol's 1 mg bolus) still cannot coarsen a 22.5 mg dose to 23. A positive value never renders as `0`; it widens to about two significant figures instead. Readouts, history and notations keep `formatValue`'s per-unit convention, and planning-mode titration keeps `formatValueStep` — snapping to the grid is the point there.
+
+- **Fixed: the Ce-target prefill skipped unit conversion entirely**, reading the stored canonical value straight into the buffer with `.toString()`. It survived only because propofol's canonical Ce unit happens to equal its one display unit. All five in-case prefills now share one path (`prefillFromCanonical`).
+
+- **Changed: the last-dose memory no longer survives New Case.** `tci_lastBolus_*` / `tci_lastRate_*` were the only keypad prefill source that outlived a case — every in-case value (Ce target, redose threshold, emergence, patient) already reset, and a canonical mg dose re-derives against the *new* patient's weight when the display unit is per-kg, so a remembered 150 mg from an 80 kg patient reappeared as 2.5 mg/kg for a 60 kg one. Doses meant to carry between cases belong in a starting-dose template, which persists deliberately and is patient-independent.
+
+---
+
+## [0.6.4.9] — 2026-08-27
+
+- **Fixed: the rail under a drug card's Emerge line could stay red for the rest of the case.** Reported from a live case: propofol's rail was canary and ketamine's amber — their drug-class colors — but fentanyl's was red, the "Ce is below the redose threshold" indicator, while that same card's right-edge status rail was blank (`data-status="off"`, i.e. no threshold set at all). The two indicators were reporting different states about the same drug.
+
+  `step-bar-below` was added and removed at five separate points in the drug-panel step-bar block, and the `threshold === 0` path was the one that never removed it. So *set a redose threshold → let Ce fall below it → clear the threshold* left the class behind; from then on the rail read red no matter what the drug did, until New Case.
+
+  The class is now derived from live state and applied once, with a single `classList.toggle` at the end of the block. No branch can leak it, and the rail cannot disagree with the status indicator again.
+
+---
+
 ## [0.6.4.8] — 2026-08-18
 
 - **Fixed: the Next Up panel could stay silent about a scheduled pump step while listing two redose forecasts further away.** Reported ~2.5 h into a case: the propofol card read `Rate → 170 mcg/kg/min in 25:27`, but Next Up showed only the fentanyl redose at 25:32 and the ketamine redose at 117:32 — the one pump action in the case was missing from the panel whose job is naming it.

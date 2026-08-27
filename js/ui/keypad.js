@@ -9,7 +9,8 @@
  * The keypad never touches the model directly.
  */
 
-import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, formatValueStep, getRoundingNoteText }
+import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, getQuantStep,
+         formatValue, formatValueStep, formatValueEntry, getRoundingNoteText }
   from '../util/units.js';
 import { DRUG_DEFS, isPumpEnabled as pumpEnabledFor } from '../util/constants.js';
 import { applyBufferKey, convertBufferUnit, bolusTimeText } from './keypad-buffer.js';
@@ -233,55 +234,23 @@ export function show(type) {
     currentRoundOverride = null;
   }
 
-  // Pre-fill if changing existing target
+  // Pre-fill if changing an existing value. All five sources are canonical, so
+  // they go through the one prefill path — see prefillFromCanonical.
   if (type === 'ceTarget' && getMode() === 'tci' && getCeTarget() > 0) {
-    buffer = getCeTarget().toString();
-    prefilled = true;
+    prefillFromCanonical(getCeTarget(), 'ceTarget');
   }
-
-  // Pre-fill if changing existing Exit Ce (convert canonical → display unit)
   if (type === 'exitCe' && getExitCe() > 0) {
-    const patient = getPatient();
-    const ctx = { weightKg: patient?.weight || 70 };
-    const displayVal = fromCanonical(getExitCe(), currentUnit, currentDrug, 'ceTarget', ctx);
-    buffer = formatValue(displayVal, currentUnit);
-    prefilled = true;
+    prefillFromCanonical(getExitCe(), 'ceTarget');
   }
-
-  // Pre-fill if changing existing redose threshold
   if (type === 'intermittent' && getIntermittentThreshold() > 0) {
-    const patient = getPatient();
-    const ctx = { weightKg: patient?.weight || 70 };
-    const displayVal = fromCanonical(getIntermittentThreshold(), currentUnit, currentDrug, 'ceTarget', ctx);
-    buffer = formatValue(displayVal, currentUnit);
-    prefilled = true;
+    prefillFromCanonical(getIntermittentThreshold(), 'ceTarget');
   }
-
-  // Pre-fill last rate for this drug (stored in canonical mg/min, converted to display unit)
-  if (type === 'rate') {
+  // Last rate / bolus for this drug, remembered in canonical mg/min and mg.
+  if (type === 'rate' || type === 'bolus') {
     try {
-      const lastMgMin = localStorage.getItem(`tci_lastRate_${currentDrug}`);
-      if (lastMgMin) {
-        const patient = getPatient();
-        const ctx = { weightKg: patient?.weight || 70 };
-        const displayVal = fromCanonical(parseFloat(lastMgMin), currentUnit, currentDrug, 'rate', ctx);
-        buffer = formatValue(displayVal, currentUnit);
-        prefilled = true;
-      }
-    } catch (e) {}
-  }
-
-  // Pre-fill last bolus dose for this drug (stored in canonical mg, converted to display unit)
-  if (type === 'bolus') {
-    try {
-      const lastMg = localStorage.getItem(`tci_lastBolus_${currentDrug}`);
-      if (lastMg) {
-        const patient = getPatient();
-        const ctx = { weightKg: patient?.weight || 70 };
-        const displayVal = fromCanonical(parseFloat(lastMg), currentUnit, currentDrug, 'bolus', ctx);
-        buffer = formatValue(displayVal, currentUnit);
-        prefilled = true;
-      }
+      const key = type === 'rate' ? 'tci_lastRate_' : 'tci_lastBolus_';
+      const last = parseFloat(localStorage.getItem(key + currentDrug));
+      if (Number.isFinite(last) && last > 0) prefillFromCanonical(last, type);
     } catch (e) {}
   }
 
@@ -334,7 +303,9 @@ export function showCustom({ drugId, task, title, value, unit, getWeightKg, onDo
 
   // Prefill from the existing entry; first keypress replaces (shared semantics)
   const hasValue = isFinite(value) && value > 0;
-  buffer = hasValue ? formatValue(value, currentUnit) : '';
+  buffer = hasValue
+    ? formatValueEntry(value, currentUnit, getQuantStep(drugId, task, currentUnit))
+    : '';
   prefilled = hasValue;
 
   // Single confirm; no IV-push split, no per-target rounding override
@@ -370,6 +341,29 @@ function weightCtx() {
   return { weightKg: patient?.weight || 70 };
 }
 
+/**
+ * Seed the buffer from a canonical value, in the current display unit.
+ *
+ * The single prefill path for every in-case source (Ce target, redose
+ * threshold, emergence, last rate, last bolus) — they are all stored
+ * canonically, and each used to carry its own copy of this conversion.
+ *
+ * Precision comes from formatValueEntry, not formatValue: the unit's display
+ * cap alone is coarser than some drugs' titration grids, which rounded a
+ * fentanyl threshold of 0.35 ng/mL down to 0.3 on the way back to the user.
+ *
+ * @param {number} canonicalValue
+ * @param {'ceTarget'|'rate'|'bolus'} task - unit table to convert against
+ */
+function prefillFromCanonical(canonicalValue, task) {
+  try {
+    const disp = fromCanonical(canonicalValue, currentUnit, currentDrug, task, weightCtx());
+    if (!Number.isFinite(disp)) return;
+    buffer = formatValueEntry(disp, currentUnit, getQuantStep(currentDrug, task, currentUnit));
+    prefilled = true;
+  } catch (e) { /* an unconvertible value just leaves the buffer empty */ }
+}
+
 function setUnit(u) {
   const prev = currentUnit;
   currentUnit = u;
@@ -395,14 +389,8 @@ function setUnit(u) {
     // Nothing typed yet: reload the last saved bolus so the default reflects
     // recent drug practice in the new unit.
     try {
-      const lastMg = localStorage.getItem(`tci_lastBolus_${currentDrug}`);
-      if (lastMg) {
-        const patient = getPatient();
-        const ctx = { weightKg: patient?.weight || 70 };
-        const displayVal = fromCanonical(parseFloat(lastMg), u, currentDrug, 'bolus', ctx);
-        buffer = formatValue(displayVal, u);
-        prefilled = true;
-      }
+      const lastMg = parseFloat(localStorage.getItem(`tci_lastBolus_${currentDrug}`));
+      if (Number.isFinite(lastMg) && lastMg > 0) prefillFromCanonical(lastMg, 'bolus');
     } catch (e) {}
   }
   updateDisplay();

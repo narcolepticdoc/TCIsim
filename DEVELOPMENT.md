@@ -4,6 +4,124 @@
 
 ## Session History
 
+### Keypad prefills: one formatter, two precisions (v0.6.4.10) — Interim
+
+Reported: a fentanyl redose threshold set to **0.35 ng/mL** reopens the keypad
+prefilled with **0.3**. Confirming it untouched moves the threshold.
+
+The audit that followed covered every prefilled value in the numeric modals.
+
+**Sources.**
+
+| modal / field | source | unit handling | survived New Case |
+|---|---|---|---|
+| Keypad `ceTarget` | `mode.ceTargets[drug]` | **raw `.toString()`** | no |
+| Keypad `intermittent` | `mode.intermittentThresholds[drug]` | `fromCanonical` + `formatValue` | no |
+| Keypad `exitCe` | `mode.exitCeTargets[drug]` | `fromCanonical` + `formatValue` | no |
+| Keypad `rate` | `tci_lastRate_<drug>` (canonical mg/min) | `fromCanonical` + `formatValue` | **yes** |
+| Keypad `bolus` | `tci_lastBolus_<drug>` (canonical mg) | `fromCanonical` + `formatValue` | **yes** |
+| Keypad unit toggle | current buffer | `convertBufferUnit` → `formatValue` | n/a |
+| `showCustom` (starting doses) | `tci-dose-template` (display units) | `formatValue` | yes |
+| Event editor — Edit | the event's canonical value | `fromCanonical` + `formatValue` | n/a |
+| Event editor — Add | nothing | — | n/a |
+| Patient modal | hidden setup inputs | own metric/imperial converters | no |
+
+**The precision defect.** `formatValue(value, unit)` rounds to a *per-unit*
+decimal cap (`UNIT_DECIMALS`) which knows nothing about each drug's titration
+grid (`DRUG_TASK_UNITS[...].quantSteps`). Where the grid is finer than the cap,
+the echo is coarser than the value:
+
+```
+fentanyl ceTarget ng/mL      grid 0.05  cap 1 dp   0.35 → 0.3   ← reported
+fentanyl rate mcg/kg/min     grid 0.01  cap 1 dp   0.03 → 0
+fentanyl bolus mcg/kg        grid 0.25  cap 1 dp   0.75 → 0.8
+```
+
+Only fentanyl trips it today — propofol and ketamine grids all sit at or above
+their unit caps — but the defect is in the shared formatter, not the drug. Two
+things made it worse than a display nit:
+
+- The direction was unstable. `0.35` reached by conversion rounds to `0.3`;
+  the same value as `0.05 × 7` (float `0.35000000000000003`) rounds to `0.4`.
+- It was not only prefill. `convertBufferUnit` formats the same way, so a unit
+  toggle truncated too; and `event-editor.js openEdit` prefilled an event's own
+  value, so **editing a 0.03 mcg/kg/min fentanyl rate and pressing Save with no
+  other change wrote a rate of 0**.
+
+`formatValueStep` already existed for this concern but could not just be
+swapped in: it rounds *to* the grid, and propofol's bolus grid is 1 mg, so a
+22.5 mg dose would echo as `23`. Neither formatter is right alone.
+
+`formatValueEntry(value, unit, step)` takes the **finer of the two**, which is
+the actual rule: *echoing a value back to the user may never lose precision the
+user could have entered; only a deliberate titration may snap to the grid.*
+`setCanonical`'s `formatValueStep` (planning ± and drag) is the titration case
+and keeps its behaviour; readouts, history and the conversion preview keep
+`formatValue`. A positive value also never renders as `0` — a conversion into
+an unsuitable unit (3 mcg/h of fentanyl is 0.00076 mcg/kg/min) widens to about
+two significant figures rather than offering a zero to confirm.
+
+**Consistency.** `ceTarget` was the one prefill that skipped `fromCanonical`
+and formatting entirely, reading the stored canonical value in with
+`.toString()`. It worked only because propofol's canonical Ce unit equals its
+single allowed display unit — a coincidence, not a design. All five in-case
+sources now go through one `prefillFromCanonical(canonicalValue, task)` in
+`keypad.js`, which also folds in the four copies of the
+`getPatient()?.weight || 70` context that `weightCtx()` already resolved.
+
+**New Case.** Everything in-case resets — Ce target, redose threshold,
+emergence (`mode.reset()`), patient demographics (`setup.reset()`), working
+display units (reseeded from the setup defaults). The last-dose memory was the
+sole exception, and it is a per-*patient* quantity wearing a per-drug key: a
+canonical mg dose re-derives against the new patient's weight when the display
+unit is per-kg, so 150 mg remembered from an 80 kg patient reappeared as
+2.5 mg/kg for a 60 kg one. It now clears in the same `DRUG_IDS` loop that
+reseeds the units. Doses meant to carry across cases already have a home — the
+starting-dose template, which persists deliberately and is patient-independent.
+
+Two asymmetries were examined and deliberately kept: the event editor's **Add**
+starts empty while the keypad's Add Bolus prefills the last dose (a
+retrospective event is not a dose you are giving now), and a starting-dose
+template entry never writes the last-dose memory (a template is a plan, not a
+dose given).
+
+### Emerge rail: a below-threshold flag that outlived its threshold (v0.6.4.9) — Interim
+
+Reported from a live case screenshot. The 3 px rail directly under each drug
+card's `Emerge → …` line was canary on propofol and amber on ketamine — those
+are `DRUG_DEFS` colors, painted by `.step-bar-wrap{background:var(--drug-color)}`
+— but red on fentanyl. Red on that rail has exactly one meaning:
+`.step-bar-below`, "Ce has fallen under the redose threshold".
+
+Fentanyl had no redose threshold. The same screenshot proves it: the card's
+right-edge status rail was absent, and `data-status="off"` is only reachable
+through `m === 'none' && threshold === 0` (`index.js` status block). Two
+indicators on one card, disagreeing about whether a threshold existed.
+
+`step-bar-below` was written in five places inside the step-bar block, one per
+branch, and the `threshold === 0` branch was the gap — it called
+`updateStepBar()` and returned, and `updateStepBar()` does not touch the class
+either. So the class survived its own precondition:
+
+```
+Set Threshold (fentanyl)  → threshold > 0
+Ce falls below it         → add('step-bar-below')     rail red   ✓
+Set Threshold → 0         → threshold === 0, branch A → no remove  rail red   ✗
+```
+
+Only New Case cleared it, via the `!caseStarted` branch.
+
+The fix is not a sixth `remove()`. `belowThresh` is now a plain boolean set by
+the one branch that means it, and the block ends with a single
+`classList.toggle('step-bar-below', belowThresh)` — so the rail is a function of
+this frame's state rather than of the branch history that got here. `barEl` /
+`cntEl` are hoisted to the top of the block, which also removes the duplicate
+lookups the old `else` branch carried.
+
+Worth stating as a general shape: a per-branch `add`/`remove` pair over N
+branches is N places to be right, and the branch that "does not care" about the
+class is the one that silently keeps it. Derive, then toggle once.
+
 ### Next Up: a floor under the pump horizon (v0.6.4.8) — Interim
 
 Reported from a live case at ET 2:29:49. The propofol card read `Rate → 170

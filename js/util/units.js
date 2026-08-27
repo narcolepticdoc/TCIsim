@@ -317,6 +317,48 @@ export function formatValueStep(value, unit, step) {
 }
 
 /**
+ * Format a value for an ENTRY BUFFER — a keypad or event-editor field that is
+ * echoing back a value the user already set, and that they may confirm again
+ * untouched.
+ *
+ * Neither of the two formatters above is right on its own here:
+ *
+ *   formatValue     rounds to the unit's general display cap, which is blind to
+ *                   the drug's titration grid. A fentanyl redose threshold of
+ *                   0.35 ng/mL (grid 0.05) came back as 0.3 — confirming the
+ *                   prefill silently moved the threshold.
+ *   formatValueStep rounds to the grid, which is *coarser* than the cap for
+ *                   drugs whose grid is wide: a 22.5 mg propofol bolus (grid
+ *                   1 mg) would come back as 23.
+ *
+ * So take the finer of the two. Echoing a value back may never lose precision
+ * the user could have entered; only a deliberate titration (formatValueStep,
+ * via keypad.setCanonical) may snap to the grid.
+ *
+ * A positive value also never renders as '0': a conversion into an
+ * unsuitable unit (3 mcg/h of fentanyl is 0.00076 mcg/kg/min) widens to about
+ * two significant figures instead, so the buffer shows a small number rather
+ * than a zero the user might confirm.
+ *
+ * @param {number} value - display-unit value
+ * @param {string} unit
+ * @param {?number} [step] - the drug/task grid for this unit (getQuantStep);
+ *   null/absent falls back to the unit's display cap alone.
+ */
+export function formatValueEntry(value, unit, step) {
+  if (!Number.isFinite(value)) return formatValue(value, unit);
+  let dp = UNIT_DECIMALS[unit] ?? 2;
+  if (step > 0) dp = Math.max(dp, decimalsForStep(step));
+  let out = parseFloat(value.toFixed(dp));
+  if (out === 0 && value > 0) {
+    // Two significant figures: one decimal past the value's leading digit.
+    dp = Math.min(10, 1 - Math.floor(Math.log10(value)));
+    out = parseFloat(value.toFixed(dp));
+  }
+  return out.toString();
+}
+
+/**
  * Format a value with its unit as a single token that never wraps between the
  * number and the unit (non-breaking space). Use anywhere a "value unit" pair
  * is displayed in flowing text — e.g. the event-log notations.

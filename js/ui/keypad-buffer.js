@@ -16,7 +16,7 @@
  * transform values.
  */
 
-import { toCanonical, fromCanonical, formatValue } from '../util/units.js';
+import { toCanonical, fromCanonical, formatValueEntry, getQuantStep } from '../util/units.js';
 import { bolusDeliveryMinutes, pushDeliveryMinutes } from '../util/constants.js';
 
 /**
@@ -64,7 +64,11 @@ export function convertBufferUnit(buffer, prevUnit, newUnit, drugId, task, ctx) 
   try {
     const canonical = toCanonical(v, prevUnit, drugId, task, ctx);
     const displayVal = fromCanonical(canonical.value, newUnit, drugId, task, ctx);
-    return { buffer: formatValue(displayVal, newUnit), prefilled: true };
+    // formatValueEntry, not formatValue: a toggle that rounded to the unit's
+    // display cap could coarsen what the user typed (fentanyl 0.35 ng/mL) or
+    // flatten it to 0 (3 mcg/h expressed as mcg/kg/min).
+    const step = getQuantStep(drugId, task, newUnit);
+    return { buffer: formatValueEntry(displayVal, newUnit, step), prefilled: true };
   } catch (e) {
     return null; // leave buffer alone on conversion errors
   }

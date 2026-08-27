@@ -177,24 +177,27 @@ function update() {
     }
 
     // ── Step bar ──────────────────────────────────────────────────
+    // `step-bar-below` is derived from live state and toggled once at the end
+    // of this block. Adding/removing it per branch used to leak: the
+    // `threshold === 0` path never removed it, so clearing a redose threshold
+    // after Ce had fallen below it left the rail red for the rest of the case.
+    const barEl = ctx.$(dId + '-bar');
+    const cntEl = ctx.$(dId + '-bar-countdown');
+    let belowThresh = false;
     if (caseStarted) {
       if (threshold === 0) {
         updateStepBar(ctx, dId, t);
       } else {
         // Threshold set: during bolus delivery show progress normally;
         // after delivery show the redose countdown from the approach cache.
-        const barEl = ctx.$(dId + '-bar');
-        const cntEl = ctx.$(dId + '-bar-countdown');
         let hasNextEvt = false;
         try { hasNextEvt = ctx.model.getEvents(dId).some(e => e.time > t + 0.0001); } catch (e) {}
 
         const cache = _getApproachCache(dId);
         if (hasNextEvt) {
           updateStepBar(ctx, dId, t);
-          barEl?.parentElement?.classList.remove('step-bar-below');
         } else if (cache.arrivalMin !== null) {
           const rem = cache.arrivalMin - t;
-          barEl?.parentElement?.classList.remove('step-bar-below');
           if (barEl) barEl.style.width = _intermittentBarPct(ctx, dId, t, cache.arrivalMin) + '%';
           if (cntEl) {
             const ceStr = fmtCeSmart(ceTarget, dId);
@@ -206,23 +209,20 @@ function update() {
           // Combined state (infusion + threshold) with no redose needed —
           // the infusion keeps Ce above threshold. Show normal step bar.
           updateStepBar(ctx, dId, t);
-          barEl?.parentElement?.classList.remove('step-bar-below');
           if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
         } else {
           // Threshold-only, Ce below threshold — red "below" indicator
-          barEl?.parentElement?.classList.add('step-bar-below');
+          belowThresh = true;
           if (barEl) barEl.style.width = '0%';
           if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
         }
       }
     } else {
       // Case not started — clear stale step bar data from previous case
-      const barEl = ctx.$(dId + '-bar');
-      const cntEl = ctx.$(dId + '-bar-countdown');
       if (barEl) barEl.style.width = '0%';
       if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
-      barEl?.parentElement?.classList.remove('step-bar-below');
     }
+    barEl?.parentElement?.classList.toggle('step-bar-below', belowThresh);
 
     // ── Right-side status indicator ───────────────────────────────
     const cardEl = document.getElementById('drug-' + dId);
