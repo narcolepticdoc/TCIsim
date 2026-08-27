@@ -11,6 +11,16 @@
 
 ---
 
+## [0.6.4.9] — 2026-08-27
+
+- **Fixed: the rail under a drug card's Emerge line could stay red for the rest of the case.** Reported from a live case: propofol's rail was canary and ketamine's amber — their drug-class colors — but fentanyl's was red, the "Ce is below the redose threshold" indicator, while that same card's right-edge status rail was blank (`data-status="off"`, i.e. no threshold set at all). The two indicators were reporting different states about the same drug.
+
+  `step-bar-below` was added and removed at five separate points in the drug-panel step-bar block, and the `threshold === 0` path was the one that never removed it. So *set a redose threshold → let Ce fall below it → clear the threshold* left the class behind; from then on the rail read red no matter what the drug did, until New Case.
+
+  The class is now derived from live state and applied once, with a single `classList.toggle` at the end of the block. No branch can leak it, and the rail cannot disagree with the status indicator again.
+
+---
+
 ## [0.6.4.8] — 2026-08-18
 
 - **Fixed: the Next Up panel could stay silent about a scheduled pump step while listing two redose forecasts further away.** Reported ~2.5 h into a case: the propofol card read `Rate → 170 mcg/kg/min in 25:27`, but Next Up showed only the fentanyl redose at 25:32 and the ketamine redose at 117:32 — the one pump action in the case was missing from the panel whose job is naming it.

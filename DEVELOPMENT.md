@@ -4,6 +4,43 @@
 
 ## Session History
 
+### Emerge rail: a below-threshold flag that outlived its threshold (v0.6.4.9) — Interim
+
+Reported from a live case screenshot. The 3 px rail directly under each drug
+card's `Emerge → …` line was canary on propofol and amber on ketamine — those
+are `DRUG_DEFS` colors, painted by `.step-bar-wrap{background:var(--drug-color)}`
+— but red on fentanyl. Red on that rail has exactly one meaning:
+`.step-bar-below`, "Ce has fallen under the redose threshold".
+
+Fentanyl had no redose threshold. The same screenshot proves it: the card's
+right-edge status rail was absent, and `data-status="off"` is only reachable
+through `m === 'none' && threshold === 0` (`index.js` status block). Two
+indicators on one card, disagreeing about whether a threshold existed.
+
+`step-bar-below` was written in five places inside the step-bar block, one per
+branch, and the `threshold === 0` branch was the gap — it called
+`updateStepBar()` and returned, and `updateStepBar()` does not touch the class
+either. So the class survived its own precondition:
+
+```
+Set Threshold (fentanyl)  → threshold > 0
+Ce falls below it         → add('step-bar-below')     rail red   ✓
+Set Threshold → 0         → threshold === 0, branch A → no remove  rail red   ✗
+```
+
+Only New Case cleared it, via the `!caseStarted` branch.
+
+The fix is not a sixth `remove()`. `belowThresh` is now a plain boolean set by
+the one branch that means it, and the block ends with a single
+`classList.toggle('step-bar-below', belowThresh)` — so the rail is a function of
+this frame's state rather than of the branch history that got here. `barEl` /
+`cntEl` are hoisted to the top of the block, which also removes the duplicate
+lookups the old `else` branch carried.
+
+Worth stating as a general shape: a per-branch `add`/`remove` pair over N
+branches is N places to be right, and the branch that "does not care" about the
+class is the one that silently keeps it. Derive, then toggle once.
+
 ### Next Up: a floor under the pump horizon (v0.6.4.8) — Interim
 
 Reported from a live case at ET 2:29:49. The propofol card read `Rate → 170
