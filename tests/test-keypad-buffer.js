@@ -86,6 +86,20 @@ const u = (...p) => pathToFileURL(path.join(__dirname, '..', ...p)).href;
   ok(convertBufferUnit('50', 'mg', 'mg', 'propofol', 'bolus', ctx) === null,
     'same unit → null (no-op)');
 
+  // A toggle may not round away what the unit's display cap cannot express.
+  // Fentanyl's rate grid (0.01 mcg/kg/min) is finer than the 1 dp cap, so the
+  // old formatValue path returned '0.1' for 0.07 and '0' for a mcg/h value.
+  const fctx = { weightKg: 65.8 };
+  const r1 = convertBufferUnit('0.07', 'mcg/kg/min', 'mcg/h', 'fentanyl', 'rate', fctx);
+  const r2 = convertBufferUnit(r1.buffer, 'mcg/h', 'mcg/kg/min', 'fentanyl', 'rate', fctx);
+  ok(Math.abs(parseFloat(r2.buffer) - 0.07) < 1e-9,
+    'fentanyl 0.07 mcg/kg/min survives a mcg/h round trip');
+  const r3 = convertBufferUnit('3', 'mcg/h', 'mcg/kg/min', 'fentanyl', 'rate', fctx);
+  ok(r3 !== null && parseFloat(r3.buffer) > 0,
+    '3 mcg/h → mcg/kg/min stays non-zero rather than collapsing to 0');
+  const r4 = convertBufferUnit('0.35', 'ng/mL', 'ng/mL', 'fentanyl', 'ceTarget', fctx);
+  ok(r4 === null, 'same-unit ceTarget toggle is still a no-op');
+
   // ---- fmtDeliveryTime ----
   ok(fmtDeliveryTime(0.5) === '30s', '0.5 min → "30s"');
   ok(fmtDeliveryTime(0.001) === '1s', 'sub-second clamps to "1s"');

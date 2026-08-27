@@ -12,7 +12,8 @@
  * TCI conflict rules (2a/2b/3a/3b/4/5) apply on confirm/delete.
  */
 
-import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, formatValue, getQuantizeConfig }
+import { toCanonical, fromCanonical, getAllowedUnits, getDefaultUnit, getPrefKey, getQuantStep,
+         formatValue, formatValueEntry, getQuantizeConfig }
   from '../util/units.js';
 import { isPumpEnabled } from '../util/constants.js';
 import { applyBufferKey, convertBufferUnit, bolusTimeText } from './keypad-buffer.js';
@@ -154,7 +155,11 @@ export function openEdit(evtId) {
     const ctx = { weightKg: patient?.weight || 70 };
     try {
       const displayVal = fromCanonical(evt.value, _currentUnit, _selectedDrug, task, ctx);
-      _buffer = formatValue(displayVal, _currentUnit);
+      // formatValueEntry: this buffer can be saved back unchanged, so it may
+      // not round the event's own value away (a 0.03 mcg/kg/min fentanyl rate
+      // came back as 0 under the unit's display cap).
+      _buffer = formatValueEntry(displayVal, _currentUnit,
+        getQuantStep(_selectedDrug, task, _currentUnit));
       _prefilled = true;
     } catch (e) {
       _buffer = String(evt.value);

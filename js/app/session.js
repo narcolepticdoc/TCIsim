@@ -263,12 +263,24 @@ export function createSession({
     // persistent setup default, so a mid-case unit swap in the previous case
     // does not leak into this fresh case. Mid-case swaps still stick and
     // survive save/restore (restore() deliberately leaves working keys alone).
+    //
+    // The same pass drops the last-dose memory. It was the only keypad prefill
+    // source that outlived a case: every in-case value (Ce target, redose
+    // threshold, emergence) resets below, so a bolus keypad that still offered
+    // the previous patient's dose was the odd one out — and a canonical mg
+    // dose re-derives against the NEW patient's weight when the display unit
+    // is per-kg. Doses carried between cases belong in a starting-dose
+    // template, which persists deliberately and is patient-independent.
     for (const drugId of DRUG_IDS) {
       for (const task of ['bolus', 'rate']) {
         const workKey = getPrefKey(drugId, task);
         if (!workKey) continue;
         try { localStorage.setItem(workKey, getSetupDefaultUnit(drugId, task)); } catch (e) {}
       }
+      try {
+        localStorage.removeItem(`tci_lastBolus_${drugId}`);
+        localStorage.removeItem(`tci_lastRate_${drugId}`);
+      } catch (e) {}
     }
 
     setConfirmedPatient(null);

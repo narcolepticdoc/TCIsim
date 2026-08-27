@@ -7,7 +7,9 @@
 
 // Inline the config so tests run standalone in Node
 
-import { toCanonical, fromCanonical, getQuantStep, quantizeInDisplay } from '../js/util/units.js';
+import { toCanonical, fromCanonical, getQuantStep, quantizeInDisplay,
+         formatValue, formatValueEntry } from '../js/util/units.js';
+import { DRUG_TASK_UNITS } from '../js/util/constants.js';
 // Real DRUG_DEFS / DRUG_TASK_UNITS come in via units.js → constants.js; the
 // inline config tables and toBase/fromBase internals were removed.
 
@@ -416,6 +418,63 @@ console.log('\n===== Quantization In Display Units =====\n');
     near(fromCanonical(q100, 'mcg/kg', 'propofol', 'bolus', heavy), 10, 1e-9,
          '100kg: 0.73 mg = 7.3 mcg/kg → 10 mcg/kg');
   }
+}
+
+console.log('\n===== Entry-buffer formatting (formatValueEntry) =====\n');
+
+{
+  // A prefilled keypad may be confirmed untouched, so echoing a value back may
+  // never round away precision the user could have entered. formatValue caps
+  // decimals per unit, which is coarser than some drugs' titration grids.
+  const ctx = { weightKg: 65.8 };
+
+  // The reported bug: a fentanyl redose threshold of 0.35 ng/mL (grid 0.05)
+  // came back as 0.3 and confirming moved the threshold.
+  const thr = fromCanonical(toCanonical(0.35, 'ng/mL', 'fentanyl', 'ceTarget', ctx).value,
+                            'ng/mL', 'fentanyl', 'ceTarget', ctx);
+  ok(formatValue(thr, 'ng/mL') === '0.3', 'formatValue still caps ng/mL at 1 dp (readouts unchanged)');
+  ok(formatValueEntry(thr, 'ng/mL', 0.05) === '0.35', 'fentanyl 0.35 ng/mL prefills as 0.35');
+
+  // Float noise used to flip the same nominal value the other way.
+  ok(formatValueEntry(0.05 * 7, 'ng/mL', 0.05) === '0.35', '0.05×7 float noise also prefills as 0.35');
+
+  // Editing an event must not rewrite its own value on save.
+  ok(formatValueEntry(0.03, 'mcg/kg/min', 0.01) === '0.03', 'fentanyl 0.03 mcg/kg/min prefills as 0.03');
+  ok(formatValueEntry(0.75, 'mcg/kg', 0.25) === '0.75', 'fentanyl 0.75 mcg/kg prefills as 0.75');
+
+  // ...and the other direction: the grid may not COARSEN a value either.
+  // Propofol's bolus grid is 1 mg, so step-only formatting would give '23'.
+  ok(formatValueEntry(22.5, 'mg', 1) === '22.5', 'propofol 22.5 mg is not coarsened to 23 by the 1 mg grid');
+  ok(formatValueEntry(800, 'ng/mL', 10) === '800', 'ketamine 800 ng/mL prefills as 800');
+
+  // A positive value never renders as 0 — 3 mcg/h of fentanyl in mcg/kg/min.
+  const tiny = fromCanonical(toCanonical(3, 'mcg/h', 'fentanyl', 'rate', ctx).value,
+                             'mcg/kg/min', 'fentanyl', 'rate', ctx);
+  ok(formatValue(tiny, 'mcg/kg/min') === '0', 'formatValue flattens a tiny rate to 0');
+  ok(parseFloat(formatValueEntry(tiny, 'mcg/kg/min', 0.01)) > 0,
+     'formatValueEntry keeps a tiny rate non-zero (~2 sig figs)');
+
+  ok(formatValueEntry(0, 'mg', 1) === '0', 'zero still formats as 0');
+  ok(formatValueEntry(7, 'mL/h', 1) === '7', 'a whole number keeps no trailing zeros');
+
+  // Exhaustive: every drug/task/unit must echo an exact grid multiple unchanged.
+  let coarsened = [];
+  for (const drug of ['propofol', 'fentanyl', 'ketamine']) {
+    for (const task of ['bolus', 'rate', 'ceTarget']) {
+      for (const unit of DRUG_TASK_UNITS[drug][task].allowed) {
+        const step = getQuantStep(drug, task, unit);
+        if (!(step > 0)) continue;
+        for (const k of [1, 3, 7, 13]) {
+          const v = parseFloat((step * k).toFixed(10));
+          if (parseFloat(formatValueEntry(v, unit, step)) !== v) {
+            coarsened.push(`${drug}/${task}/${unit} ${v}`);
+          }
+        }
+      }
+    }
+  }
+  ok(coarsened.length === 0,
+     `every drug/task/unit echoes exact grid multiples unchanged${coarsened.length ? ' — lost: ' + coarsened.join(', ') : ''}`);
 }
 
 // ===== SUMMARY =====
