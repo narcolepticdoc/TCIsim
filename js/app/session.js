@@ -13,6 +13,45 @@ import { rehydrateEvents } from '../sim/preview.js';
 const $ = id => document.getElementById(id);
 
 /**
+ * Drop the localStorage state that belongs to the case being left, so it
+ * cannot surface as a default in the next one.
+ *
+ *   - working display units (`tci-pref-{bolus,rate}Unit-{drug}`) are reseeded
+ *     from the persistent setup default, so a mid-case unit swap in the
+ *     previous case does not leak forward. Mid-case swaps still stick for the
+ *     rest of that case and survive save/restore (restore() deliberately
+ *     leaves working keys alone).
+ *   - the last-dose keypad memory (`tci_lastBolus_`/`tci_lastRate_`) is
+ *     dropped. It was the only keypad prefill source that outlived a case,
+ *     and it is a per-*patient* quantity behind a per-drug key: a canonical mg
+ *     dose re-derives against the NEW patient's weight when the display unit
+ *     is per-kg. Doses meant to carry between cases belong in the
+ *     starting-dose template, which persists deliberately and is
+ *     patient-independent.
+ *
+ * Called from BOTH case-entry points, because "a new case begins" is not the
+ * same event as "the New Case button was pressed". On a fresh page load — a
+ * cold start, or the automatic reload after a service-worker version update —
+ * the app boots straight to the setup screen and `newCase()` never runs, so
+ * confirming a patient there used to start a case still carrying the previous
+ * one's units and doses. Idempotent, so New Case → confirm running it twice
+ * costs nothing.
+ */
+export function resetCaseCarryOver() {
+  for (const drugId of DRUG_IDS) {
+    for (const task of ['bolus', 'rate']) {
+      const workKey = getPrefKey(drugId, task);
+      if (!workKey) continue;
+      try { localStorage.setItem(workKey, getSetupDefaultUnit(drugId, task)); } catch (e) {}
+    }
+    try {
+      localStorage.removeItem(`tci_lastBolus_${drugId}`);
+      localStorage.removeItem(`tci_lastRate_${drugId}`);
+    } catch (e) {}
+  }
+}
+
+/**
  * Create session controller.
  *
  * @param {{
@@ -259,29 +298,9 @@ export function createSession({
     // Reset model
     if (model) model.reset();
 
-    // Reseed each drug/task's working display-unit preference from the
-    // persistent setup default, so a mid-case unit swap in the previous case
-    // does not leak into this fresh case. Mid-case swaps still stick and
-    // survive save/restore (restore() deliberately leaves working keys alone).
-    //
-    // The same pass drops the last-dose memory. It was the only keypad prefill
-    // source that outlived a case: every in-case value (Ce target, redose
-    // threshold, emergence) resets below, so a bolus keypad that still offered
-    // the previous patient's dose was the odd one out — and a canonical mg
-    // dose re-derives against the NEW patient's weight when the display unit
-    // is per-kg. Doses carried between cases belong in a starting-dose
-    // template, which persists deliberately and is patient-independent.
-    for (const drugId of DRUG_IDS) {
-      for (const task of ['bolus', 'rate']) {
-        const workKey = getPrefKey(drugId, task);
-        if (!workKey) continue;
-        try { localStorage.setItem(workKey, getSetupDefaultUnit(drugId, task)); } catch (e) {}
-      }
-      try {
-        localStorage.removeItem(`tci_lastBolus_${drugId}`);
-        localStorage.removeItem(`tci_lastRate_${drugId}`);
-      } catch (e) {}
-    }
+    // Units and last-dose memory — see resetCaseCarryOver. Also run from
+    // setup's onConfirm, which is the entry point a cold start uses.
+    resetCaseCarryOver();
 
     setConfirmedPatient(null);
     setAnnotations([]);

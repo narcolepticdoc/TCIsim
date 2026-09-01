@@ -11,6 +11,18 @@
 
 ---
 
+## [0.6.4.13] — 2026-09-01
+
+- **Fixed: a new case could still open with the previous case's keypad defaults.** Reported with a fresh case showing `12.5 mg` prefilled in the ketamine Add Bolus keypad and `274.6 mcg/kg` in propofol's — neither of which was a dose given in that case. The two doses that *had* been given came from the starting-dose template, which queues events directly and never touches the keypad, so nothing in the case had overwritten the stale values.
+
+  v0.6.4.10 cleared the last-dose memory on New Case, but that reset lived inside `session.newCase()` — which runs only when the **New Case button** is pressed. On a cold start the app boots straight to the setup screen and `newCase()` never runs, so confirming a patient there began a case still carrying the previous one's `tci_lastBolus_*` / `tci_lastRate_*` **and** its working display units (which is why propofol's bolus keypad opened in mcg/kg rather than the setup default). A service-worker version update reloads the app, so every update put users on exactly that path.
+
+  The reset is now a module-level `resetCaseCarryOver()` called from **both** entry points — `newCase()` and setup's `onConfirm` — because "a new case begins" is not the same event as "the New Case button was pressed". It is idempotent, so New Case → confirm running it twice costs nothing.
+
+  Restore is deliberately unchanged: it resumes the case you were just in, so the memory it carries belongs to that case.
+
+---
+
 ## [0.6.4.12] — 2026-08-27
 
 - **Fixed: the emergence countdown counted the wrong way after a bolus given with the pump off.** The drug card's `Emerge → X in M:SS` runs as a two-mode state machine: with an infusion running it re-predicts every second, and when "idle" it snapshots the decay once and ticks the display down 1 s per second, sanity-checking only every 5 s. `isIdle` was defined as *pump rate is zero* — but `getRateAtTime` walks rate and pause events only, so **boluses are invisible to it**. A bolus given with no infusion running therefore read as rate 0 for its entire delivery *and* the effect-site rise that follows, and through that window the true time-to-emergence climbs steeply while the display counted **down**, snapping back with a visible upward jump every 5 s.
