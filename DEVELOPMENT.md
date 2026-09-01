@@ -4,6 +4,80 @@
 
 ## Session History
 
+### Idle is a direction, not a rate (v0.6.4.12) — Interim
+
+Asked to check whether the emergence countdown could ever fail to update,
+"especially for propofol infusions, and especially moving from TCI to a manual
+infusion with boluses". The TCI → manual switch turned out to be fine. The
+boluses were not.
+
+`exit-readout.js` is a two-mode machine, and its header stated the premise
+plainly: *"Idle (rate == 0): Ce is actually decaying."* That sentence is the
+bug. `isIdle` was `!(getRateAtTime(...) > 0)`, and `getRateAtTime`
+(`js/sim/events/replay.js:30`) walks `rate` and `pause` events only — **bolus
+events are invisible to it**. So a bolus given with no infusion running reads
+as rate 0 for its whole delivery and for the effect-site rise afterwards. In
+that window Ce is climbing, the true time-to-emergence is climbing with it, and
+the idle branch was ticking the display *down* 1 s per second, resyncing with
+an upward jump every `IDLE_SANITY_MS`.
+
+Driving the real module against the real model and comparing what the card
+would display with `predictDecayTo` at the same instant:
+
+```
+ t(min)  rate    Ce     shown    truth     err
+ 25.40    0.0   1.882    647s     723s    76.3s   <<<
+ 25.43    0.0   1.914    739s     757s    18.3s
+ 25.47    0.0   1.949    737s     790s    53.1s   <<<
+ 25.50    0.0   1.986    821s     821s     0.5s   ← 5 s sanity snaps it back
+ 25.57    0.0   2.068    817s     881s    64.0s   <<<
+```
+
+Propofol, 100 mg with the pump stopped: worst 76 s. Ketamine by IV push — the
+normal way it is given, so rate is 0 for the entire case — worst **3094 s**,
+i.e. the card reading `26:38` against an honest `78:15`. And it fires in plain
+TCI too: the plan leaves rate at 0 between the loading bolus and the first
+maintenance step, which is the same trap in miniature (48.7 s at t ≈ 1.2 min).
+
+The fix is to make idle mean what the code assumed: Ce is falling. Direction
+decides — the rule `settings.checkBelowThreshold` and `decay-predictor`'s
+`hasBeenAbove` already apply to the redose threshold, now applied here too.
+Ce's own direction is not quite enough on its own: for the first few seconds of
+a bolus the plasma is loaded but the effect site is still coasting down, so Ce
+falls while the answer has already jumped. `isInBolusPhase` — which the drug
+panel already uses for the "Bolus" status label — covers exactly that lag, and
+`rising` carries the rest of the climb to the peak.
+
+Worth stating generally, because this is the second bug in three days of the
+same shape (after the step-bar rail): **a cheap proxy for a condition drifts
+from the condition.** "Pump rate is zero" was a proxy for "Ce is falling", and
+it was right often enough to survive review and wrong exactly where a bolus is
+the whole point of the screen. The rail bug was a class outliving its
+precondition; this is a proxy outliving its correlation. Both were found by
+asking what the code *assumes* rather than what it *does*.
+
+**Second defect, found while measuring the first.** The reference itself was
+stepping in 30 s jumps for ketamine. `predictTroughTime`'s bisection carried an
+absolute concentration early-exit, `|midCe − troughCe| < 1e-4` µg/mL. An
+absolute band in canonical units means something different for every drug:
+
+```
+propofol  target 1.5 µg/mL     → 1e-4 is  0.01% of target   61 distinct values / 61 s
+ketamine  target 0.030 µg/mL   → 1e-4 is  0.33% of target    3 distinct values / 61 s
+fentanyl  target 0.0003 µg/mL  → 1e-4 is 33.33% of target    3 distinct values / 61 s
+```
+
+At 33% of target, bisection returns on its first probe and the answer collapses
+onto the 0.5 min coarse grid, so the fentanyl and ketamine countdowns sat still
+for half a minute and then jumped half a minute. The tolerance is now relative
+to the target. The same function backs `predictTrough`, so the redose countdown
+had the identical quantisation and is fixed with it.
+
+`tests/test-exit-readout.mjs` drives the real readout module over the real
+model with a fake wall clock locked to sim time, and asserts the displayed
+countdown tracks ground truth and never walks against a rising truth. It fails
+6 of 9 assertions against the pre-fix files.
+
 ### The chart stack comes in-house (v0.6.4.11) — Interim
 
 Reported: after restoring a case on v0.6.4.10, **all horizontal chart threshold
