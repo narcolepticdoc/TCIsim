@@ -4,6 +4,61 @@
 
 ## Session History
 
+### The Restore button was frozen at boot (v0.6.4.14) — Interim
+
+Asked what happens when a case is never explicitly ended — the app is just
+restarted with the old case still in storage and a new patient entered.
+
+The good news first: with v0.6.4.13 in, nothing leaks. A restart plus a new
+patient gives a genuinely clean case — 0 events, Ce target / redose threshold /
+emergence all 0, dose memory gone, only the unit preferences surviving and
+those correctly reseeded from the setup defaults. Contamination is not the
+problem.
+
+The **Restore Last Case** button is. It was read once inside boot
+(`app.js:564-574`) and never again, so its visibility *and* its label were
+frozen for the session. Both failure directions reproduce:
+
+```
+SCENARIO 1 — saved case at boot, a second case is run, then New Case
+  after New Case → button says:  "Restore Last Case  66y M 69.4kg · 2 events"
+                   but restores:  30y F 55kg
+  MISMATCH: true
+
+SCENARIO 2 — no saved case at boot (first ever run)
+  case saved to storage: true | after New Case → restore visible: false
+  UNRECOVERABLE: true
+```
+
+So the control could advertise one patient and deliver another, and in a
+session that began with empty storage it stayed hidden even once a case existed
+— exactly when an accidental New Case most needs an undo.
+
+The hook is `showScreen()`. Every route back to the setup screen passes through
+it (boot, `newCase()`, and anything added later), so refreshing there is the
+one placement that cannot go stale again — the same reasoning as v0.6.4.13's
+`resetCaseCarryOver()`, which had to be reachable from both case-entry points.
+The click handler is bound once at boot, deliberately outside the refresh: the
+old code attached it inside the `hasSavedCase()` branch, and a function that
+re-runs would have stacked a listener per visit (pinned by a three-visits-then-
+one-click check).
+
+**And the legibility, which is the same bug wearing different clothes.** The
+summary line is the only thing naming *whose* case will be restored — the text
+that stands between the user and resuming a different patient — and it rendered
+at 10px in `--text-muted`: `#475569` on `#0f172a`, roughly 2:1. The highest-
+consequence string on the screen was its least readable one. Now 12-13px mono
+in `--text-secondary`, about 7:1 in both themes, on a filled surface with an
+accent border. `--blue` as a fill stays reserved for Confirm Patient so the
+primary action still visibly outranks it.
+
+Left alone on purpose: `session.save()` still fires only on mutation, so
+confirming a new patient does not overwrite the stored case until the first
+dose. Auto-saving an empty case on confirm would delete the previous case the
+instant a patient is entered. The window where a restart would offer the
+*previous* patient's case is better closed by a label that tells the truth than
+by destroying the thing the user might want back.
+
 ### A new case begins in two places (v0.6.4.13) — Interim
 
 Reported against v0.6.4.12: a fresh case, and the ketamine Add Bolus keypad

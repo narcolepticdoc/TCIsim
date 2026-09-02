@@ -11,6 +11,20 @@
 
 ---
 
+## [0.6.4.14] — 2026-09-02
+
+- **Fixed: the Restore Last Case button could name the wrong patient, or hide a case you could still recover.** It was evaluated once, at boot, and never refreshed — so both its label and its visibility were frozen for the whole session.
+
+  Reproduced: boot with a saved case, run a *second* case for a different patient, press New Case — the button still read `Restore Last Case · 66y M 69.4kg · 2 events` while actually restoring the `30y F 55kg` case. And in a session that started with empty storage the button stayed hidden even after a case had been saved, so an accidental New Case was unrecoverable although the case was sitting in localStorage.
+
+  It now refreshes on every setup-screen visit, hooked into `showScreen()` — the one place every route back to setup passes through, so it cannot go stale again. The click handler is bound once at boot rather than inside the refresh, which would otherwise stack a listener per visit.
+
+- **Changed: the Restore Last Case button is legible.** The summary line is the only thing naming *whose* case will be restored — the one piece of text that prevents restoring the wrong patient — and it rendered at 10px in `--text-muted` (about 2:1 against the background) inside a transparent button. It is now 12–13px monospace in `--text-secondary` (~7:1 in both themes), on a filled surface with an accent border. `--blue` as a fill stays exclusive to Confirm Patient, which remains the primary action.
+
+  `session.save()` deliberately still fires only on mutation, so confirming a new patient does not immediately overwrite the stored case. Auto-saving an empty case on confirm would destroy the previous one the moment a patient is entered, removing the undo entirely — a truthful label makes that window an informed choice instead.
+
+---
+
 ## [0.6.4.13] — 2026-09-01
 
 - **Fixed: a new case could still open with the previous case's keypad defaults.** Reported with a fresh case showing `12.5 mg` prefilled in the ketamine Add Bolus keypad and `274.6 mcg/kg` in propofol's — neither of which was a dose given in that case. The two doses that *had* been given came from the starting-dose template, which queues events directly and never touches the keypad, so nothing in the case had overwritten the stale values.
