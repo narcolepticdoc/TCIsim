@@ -29,7 +29,7 @@ import * as persist from './ui/persist.js';
 import * as settings from './ui/settings.js';
 import { initSettingsUI } from './app/settings-ui.js';
 import { createTciModal } from './app/tci-modal.js';
-import { createSession } from './app/session.js';
+import { createSession, resetCaseCarryOver } from './app/session.js';
 import { initPortraitLayout, syncPortraitLayout } from './app/portrait-layout.js';
 import { createChartBridge } from './app/chart-bridge.js';
 import { createPlanning } from './app/planning.js';
@@ -578,6 +578,12 @@ function boot() {
   setup.init({
     onConfirm(patient) {
       try {
+        // A case begins here on every path, including a cold start that never
+        // went through New Case (a fresh load, or the reload after a
+        // service-worker update). Drop the previous case's carry-over before
+        // anything can read it — the keypad's last-dose prefills in
+        // particular. Idempotent when newCase() has already run.
+        resetCaseCarryOver();
         confirmedPatient = patient;
         model.setPatient(patient);
         // Refresh every drug's config (pump settings may have changed)

@@ -4,6 +4,53 @@
 
 ## Session History
 
+### A new case begins in two places (v0.6.4.13) — Interim
+
+Reported against v0.6.4.12: a fresh case, and the ketamine Add Bolus keypad
+opened prefilled `12.5 mg`, propofol's `274.6 mcg/kg`. Neither was a dose given
+in that case — the log held a 25 mg ketamine push and a 1000 mcg/kg propofol
+bolus, both stamped at case start.
+
+That detail is the whole diagnosis. Doses stamped at case start come from the
+**starting-dose template**, which `queueStartingDoses` inserts straight into the
+event list; they never pass through `keypad.confirm()`, so they never write
+`tci_lastBolus_*`. The Redose button read the event list and showed the right
+numbers (`Redose 25 mg`, `Redose 1000 mcg/kg`); the keypad read localStorage
+and showed the previous case's.
+
+v0.6.4.10 added the clearing pass for exactly this, and it was correct — but it
+was written *inside* `session.newCase()`, which is the New Case **button's**
+handler. The app has two ways into a case:
+
+```
+btn-new-case → newCase() → setup screen → onConfirm → sim screen   ✓ cleared
+cold start   →            setup screen → onConfirm → sim screen   ✗ never cleared
+```
+
+A cold start is not exotic. It is a page reload, a PWA relaunch — and the
+automatic reload after a service-worker version update, which means **every
+update dropped users onto the uncleared path**. The same gap left the working
+display units unseeded, which is why propofol's keypad opened in mcg/kg instead
+of the setup default.
+
+`resetCaseCarryOver()` is now module-level in `session.js` and called from both
+`newCase()` and setup's `onConfirm`. Idempotent, so the New Case path running it
+twice costs nothing. Being module-level (it needs no closure state — only
+`DRUG_IDS`, `getPrefKey`, `getSetupDefaultUnit` and localStorage) also makes it
+directly unit-testable, which is what `tests/test-case-carryover.mjs` does,
+including a guard list of cross-case keys it must not touch.
+
+`restore()` is deliberately left alone. It resumes the case you were just in —
+the reload-mid-case recovery path — so the memory it carries belongs to that
+case.
+
+The general shape, and it is the third of its kind in this stretch (after the
+step-bar rail and the idle-vs-rate proxy): **the fix was attached to a UI event
+rather than to the state transition it stood for.** "New Case was pressed" was
+a proxy for "a new case begins", right on the path anyone would test and wrong
+on the path an auto-update forces. Cleanup belongs at the transition, reachable
+from every entry point, not in one handler.
+
 ### Idle is a direction, not a rate (v0.6.4.12) — Interim
 
 Asked to check whether the emergence countdown could ever fail to update,
