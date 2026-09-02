@@ -170,6 +170,30 @@ function getRedoseDose(drugId) {
 
 // ---- Screen Navigation ----
 
+/**
+ * Re-read the saved case and repaint the Restore button.
+ *
+ * Must run on every setup-screen visit, not once at boot. Read once, the
+ * button froze for the whole session and lied in both directions: after
+ * running a second case it still advertised the FIRST case's patient while
+ * restoring the second ("Restore 66y M 69.4kg" landing you in the 30y F 55kg
+ * case), and a session that booted with no saved case kept the button hidden
+ * even after a case had been saved — so an accidental New Case was
+ * unrecoverable although the case was sitting in storage.
+ *
+ * The summary is the only thing naming WHOSE case this restores, so it is
+ * rendered as its own element and styled to be read (see .restore-summary).
+ */
+function refreshRestoreButton() {
+  const btn = $('btn-restore');
+  if (!btn) return;
+  const summary = persist.hasSavedCase() ? persist.getSavedCaseSummary() : null;
+  if (!summary) { btn.style.display = 'none'; return; }
+  btn.innerHTML = '<span class="restore-label">Restore Last Case</span>' +
+                  `<span class="restore-summary">${summary}</span>`;
+  btn.style.display = '';
+}
+
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   $(id).classList.add('active');
@@ -178,6 +202,9 @@ function showScreen(id) {
   if (id === 'sim-screen') {
     requestAnimationFrame(() => requestAnimationFrame(syncPortraitLayout));
   }
+  // Every route back to setup passes through here — boot, newCase(), and
+  // anything added later — so the Restore button cannot go stale again.
+  if (id === 'setup-screen') refreshRestoreButton();
   // Notify sw-register so it can gate version checks/reloads to the setup
   // screen — we never want the SW to swap out from under a running case.
   document.dispatchEvent(new CustomEvent('tcisim:screenchange', { detail: { id } }));
@@ -561,18 +588,11 @@ function boot() {
     initSimScreen, showScreen, addAnnotation, refreshChart,
   });
 
-  // Show restore button if saved case exists
-  const btnRestore = $('btn-restore');
-  if (btnRestore) {
-    if (persist.hasSavedCase()) {
-      const summary = persist.getSavedCaseSummary();
-      btnRestore.innerHTML = `Restore Last Case${summary ? `<span class="restore-summary">${summary}</span>` : ''}`;
-      btnRestore.style.display = '';
-      btnRestore.addEventListener('click', () => session.restore());
-    } else {
-      btnRestore.style.display = 'none';
-    }
-  }
+  // Bind the restore click ONCE. The button's label and visibility are
+  // refreshed on every setup-screen visit (refreshRestoreButton), so binding
+  // inside that would stack a listener per visit.
+  $('btn-restore')?.addEventListener('click', () => session.restore());
+  refreshRestoreButton();
 
   // Initialize setup screen
   setup.init({

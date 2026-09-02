@@ -177,9 +177,16 @@
     .derived-item .d-value{font-family:var(--font-mono);font-size:13px;color:var(--text-accent);font-weight:500}
     .btn-confirm{width:100%;padding:10px;background:var(--blue);border:none;border-radius:var(--radius-md);color:#fff;font-family:var(--font-display);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;flex-shrink:0}
     .btn-confirm:hover{background:#2563eb}
-    .btn-restore{width:100%;padding:9px;background:transparent;border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-secondary);font-family:var(--font-display);font-size:12px;cursor:pointer;transition:all .15s;flex-shrink:0}
-    .btn-restore:hover{background:var(--bg-hover);color:var(--text-primary)}
-    .btn-restore .restore-summary{display:block;font-size:10px;color:var(--text-muted);margin-top:2px}
+    /* Restore Last Case — a real affordance, not a footnote. The summary line
+       is the only thing naming WHOSE case this restores, so it is sized and
+       coloured to be read: at 10px in --text-muted it was the least legible
+       text on the screen while carrying the highest cost of being missed.
+       Filled surface + accent border, but never --blue: that fill belongs to
+       Confirm Patient alone, which stays the primary action. */
+    .btn-restore{width:100%;padding:10px 12px;background:var(--bg-input);border:1px solid var(--border-focus);border-radius:var(--radius-md);color:var(--text-primary);font-family:var(--font-display);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;flex-shrink:0;text-align:center}
+    .btn-restore:hover{background:var(--bg-hover);border-color:var(--text-accent)}
+    .btn-restore .restore-label{display:block;color:var(--text-accent)}
+    .btn-restore .restore-summary{display:block;font-family:var(--font-mono);font-size:12px;font-weight:400;color:var(--text-secondary);margin-top:4px;letter-spacing:.2px}
     .btn-pull-patient{width:100%;padding:8px;background:transparent;border:1px dashed var(--border);border-radius:var(--radius-md);color:var(--text-secondary);font-family:var(--font-display);font-size:11.5px;cursor:pointer;transition:all .15s;flex-shrink:0}
     .btn-pull-patient:hover:not(:disabled){background:var(--bg-hover);color:var(--text-primary);border-color:var(--border-focus)}
     .btn-pull-patient:disabled{opacity:.5;cursor:default}
@@ -215,7 +222,7 @@
     .btn-template-sync{padding:5px 10px;background:transparent;border:1px dashed var(--border);border-radius:var(--radius-sm);color:var(--text-secondary);font-family:var(--font-display);font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}
     .btn-template-sync:hover:not(:disabled){background:var(--bg-hover);color:var(--text-primary);border-color:var(--border-focus)}
     .btn-template-sync:disabled{opacity:.5;cursor:default}
-    @media(max-height:380px){.setup-brand{width:160px;min-width:140px;padding:12px 10px;gap:6px}.setup-brand h1{font-size:20px}.setup-form{padding:8px 14px;gap:6px}.input-grid{gap:5px 10px}.form-row input[type="text"],.form-row select{padding:5px 8px;font-size:13px}.form-row label{font-size:10px}.btn-confirm{padding:8px;font-size:13px}.derived-bar{padding:5px 8px}.derived-item .d-value{font-size:12px}}
+    @media(max-height:380px){.setup-brand{width:160px;min-width:140px;padding:12px 10px;gap:6px}.setup-brand h1{font-size:20px}.setup-form{padding:8px 14px;gap:6px}.input-grid{gap:5px 10px}.form-row input[type="text"],.form-row select{padding:5px 8px;font-size:13px}.form-row label{font-size:10px}.btn-confirm{padding:8px;font-size:13px}.btn-restore{padding:7px 10px;font-size:13px}.btn-restore .restore-summary{font-size:11px;margin-top:2px}.derived-bar{padding:5px 8px}.derived-item .d-value{font-size:12px}}
     @media(min-width:900px){.setup-form{max-width:540px}}
 
     /* ==== SIM SCREEN ==== */
@@ -942,6 +949,8 @@
       .form-row label{font-size:12px}
       .form-row input[type="text"],.form-row select{font-size:15px;padding:7px 11px}
       .btn-confirm{font-size:15px;padding:12px}
+      .btn-restore{font-size:15px;padding:12px}
+      .btn-restore .restore-summary{font-size:13px}
 
       /* Topbar */
       .sim-topbar{height:42px;padding:0 16px;gap:12px}
