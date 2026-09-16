@@ -67,6 +67,7 @@ let _items       = [];    // last collected list
 let _milestones  = [];    // last milestone candidates (for key pruning)
 let _alarmLevel  = 'none';
 let _lastRebuild = -1e9;  // sim-minutes timestamp of the last list rebuild
+let _dirty       = false; // a re-collection is owed on the next frame
 let _lastRenderedSig = '';
 
 const REBUILD_INTERVAL_MIN = 500 / 60000;   // 500 ms, matching the chart cursor
@@ -147,6 +148,7 @@ export function reset() {
   _milestones = [];
   _alarmLevel = 'none';
   _lastRebuild = -1e9;
+  _dirty = false;
   _lastRenderedSig = '';
   _applyAlarmClasses('none');
   _syncTimeButton();
@@ -214,7 +216,14 @@ function _syncTimeButton() {
 export function onFrame(t) {
   if (!_model) return;
 
-  if (t - _lastRebuild >= REBUILD_INTERVAL_MIN) {
+  // `_dirty` bypasses the throttle. It is set by render(), which runs inside
+  // refreshChart *before* the drug-panel rAF pass has recomputed the approach
+  // caches this frame — so the milestones it collected are the pre-mutation
+  // ones. The throttle alone cannot recover from that: it is measured in sim
+  // minutes, so a paused clock never advances past it and the stale snapshot
+  // would stand until the sub-view was left and re-entered.
+  if (_dirty || t - _lastRebuild >= REBUILD_INTERVAL_MIN) {
+    _dirty = false;
     _lastRebuild = t;
     _rebuild(t);
   }
@@ -241,6 +250,12 @@ export function render(t = _now()) {
   _rebuild(t);
   _updateAlarm(t);
   if (_active) { _renderList(); _renderClock(t); }
+  // Clinical forecasts (redose threshold, target, SS, plateau, emergence) are
+  // read out of the drug-panel approach caches, which this frame's rAF pass has
+  // not refilled yet — a model mutation invalidates them but leaves the old
+  // values in place until updateApproachLine() runs. Ask for one more pass so
+  // the panel picks up the recomputed milestones.
+  _dirty = true;
 }
 
 // ── Collection ────────────────────────────────────────────────────────────────
@@ -495,7 +510,14 @@ function _renderList() {
 
   // Rebuild only when the set of rows changes — the times inside them are
   // patched every frame by _renderRowTimes().
-  const sig = _items.map(i => `${i.key}:${i.elapsed ? 1 : 0}`).join('|');
+  // Key + elapsed is not enough: a row's identity survives changes to what it
+  // says. Editing a redose threshold keeps the same drug, kind and crossing
+  // generation, and editing a scheduled event keeps its id — so the signature
+  // carries the two pieces of text the row actually renders. _renderRowTimes
+  // patches the time column every frame; everything else lives in this HTML.
+  const sig = _items.map(i =>
+    `${i.key}:${i.elapsed ? 1 : 0}:${i.latched ? 1 : 0}:${_verbFor(i)}:${_valueFor(i)}`
+  ).join('|');
   if (sig === _lastRenderedSig) return;
   _lastRenderedSig = sig;
 

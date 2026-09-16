@@ -4,6 +4,72 @@
 
 ## Session History
 
+### Next Up kept counting down to the old redose threshold (v0.6.4.15) — Interim
+
+Reported from intermittent-mode use: the redose threshold was changed, the drug
+card picked it up, and the Next Up countdown kept running against the previous
+value — "did not update until I left the panel and reloaded it".
+
+That last clause is the diagnosis. Leaving and re-entering the sub-view calls
+`nextUp.setActive()`, which is the only thing in the module that forces both a
+re-collection *and* a full list repaint. Everything the panel does short of that
+turned out to be unable to see the edit, for two unrelated reasons.
+
+**1. The panel reads forecasts it does not own.** `next-up.js` gets Emergence,
+redose, target, SS and plateau out of the drug-panel approach caches via
+`getMilestones()`; those caches are refilled by the drug-panel rAF pass.
+`chart-bridge.refresh()` does this, in this order:
+
+```
+drugPanel.setCurveData(rawCurve)   // marks every approach cache stale
+...
+nextUp.render(t)                   // reads getMilestones() — still the old values
+```
+
+`setCurveData` sets `computedVersion = -1` but leaves the previous numbers in
+place, so the render that a mutation triggers is guaranteed to collect the
+pre-mutation forecast. In a running case the 500 ms rebuild throttle papered
+over it half a second later. But the throttle compares **sim** minutes:
+
+```
+if (t - _lastRebuild >= REBUILD_INTERVAL_MIN)
+```
+
+With the case clock paused, `t` never moves, `_lastRebuild` was just set to `t`
+by that very render, and the condition is false forever. The stale snapshot then
+survives until `setActive()` — which is exactly the reported escape hatch.
+
+`render()` now sets a `_dirty` flag that `onFrame()` honours ahead of the
+throttle. `onFrame` is called from the end of the drug-panel `update()` loop, so
+by the time it runs the caches have been refilled for that frame; one extra
+collection per mutation, and it is a pure pass over the event list.
+
+**2. The row-set signature described identity, not content.** `_renderList()`
+skips the `innerHTML` rebuild when the signature is unchanged, and it was:
+
+```js
+const sig = _items.map(i => `${i.key}:${i.elapsed ? 1 : 0}`).join('|');
+```
+
+A redose milestone's key is `drugId:redose#<generation><c|p>`. Editing the
+threshold changes the drug's threshold, not its drug, its kind, or its crossing
+generation — so the key is stable by design (that is what makes acknowledgement
+scoping work), and the row kept its old `nu-value` text. The same hole applied
+to an edited scheduled event, whose key is its event id. Only the time column is
+patched per frame by `_renderRowTimes()`, so everything else in the row was
+frozen. The signature now includes `_verbFor(i)` and `_valueFor(i)` — the two
+strings `_buildRow` actually draws.
+
+Both were reproduced before fixing, in `tests/test-next-up-refresh.mjs`. It
+drives the real `next-up.js` against a minimal DOM (`tests/helpers/mini-dom.mjs`)
+so the assertions are about rendered rows rather than module internals, and
+replays the reported sequence with the clock held still: fentanyl 200 mcg push,
+threshold 1.2 → 0.8 → 1.0 ng/mL. Against the old code the countdown sat at
+`6:31` through every edit; with the fix it tracks `predictTrough` to within a
+minute at each step.
+
+---
+
 ### The Restore button was frozen at boot (v0.6.4.14) — Interim
 
 Asked what happens when a case is never explicitly ended — the app is just
