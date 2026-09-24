@@ -11,6 +11,20 @@
 
 ---
 
+## [0.6.4.15] — 2026-09-16
+
+- **Fixed: changing a redose threshold left the Next Up countdown showing the old one.** Reported from intermittent-mode use: the threshold was edited, the drug card followed it, and the Next Up row kept counting down to the previous value until the panel was switched away from and back.
+
+  Two separate staleness bugs, either of which was enough on its own.
+
+  The first is an ordering problem. `next-up.js` does not compute its clinical forecasts — it reads them out of the drug-panel approach caches, which the rAF pass refills. `chart-bridge.refresh()` invalidates those caches and then calls `nextUp.render()` in the same synchronous pass, so the milestones the panel collects are the *pre-edit* ones; the cache has been marked stale but not yet recomputed. The only thing that ever corrected this was the panel's 500 ms rebuild throttle, and that throttle is measured in **sim** minutes — with the case clock paused it never elapses, so the pre-edit snapshot stood for good. `render()` now marks the list dirty, and the next frame (after the rAF pass has refilled the caches) re-collects regardless of the throttle.
+
+  The second is the row-set signature. `_renderList()` rebuilds the list HTML only when the signature changes, and the signature was `key:elapsed`. A redose row's key is drug + kind + crossing generation — a threshold edit touches none of them — so even with fresh data the row kept rendering the old value. An edited scheduled event had the same hole, since its key is the event id. The signature now carries the two pieces of text the row actually draws (verb and value); the time column is patched every frame and stays out of it.
+
+  Pinned by `tests/test-next-up-refresh.mjs`, which drives the real module against a small DOM and asserts what would be on screen, including agreement with `predictTrough` after the edit.
+
+---
+
 ## [0.6.4.14] — 2026-09-02
 
 - **Fixed: the Restore Last Case button could name the wrong patient, or hide a case you could still recover.** It was evaluated once, at boot, and never refreshed — so both its label and its visibility were frozen for the whole session.
