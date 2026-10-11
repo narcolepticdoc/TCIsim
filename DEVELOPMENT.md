@@ -40,10 +40,14 @@ start, and "first occurrence at or after the start" for events. Both turned a
 near-miss into a day-long jump. 10:05 typed at 10:04 became a start 23 h 59 min
 ago, and RT 22:55 in a 23:00 case became an event at ET 23:55, where the old
 code clamped it to 0:00. The "nearer reading" rule leaves both of those as they
-were. Its own limit is a time more than about 12 h on the far side of midnight
-(re-typing a start 14 h into an overnight case, or planning in RT 11 h ahead
-across midnight). The ET entry and the Elapsed tab are unaffected, and both are
-always available.
+were. Its own limits depend on how long the case has run, not on how far the
+time is from midnight. A start is never read as more than 12 h ago, so re-typing
+the start of an overnight case after about 12 h is refused as "in the future".
+An RT time that is on the clock before the start counts as after midnight only
+if it has already happened in the case, or is less than 12 h − elapsed/2 ahead of
+now. Planning in RT across midnight therefore reaches about 12 h ahead at the
+start of a case and less later on. The ET entry and the Elapsed tab are
+unaffected, and both are always available.
 
 The picker gained `getNowMinutes` (the timer's elapsed, passed by both modals).
 "Nearer to the live case" needs the case's now, not the real clock, because the
