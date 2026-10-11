@@ -11,6 +11,22 @@
 
 ---
 
+## [0.6.4.16] — 2026-10-11
+
+- **Fixed: clock times entered in a case that crosses midnight.** Every clock time the app takes is HH:MM with no date, and two places pinned that HH:MM to a fixed calendar day. Both failed silently once a case ran past midnight.
+
+  *Case start time* (timer popover, Start time tab). The HH:MM went on today's date, so at 00:40 a 23:15 start meant 23:15 tonight. The popover said "Start time is in the future" and Apply closed it without changing anything. A start time that hasn't happened yet today now means last night's, when that is the nearer reading; the preview marks it `(yesterday)`. A time just ahead of the clock (10:05 typed at 10:04) is still refused as being in the future, rather than read as a start 23 h 59 min ago.
+
+  *Event times entered in RT* (event editor and reconcile modal). The HH:MM went on the case start's date, so in a case started at 23:00 an event at RT 00:30 resolved 22.5 h *before* the start, was clamped, and landed at ET 0:00. Switching an existing post-midnight event from ET to RT and back did the same. A time that would fall before the start now means after midnight when that is nearer to the live case; one just before the start (22:55 for a 23:00 start) still clamps onto ET 0:00, as before.
+
+  Every input that worked before resolves exactly as it did. The day is chosen only when the old same-day reading was impossible. Days are stepped on the calendar, not in 24 h blocks, so a case that crosses a DST change reads correct clock times and measures its real length.
+
+- **Fixed: the event time could open an hour early.** The picker split case minutes as `floor(min / 60)` : `round(min % 60)`, so 59.6 min became 0:60. No option matches 60, so the select fell back to its first option and read 0:00. This happened when Add Event opened in the last half-minute of an hour, and in an ET → RT → ET round trip when the case start had seconds. The split now rounds the total first.
+
+  Pinned by `tests/test-midnight-clock.mjs`. It checks the resolvers in five time zones and across both US DST changes. It also drives the real `time-picker.js` and `timer.js` with a fake clock, using select stubs that fall back to the first option the way a browser does.
+
+---
+
 ## [0.6.4.15] — 2026-09-16
 
 - **Fixed: changing a redose threshold left the Next Up countdown showing the old one.** Reported from intermittent-mode use: the threshold was edited, the drug card followed it, and the Next Up row kept counting down to the previous value until the panel was switched away from and back.

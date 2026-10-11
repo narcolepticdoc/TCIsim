@@ -13,7 +13,7 @@
  * caches, and the page reloads onto the new version.
  */
 
-const VERSION = '0.6.4.15';
+const VERSION = '0.6.4.16';
 const CACHE_NAME = `tcisim-v${VERSION}`;
 
 const PRECACHE_URLS = [
@@ -109,6 +109,7 @@ const PRECACHE_URLS = [
   'js/sync/patient-sync.js',
   'js/sync/prefs-sync.js',
 
+  'js/util/clock-time.js',
   'js/util/color.js',
   'js/util/constants.js',
   'js/util/event-label.js',

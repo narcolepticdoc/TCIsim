@@ -65,6 +65,7 @@ export function init(opts) {
     unitRowSel: '#ee-time-unit .tp-unit',
     conversionId: 'ee-time-conversion',
     getWallClockStart: () => (_timer.getWallClockStart ? _timer.getWallClockStart() : null),
+    getNowMinutes: () => _timer.getElapsedMinutes(),
     isRunning: () => _controls.isCaseStarted(),
     labelStyle: 'prefix',
   });

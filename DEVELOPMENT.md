@@ -4,6 +4,65 @@
 
 ## Session History
 
+### Clock times in a case that crosses midnight (v0.6.4.16) — Interim
+
+Prompted by a question rather than a report: what happens to a case that starts
+before midnight? The engine never sees a clock. Events are case minutes, the
+wall-clock start is a full `Date` (saved as ISO), and every RT display adds
+elapsed time to it. So the axis, history and Next Up already roll over cleanly
+(`23:30, 0:00, 0:30`). The two places that *read* a typed HH:MM did not.
+
+**Start time (timer popover).** `applyStartTime` did `new Date().setHours(h, m)`,
+so the HH:MM was always on today's date. At 00:40, typing 23:15 meant 23:15
+tonight, `newElapsedMs < 0`, and the popover closed with nothing changed. The
+preview said "Start time is in the future", which was true of the date it had
+picked. The Elapsed tab was the only way to set a pre-midnight start.
+
+**RT event time (`time-picker.js`, shared by the event editor and reconcile
+modal).** `getCaseMinutes` did `new Date(ws).setHours(h, m)`, so the HH:MM went
+on the *start's* date. RT 00:30 in a 23:00 case came out at −22.5 h, and
+`Math.max(0, …)` turned that into ET 0:00. The only sign was the small `= ET
+0:00` label. The ET ↔ RT toggle goes through the same function, so switching an
+existing post-midnight event to RT and back also put it at 0:00.
+
+**The rule (`js/util/clock-time.js`).** Each resolver keeps the old same-day
+reading wherever it was valid, and only crosses midnight when that reading is
+impossible *and* the other day is nearer:
+
+- start time: today's if it has passed; otherwise yesterday's if that is nearer
+  to now than today's; otherwise still "in the future";
+- RT event: the start's day if not before the start; otherwise the next day's
+  if that is nearer to the live case than the pre-start reading is; otherwise
+  the pre-start reading, which the caller clamps to ET 0:00 as before.
+
+A first draft took the simpler routes: "most recent past occurrence" for the
+start, and "first occurrence at or after the start" for events. Both turned a
+near-miss into a day-long jump. 10:05 typed at 10:04 became a start 23 h 59 min
+ago, and RT 22:55 in a 23:00 case became an event at ET 23:55, where the old
+code clamped it to 0:00. The "nearer reading" rule leaves both of those as they
+were. Its own limit is a time more than about 12 h on the far side of midnight
+(re-typing a start 14 h into an overnight case, or planning in RT 11 h ahead
+across midnight). The ET entry and the Elapsed tab are unaffected, and both are
+always available.
+
+The picker gained `getNowMinutes` (the timer's elapsed, passed by both modals).
+"Nearer to the live case" needs the case's now, not the real clock, because the
+timer can be paused. Days step via `setDate()`, not ±86 400 000 ms, so HH:MM
+stays HH:MM across a DST change, while elapsed time stays plain `Date`
+subtraction. A 23:00 → 03:00 case on the fall-back night is five hours, and the
+tests check that.
+
+**Also fixed: `floor(min/60) : round(min % 60)`.** 59.6 min split to 0:60, which
+matches no option. A real `<select>` then falls back to its first option, so the
+picker read 0:00, an hour early. This was reachable from Add Event in the last
+half-minute of any hour, and from the RT round trip whenever the start has
+seconds. `splitHM` rounds the total first. The test's select stub copies the
+browser fallback on purpose; with an idealised stub this bug would not show.
+
+Pinned by `tests/test-midnight-clock.mjs` (resolvers in five zones and across
+both US DST changes; picker and timer popover driven through the real modules
+with a fake `Date`). 12 of its checks fail on the pre-fix code.
+
 ### Next Up kept counting down to the old redose threshold (v0.6.4.15) — Interim
 
 Reported from intermittent-mode use: the redose threshold was changed, the drug
