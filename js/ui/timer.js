@@ -7,6 +7,8 @@
  * that app.js uses when calling model commands.
  */
 
+import { resolveStartTime } from '../util/clock-time.js';
+
 const $ = id => document.getElementById(id);
 
 let elapsedMs = 0;
@@ -250,16 +252,16 @@ function updatePopoverInfo() {
     const val = $('input-start-time').value;
     if (!val) { info.textContent = ''; return; }
     const [h, m] = val.split(':').map(Number);
-    const proposed = new Date();
-    proposed.setHours(h, m, 0, 0);
     const now = new Date();
-    const diffMs = now.getTime() - proposed.getTime();
-    if (diffMs > 0) {
-      const diffSec = Math.floor(diffMs / 1000);
+    // 23:15 typed at 00:40 is last night, not tonight (see util/clock-time.js).
+    const proposed = resolveStartTime(h, m, now);
+    if (proposed) {
+      const diffSec = Math.floor((now.getTime() - proposed.getTime()) / 1000);
       const eh = Math.floor(diffSec / 3600);
       const em = Math.floor((diffSec % 3600) / 60);
       const es = diffSec % 60;
-      info.textContent = `Elapsed: ${eh}:${String(em).padStart(2, '0')}:${String(es).padStart(2, '0')}`;
+      const yesterday = proposed.toDateString() !== now.toDateString() ? ' (yesterday)' : '';
+      info.textContent = `Elapsed: ${eh}:${String(em).padStart(2, '0')}:${String(es).padStart(2, '0')}${yesterday}`;
     } else {
       info.textContent = 'Start time is in the future';
     }
@@ -278,11 +280,10 @@ function applyStartTime() {
     const val = $('input-start-time').value;
     if (!val) return;
     const [h, m] = val.split(':').map(Number);
-    const newStart = new Date();
-    newStart.setHours(h, m, 0, 0);
     const now = new Date();
+    const newStart = resolveStartTime(h, m, now);
+    if (!newStart) { closePopover(); return; }
     const newElapsedMs = now.getTime() - newStart.getTime();
-    if (newElapsedMs < 0) { closePopover(); return; }
 
     wallClockStart = newStart;
     elapsedMs = newElapsedMs;

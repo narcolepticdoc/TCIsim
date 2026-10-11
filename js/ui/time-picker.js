@@ -11,7 +11,13 @@
  *
  * The case↔real unit toggle round-trips the in-progress selection through
  * case minutes (CLAUDE.md: unit toggles convert, they don't clear).
+ *
+ * A real-time pick is resolved against the live case, not pinned to the start's
+ * calendar day: in a case that crosses midnight, 00:30 is after the 23:00 start,
+ * not 22.5 h before it (see util/clock-time.js).
  */
+
+import { resolveCaseClockTime } from '../util/clock-time.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -34,12 +40,24 @@ export function getSelectInt(id) {
 }
 
 /**
+ * Case minutes → the [hours, minutes] the selects show. Rounds once, on the
+ * total: rounding only the minutes turned 59.6 into 0:60, which matches no
+ * option, so the select fell back to 00 and read 0:00 — an hour early.
+ */
+function splitHM(minutes) {
+  const total = Math.round(minutes);
+  return [Math.floor(total / 60), total % 60];
+}
+
+/**
  * @param {Object} cfg
  * @param {string} cfg.hoursId        - <select> id for hours
  * @param {string} cfg.minutesId      - <select> id for minutes
  * @param {string} cfg.unitRowSel     - querySelector for the case/real .tp-unit buttons
  * @param {string} cfg.conversionId   - element id for the conversion label
  * @param {Function} cfg.getWallClockStart - () => Date|null
+ * @param {Function} cfg.getNowMinutes - () => current case time (min); a real-time
+ *                                       pick is read relative to it across midnight
  * @param {Function} cfg.isRunning    - () => boolean ("real" tab enabled + case→RT label)
  * @param {'prefix'|'suffix'} cfg.labelStyle
  * @param {Function} [cfg.onChange]   - called after any select change or unit toggle
@@ -47,7 +65,7 @@ export function getSelectInt(id) {
  */
 export function makeTimePicker({
   hoursId, minutesId, unitRowSel, conversionId,
-  getWallClockStart, isRunning, labelStyle, onChange,
+  getWallClockStart, getNowMinutes, isRunning, labelStyle, onChange,
 }) {
   let timeUnit = 'case'; // 'case' | 'real'
 
@@ -76,8 +94,10 @@ export function makeTimePicker({
     }
     const ws = wallStart();
     if (!ws) return getSelectInt(hoursId) * 60 + getSelectInt(minutesId);
-    const target = new Date(ws);
-    target.setHours(getSelectInt(hoursId), getSelectInt(minutesId), 0, 0);
+    const nowMin = getNowMinutes ? getNowMinutes() : 0;
+    const target = resolveCaseClockTime(getSelectInt(hoursId), getSelectInt(minutesId),
+      ws, new Date(ws.getTime() + nowMin * 60000));
+    // A time before the start still clamps onto it.
     return Math.max(0, (target - ws) / 60000);
   }
 
@@ -92,17 +112,17 @@ export function makeTimePicker({
         cv.textContent = fmtLabel('RT', rd.getHours(), String(rd.getMinutes()).padStart(2, '0'));
       } else { cv.textContent = ''; }
     } else if (ws) {
-      const caseMin = getCaseMinutes();
-      cv.textContent = fmtLabel('ET',
-        Math.floor(caseMin / 60), String(Math.round(caseMin % 60)).padStart(2, '0'));
+      const [h, m] = splitHM(getCaseMinutes());
+      cv.textContent = fmtLabel('ET', h, String(m).padStart(2, '0'));
     } else { cv.textContent = ''; }
   }
 
   /** Reset picker to case mode at the given case time (modal open path). */
   function setCaseMinutes(minutes) {
     timeUnit = 'case';
-    buildTimeSelect($(hoursId), 24, 2, Math.floor(minutes / 60), handleSelectChange);
-    buildTimeSelect($(minutesId), 60, 2, Math.round(minutes % 60), handleSelectChange);
+    const [h, m] = splitHM(minutes);
+    buildTimeSelect($(hoursId), 24, 2, h, handleSelectChange);
+    buildTimeSelect($(minutesId), 60, 2, m, handleSelectChange);
     syncUnitButtons();
     updateConversion();
   }
@@ -114,8 +134,9 @@ export function makeTimePicker({
     timeUnit = unit;
     syncUnitButtons();
     if (unit === 'case') {
-      buildTimeSelect($(hoursId), 24, 2, Math.floor(caseMin / 60), handleSelectChange);
-      buildTimeSelect($(minutesId), 60, 2, Math.round(caseMin % 60), handleSelectChange);
+      const [h, m] = splitHM(caseMin);
+      buildTimeSelect($(hoursId), 24, 2, h, handleSelectChange);
+      buildTimeSelect($(minutesId), 60, 2, m, handleSelectChange);
     } else {
       const ws = wallStart();
       if (ws) {

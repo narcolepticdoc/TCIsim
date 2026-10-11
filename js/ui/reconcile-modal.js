@@ -148,6 +148,7 @@ export function init(opts = {}) {
     unitRowSel: '#rm-time-unit .tp-unit',
     conversionId: 'rm-time-conversion',
     getWallClockStart: () => (_timer.getWallClockStart && _timer.getWallClockStart()) || null,
+    getNowMinutes: () => _timer.getElapsedMinutes(),
     isRunning: () => !!(_timer.getWallClockStart && _timer.getWallClockStart()),
     labelStyle: 'suffix',
     onChange: () => _render(),
