@@ -128,6 +128,12 @@ for (const tz of ['America/New_York', 'Europe/London', 'Asia/Kolkata', 'Australi
   eq(mins(resolveCaseClockTime(10, 0, start, longNow), start), 660, '14 h overnight case: 10:00 → ET 11:00');
   eq(mins(resolveCaseClockTime(22, 0, start, longNow), start), -60, '14 h overnight case: 22:00 → before the start');
   eq(mins(resolveCaseClockTime(0, 30, start), start), 90, 'no `now` given: reads relative to the start');
+  // The live `now` decides it: 13:00 is 10 h before a 23:00 start but, 10 h into
+  // the case (now 09:00), only 4 h ahead. Read against the start alone it would
+  // be the pre-start reading; a fixed 12 h cut-off would say the same.
+  eq(mins(resolveCaseClockTime(13, 0, start, at(10, 6, 9, 0)), start), 840,
+     '10 h into the case: 13:00 → ET 14:00 (4 h ahead), not before the start');
+  eq(mins(resolveCaseClockTime(13, 0, start), start), -600, 'at the start itself, 13:00 is 10 h before it');
 }
 
 process.env.TZ = 'America/New_York';
@@ -184,6 +190,18 @@ picker.setCaseMinutes(119.5);
 eq(sel(), '2:00', '119.5 min opens at 2:00, not 1:00');
 picker.setCaseMinutes(30.2);
 eq(sel(), '0:30', '30.2 min opens at 0:30');
+picker.setUnit('real');
+els.get('ee-hours').value = 0; els.get('ee-minutes').value = 0;
+picker.refreshConversion();
+eq(els.get('ee-conv').textContent, '= ET 1:00', 'start 23:00:15, RT 00:00 (59.75 min) labels ET 1:00, not 0:60');
+
+console.log('\n  time-picker.js — the live case clock decides');
+ws = at(10, 5, 23, 0);
+nowMin = 600;                                   // 09:00 the next morning
+picker.setCaseMinutes(nowMin);
+picker.setUnit('real');
+els.get('ee-hours').value = 13; els.get('ee-minutes').value = 0;
+eq(picker.getCaseMinutes(), 840, '10 h into a 23:00 case, RT 13:00 → ET 14:00 (uses getNowMinutes)');
 
 console.log('\n  time-picker.js — same-day case unchanged');
 ws = at(10, 6, 8, 0);
