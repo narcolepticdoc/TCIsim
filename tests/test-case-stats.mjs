@@ -371,9 +371,98 @@ console.log('\n  view details');
   m.addBolus(P, 20, 50, 'IV push 50 mg', { deliveryMode: 'push', source: 'manual' });
   setPumpSettings(P, { concentration: 20 });
   caseTotals.render();
-  ok(document.getElementById('tot-list').innerHTML.includes('· 7.50 mL'), 'total mL follows the case concentration (150 mg at 2% = 7.5 mL)');
+  ok(document.getElementById('tot-list').innerHTML.includes('>7.50 mL<'), 'total mL follows the case concentration (150 mg at 2% = 7.5 mL)');
   resetPumpSettings();
   caseTotals.setActive(false);
+}
+
+console.log('\n  doses given together are not a span');
+{
+  // An induction template at ET 0: fentanyl and ketamine pushed together, and
+  // a propofol pump bolus. By the definition that is a case time of 0.
+  const m = freshModel();
+  m.addBolus('fentanyl', 0, 0.1, 'IV push 100 mcg', { deliveryMode: 'push', source: 'manual' });
+  m.addBolus('ketamine', 0, 30, 'IV push 30 mg', { deliveryMode: 'push', source: 'manual' });
+  m.addBolus(P, 0, 150, 'Bolus 150 mg', { deliveryMode: 'pump', source: 'manual' });
+  const c = caseOf(m, 3);
+  eq(c.hasSpan, false, 'three doses at ET 0 overlap: no span');
+  eq(avgOf(c, P), null, '…so no average (it would read the pump\'s bolus rate, 750 mL/h)');
+  eq(avgOf(c, 'ketamine'), null, '…for any drug');
+  // A dose that starts after another has finished opens a real span.
+  m.addBolus('fentanyl', 15, 0.05, 'IV push 50 mcg', { deliveryMode: 'push', source: 'manual' });
+  const c2 = caseOf(m, 20);
+  eq(c2.hasSpan, true, 'a later dose gives the case a span');
+  near(avgOf(c2, P), 150 / c2.caseTimeMin, 'propofol averages over ET 0 → that dose');
+}
+
+console.log('\n  dose reconciliations');
+{
+  // A downward single-bolus correction (reconcile-modal: a negative push at
+  // the default ET 0) is in the total but is not a time drug was given.
+  const m = freshModel();
+  m.addBolus('fentanyl', 5, 0.1, 'IV push 100 mcg', { deliveryMode: 'push', source: 'manual' });
+  m.addRate(P, 5, 10, 'Rate 10');
+  const before = caseOf(m, 65);
+  m.addBolus(P, 0, -50, 'Dose reconciliation −50 mg', { deliveryMode: 'push', source: 'manual' });
+  const after = caseOf(m, 65);
+  const sp = after.drugs.find(d => d.drugId === P);
+  near(sp.totalMg, cumulative(m, P, 65), 'total (with the correction) equals getCumulativeDose');
+  near(sp.correctionMg, -50, 'the −50 mg is a correction');
+  eq(sp.pushCount, 0, '…not an IV push');
+  near(sp.infusionMg + sp.pumpBolusMg + sp.pushMg + sp.correctionMg, sp.totalMg, 'the split adds up to the total');
+  near(after.firstGiven, before.firstGiven, 'the case still starts at ET 5, not at the correction');
+  near(avgOf(after, 'fentanyl'), avgOf(before, 'fentanyl'), 'other drugs\' averages unchanged');
+}
+{
+  // A correction does not make a lone dose into a span.
+  const m = freshModel();
+  m.addBolus(P, 10, 100, 'Bolus 100 mg', { deliveryMode: 'pump', source: 'manual' });
+  m.addBolus(P, 0, -20, 'Dose reconciliation −20 mg', { deliveryMode: 'push', source: 'manual' });
+  eq(caseOf(m, 40).hasSpan, false, 'one dose plus a correction: still no span');
+}
+{
+  // A drug corrected back to nothing has no card and no say in the case time.
+  const m = freshModel();
+  m.addRate(P, 10, 10, 'Rate 10');
+  m.addPause(P, 60, 'Stop');
+  m.addBolus('fentanyl', 90, 0.1, 'IV push 100 mcg', { deliveryMode: 'push', source: 'manual' });
+  m.addBolus('fentanyl', 0, -0.1, 'Dose reconciliation −100 mcg', { deliveryMode: 'push', source: 'manual' });
+  const c = caseOf(m, 120);
+  eq(c.drugs.map(d => d.drugId).join(','), 'propofol', 'fentanyl (net 0) has no card');
+  near(c.caseTimeMin, 50, 'and the case time is propofol\'s ET 10 → 60, not stretched to ET 90');
+}
+{
+  // A downward spread correction on a push-only drug: a negative rate.
+  const m = freshModel();
+  m.addBolus('fentanyl', 5, 0.1, 'IV push 100 mcg', { deliveryMode: 'push', source: 'manual' });
+  m.addBolus('fentanyl', 40, 0.05, 'IV push 50 mcg', { deliveryMode: 'push', source: 'manual' });
+  m.applyRateAugmentation('fentanyl', 0, 65, -0.05 / 65);
+  const f = caseOf(m, 70).drugs.find(d => d.drugId === 'fentanyl');
+  near(f.totalMg, cumulative(m, 'fentanyl', 70), 'total equals getCumulativeDose');
+  ok(f.correctionMg < 0 && f.infusionMg === 0, 'the negative spread is a correction, not infusion');
+  near(f.infusionMg + f.pumpBolusMg + f.pushMg + f.correctionMg, f.totalMg, 'the split adds up to the total');
+  caseTotals.init({ model: m, getPatient: () => PATIENT, getDrugIds: () => DRUG_IDS, getElapsedMinutes: () => 70 });
+  caseTotals.setActive(true);
+  const t = document.getElementById('tot-list').innerHTML
+    .replace(/<span class="tot-nb">([^<]*)<\/span>/g, '$1').replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
+  ok(/Correction\|-50(\.0)? mcg/.test(t), `the card shows the correction line (${t.match(/Correction\|[^|]*/)?.[0]})`);
+  caseTotals.setActive(false);
+}
+
+console.log('\n  a push-only drug never leads with mL/h');
+{
+  // A working rate unit of mL/h can survive from a setup default chosen while
+  // the pump was on.
+  const m = freshModel();
+  m.addBolus('fentanyl', 1, 0.1, 'IV push 100 mcg', { deliveryMode: 'push', source: 'manual' });
+  m.addBolus('fentanyl', 30, 0.05, 'IV push 50 mcg', { deliveryMode: 'push', source: 'manual' });
+  localStorage.setItem('tci-pref-rateUnit-fentanyl', 'mL/h');
+  caseTotals.init({ model: m, getPatient: () => PATIENT, getDrugIds: () => DRUG_IDS, getElapsedMinutes: () => 40 });
+  caseTotals.setActive(true);
+  const h = document.getElementById('tot-list').innerHTML;
+  ok(!h.includes('mL/h') && h.includes('mcg/kg/min'), 'pump off: per-kg leads and no mL/h appears');
+  caseTotals.setActive(false);
+  localStorage.removeItem('tci-pref-rateUnit-fentanyl');
 }
 
 console.log('\n  a single dose in the whole case');

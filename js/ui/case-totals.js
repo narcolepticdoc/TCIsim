@@ -14,7 +14,8 @@
  *     unit time, not the rate while its pump ran (the user's definition).
  *     Shown in the drug's working rate unit plus one companion unit, once the
  *     case has a span to average over: an infusion, or two doses.
- *   - The split: infusion, pump boluses, IV pushes.
+ *   - The split: infusion, pump boluses, IV pushes, and any dose
+ *     reconciliation correction, so the lines always add up to the total.
  *
  * Amounts grow while a pump runs, so the view re-renders about once a second
  * while it is the active tab (onFrame), and at once after any mutation
@@ -134,6 +135,8 @@ function buildCard(r, weightKg) {
     lines.push(line(r.pushCount === 1 ? 'IV push' : 'IV pushes',
       `${r.pushCount} · ${fmtTotalMass(r.pushMg, r.drugId)}`));
   }
+  // A dose reconciliation that took drug away: in the total, never a dose.
+  if (r.correctionMg !== 0) lines.push(line('Correction', fmtTotalMass(r.correctionMg, r.drugId)));
 
   // Light theme reads the drug name in contrast-corrected ink, as Next Up does.
   const style = def.color
@@ -143,7 +146,9 @@ function buildCard(r, weightKg) {
     `<div class="tot-head">` +
       `<span class="tot-drug">${esc(def.name || r.drugId)}</span>` +
       `<span class="tot-total"><span class="tot-nb">${fmtTotalMass(r.totalMg, r.drugId)}</span>` +
-        `<span class="tot-ml"> · ${fmtMl(r.totalMg, r.drugId)}</span></span>` +
+        // The break between mass and mL sits outside the no-wrap parts, so a
+        // 4-digit total can drop its mL to the next line in a narrow column.
+        `<span class="tot-ml"> · <span class="tot-nb">${fmtMl(r.totalMg, r.drugId)}</span></span></span>` +
     `</div>` +
     lines.join('') +
   `</div>`;
@@ -173,11 +178,16 @@ function fmtMl(mg, drugId) {
  */
 function fmtAvgRate(mgMin, drugId, weightKg) {
   const allowed = getAllowedUnits(drugId, 'rate');
-  const primary = getWorkingUnit(drugId, 'rate');
+  const pumpOn = isPumpEnabled(drugId);
   const perKg = allowed.find(u => u.includes('/kg/'));
-  // mL/h only means something for a drug on a pump; a push-only drug gets an
-  // absolute mass rate instead where the drug has one (fentanyl mcg/h).
-  const absolute = isPumpEnabled(drugId) && allowed.includes('mL/h')
+  // mL/h only means something for a drug on a pump — as the companion, and as
+  // the lead unit too: a working unit of mL/h can survive from a setup default
+  // chosen before the pump was switched off.
+  let primary = getWorkingUnit(drugId, 'rate');
+  if (!pumpOn && primary === 'mL/h') primary = perKg || primary;
+  // A push-only drug's companion is an absolute mass rate where it has one
+  // (fentanyl mcg/h, ketamine mg/min).
+  const absolute = pumpOn && allowed.includes('mL/h')
     ? 'mL/h'
     : allowed.find(u => !u.includes('/kg/') && u !== 'mL/h') || null;
   const companion = primary.includes('/kg/') ? absolute : perKg || null;

@@ -34,9 +34,22 @@ So:
   `computeCaseStats` takes the earliest first delivery and the latest last
   delivery across `DRUG_IDS`; `computeDrugStats` no longer has a per-drug
   average, so nobody can reach for the wrong denominator.
-- The averages show once the case has a span: an infusion of any drug, or two
-  doses between them. One bolus alone in the whole case spans only its own
-  delivery time. A drug given once still averages over the case.
+- The averages show once the case has a span: an infusion of any drug, or a
+  dose that starts after another has *finished*. The first version counted any
+  two doses, and the verification pass caught where that goes wrong. An
+  induction template pushes several drugs at ET 0, which spans only their
+  delivery times. That read "Case time 0 min" with propofol "averaging" 750
+  mL/h, the pump's bolus rate. By the user's definition, doses at one instant
+  are a case time of 0. A drug given once still averages over the case.
+- **Dose reconciliations are not drug given.** `reconcile-modal.js` records a
+  downward single-bolus correction as a negative push, by default at ET 0, and
+  a downward spread as negative rate segments. Counted as deliveries, they
+  moved the case start to ET 0, made a lone dose into a "span", and showed as
+  "IV push −50 mg". Spread corrections also left the split not adding up to the
+  total. Negative amounts now go to `correctionMg`: they stay in the total (so
+  it still equals `getCumulativeDose`) and appear as a **Correction** line, but
+  they never move the case time or count as a dose. A drug corrected back to
+  nothing has no card and no say in the case time.
 
 **What readings 4–5 removed.** Reading 2's review had found that a TCI plan's own
 zero step read as the pump stopping, so a `stopped | delivering | hold` state
@@ -47,7 +60,9 @@ walk only records first and last delivery, and whether anything is being given
 at `now`.
 
 **Labels.** One "Case time" line (the user's own term) above the cards, and
-"Avg rate" on each card.
+"Avg rate" on each card. A push-only drug never shows mL/h, not even as its
+lead unit. A working unit of mL/h can survive from a setup default chosen
+before the pump was switched off. Its card leads with per-kg instead.
 The rate companion is mL/h only for a drug on a pump. A push-only drug gets an
 absolute mass rate where it has one (fentanyl mcg/h); mL/h means nothing
 without a pump.

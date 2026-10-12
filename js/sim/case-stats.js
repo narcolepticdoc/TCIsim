@@ -24,6 +24,11 @@
  *
  * A bolus is a pump bolus unless `deliveryMode === 'push'`, the same test
  * getCumulativeDose uses to pick its delivery time.
+ *
+ * Negative amounts are dose reconciliations (reconcile-modal.js: a single
+ * correction bolus, or a spread rate below zero). They stay in the total —
+ * it must equal getCumulativeDose — but they are not a time drug was given and
+ * not a dose, so they go to `correctionMg` and never move the case time.
  */
 
 /**
@@ -33,15 +38,20 @@
  * @returns {{
  *   totalMg: number, infusionMg: number,
  *   pumpBolusMg: number, pumpBolusCount: number,
- *   pushMg: number, pushCount: number,
+ *   pushMg: number, pushCount: number, correctionMg: number,
  *   firstGiven: number|null, lastGiven: number|null, givingNow: boolean,
+ *   firstDoseEnd: number|null, lastDoseStart: number|null,
  * }}
  */
 export function computeDrugStats(events, now, getDeliveryMinutes) {
   let infusionMg = 0;
   let pumpBolusMg = 0, pumpBolusCount = 0;
   let pushMg = 0, pushCount = 0;
+  let correctionMg = 0;
   let firstGiven = null, lastGiven = null;
+  // Bolus spread, for computeCaseStats: doses that only overlap each other
+  // (two drugs pushed together) do not make a span.
+  let firstDoseEnd = null, lastDoseStart = null;
   let currentTime = 0;
   let currentRate = 0;
   let midBolus = false;   // a bolus (either route) still delivering at `now`
@@ -51,13 +61,17 @@ export function computeDrugStats(events, now, getDeliveryMinutes) {
     if (firstGiven === null || a < firstGiven) firstGiven = a;
     if (lastGiven === null || b > lastGiven) lastGiven = b;
   };
+  const infuse = (a, b) => {
+    const mg = (b - a) * currentRate;
+    if (currentRate > 0) { infusionMg += mg; gave(a, b); }
+    else if (currentRate < 0) correctionMg += mg;
+  };
 
   if (events && events.length && now > 0) {
     for (const evt of events) {
       if (evt.time > now) break;
       if (evt.time > currentTime) {
-        infusionMg += (evt.time - currentTime) * currentRate;
-        if (currentRate > 0) gave(currentTime, evt.time);
+        infuse(currentTime, evt.time);
         currentTime = evt.time;
       }
       if (evt.type === 'bolus') {
@@ -67,13 +81,19 @@ export function computeDrugStats(events, now, getDeliveryMinutes) {
         const given = done
           ? evt.value
           : evt.value * Math.max(0, Math.min(1, (now - evt.time) / duration));
-        if (evt.deliveryMode === 'push') { pushMg += given; pushCount++; }
-        else { pumpBolusMg += given; pumpBolusCount++; }
-        gave(evt.time, Math.min(endTime, now));
+        if (evt.value < 0) {
+          correctionMg += given;
+        } else if (evt.value > 0) {
+          if (evt.deliveryMode === 'push') { pushMg += given; pushCount++; }
+          else { pumpBolusMg += given; pumpBolusCount++; }
+          gave(evt.time, Math.min(endTime, now));
+          if (firstDoseEnd === null || endTime < firstDoseEnd) firstDoseEnd = endTime;
+          if (lastDoseStart === null || evt.time > lastDoseStart) lastDoseStart = evt.time;
+        }
         if (done) {
           currentTime = endTime;
         } else {
-          midBolus = true;
+          midBolus = evt.value > 0;
           currentTime = now;
           break;
         }
@@ -83,26 +103,25 @@ export function computeDrugStats(events, now, getDeliveryMinutes) {
         currentRate = 0;
       }
     }
-    if (currentTime < now) {
-      infusionMg += (now - currentTime) * currentRate;
-      if (currentRate > 0) gave(currentTime, now);
-    }
+    if (currentTime < now) infuse(currentTime, now);
   }
 
   // Still being given at `now`: a bolus mid-delivery, or an infusion in force
   // (an IV push in progress suspends it in this accounting, but it is running).
-  const givingNow = now > 0 && (midBolus || currentRate > 0);
+  const givingNow = now > 0 && (midBolus || currentRate > 0);  // midBolus: positive doses only
   if (givingNow) {
     if (firstGiven === null) firstGiven = now;
     lastGiven = now;
   }
 
   return {
-    totalMg: infusionMg + pumpBolusMg + pushMg,
+    totalMg: infusionMg + pumpBolusMg + pushMg + correctionMg,
     infusionMg,
     pumpBolusMg, pumpBolusCount,
     pushMg, pushCount,
+    correctionMg,
     firstGiven, lastGiven, givingNow,
+    firstDoseEnd, lastDoseStart,
   };
 }
 
@@ -110,9 +129,14 @@ export function computeDrugStats(events, now, getDeliveryMinutes) {
  * The whole case: one case time across every drug, and each drug's average
  * over it.
  *
- * The averages need a span to be about: an infusion of any drug, or at least
- * two doses between them. A lone bolus spans only its own delivery time
- * (seconds for a push), and every drug would "average" at its delivery rate.
+ * The averages need a span to be about: an infusion of any drug, or a dose
+ * that starts after another has finished. A lone bolus — or several given
+ * together, like an induction template at ET 0 — spans only its own delivery
+ * time (seconds for a push), and every drug would "average" at its delivery
+ * rate; by the user's definition doses at one instant are a case time of 0.
+ *
+ * Only drugs with something net given define the case: a drug whose doses a
+ * reconciliation corrected back to nothing has no card and no say in the span.
  *
  * @param {Array<[string, Array]>} drugEvents - [drugId, events] in display order
  * @param {number} now
@@ -128,18 +152,20 @@ export function computeCaseStats(drugEvents, now, getDeliveryMinutes) {
     ({ drugId, ...computeDrugStats(events, now, getDeliveryMinutes) }));
 
   let firstGiven = null, lastGiven = null, givingNow = false;
-  let infused = false, doses = 0;
+  let infused = false, firstDoseEnd = null, lastDoseStart = null;
   for (const d of all) {
-    if (d.firstGiven === null) continue;
+    if (d.firstGiven === null || !(d.totalMg > 0)) continue;
     if (firstGiven === null || d.firstGiven < firstGiven) firstGiven = d.firstGiven;
     if (lastGiven === null || d.lastGiven > lastGiven) lastGiven = d.lastGiven;
     givingNow = givingNow || d.givingNow;
     infused = infused || d.infusionMg > 0;
-    doses += d.pumpBolusCount + d.pushCount;
+    if (d.firstDoseEnd !== null && (firstDoseEnd === null || d.firstDoseEnd < firstDoseEnd)) firstDoseEnd = d.firstDoseEnd;
+    if (d.lastDoseStart !== null && (lastDoseStart === null || d.lastDoseStart > lastDoseStart)) lastDoseStart = d.lastDoseStart;
   }
 
   const caseTimeMin = firstGiven === null ? 0 : lastGiven - firstGiven;
-  const hasSpan = caseTimeMin > 0 && (infused || doses >= 2);
+  const dosesApart = firstDoseEnd !== null && lastDoseStart >= firstDoseEnd;
+  const hasSpan = caseTimeMin > 0 && (infused || dosesApart);
   const drugs = all
     .filter(d => d.totalMg > 0)
     .map(d => ({ ...d, avgRateMgMin: hasSpan ? d.totalMg / caseTimeMin : null }));
