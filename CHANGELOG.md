@@ -13,11 +13,11 @@
 
 ## [0.6.4.17] — 2026-10-12
 
-- **Fixed: mL and mL/h were wrong at any non-default concentration.** `units.js` converts mL with the concentration a caller passes, and when none was passed it fell back to the built-in default (propofol 10 mg/mL). Ten call sites passed none: the keypad, event editor, history and Next Up labels, warning popups, drug-card rate, chart rate labels, planning titration and the redose prefill. At 2% propofol:
+- **Fixed: mL and mL/h were wrong at any non-default concentration.** `units.js` converts mL with the concentration a caller passes, and when none was passed it fell back to the built-in default (propofol 10 mg/mL). Ten call sites passed none: the keypad, event editor, history and Next Up labels, warning popups, drug-card rate, chart rate labels, planning titration and the Redose button label. At 2% propofol:
   - **50 mL/h typed into the keypad was simulated as 8.33 mg/min.** A 2% pump at 50 mL/h gives 16.67 mg/min, so the curve showed half the drug actually given. A 10 mL bolus was recorded as 100 mg, not 200.
   - **A TCI step the planner computed correctly was labelled "100 mL/h"**, twice what the pump should be set to. The planner itself always used the right concentration.
 
-  The same held for every drug and concentration the setup screen offers: ketamine 5% and 10% were off by 5× and 10×, fentanyl 25 mcg/mL by 2×, and 8.33 mg/mL propofol by 1.2×. Entry and display were wrong by the same factor, so a typed rate echoed back unchanged, which is why this went unnoticed. The fallback is now the drug's live pump concentration, which the setup screen installs for a new case and `session.restore()` installs for a saved one. Callers converting for another context still pass their own. The drug cards' model label ("Eleveld · 10 mg/mL") also reads the live concentration now. It used to show the setup screen's default, which a restored or pulled case need not share.
+  The same held for every drug and concentration the setup screen offers: ketamine 5% and 10% were off by 5× and 10×, fentanyl 25 mcg/mL by 2×, and 8.33 mg/mL propofol by 1.2×. Entry and display were wrong by the same factor, so a typed rate echoed back unchanged, which is why this went unnoticed. The fallback is now the drug's live pump concentration, which the setup screen installs for a new case and `session.restore()` installs for a saved one. Callers converting for another context still pass their own, and the setup screen's starting-dose editor now passes the concentration selected there, since until Confirm the live setting is still the previous case's. The drug cards' model label ("Eleveld · 10 mg/mL") also reads the live concentration now. It used to show the setup screen's default, which a restored or pulled case need not share.
 
 - **Fixed: pulling a case from the cloud kept this device's last-dose memory.** The pulled case then opened with the previous patient's doses pre-filled in the keypads, and per-kg units showed them against the new patient's weight. A pull now clears that memory, as New Case and setup confirm already do.
 
@@ -25,11 +25,11 @@
 
 - **Fixed: hour menus stopped at 23.** Cases restored more than 24 h after they started:
   - The timer's Elapsed tab had no option for the current hour, so it fell back to 0, and Apply rewound the clock by a day or more.
-  - The event time picker did the same: an event past ET 24:00 opened at 00:xx and saved back a day early.
+  - The event time picker did the same: an event past ET 24:00 opened at 00:xx, and saving it moved it back by all of its hours.
 
   Both menus now always offer the hour they show.
 
-  Pinned by `tests/test-concentration-units.mjs` (14 of its 22 checks fail on the old fallback), new rate-limiter cases in `tests/test-api-sync.js`, and new past-24 h cases in `tests/test-midnight-clock.mjs` (6 fail on the old menus).
+  Pinned by `tests/test-concentration-units.mjs` (14 of its 22 checks fail on the old fallback), `tests/test-template-keypad-concentration.mjs` (the setup editor), new rate-limiter cases in `tests/test-api-sync.js`, and new past-24 h cases in `tests/test-midnight-clock.mjs` (6 fail on the old menus).
 
 ---
 

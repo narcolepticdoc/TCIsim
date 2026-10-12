@@ -52,7 +52,7 @@ function splitHM(minutes) {
 /**
  * Hour options for a case-time select: 0–23, and never too few for the hour
  * shown. Past ET 24:00 the hour had no option, the select fell back to 00, and
- * saving the event moved it back a day.
+ * saving the event moved it back by all of its hours.
  */
 function caseHourCount(h) {
   return Math.max(24, h + 1);

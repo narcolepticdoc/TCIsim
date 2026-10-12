@@ -1,7 +1,7 @@
 /**
  * units.js — Unit Conversion Layer
  * 
- * Pure functions for converting between display units and canonical
+ * Functions for converting between display units and canonical
  * (engine) units. No DOM. Used by keypad, drug panel, history panel,
  * chart labels — anywhere units are displayed or entered.
  *

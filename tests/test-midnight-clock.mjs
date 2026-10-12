@@ -208,7 +208,7 @@ ws = at(10, 3, 8, 0);
 nowMin = 3000;                                  // a restored case, 50 h in
 picker.setCaseMinutes(1500);
 eq(sel(), '25:00', 'an event at ET 25:00 opens at 25:00 (was 00:00 — no option for hour 25)');
-eq(picker.getCaseMinutes(), 1500, '…and saves back at ET 25:00, not a day earlier');
+eq(picker.getCaseMinutes(), 1500, '…and saves back at ET 25:00, not ET 0:00');
 picker.setCaseMinutes(nowMin);
 eq(sel(), '50:00', 'Add Event 50 h in opens at 50:00');
 picker.setCaseMinutes(1439.6);
@@ -253,6 +253,9 @@ eq(hm(timer.getWallClockStart()), '10/5 23:15', '…and Apply leaves the start a
 fakeNowMs = at(10, 6, 14, 0).getTime();
 eq(setStart('09:30'), 'Elapsed: 4:30:00', 'same-day start: no "(yesterday)"');
 eq(timer.getElapsedMinutes(), 270, 'same-day start: 4:30 elapsed, as before');
+els.get('elapsed-timer').fire('click');
+eq(els.get('tp-elapsed-h').options.length, 24, 'at 4:30 the Elapsed tab still offers hours 0–23');
+els.get('tp-btn-cancel').fire('click');
 
 console.log('\n  timer.js — Elapsed tab past 24 h');
 fakeNowMs = at(10, 6, 14, 0).getTime();

@@ -219,10 +219,11 @@ const VALID_TEMPLATE = { v: 1, updatedAt: 1, drugs: { propofol: { bolus: { value
   {
     // Fake Redis: in-memory counters with incr/expire/ttl (+ get/set no-ops)
     const counters = new Map();
+    const calls = { expire: 0, ttl: 0 };
     setRedisForTest({
       incr: async (k) => { const v = (counters.get(k) || 0) + 1; counters.set(k, v); return v; },
-      expire: async () => 1,
-      ttl: async () => 42,
+      expire: async () => { calls.expire++; return 1; },
+      ttl: async () => { calls.ttl++; return 42; },
       get: async () => null,
       set: async () => 'OK',
     });
@@ -233,10 +234,16 @@ const VALID_TEMPLATE = { v: 1, updatedAt: 1, drugs: { propofol: { bolus: { value
       last = await call({ method: 'GET', query: { code: 'ABC234' }, headers: ipReq.headers });
     }
     ok(last.statusCode !== 429, `request #${RATE_LIMIT} from one IP is allowed`);
+    // A fixed window: only the first request arms the TTL. Re-arming on later
+    // requests would slide the window, so a client that keeps sending is never
+    // let back in — the lockout the over-limit re-arm below exists to end.
+    ok(calls.expire === 1 && calls.ttl === 0,
+      `under the limit: EXPIRE once, TTL never (got ${calls.expire}/${calls.ttl})`);
     const over = await call({ method: 'GET', query: { code: 'ABC234' }, headers: ipReq.headers });
     ok(over.statusCode === 429 && over.body.error === 'rate-limited',
       `request #${RATE_LIMIT + 1} from one IP → 429 rate-limited`);
     ok(over.headers['Retry-After'] === '42', '429 carries Retry-After from TTL');
+    ok(calls.expire === 1, 'over the limit with a live TTL: no EXPIRE (the window is not extended)');
 
     const otherIp = await call({ method: 'GET', query: { code: 'ABC234' }, headers: { 'x-forwarded-for': '8.8.8.8' } });
     ok(otherIp.statusCode !== 429, 'a different IP has its own counter');

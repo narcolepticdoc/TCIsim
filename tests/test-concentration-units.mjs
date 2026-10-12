@@ -5,7 +5,7 @@
  * passed none it used to fall back to the DRUG_DEFS default (propofol 10 mg/mL).
  * Ten call sites passed none — the keypad, event editor, history and Next Up
  * labels, drug-card rate, chart rate labels, planning titration, redose
- * prefill — so a 2% propofol case read and wrote every mL figure at 1%:
+ * button label — so a 2% propofol case read and wrote every mL figure at 1%:
  *
  *   - 50 mL/h typed into the keypad was simulated as 8.33 mg/min; a 2% pump at
  *     50 mL/h gives 16.67. A 10 mL bolus was recorded as 100 mg, not 200.
@@ -64,7 +64,7 @@ eq(DRUG_DEFS.propofol.concentration, 10, 'DRUG_DEFS default is untouched');
 console.log('\n  labels at 2% — history, Next Up, warning popups, drug card');
 const tciStep = { type: 'rate', value: 50 * 20 / 60, source: 'tci' };
 eq(formatEventAction(tciStep, 'propofol', { weightKg: 70 }), 'Rate → 50 mL/h',
-   'history/warning label for a TCI step reads 50 mL/h (was 100)');
+   'warning-popup label for a TCI step reads 50 mL/h (was 100)');
 eq(formatEventAction(tciStep, 'propofol', { weightKg: 70, variant: 'hud' }).value, '50 mL/h',
    'Next Up value reads 50 mL/h');
 eq(formatEventAction({ type: 'bolus', value: 200, deliveryMode: 'pump' }, 'propofol', { weightKg: 70 }),
