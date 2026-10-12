@@ -15,11 +15,11 @@
 
 - **New: a Totals tab in the History panel (Log | Next Up | Totals).** One place to read what every drug has given, instead of the Log's per-drug "Total delivered" strip. There is one card per drug that has delivered anything:
   - **Total**: mass and mL. This is the same number as the Log's strip, from the same calculation.
-  - **Avg pump rate**: everything the pump delivered, infusion *and* pump boluses (so a TCI case's induction and step-up boluses count), divided by the pump window. IV pushes never count. It is shown in the drug's working rate unit plus one companion (per-kg, or mL/h), and only once the drug has infused.
-  - **Pump time**: the window, from the first moment the pump delivered anything to the last time it stopped, or "now" while it runs. **Pauses inside the window are not subtracted.** Start and stop read in ET, or in RT when the Log is set to RT.
+  - **Avg pump rate**: everything the pump delivered, infusion *and* pump boluses (so a TCI case's induction and step-up boluses count), divided by the pump window. IV pushes never count. It is shown in the drug's working rate unit plus one companion (per-kg, or mL/h), and only once the drug has infused. Averages below 1 keep two significant figures, so a fentanyl infusion reads 0.02 mcg/kg/min, not 0.
+  - **Pump time**: the window, from the first moment the pump delivered anything to the last time it was stopped, or "now" while it runs. **Pauses inside the window are not subtracted**, and that includes a TCI plan's own zero steps (the Log's "Paused" rows). The plan is still running through those, so a Stop pressed during one ends the window at the Stop. A stop is a pause event (the Log's "Stopped") or a rate of 0 set by hand. Start and stop read in ET, or in RT when the Log is set to RT.
   - **The split**: infusion, pump boluses and IV pushes, each with its count.
 
-  The tab updates about once a second while it is open, so a running infusion's totals climb live. It updates at once after any edit, and does no work while hidden. mL figures use the case's own concentration. Pinned by `tests/test-case-stats.mjs`, which builds cases through the real model and checks every total against the Log's.
+  The tab updates about once a second while it is open, so a running infusion's totals climb live. It updates at once after any edit and on New Case, and does nothing while another History tab is selected. mL figures use the case's own concentration. Pinned by `tests/test-case-stats.mjs`, which builds cases through the real model and checks every computed total against the Log's.
 
 ---
 

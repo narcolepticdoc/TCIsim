@@ -324,6 +324,9 @@ function initSimScreen(patient) {
   // Reset sim screen state
   $('history-list').innerHTML = '';
   $('history-empty').style.display = 'block';
+  // Totals keeps its sub-tab across cases: repaint against this case so it
+  // never shows the previous patient's cards until Start or the first dose.
+  caseTotals.render();
 
   // Reset chart placeholder
   const placeholder = $('chart-placeholder');

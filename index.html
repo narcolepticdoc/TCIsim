@@ -561,18 +561,18 @@
        One card per drug, the drug's colour on the left edge like a Next Up
        row. The total leads; the average pump rate is the line people report. */
     #hv-view-totals{padding:8px 10px}
-    .ct-list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
-    .ct-empty{text-align:center;color:var(--text-muted);font-size:13px;padding-top:24px}
-    .ct-card{display:flex;flex-direction:column;gap:3px;padding:8px 10px;background:var(--bg-card);border-radius:var(--radius-sm);border-left:3px solid var(--ct-drug,transparent)}
-    .ct-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:2px}
-    .ct-drug{font-family:var(--font-display);font-size:11px;font-weight:700;color:var(--ct-drug,var(--text-secondary));text-transform:uppercase;letter-spacing:.06em}
-    :root[data-theme="light"] .ct-drug{color:var(--ct-drug-ink,var(--ct-drug,var(--text-secondary)))}
-    .ct-total{font-family:var(--font-mono);font-size:16px;font-weight:600;color:var(--text-primary);white-space:nowrap}
-    .ct-ml{font-size:12px;font-weight:400;color:var(--text-secondary)}
-    .ct-line{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-    .ct-label{font-family:var(--font-display);font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
-    .ct-value{font-family:var(--font-mono);font-size:12px;color:var(--text-primary);text-align:right}
-    .ct-nb{white-space:nowrap}
+    .tot-list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+    .tot-empty{text-align:center;color:var(--text-muted);font-size:13px;padding-top:24px}
+    .tot-card{display:flex;flex-direction:column;gap:3px;padding:8px 10px;background:var(--bg-card);border-radius:var(--radius-sm);border-left:3px solid var(--tot-drug,transparent)}
+    .tot-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:0 8px;margin-bottom:2px}
+    .tot-drug{font-family:var(--font-display);font-size:11px;font-weight:700;color:var(--tot-drug,var(--text-secondary));text-transform:uppercase;letter-spacing:.06em}
+    :root[data-theme="light"] .tot-drug{color:var(--tot-drug-ink,var(--tot-drug,var(--text-secondary)))}
+    .tot-total{margin-left:auto;font-family:var(--font-mono);font-size:16px;font-weight:600;color:var(--text-primary);text-align:right}
+    .tot-ml{font-size:12px;font-weight:400;color:var(--text-secondary);white-space:nowrap}
+    .tot-line{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:0 8px}
+    .tot-label{font-family:var(--font-display);font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+    .tot-value{margin-left:auto;font-family:var(--font-mono);font-size:12px;color:var(--text-primary);text-align:right}
+    .tot-nb{white-space:nowrap}
     /* Row-time toggle — same visual language as the Log's ET/RT button. Only the
        list obeys it; the clock above is always a countdown. */
     .nu-actions{display:flex;justify-content:flex-end;padding:4px 0 0;flex-shrink:0}
@@ -702,11 +702,11 @@
       body.text-lg .nu-value{font-size:15px}
       body.text-lg .nu-time{font-size:18px}
       body.text-lg .nu-empty{font-size:15px}
-      body.text-lg .ct-drug{font-size:11.5px}
-      body.text-lg .ct-total{font-size:18px}
-      body.text-lg .ct-ml,body.text-lg .ct-label{font-size:12.5px}
-      body.text-lg .ct-value{font-size:13.5px}
-      body.text-lg .ct-empty{font-size:15px}
+      body.text-lg .tot-drug{font-size:11.5px}
+      body.text-lg .tot-total{font-size:18px}
+      body.text-lg .tot-ml,body.text-lg .tot-label{font-size:12.5px}
+      body.text-lg .tot-value{font-size:13.5px}
+      body.text-lg .tot-empty{font-size:15px}
       body.text-lg .nu-action-time{font-size:13px}
       body.text-lg .sim-topbar .app-name{font-size:12.5px}
       body.text-lg .patient-summary{font-size:12.5px}
@@ -748,11 +748,11 @@
       body.text-xl .nu-value{font-size:16.5px}
       body.text-xl .nu-time{font-size:20px}
       body.text-xl .nu-empty{font-size:16.5px}
-      body.text-xl .ct-drug{font-size:13px}
-      body.text-xl .ct-total{font-size:20px}
-      body.text-xl .ct-ml,body.text-xl .ct-label{font-size:14px}
-      body.text-xl .ct-value{font-size:15px}
-      body.text-xl .ct-empty{font-size:16.5px}
+      body.text-xl .tot-drug{font-size:13px}
+      body.text-xl .tot-total{font-size:20px}
+      body.text-xl .tot-ml,body.text-xl .tot-label{font-size:14px}
+      body.text-xl .tot-value{font-size:15px}
+      body.text-xl .tot-empty{font-size:16.5px}
       body.text-xl .nu-action-time{font-size:14.5px}
       body.text-xl .sim-topbar .app-name{font-size:14px}
       body.text-xl .patient-summary{font-size:14px}
@@ -844,11 +844,11 @@
       body.text-xxl .nu-value{font-size:18px}
       body.text-xxl .nu-time{font-size:22px}
       body.text-xxl .nu-empty{font-size:18px}
-      body.text-xxl .ct-drug{font-size:14.5px}
-      body.text-xxl .ct-total{font-size:22px}
-      body.text-xxl .ct-ml,body.text-xxl .ct-label{font-size:15.5px}
-      body.text-xxl .ct-value{font-size:16.5px}
-      body.text-xxl .ct-empty{font-size:18px}
+      body.text-xxl .tot-drug{font-size:14.5px}
+      body.text-xxl .tot-total{font-size:22px}
+      body.text-xxl .tot-ml,body.text-xxl .tot-label{font-size:15.5px}
+      body.text-xxl .tot-value{font-size:16.5px}
+      body.text-xxl .tot-empty{font-size:18px}
       body.text-xxl .nu-action-time{font-size:16px}
       body.text-xxl .sim-topbar .app-name{font-size:17px}
       body.text-xxl .patient-summary{font-size:17px}
@@ -1834,7 +1834,7 @@
             </div>
           </div>
           <div class="hv-view" id="hv-view-totals">
-            <div class="ct-list" id="ct-list"></div>
+            <div class="tot-list" id="tot-list"></div>
           </div>
         </div>
       </div>

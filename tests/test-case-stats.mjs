@@ -125,6 +125,7 @@ console.log('\n  paused at now (pause at 20, now 25)');
   eq(s.pumpRunning, false, 'paused → not running');
   near(s.pumpEnd, 20, 'window ends at the pause (the last stop so far)');
   near(s.avgPumpRateMgMin, (100 + 190) / 20, 'avg over ET 0 → 20');
+  near(s.totalMg, cumulative(m, P, 25), 'total equals getCumulativeDose');
 }
 
 console.log('\n  future events are ignored');
@@ -135,7 +136,70 @@ console.log('\n  future events are ignored');
   const s = stats(m, P, 10);
   near(s.totalMg, 50, '10 min at 5 mg/min; the ET 30 step has not happened');
   near(s.avgPumpRateMgMin, 5, 'avg 5 mg/min');
+  near(s.totalMg, cumulative(m, P, 10), 'total equals getCumulativeDose');
 }
+
+console.log('\n  stops vs holds');
+{
+  // A TCI step-down: the plan holds the pump at 0 (the Log's "Paused"), then
+  // resumes by itself. The plan is still running through the hold.
+  const m = freshModel();
+  m.planTCI(P, 0, 4);
+  m.planTCI(P, 30, 2);
+  const hold = m.getEvents(P).find(e => e.type === 'rate' && e.source === 'tci' && e.value === 0 && e.time >= 30);
+  const resume = m.getEvents(P).find(e => e.type === 'rate' && e.value > 0 && e.time > hold.time);
+  ok(hold && resume, `the step-down holds at ET ${hold?.time.toFixed(1)} and resumes at ET ${resume?.time.toFixed(1)}`);
+  const mid = (hold.time + resume.time) / 2;
+  const h = stats(m, P, mid);
+  eq(h.pumpRunning, true, 'during a TCI hold that resumes, the pump is running');
+  near(h.pumpEnd, mid, '…and the window runs to now');
+  near(h.totalMg, cumulative(m, P, mid), 'total equals getCumulativeDose in the hold');
+
+  // Stop pressed during the hold: app.js onPumpPause adds a pause and clears
+  // the plan's future. The hold before the Stop is a pause inside the window.
+  const stopAt = mid;
+  m.addPause(P, stopAt, 'Pump stopped');
+  m.clearAfter(P, stopAt);
+  const st = stats(m, P, stopAt + 15);
+  eq(st.pumpRunning, false, 'after Stop the pump is stopped');
+  near(st.pumpEnd, stopAt, 'the window ends at the Stop, not at the start of the hold');
+  near(st.avgPumpRateMgMin, st.pumpMg / stopAt, 'avg over ET 0 → Stop');
+  near(st.totalMg, cumulative(m, P, stopAt + 15), 'total equals getCumulativeDose after Stop');
+}
+{
+  // A hold with nothing scheduled after it is where delivery ended.
+  const m = freshModel();
+  m.addRate(P, 0, 10, 'Rate 10');
+  m.addRate(P, 20, 0, 'TCI hold', { source: 'tci' });
+  const s = stats(m, P, 40);
+  eq(s.pumpRunning, false, 'a TCI hold with no further delivery is not running');
+  near(s.pumpEnd, 20, '…and the window ends where delivery did');
+  near(s.totalMg, cumulative(m, P, 40), 'total equals getCumulativeDose');
+}
+{
+  // A manual rate 0 is a stop (Stop Pump is a no-op on it); a later pause
+  // does not move the stop.
+  const m = freshModel();
+  m.addRate(P, 0, 10, 'Rate 10');
+  m.addRate(P, 20, 0, 'Rate 0');
+  m.addPause(P, 30, 'Pause');
+  const s = stats(m, P, 40);
+  near(s.pumpEnd, 20, 'manual rate 0 at ET 20 is the stop; the pause at 30 changes nothing');
+  near(s.totalMg, cumulative(m, P, 40), 'total equals getCumulativeDose');
+}
+{
+  // A manual pump bolus during a TCI hold: its rate-restore puts the hold back,
+  // it does not stop the pump.
+  const m = freshModel();
+  m.addRate(P, 0, 10, 'Rate 10', { source: 'tci' });
+  m.addRate(P, 20, 0, 'TCI hold', { source: 'tci' });
+  m.addRate(P, 40, 8, 'TCI resume', { source: 'tci' });
+  m.addBolus(P, 25, 20, 'Bolus 20 mg', { deliveryMode: 'pump', source: 'manual' });
+  const s = stats(m, P, 35);
+  eq(s.pumpRunning, true, 'a bolus inside a hold leaves the hold (and the running plan) in place');
+  near(s.totalMg, cumulative(m, P, 35), 'total equals getCumulativeDose');
+}
+
 
 console.log('\n  IV push only (fentanyl, pump off)');
 {
@@ -178,11 +242,11 @@ console.log('\n  Totals view');
     getTimeMode: () => timeMode,
     getWallClockStart: () => new Date(2026, 9, 5, 23, 10),
   });
-  eq(document.getElementById('ct-list').innerHTML, '', 'nothing renders while the tab is hidden');
+  eq(document.getElementById('tot-list').innerHTML, '', 'nothing renders while the tab is hidden');
   caseTotals.setActive(true);
-  const html = () => document.getElementById('ct-list').innerHTML;
+  const html = () => document.getElementById('tot-list').innerHTML;
   // Unwrap the no-wrap value parts first, then mark every other tag boundary.
-  const text = () => html().replace(/<span class="ct-nb">([^<]*)<\/span>/g, '$1')
+  const text = () => html().replace(/<span class="tot-nb">([^<]*)<\/span>/g, '$1')
     .replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
 
   const s = stats(m, P, 90);
@@ -216,10 +280,49 @@ console.log('\n  Totals view');
      'mL/h follows the case concentration (2%)');
   resetPumpSettings();
 
+  // While hidden, neither render() nor onFrame() touches the DOM — even past
+  // the 1 s throttle and with the case changing underneath.
   caseTotals.setActive(false);
+  const before = html();
   now = 1;
+  caseTotals.render();
+  eq(html(), before, 'hidden tab: render() does not repaint');
+  const realNow = Date.now;
+  Date.now = () => realNow() + 5000;
   caseTotals.onFrame(1);
-  ok(text().includes('Pump time'), 'hidden tab: onFrame does not repaint');
+  Date.now = realNow;
+  eq(html(), before, 'hidden tab: onFrame() does not repaint, even past the throttle');
+  caseTotals.setActive(true);
+  ok(html() !== before, 'showing the tab repaints at once');
+  // Visible: onFrame repaints once the throttle has passed, and not before.
+  now = 55;
+  caseTotals.onFrame(55);
+  eq(text().includes('→ now'), false, 'visible: onFrame inside the 1 s throttle does not repaint');
+  Date.now = () => realNow() + 5000;
+  caseTotals.onFrame(55);
+  Date.now = realNow;
+  ok(text().includes('→ now'), 'visible: onFrame past the throttle repaints');
+  caseTotals.setActive(false);
+}
+
+console.log('\n  view details');
+{
+  const m = freshModel();
+  m.addBolus(P, 0, 100, 'Bolus 100 mg', { deliveryMode: 'pump', source: 'manual' });
+  m.addRate('fentanyl', 0, 0.0014, 'Rate 0.02 mcg/kg/min');   // 0.02 mcg/kg/min at 70 kg
+  caseTotals.init({ model: m, getPatient: () => PATIENT, getDrugIds: () => DRUG_IDS, getElapsedMinutes: () => 30 });
+  caseTotals.setActive(true);
+  const t = document.getElementById('tot-list').innerHTML
+    .replace(/<span class="tot-nb">([^<]*)<\/span>/g, '$1').replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
+  const prop = t.split('Fentanyl')[0];
+  ok(!prop.includes('Avg pump rate'), 'pump boluses alone give no average rate');
+  ok(prop.includes('Pump bolus|1 · 100.0 mg'), '…but the bolus is listed');
+  ok(t.includes('Avg pump rate|0.02 mcg/kg/min'), 'a fentanyl average reads 0.02 mcg/kg/min, not 0');
+  setPumpSettings(P, { concentration: 20 });
+  caseTotals.render();
+  ok(document.getElementById('tot-list').innerHTML.includes('· 5.00 mL'), 'total mL follows the case concentration (100 mg at 2% = 5 mL)');
+  resetPumpSettings();
+  caseTotals.setActive(false);
 }
 
 console.log('\n  empty case');
@@ -227,7 +330,7 @@ console.log('\n  empty case');
   const m = freshModel();
   caseTotals.init({ model: m, getPatient: () => PATIENT, getDrugIds: () => DRUG_IDS, getElapsedMinutes: () => 10 });
   caseTotals.setActive(true);
-  ok(document.getElementById('ct-list').innerHTML.includes('Nothing given yet'), 'empty state');
+  ok(document.getElementById('tot-list').innerHTML.includes('Nothing given yet'), 'empty state');
   caseTotals.setActive(false);
 }
 

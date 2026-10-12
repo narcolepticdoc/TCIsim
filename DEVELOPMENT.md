@@ -12,45 +12,58 @@ was no average infusion rate at all.
 
 **Definitions, as decided with the user:**
 - **Pump window**: from the first moment the pump delivered anything (a pump
-  bolus or a non-zero rate) to the last time it stopped, or *now* while it
-  runs. Pauses inside the window are **not** subtracted.
+  bolus or a non-zero rate) to the last time it was *stopped*, or *now* while
+  it runs. Pauses inside the window are **not** subtracted.
 - **Average pump rate**: (infusion + pump boluses) ÷ window. The other option
   was infusion only. The user chose all pump delivery, so a TCI case's
   induction and step-up boluses count. IV pushes never count.
 - The average shows only once a drug has infused. A drug given only pump
   boluses would otherwise "average" at the pump's bolus rate.
 
+**Stop versus pause.** The review found the first version closed the window at
+the end of the last non-zero delivery. That reads a TCI plan's own zero step as
+the pump stopping, but the Log calls that step "Paused" (`history.js`) and
+`onPumpPause` treats it as a running pump that Stop still has to halt. During a
+step-down hold the card said "→ ET 0:30" while TCI was active. A Stop pressed
+during the hold left the window ending at the hold's start, which subtracted
+the pause and overstated the average by 17% in the reviewer's case. The walk now
+tracks `stopped | delivering | hold`:
+- A TCI rate 0 is a hold.
+- A pause event (the Log's "Stopped") or any other rate 0 is a stop. The app
+  treats a manual rate 0 as an idle pump; Stop Pump is a no-op on it.
+- The system rate-restore after a bolus only puts back what was in force, so a
+  bolus inside a hold leaves the hold.
+- A hold counts as running while more pump delivery is scheduled after `now`.
+  With none, it is where delivery ended.
+- The window ends at `max(last delivery, last transition into stopped)`.
+
 **Where:** a third tab in the History panel, `Log | Next Up | Totals`. Next Up
 is already cross-drug and lives there. `setEventsView` in `app.js` now loops
 over `EVENTS_VIEWS`, so each view's tab and pane follow the `hv-tab-<v>` /
-`hv-view-<v>` naming.
+`hv-view-<v>` naming. `initSimScreen` repaints it, so New Case never shows the
+previous patient's cards.
 
 **Code:**
 - `js/sim/case-stats.js` `computeDrugStats(events, now, getDeliveryMinutes)` is
-  pure. It follows `getCumulativeDose`'s walk step for step: a bolus suspends
-  the infusion for its delivery time, and a bolus in progress counts its
-  delivered fraction and ends the walk. It adds the push/pump split and the
-  window. The total must equal `getCumulativeDose`, which the Log strip and the
-  reconcile baseline use, and the tests assert that for every scenario.
-- **A pump that is running closes the window at `now`.** That includes an IV
-  push in progress over a running infusion. The accounting suspends the
-  infusion during the push, but the pump has not stopped, and without this the
-  window briefly ended at the push's start.
+  pure. It follows `getCumulativeDose`'s walk step for step, so its total must
+  equal what the Log strip and the reconcile baseline show. The tests assert
+  that for every computation scenario.
 - `js/ui/case-totals.js` renders it. While its tab is active it repaints
-  immediately on `render()` (from `chart-bridge.refresh()`) and about once a
-  second from `onFrame`, and only touches the DOM when the markup changed.
-  Rates are shown in the drug's working unit plus one companion; mL use the
-  live (case) concentration, per the units.js invariant. Value parts are
-  `white-space:nowrap`, so the narrow column beside the chart wraps between
-  "55.1 mL/h" and "131.1 mcg/kg/min", not inside either.
+  immediately on `render()` (from `chart-bridge.refresh()` and
+  `initSimScreen`) and about once a second from `onFrame`, and only touches the
+  DOM when the markup changed.
+- Averages below 1 keep two significant figures. `formatValue` caps mcg/kg/min
+  at one decimal, which showed a fentanyl average as "0".
+- Classes use a `tot-` prefix. The first version used `ct-`, which already
+  belongs to the top-bar case-time clock (`.ct-label`/`.ct-value`), so an
+  unscoped `.ct-value{font-size:12px}` shrank the always-visible ET clock.
+- Card lines wrap, but no value is ever split from its unit, so the 1024 px
+  side column and the largest text sizes no longer clip.
 
 **Checked in a real browser** (Playwright/Chromium, scratch only): phone, iPad
-portrait and tablet landscape, dark and light themes, and the large text sizes
-(those only apply from 601 px wide, as for the rest of the app). There were no
-console errors. Tests: `tests/test-case-stats.mjs`. It covers the manual case
-(pump bolus, paused infusion, IV push over an infusion), running versus
-stopped, mid-push, mid-bolus, future events, push-only drugs, a TCI plan, and
-the rendered view (units, ET/RT, 2% concentration, hidden-tab no-op).
+portrait, tablet landscape at 1024 and 1180 px, dark and light themes, and the
+larger text sizes. New Case was checked too: the tab reads "Nothing given yet."
+The top-bar clock's computed size matches main. There were no console errors.
 
 ### Concentration fallback, pull carry-over, limiter lockout, 24 h menus (v0.6.4.17) — Interim
 

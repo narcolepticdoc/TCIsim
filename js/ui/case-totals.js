@@ -69,7 +69,7 @@ export function isActive() { return _active; }
 export function render(t = _getElapsedMinutes()) {
   if (!_active) return;
   _lastRenderMs = Date.now();
-  const el = $('ct-list');
+  const el = $('tot-list');
   if (!el) return;
   const html = buildHtml(t);
   if (html !== _lastHtml) {
@@ -108,7 +108,7 @@ export function collectTotals(t = _getElapsedMinutes()) {
 
 function buildHtml(t) {
   const rows = collectTotals(t);
-  if (!rows.length) return `<div class="ct-empty">Nothing given yet.</div>`;
+  if (!rows.length) return `<div class="tot-empty">Nothing given yet.</div>`;
   const weightKg = _getPatient()?.weight || 70;
   return rows.map(r => buildCard(r, weightKg)).join('');
 }
@@ -135,21 +135,21 @@ function buildCard(r, weightKg) {
 
   // Light theme reads the drug name in contrast-corrected ink, as Next Up does.
   const style = def.color
-    ? `--ct-drug:${esc(def.color)};--ct-drug-ink:${esc(inkOnWhite(def.color))}`
+    ? `--tot-drug:${esc(def.color)};--tot-drug-ink:${esc(inkOnWhite(def.color))}`
     : '';
-  return `<div class="ct-card" style="${style}">` +
-    `<div class="ct-head">` +
-      `<span class="ct-drug">${esc(def.name || r.drugId)}</span>` +
-      `<span class="ct-total">${fmtTotalMass(r.totalMg, r.drugId)}` +
-        `<span class="ct-ml"> · ${fmtMl(r.totalMg, r.drugId)}</span></span>` +
+  return `<div class="tot-card" style="${style}">` +
+    `<div class="tot-head">` +
+      `<span class="tot-drug">${esc(def.name || r.drugId)}</span>` +
+      `<span class="tot-total"><span class="tot-nb">${fmtTotalMass(r.totalMg, r.drugId)}</span>` +
+        `<span class="tot-ml"> · ${fmtMl(r.totalMg, r.drugId)}</span></span>` +
     `</div>` +
     lines.join('') +
   `</div>`;
 }
 
 function line(label, value) {
-  return `<div class="ct-line"><span class="ct-label">${label}</span>` +
-         `<span class="ct-value">${value}</span></div>`;
+  return `<div class="tot-line"><span class="tot-label">${label}</span>` +
+         `<span class="tot-value">${value}</span></div>`;
 }
 
 /** mL at the live pump concentration — the case's own (units.js invariant). */
@@ -178,10 +178,21 @@ function fmtAvgRate(mgMin, drugId, weightKg) {
     if (!unit) continue;
     try {
       const v = fromCanonical(mgMin, unit, drugId, 'rate', { weightKg });
-      parts.push(`${formatValue(v, unit)} ${unit}`);
+      parts.push(`${fmtAverage(v, unit)} ${unit}`);
     } catch (e) { /* unit not convertible here — skip it */ }
   }
   return joinParts(parts);
+}
+
+/**
+ * A computed average, not a set value: the unit's readout precision from 1 up
+ * (propofol 131.1 mcg/kg/min), two significant figures below it. formatValue
+ * alone caps mcg/kg/min at one decimal, which put a fentanyl infusion's
+ * average (≈0.02 mcg/kg/min) on the card as "0".
+ */
+function fmtAverage(v, unit) {
+  if (!(v > 0) || v >= 1) return formatValue(v, unit);
+  return parseFloat(v.toPrecision(2)).toString();
 }
 
 function fmtPumpTime(r) {
@@ -195,17 +206,20 @@ function fmtPumpTime(r) {
  * never between a number and its unit.
  */
 function joinParts(parts) {
-  return parts.map(p => `<span class="ct-nb">${p}</span>`).join(' · ');
+  return parts.map(p => `<span class="tot-nb">${p}</span>`).join(' · ');
 }
 
-/** A case time as ET h:mm, or RT h:mm when the Log is showing real time. */
+/**
+ * A case time as ET h:mm, or RT h:mm when the Log is showing real time. Both
+ * truncate to the minute, as the Log's h:mm:ss reads (ET 0:59:40 → 0:59).
+ */
 function fmtClock(min) {
   const ws = _getTimeMode() === 'rt' ? _getWallClockStart() : null;
   if (ws) {
     const d = new Date(ws.getTime() + min * 60000);
     return `RT ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
   }
-  const total = Math.round(min);
+  const total = Math.floor(min + 1e-9);
   return `ET ${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
