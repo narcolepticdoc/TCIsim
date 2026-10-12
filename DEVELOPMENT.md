@@ -4,45 +4,45 @@
 
 ## Session History
 
-### Totals tab — per-drug totals and average infusion rate (v0.6.5) — Interim
+### Totals tab — per-drug totals and average rate (v0.6.5) — Interim
 
 Asked for as "an easy way to report some stats": the totals were spread over
 three places (the Log's "Total delivered" strip, one drug at a time), and there
 was no average infusion rate at all.
 
-**Definitions, as decided with the user:**
-- **Pump window**: from the first moment the pump delivered anything (a pump
-  bolus or a non-zero rate) to the last time it was *stopped*, or *now* while
-  it runs. Pauses inside the window are **not** subtracted.
-- **Average infusion rate**: the drug's whole-case total, by every route, ÷
-  window. That includes IV pushes, even an induction push given before the
-  pump started. It went through three readings. Infusion only was offered
-  first. The user picked all pump delivery, which still left pushes out. Then
-  they clarified: "the rate over the entire case, from first pump start to
-  last pump stop. While this isn't the actual average rate while the pump is
-  infusing, it is a better overall measure of how much total drug the patient
-  is requiring per unit time." Asked about pushes, they chose all of them. The
-  card labels it "Avg infusion rate" over "Infusion time", the user's own
-  terms.
-- The average shows only once a drug has infused. A drug given only pump
-  boluses would otherwise "average" at the pump's bolus rate.
+**Definitions, as decided with the user.** The average went through four
+readings, and the last one is the rule:
+1. Infusion only (offered first).
+2. All pump delivery over first pump start → last stop (the user's first pick).
+3. Whole-case total over that pump window, after this clarification: "the
+   rate over the entire case, from first pump start to last pump stop. While
+   this isn't the actual average rate while the pump is infusing, it is a
+   better overall measure of how much total drug the patient is requiring per
+   unit time."
+4. **Final:** "The calculation should be the total amount of drug given over
+   the case / the case time (in this case simplified to first time drug was
+   given to last time drug was given)."
 
-**Stop versus pause.** The review found the first version closed the window at
-the end of the last non-zero delivery. That reads a TCI plan's own zero step as
-the pump stopping, but the Log calls that step "Paused" (`history.js`) and
-`onPumpPause` treats it as a running pump that Stop still has to halt. During a
-step-down hold the card said "→ ET 0:30" while TCI was active. A Stop pressed
-during the hold left the window ending at the hold's start, which subtracted
-the pause and overstated the average by 17% in the reviewer's case. The walk now
-tracks `stopped | delivering | hold`:
-- A TCI rate 0 is a hold.
-- A pause event (the Log's "Stopped") or any other rate 0 is a stop. The app
-  treats a manual rate 0 as an idle pump; Stop Pump is a no-op on it.
-- The system rate-restore after a bolus only puts back what was in force, so a
-  bolus inside a hold leaves the hold.
-- A hold counts as running while more pump delivery is scheduled after `now`.
-  With none, it is where delivery ended.
-- The window ends at `max(last delivery, last transition into stopped)`.
+So:
+- **Case time** runs from the first delivery of any kind (push, pump bolus or
+  non-zero rate) to the end of the last delivery, or *now* while an infusion
+  or bolus is running. Gaps in between are not subtracted.
+- **Average** = total ÷ case time.
+- It shows once there is a span to average over: an infusion, or two doses.
+  One bolus alone spans only its own delivery time.
+
+**What reading 4 removed.** Reading 2's review had found that a TCI plan's own
+zero step read as the pump stopping, so a `stopped | delivering | hold` state
+machine was added (TCI hold = pause, Stop during a hold ends the window at the
+Stop). Under reading 4 the window ends at the last *delivery*. A hold is a gap
+like any other, and a Stop no longer matters, so the state machine is gone. The
+walk only records first and last delivery, and whether anything is being given
+at `now`.
+
+**Labels.** The card reads "Avg rate" over "Case time", the user's own term.
+The rate companion is mL/h only for a drug on a pump. A push-only drug gets an
+absolute mass rate where it has one (fentanyl mcg/h); mL/h means nothing
+without a pump.
 
 **Where:** a third tab in the History panel, `Log | Next Up | Totals`. Next Up
 is already cross-drug and lives there. `setEventsView` in `app.js` now loops

@@ -7,19 +7,17 @@
  * baseline — a bolus suspends the infusion for its delivery time, and one still
  * running at `now` counts the fraction delivered so far.
  *
- * On top of that total it splits boluses by route and measures the pump:
+ * On top of that total it splits boluses by route and measures the case:
  *
- *   - Pump window: from the first moment the pump delivered anything (a pump
- *     bolus or a non-zero rate) to the last time it was stopped, or to `now`
- *     while it runs. Pauses inside the window are not subtracted — including a
- *     TCI plan's own zero steps, which the Log shows as "Paused": the plan is
- *     still running through them, and a Stop pressed during one ends the
- *     window at the Stop, not at the start of the hold.
- *   - Average infusion rate: the drug's whole-case total — every route,
- *     including IV pushes before the pump started or after it stopped —
- *     divided by that window. Not the rate while the pump was running: an
- *     overall measure of how much drug the patient needed per unit time, as
- *     the user defined it.
+ *   - Case time: from the first time the drug was given, by any route, to the
+ *     last time it was given — the end of the last delivery, or `now` while an
+ *     infusion or bolus is still running. Gaps in between (pauses, TCI holds,
+ *     time between pushes) are not subtracted.
+ *   - Average rate: the drug's total ÷ case time. Not the rate while the pump
+ *     ran: an overall measure of how much drug the patient needed per unit
+ *     time, as the user defined it ("the total amount of drug given over the
+ *     case / the case time, simplified to first time drug was given to last
+ *     time drug was given").
  *
  * A bolus is a pump bolus unless `deliveryMode === 'push'`, the same test
  * getCumulativeDose uses to pick its delivery time.
@@ -33,34 +31,23 @@
  *   totalMg: number, infusionMg: number,
  *   pumpBolusMg: number, pumpBolusCount: number,
  *   pushMg: number, pushCount: number,
- *   pumpMg: number,
- *   pumpStart: number|null, pumpEnd: number|null, pumpRunning: boolean,
- *   pumpWindowMin: number, avgRateMgMin: number|null,
+ *   firstGiven: number|null, lastGiven: number|null, givingNow: boolean,
+ *   caseTimeMin: number, avgRateMgMin: number|null,
  * }}
  */
 export function computeDrugStats(events, now, getDeliveryMinutes) {
   let infusionMg = 0;
   let pumpBolusMg = 0, pumpBolusCount = 0;
   let pushMg = 0, pushCount = 0;
-  let pumpStart = null, lastDelivery = null;
-  let lastStop = null;
+  let firstGiven = null, lastGiven = null;
   let currentTime = 0;
   let currentRate = 0;
-  // 'stopped' | 'delivering' | 'hold'. A hold is a TCI plan's own zero step —
-  // the Log's "Paused" row: the plan is still running and resumes by itself.
-  // A stop is a pause event (the Log's "Stopped") or a zero rate anyone else
-  // set; the post-bolus rate-restore only puts back what was in force.
-  let state = 'stopped';
-  let midBolus = null;   // the bolus still delivering at `now`, if any
+  let midBolus = false;   // a bolus (either route) still delivering at `now`
 
-  const ran = (a, b) => {
+  const gave = (a, b) => {
     if (!(b > a)) return;
-    if (pumpStart === null || a < pumpStart) pumpStart = a;
-    if (lastDelivery === null || b > lastDelivery) lastDelivery = b;
-  };
-  const stopAt = (t) => {
-    if (state !== 'stopped' && pumpStart !== null) lastStop = t;
-    state = 'stopped';
+    if (firstGiven === null || a < firstGiven) firstGiven = a;
+    if (lastGiven === null || b > lastGiven) lastGiven = b;
   };
 
   if (events && events.length && now > 0) {
@@ -68,7 +55,7 @@ export function computeDrugStats(events, now, getDeliveryMinutes) {
       if (evt.time > now) break;
       if (evt.time > currentTime) {
         infusionMg += (evt.time - currentTime) * currentRate;
-        if (currentRate > 0) ran(currentTime, evt.time);
+        if (currentRate > 0) gave(currentTime, evt.time);
         currentTime = evt.time;
       }
       if (evt.type === 'bolus') {
@@ -78,67 +65,44 @@ export function computeDrugStats(events, now, getDeliveryMinutes) {
         const given = done
           ? evt.value
           : evt.value * Math.max(0, Math.min(1, (now - evt.time) / duration));
-        if (evt.deliveryMode === 'push') {
-          pushMg += given; pushCount++;
-        } else {
-          pumpBolusMg += given; pumpBolusCount++;
-          ran(evt.time, Math.min(endTime, now));
-        }
+        if (evt.deliveryMode === 'push') { pushMg += given; pushCount++; }
+        else { pumpBolusMg += given; pumpBolusCount++; }
+        gave(evt.time, Math.min(endTime, now));
         if (done) {
           currentTime = endTime;
         } else {
-          midBolus = evt;
+          midBolus = true;
           currentTime = now;
           break;
         }
       } else if (evt.type === 'rate') {
         currentRate = evt.value;
-        if (evt.value > 0) state = 'delivering';
-        else if (evt.source === 'tci') state = 'hold';
-        else if (evt.source === 'system') { if (state === 'delivering') stopAt(evt.time); }
-        else stopAt(evt.time);
       } else if (evt.type === 'pause') {
         currentRate = 0;
-        stopAt(evt.time);
       }
     }
     if (currentTime < now) {
       infusionMg += (now - currentTime) * currentRate;
-      if (currentRate > 0) ran(currentTime, now);
+      if (currentRate > 0) gave(currentTime, now);
     }
   }
 
-  // Running at `now`: a pump bolus still going, an infusion in force (an IV
-  // push in progress suspends it in this accounting but does not stop the
-  // pump), or a TCI hold with more delivery scheduled after it.
-  const holdResumes = state === 'hold' && (events || []).some(e => e.time > now &&
-    ((e.type === 'rate' && e.value > 0) || (e.type === 'bolus' && e.deliveryMode !== 'push')));
-  const pumpRunning = now > 0 && (
-    (midBolus !== null && midBolus.deliveryMode !== 'push') ||
-    state === 'delivering' || holdResumes);
-
-  // The window: first delivery to the last stop. A hold that a Stop ended
-  // counts inside it, like any pause; a running pump has not stopped yet.
-  let pumpEnd = null;
-  if (pumpRunning) {
-    if (pumpStart === null) pumpStart = now;
-    pumpEnd = now;
-  } else if (pumpStart !== null) {
-    pumpEnd = Math.max(lastDelivery, lastStop ?? -Infinity);
+  // Still being given at `now`: a bolus mid-delivery, or an infusion in force
+  // (an IV push in progress suspends it in this accounting, but it is running).
+  const givingNow = now > 0 && (midBolus || currentRate > 0);
+  if (givingNow) {
+    if (firstGiven === null) firstGiven = now;
+    lastGiven = now;
   }
 
-  const pumpMg = infusionMg + pumpBolusMg;
-  const pumpWindowMin = pumpStart === null ? 0 : pumpEnd - pumpStart;
+  const totalMg = infusionMg + pumpBolusMg + pushMg;
+  const caseTimeMin = firstGiven === null ? 0 : lastGiven - firstGiven;
   return {
-    totalMg: pumpMg + pushMg,
-    infusionMg,
+    totalMg, infusionMg,
     pumpBolusMg, pumpBolusCount,
     pushMg, pushCount,
-    pumpMg,
-    pumpStart, pumpEnd, pumpRunning,
-    pumpWindowMin,
-    // Whole-case total over the pump window — pushes included, pauses not
-    // subtracted (see the header).
-    avgRateMgMin: pumpWindowMin > 0 ? (pumpMg + pushMg) / pumpWindowMin : null,
+    firstGiven, lastGiven, givingNow,
+    caseTimeMin,
+    avgRateMgMin: caseTimeMin > 0 ? totalMg / caseTimeMin : null,
   };
 }

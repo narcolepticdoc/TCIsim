@@ -6,13 +6,13 @@
  *   - Total: everything delivered so far, in the drug's mass unit and mL — the
  *     same number as the Log's "Total delivered" strip (both come from the
  *     getCumulativeDose walk; see sim/case-stats.js).
- *   - Avg infusion rate: the drug's whole-case total, IV pushes included, over
- *     the infusion time — first pump start to last pump stop (or now). Pauses
- *     inside it are not subtracted. An overall requirement per unit time, not
- *     the rate while the pump ran (the user's definition). Shown in the drug's
- *     working rate unit plus one companion unit, and only once the drug has
- *     infused at all.
- *   - Infusion time, and the split: infusion, pump boluses, IV pushes.
+ *   - Avg rate: the drug's total ÷ case time, first time it was given to the
+ *     last (or now while it is still being given), by any route, gaps
+ *     included — an overall requirement per unit time, not the rate while the
+ *     pump ran (the user's definition). Shown in the drug's working rate unit
+ *     plus one companion unit, once there is a span to average over: an
+ *     infusion, or at least two doses.
+ *   - Case time, and the split: infusion, pump boluses, IV pushes.
  *
  * Amounts grow while a pump runs, so the view re-renders about once a second
  * while it is the active tab (onFrame), and at once after any mutation
@@ -20,7 +20,7 @@
  * changed. Nothing runs while another tab is showing.
  */
 
-import { DRUG_DEFS } from '../util/constants.js';
+import { DRUG_DEFS, isPumpEnabled } from '../util/constants.js';
 import { inkOnWhite } from '../util/color.js';
 import { fromCanonical, formatValue, getWorkingUnit, getAllowedUnits } from '../util/units.js';
 import { computeDrugStats } from '../sim/case-stats.js';
@@ -118,11 +118,13 @@ function buildCard(r, weightKg) {
   const def = DRUG_DEFS[r.drugId] || {};
   const lines = [];
 
-  // Only a drug that has infused has an average rate. Pump boluses alone
-  // would average out at the pump's bolus rate, which says nothing.
-  if (r.infusionMg > 0 && r.avgRateMgMin != null) {
-    lines.push(line('Avg infusion rate', fmtAvgRate(r.avgRateMgMin, r.drugId, weightKg)));
-    lines.push(line('Infusion time', fmtPumpTime(r)));
+  // An average needs a span to average over: an infusion, or two doses. One
+  // bolus alone spans only its own delivery time (seconds for a push), and
+  // would "average" out at its delivery rate.
+  const doses = r.pumpBolusCount + r.pushCount;
+  if ((r.infusionMg > 0 || doses >= 2) && r.avgRateMgMin != null) {
+    lines.push(line('Avg rate', fmtAvgRate(r.avgRateMgMin, r.drugId, weightKg)));
+    lines.push(line('Case time', fmtCaseTime(r)));
   }
   if (r.infusionMg > 0) lines.push(line('Infusion', fmtTotalMass(r.infusionMg, r.drugId)));
   if (r.pumpBolusCount > 0) {
@@ -171,9 +173,12 @@ function fmtAvgRate(mgMin, drugId, weightKg) {
   const allowed = getAllowedUnits(drugId, 'rate');
   const primary = getWorkingUnit(drugId, 'rate');
   const perKg = allowed.find(u => u.includes('/kg/'));
-  const companion = primary.includes('/kg/')
-    ? (allowed.includes('mL/h') ? 'mL/h' : null)
-    : perKg || null;
+  // mL/h only means something for a drug on a pump; a push-only drug gets an
+  // absolute mass rate instead where the drug has one (fentanyl mcg/h).
+  const absolute = isPumpEnabled(drugId) && allowed.includes('mL/h')
+    ? 'mL/h'
+    : allowed.find(u => !u.includes('/kg/') && u !== 'mL/h') || null;
+  const companion = primary.includes('/kg/') ? absolute : perKg || null;
   const parts = [];
   for (const unit of [primary, companion]) {
     if (!unit) continue;
@@ -196,9 +201,9 @@ function fmtAverage(v, unit) {
   return parseFloat(v.toPrecision(2)).toString();
 }
 
-function fmtPumpTime(r) {
-  const span = `${fmtClock(r.pumpStart)} → ${r.pumpRunning ? 'now' : fmtClock(r.pumpEnd)}`;
-  return joinParts([fmtDuration(r.pumpWindowMin), span]);
+function fmtCaseTime(r) {
+  const span = `${fmtClock(r.firstGiven)} → ${r.givingNow ? 'now' : fmtClock(r.lastGiven)}`;
+  return joinParts([fmtDuration(r.caseTimeMin), span]);
 }
 
 /**
