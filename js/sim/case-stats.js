@@ -7,17 +7,20 @@
  * baseline — a bolus suspends the infusion for its delivery time, and one still
  * running at `now` counts the fraction delivered so far.
  *
- * On top of that total it splits boluses by route and measures the case:
+ * On top of that total it splits boluses by route and records when the drug
+ * was first and last given. computeCaseStats then measures the case:
  *
- *   - Case time: from the first time the drug was given, by any route, to the
- *     last time it was given — the end of the last delivery, or `now` while an
- *     infusion or bolus is still running. Gaps in between (pauses, TCI holds,
- *     time between pushes) are not subtracted.
- *   - Average rate: the drug's total ÷ case time. Not the rate while the pump
- *     ran: an overall measure of how much drug the patient needed per unit
- *     time, as the user defined it ("the total amount of drug given over the
- *     case / the case time, simplified to first time drug was given to last
- *     time drug was given").
+ *   - Case time is global, one span for every drug: from the first time any
+ *     drug was given, by any route, to the last time any drug was given — the
+ *     end of the last delivery, or `now` while something is still being given.
+ *     Gaps in between (pauses, TCI holds, time between doses) are not
+ *     subtracted.
+ *   - Each drug's average rate: its total ÷ the case time. Not the rate while
+ *     its pump ran: an overall measure of how much of it the patient needed
+ *     per unit time, as the user defined it ("the total amount of drug given
+ *     over the case / the case time (in this case simplified to first time
+ *     drug was given to last time drug was given)", and "case time should be
+ *     global for all drugs").
  *
  * A bolus is a pump bolus unless `deliveryMode === 'push'`, the same test
  * getCumulativeDose uses to pick its delivery time.
@@ -32,7 +35,6 @@
  *   pumpBolusMg: number, pumpBolusCount: number,
  *   pushMg: number, pushCount: number,
  *   firstGiven: number|null, lastGiven: number|null, givingNow: boolean,
- *   caseTimeMin: number, avgRateMgMin: number|null,
  * }}
  */
 export function computeDrugStats(events, now, getDeliveryMinutes) {
@@ -95,14 +97,51 @@ export function computeDrugStats(events, now, getDeliveryMinutes) {
     lastGiven = now;
   }
 
-  const totalMg = infusionMg + pumpBolusMg + pushMg;
-  const caseTimeMin = firstGiven === null ? 0 : lastGiven - firstGiven;
   return {
-    totalMg, infusionMg,
+    totalMg: infusionMg + pumpBolusMg + pushMg,
+    infusionMg,
     pumpBolusMg, pumpBolusCount,
     pushMg, pushCount,
     firstGiven, lastGiven, givingNow,
-    caseTimeMin,
-    avgRateMgMin: caseTimeMin > 0 ? totalMg / caseTimeMin : null,
   };
+}
+
+/**
+ * The whole case: one case time across every drug, and each drug's average
+ * over it.
+ *
+ * The averages need a span to be about: an infusion of any drug, or at least
+ * two doses between them. A lone bolus spans only its own delivery time
+ * (seconds for a push), and every drug would "average" at its delivery rate.
+ *
+ * @param {Array<[string, Array]>} drugEvents - [drugId, events] in display order
+ * @param {number} now
+ * @param {Function} getDeliveryMinutes
+ * @returns {{
+ *   drugs: Array<Object>,   // computeDrugStats + { drugId, avgRateMgMin }, for drugs that gave anything
+ *   firstGiven: number|null, lastGiven: number|null, givingNow: boolean,
+ *   caseTimeMin: number, hasSpan: boolean,
+ * }}
+ */
+export function computeCaseStats(drugEvents, now, getDeliveryMinutes) {
+  const all = drugEvents.map(([drugId, events]) =>
+    ({ drugId, ...computeDrugStats(events, now, getDeliveryMinutes) }));
+
+  let firstGiven = null, lastGiven = null, givingNow = false;
+  let infused = false, doses = 0;
+  for (const d of all) {
+    if (d.firstGiven === null) continue;
+    if (firstGiven === null || d.firstGiven < firstGiven) firstGiven = d.firstGiven;
+    if (lastGiven === null || d.lastGiven > lastGiven) lastGiven = d.lastGiven;
+    givingNow = givingNow || d.givingNow;
+    infused = infused || d.infusionMg > 0;
+    doses += d.pumpBolusCount + d.pushCount;
+  }
+
+  const caseTimeMin = firstGiven === null ? 0 : lastGiven - firstGiven;
+  const hasSpan = caseTimeMin > 0 && (infused || doses >= 2);
+  const drugs = all
+    .filter(d => d.totalMg > 0)
+    .map(d => ({ ...d, avgRateMgMin: hasSpan ? d.totalMg / caseTimeMin : null }));
+  return { drugs, firstGiven, lastGiven, givingNow, caseTimeMin, hasSpan };
 }

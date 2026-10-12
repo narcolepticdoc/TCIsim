@@ -5,11 +5,11 @@
  * set them:
  *   - Total = everything delivered by `now`; it must equal getCumulativeDose,
  *     which the Log's "Total delivered" strip and the reconcile baseline use.
- *   - Case time = first time the drug was given, by any route, to the last
- *     time it was given (the end of the last delivery), or `now` while it is
- *     still being given. Gaps in between are not subtracted.
- *   - Average rate = total ÷ case time. Shown once there is a span to average
- *     over: an infusion, or at least two doses.
+ *   - Case time is global: the first time any drug was given, by any route,
+ *     to the last time any drug was given (the end of the last delivery), or
+ *     `now` while something is still being given. Gaps are not subtracted.
+ *   - Each drug's average rate = its total ÷ that one case time. Shown once
+ *     the case has a span: an infusion of any drug, or two doses between them.
  *
  * Cases are built through the real model, so delivery durations and the
  * system rate-restore events after manual boluses are the production ones.
@@ -29,7 +29,7 @@ globalThis.document = {
 
 const { createModel } = await import('../js/sim/simulation.js');
 const { getCumulativeDose } = await import('../js/sim/events/query.js');
-const { computeDrugStats } = await import('../js/sim/case-stats.js');
+const { computeDrugStats, computeCaseStats } = await import('../js/sim/case-stats.js');
 const { setPumpSettings, resetPumpSettings, DRUG_IDS } = await import('../js/util/constants.js');
 const { formatValue } = await import('../js/util/units.js');
 const caseTotals = await import('../js/ui/case-totals.js');
@@ -57,6 +57,9 @@ function freshModel() {
 const dur = (m) => (evt) => m.getEventList().getBolusDelivery(evt).duration;
 const stats = (m, drug, now) => computeDrugStats(m.getEvents(drug), now, dur(m));
 const cumulative = (m, drug, now) => getCumulativeDose(m.getEvents(drug), drug, now, dur(m)).totalMg;
+const caseOf = (m, now, drugs = DRUG_IDS) =>
+  computeCaseStats(drugs.map(d => [d, m.getEvents(d)]), now, dur(m));
+const avgOf = (c, drug) => c.drugs.find(d => d.drugId === drug)?.avgRateMgMin ?? null;
 const pushOf = (m, drug, time) => m.getEvents(drug).find(e => e.type === 'bolus' && e.time === time);
 
 // ---- A manual propofol case ----
@@ -93,8 +96,9 @@ console.log('\n  manual propofol case, last given ET 60, now ET 90');
   near(s.firstGiven, 0, 'first given at ET 0 (the pump bolus)');
   near(s.lastGiven, 60, 'last given at ET 60 (the infusion stopped)');
   eq(s.givingNow, false, 'not being given at ET 90');
-  near(s.caseTimeMin, 60, 'case time 60 min; the gaps (0.8–1, 20–30) are not subtracted');
-  near(s.avgRateMgMin, s.totalMg / 60, 'avg = total ÷ case time');
+  const c = caseOf(m, 90);
+  near(c.caseTimeMin, 60, 'case time 60 min; the gaps (0.8–1, 20–30) are not subtracted');
+  near(avgOf(c, P), s.totalMg / 60, 'avg = total ÷ case time');
 }
 
 console.log('\n  the same case while it is still being given');
@@ -104,7 +108,7 @@ console.log('\n  the same case while it is still being given');
   eq(s.givingNow, true, 'at ET 55 the infusion is running');
   near(s.lastGiven, 55, 'case time runs to now');
   near(s.totalMg, cumulative(m, P, 55), 'total equals getCumulativeDose');
-  near(s.avgRateMgMin, s.totalMg / 55, 'avg = total so far ÷ case time so far');
+  near(avgOf(caseOf(m, 55), P), s.totalMg / 55, 'avg = total so far ÷ case time so far');
 
   const mid = 50 + dur(m)(pushOf(m, P, 50)) / 2;
   const sp = stats(m, P, mid);
@@ -125,7 +129,7 @@ console.log('\n  paused at now (pause at 20, now 25)');
   const s = stats(m, P, 25);
   eq(s.givingNow, false, 'paused → not being given');
   near(s.lastGiven, 20, 'last given at the pause');
-  near(s.avgRateMgMin, (100 + 190) / 20, 'avg over ET 0 → 20');
+  near(avgOf(caseOf(m, 25), P), (100 + 190) / 20, 'avg over ET 0 → 20');
   near(s.totalMg, cumulative(m, P, 25), 'total equals getCumulativeDose');
 }
 
@@ -144,9 +148,9 @@ console.log('\n  IV pushes before the pump and after it stopped');
   const s = stats(m, P, 120);
   near(s.firstGiven, 0, 'first given at the induction push, before the pump');
   near(s.lastGiven, lateEnd, 'last given at the end of the push after the stop');
-  near(s.caseTimeMin, lateEnd, 'case time ET 0 → that push, pause included');
+  near(caseOf(m, 120).caseTimeMin, lateEnd, 'case time ET 0 → that push, pause included');
   near(s.pushMg, 70, 'both pushes counted');
-  near(s.avgRateMgMin, s.totalMg / lateEnd, 'avg = total (pushes included) ÷ case time');
+  near(avgOf(caseOf(m, 120), P), s.totalMg / lateEnd, 'avg = total (pushes included) ÷ case time');
   near(s.totalMg, cumulative(m, P, 120), 'total equals getCumulativeDose');
 }
 
@@ -157,7 +161,7 @@ console.log('\n  future events are ignored');
   m.addRate(P, 30, 50, 'Rate 50 (future)');
   const s = stats(m, P, 10);
   near(s.totalMg, 50, '10 min at 5 mg/min; the ET 30 step has not happened');
-  near(s.avgRateMgMin, 5, 'avg 5 mg/min');
+  near(avgOf(caseOf(m, 10), P), 5, 'avg 5 mg/min');
   near(s.totalMg, cumulative(m, P, 10), 'total equals getCumulativeDose');
 }
 
@@ -184,7 +188,7 @@ console.log('\n  "last time given" is delivery, not pump state');
   m.clearAfter(P, mid);
   const st = stats(m, P, mid + 15);
   near(st.lastGiven, hold.time, 'a Stop does not move the last time drug was given');
-  near(st.avgRateMgMin, st.totalMg / hold.time, 'avg over ET 0 → the last delivery');
+  near(avgOf(caseOf(m, mid + 15), P), st.totalMg / hold.time, 'avg over ET 0 → the last delivery');
   near(st.totalMg, cumulative(m, P, mid + 15), 'total equals getCumulativeDose after Stop');
 }
 {
@@ -208,8 +212,8 @@ console.log('\n  IV push only (fentanyl, pump off)');
   const s = stats(m, 'fentanyl', 60);
   near(s.totalMg, 0.15, 'total 150 mcg');
   eq(s.pushCount, 2, 'two pushes');
-  near(s.caseTimeMin, end, 'case time first push → end of the last');
-  near(s.avgRateMgMin, 0.15 / end, 'avg = 150 mcg ÷ case time');
+  near(s.lastGiven - s.firstGiven, end, 'given from the first push to the end of the last');
+  near(avgOf(caseOf(m, 60), 'fentanyl'), 0.15 / end, 'avg = 150 mcg ÷ case time');
   near(s.totalMg, cumulative(m, 'fentanyl', 60), 'total equals getCumulativeDose');
 }
 
@@ -222,7 +226,50 @@ console.log('\n  a TCI plan');
   ok(s.pumpBolusCount >= 1, `the plan's induction bolus counts as a pump bolus (${s.pumpBolusCount})`);
   near(s.firstGiven, 0, 'first given at ET 0');
   eq(s.givingNow, true, 'infusing at ET 30');
-  near(s.avgRateMgMin, s.totalMg / 30, 'avg = everything given ÷ 30 min');
+  near(avgOf(caseOf(m, 30), P), s.totalMg / 30, 'avg = everything given ÷ 30 min');
+}
+
+console.log('\n  one case time for every drug');
+{
+  // Propofol infused ET 10–60; fentanyl pushed at ET 0 and ET 90.
+  const m = freshModel();
+  m.addBolus('fentanyl', 0, 0.1, 'IV push 100 mcg', { deliveryMode: 'push', source: 'manual' });
+  m.addRate(P, 10, 10, 'Rate 10');
+  m.addPause(P, 60, 'Stop');
+  m.addBolus('fentanyl', 90, 0.05, 'IV push 50 mcg', { deliveryMode: 'push', source: 'manual' });
+  const end = 90 + dur(m)(pushOf(m, 'fentanyl', 90));
+  const c = caseOf(m, 120);
+  near(c.firstGiven, 0, 'the case starts at the first drug given (fentanyl, ET 0)');
+  near(c.lastGiven, end, 'and ends at the last drug given (fentanyl, ET 90)');
+  near(c.caseTimeMin, end, 'one case time');
+  near(avgOf(c, P), 500 / end, 'propofol: its 500 mg ÷ the case time, not ÷ its own 50 min');
+  near(avgOf(c, 'fentanyl'), 0.15 / end, 'fentanyl: its 150 mcg ÷ the same case time');
+  eq(c.drugs.map(d => d.drugId).join(','), 'propofol,fentanyl', 'drugs in DRUG_IDS order; ketamine (nothing given) left out');
+  eq(c.hasSpan, true, 'an infusion gives the case a span');
+}
+{
+  // Anything still being given keeps the case open.
+  const m = freshModel();
+  m.addRate(P, 0, 10, 'Rate 10');
+  m.addPause(P, 30, 'Stop');
+  m.addRate('ketamine', 20, 0.5, 'Rate 0.5');
+  const c = caseOf(m, 50);
+  eq(c.givingNow, true, 'ketamine still running → the case is still going');
+  near(c.lastGiven, 50, 'case time runs to now');
+  near(avgOf(c, P), 300 / 50, 'propofol stopped at 30 but averages over the whole 50 min');
+}
+{
+  const m = freshModel();
+  m.addBolus('fentanyl', 0, 0.1, 'IV push 100 mcg', { deliveryMode: 'push', source: 'manual' });
+  const one = caseOf(m, 20);
+  eq(one.hasSpan, false, 'a single dose in the whole case: no span');
+  eq(avgOf(one, 'fentanyl'), null, '…and no average');
+  m.addBolus('ketamine', 30, 20, 'IV push 20 mg', { deliveryMode: 'push', source: 'manual' });
+  const two = caseOf(m, 40);
+  eq(two.hasSpan, true, 'two doses, even of different drugs, give the case a span');
+  const end = 30 + dur(m)(pushOf(m, 'ketamine', 30));
+  near(avgOf(two, 'fentanyl'), 0.1 / end, 'fentanyl averages over the global case time');
+  near(avgOf(two, 'ketamine'), 20 / end, 'ketamine too, though it was given once');
 }
 
 // ---- The view ----
@@ -248,18 +295,19 @@ console.log('\n  Totals view');
   const text = () => html().replace(/<span class="tot-nb">([^<]*)<\/span>/g, '$1')
     .replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
 
-  const s = stats(m, P, 90);
-  const mlh = formatValue(s.avgRateMgMin * 60 / 10, 'mL/h');
-  const kg = formatValue(s.avgRateMgMin * 1000 / 70, 'mcg/kg/min');
+  const avgP = avgOf(caseOf(m, 90), P);
+  const mlh = formatValue(avgP * 60 / 10, 'mL/h');
+  const kg = formatValue(avgP * 1000 / 70, 'mcg/kg/min');
   ok(text().includes('Propofol'), 'propofol card');
   ok(text().includes(`Avg rate|${mlh} mL/h · ${kg} mcg/kg/min`),
      `avg rate in the working unit (mL/h) and per-kg: ${mlh} mL/h · ${kg} mcg/kg/min`);
-  ok(text().includes('Case time|1 h 00 min · ET 0:00 → ET 1:00'), 'case time 1 h, ET 0:00 → ET 1:00');
+  ok(text().startsWith('|Case time|1 h 00 min · ET 0:00 → ET 1:00|'), 'one case-time line, above the cards: 1 h, ET 0:00 → ET 1:00');
+  eq(text().split('Case time').length - 1, 1, 'the case time appears once, not per card');
   ok(text().includes('Pump bolus|1 · 100.0 mg'), 'pump bolus line');
   ok(text().includes('IV push|1 · 20.0 mg'), 'IV push line');
   ok(/Fentanyl\|100 mcg\| · 2\.00 mL/.test(text()), 'fentanyl card: 100 mcg · 2.00 mL');
   const fent = text().split('Fentanyl')[1];
-  ok(!fent.includes('Avg rate'), 'a single dose gives no average rate');
+  ok(fent.includes('Avg rate'), 'fentanyl, pushed once, still averages over the global case time');
   ok(text().indexOf('Propofol') < text().indexOf('Fentanyl'), 'cards follow DRUG_IDS order');
 
   now = 55;
@@ -274,8 +322,7 @@ console.log('\n  Totals view');
   timeMode = 'et';
   now = 90;
   caseTotals.render();
-  const s20 = stats(m, P, 90);
-  ok(text().includes(`${formatValue(s20.avgRateMgMin * 60 / 20, 'mL/h')} mL/h`),
+  ok(text().includes(`${formatValue(avgOf(caseOf(m, 90), P) * 60 / 20, 'mL/h')} mL/h`),
      'mL/h follows the case concentration (2%)');
   resetPumpSettings();
 
@@ -314,21 +361,30 @@ console.log('\n  view details');
   const t = document.getElementById('tot-list').innerHTML
     .replace(/<span class="tot-nb">([^<]*)<\/span>/g, '$1').replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
   const prop = t.split('Fentanyl')[0];
-  ok(!prop.includes('Avg rate'), 'one pump bolus alone gives no average rate');
-  ok(prop.includes('Pump bolus|1 · 100.0 mg'), '…but the bolus is listed');
+  ok(prop.includes('Avg rate'), 'with fentanyl infusing, propofol (one pump bolus) has an average over the case time');
+  ok(prop.includes('Pump bolus|1 · 100.0 mg'), '…and the bolus is listed');
   ok(t.includes('Avg rate|0.02 mcg/kg/min · 84 mcg/h'), 'a fentanyl average reads 0.02 mcg/kg/min, not 0; pump off → mcg/h companion, not mL/h');
   setPumpSettings('fentanyl', { pumpEnabled: true });
   caseTotals.render();
   ok(document.getElementById('tot-list').innerHTML.includes('0.02 mcg/kg/min</span> · <span class="tot-nb">1.7 mL/h'),
      'pump on → the companion is mL/h (84 mcg/h at 50 mcg/mL)');
   m.addBolus(P, 20, 50, 'IV push 50 mg', { deliveryMode: 'push', source: 'manual' });
-  caseTotals.render();
-  ok(document.getElementById('tot-list').innerHTML.split('Fentanyl')[0].includes('Avg rate'),
-     'a second dose (pump bolus + push) gives propofol an average');
   setPumpSettings(P, { concentration: 20 });
   caseTotals.render();
   ok(document.getElementById('tot-list').innerHTML.includes('· 7.50 mL'), 'total mL follows the case concentration (150 mg at 2% = 7.5 mL)');
   resetPumpSettings();
+  caseTotals.setActive(false);
+}
+
+console.log('\n  a single dose in the whole case');
+{
+  const m = freshModel();
+  m.addBolus(P, 0, 100, 'IV push 100 mg', { deliveryMode: 'push', source: 'manual' });
+  caseTotals.init({ model: m, getPatient: () => PATIENT, getDrugIds: () => DRUG_IDS, getElapsedMinutes: () => 10 });
+  caseTotals.setActive(true);
+  const h = document.getElementById('tot-list').innerHTML;
+  ok(h.includes('100.0 mg'), 'the dose is listed');
+  ok(!h.includes('Case time') && !h.includes('Avg rate'), 'no case time and no average from one dose');
   caseTotals.setActive(false);
 }
 

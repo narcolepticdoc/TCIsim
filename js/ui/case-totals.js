@@ -1,18 +1,20 @@
 /**
  * case-totals.js — Totals view of the Events panel: what each drug has given.
  *
- * One card per drug that has delivered anything, in DRUG_IDS order:
+ * A case-time line, then one card per drug that has delivered anything, in
+ * DRUG_IDS order:
  *
+ *   - Case time is global, one span for every drug: the first time any drug
+ *     was given to the last time any was given (or now while something still
+ *     is), gaps included (sim/case-stats.js computeCaseStats).
  *   - Total: everything delivered so far, in the drug's mass unit and mL — the
  *     same number as the Log's "Total delivered" strip (both come from the
- *     getCumulativeDose walk; see sim/case-stats.js).
- *   - Avg rate: the drug's total ÷ case time, first time it was given to the
- *     last (or now while it is still being given), by any route, gaps
- *     included — an overall requirement per unit time, not the rate while the
- *     pump ran (the user's definition). Shown in the drug's working rate unit
- *     plus one companion unit, once there is a span to average over: an
- *     infusion, or at least two doses.
- *   - Case time, and the split: infusion, pump boluses, IV pushes.
+ *     getCumulativeDose walk).
+ *   - Avg rate: the drug's total ÷ the case time — an overall requirement per
+ *     unit time, not the rate while its pump ran (the user's definition).
+ *     Shown in the drug's working rate unit plus one companion unit, once the
+ *     case has a span to average over: an infusion, or two doses.
+ *   - The split: infusion, pump boluses, IV pushes.
  *
  * Amounts grow while a pump runs, so the view re-renders about once a second
  * while it is the active tab (onFrame), and at once after any mutation
@@ -23,7 +25,7 @@
 import { DRUG_DEFS, isPumpEnabled } from '../util/constants.js';
 import { inkOnWhite } from '../util/color.js';
 import { fromCanonical, formatValue, getWorkingUnit, getAllowedUnits } from '../util/units.js';
-import { computeDrugStats } from '../sim/case-stats.js';
+import { computeCaseStats } from '../sim/case-stats.js';
 import { fmtTotalMass } from './history.js';
 
 const $ = id => document.getElementById(id);
@@ -89,42 +91,39 @@ export function onFrame(t) {
 // ---- Building the view ----
 
 /**
- * The per-drug statistics the view shows, as data. Exported for tests and for
- * anything else that wants the same numbers (a future case summary).
+ * The statistics the view shows, as data (computeCaseStats' shape), or null
+ * without a model. Exported for tests and for anything else that wants the
+ * same numbers (a future case summary).
  */
 export function collectTotals(t = _getElapsedMinutes()) {
-  if (!_model) return [];
+  if (!_model) return null;
   const list = _model.getEventList ? _model.getEventList() : null;
-  const delivery = list && list.getBolusDelivery
-    ? (evt) => list.getBolusDelivery(evt).duration
-    : null;
-  if (!delivery) return [];
-  const out = [];
-  for (const drugId of _getDrugIds()) {
-    const stats = computeDrugStats(_model.getEvents(drugId), t, delivery);
-    if (stats.totalMg > 0) out.push({ drugId, ...stats });
-  }
-  return out;
+  if (!list || !list.getBolusDelivery) return null;
+  return computeCaseStats(
+    _getDrugIds().map(drugId => [drugId, _model.getEvents(drugId)]),
+    t,
+    (evt) => list.getBolusDelivery(evt).duration);
 }
 
 function buildHtml(t) {
-  const rows = collectTotals(t);
-  if (!rows.length) return `<div class="tot-empty">Nothing given yet.</div>`;
+  const c = collectTotals(t);
+  if (!c || !c.drugs.length) return `<div class="tot-empty">Nothing given yet.</div>`;
   const weightKg = _getPatient()?.weight || 70;
-  return rows.map(r => buildCard(r, weightKg)).join('');
+  // One case time for every drug, above the cards.
+  const head = c.hasSpan
+    ? `<div class="tot-case">${lineInner('Case time', fmtCaseTime(c))}</div>`
+    : '';
+  return head + c.drugs.map(r => buildCard(r, weightKg)).join('');
 }
 
 function buildCard(r, weightKg) {
   const def = DRUG_DEFS[r.drugId] || {};
   const lines = [];
 
-  // An average needs a span to average over: an infusion, or two doses. One
-  // bolus alone spans only its own delivery time (seconds for a push), and
-  // would "average" out at its delivery rate.
-  const doses = r.pumpBolusCount + r.pushCount;
-  if ((r.infusionMg > 0 || doses >= 2) && r.avgRateMgMin != null) {
+  // Over the global case time; null until the case has a span (see
+  // computeCaseStats).
+  if (r.avgRateMgMin != null) {
     lines.push(line('Avg rate', fmtAvgRate(r.avgRateMgMin, r.drugId, weightKg)));
-    lines.push(line('Case time', fmtCaseTime(r)));
   }
   if (r.infusionMg > 0) lines.push(line('Infusion', fmtTotalMass(r.infusionMg, r.drugId)));
   if (r.pumpBolusCount > 0) {
@@ -151,8 +150,11 @@ function buildCard(r, weightKg) {
 }
 
 function line(label, value) {
-  return `<div class="tot-line"><span class="tot-label">${label}</span>` +
-         `<span class="tot-value">${value}</span></div>`;
+  return `<div class="tot-line">${lineInner(label, value)}</div>`;
+}
+
+function lineInner(label, value) {
+  return `<span class="tot-label">${label}</span><span class="tot-value">${value}</span>`;
 }
 
 /** mL at the live pump concentration — the case's own (units.js invariant). */
@@ -201,9 +203,9 @@ function fmtAverage(v, unit) {
   return parseFloat(v.toPrecision(2)).toString();
 }
 
-function fmtCaseTime(r) {
-  const span = `${fmtClock(r.firstGiven)} → ${r.givingNow ? 'now' : fmtClock(r.lastGiven)}`;
-  return joinParts([fmtDuration(r.caseTimeMin), span]);
+function fmtCaseTime(c) {
+  const span = `${fmtClock(c.firstGiven)} → ${c.givingNow ? 'now' : fmtClock(c.lastGiven)}`;
+  return joinParts([fmtDuration(c.caseTimeMin), span]);
 }
 
 /**

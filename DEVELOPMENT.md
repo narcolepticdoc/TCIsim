@@ -10,7 +10,7 @@ Asked for as "an easy way to report some stats": the totals were spread over
 three places (the Log's "Total delivered" strip, one drug at a time), and there
 was no average infusion rate at all.
 
-**Definitions, as decided with the user.** The average went through four
+**Definitions, as decided with the user.** The average went through five
 readings, and the last one is the rule:
 1. Infusion only (offered first).
 2. All pump delivery over first pump start → last stop (the user's first pick).
@@ -19,27 +19,35 @@ readings, and the last one is the rule:
    this isn't the actual average rate while the pump is infusing, it is a
    better overall measure of how much total drug the patient is requiring per
    unit time."
-4. **Final:** "The calculation should be the total amount of drug given over
-   the case / the case time (in this case simplified to first time drug was
-   given to last time drug was given)."
+4. "The calculation should be the total amount of drug given over the case /
+   the case time (in this case simplified to first time drug was given to
+   last time drug was given)."
+5. **Final:** "Case time should be global for all drugs."
 
 So:
-- **Case time** runs from the first delivery of any kind (push, pump bolus or
-  non-zero rate) to the end of the last delivery, or *now* while an infusion
-  or bolus is running. Gaps in between are not subtracted.
-- **Average** = total ÷ case time.
-- It shows once there is a span to average over: an infusion, or two doses.
-  One bolus alone spans only its own delivery time.
+- **Case time** is one span for the whole case. It runs from the first
+  delivery of any drug, of any kind (push, pump bolus or non-zero rate), to
+  the end of the last delivery of any drug, or *now* while anything is still
+  being given. Gaps in between are not subtracted. It shows once, above the
+  cards.
+- **Each drug's average** = that drug's total ÷ the case time.
+  `computeCaseStats` takes the earliest first delivery and the latest last
+  delivery across `DRUG_IDS`; `computeDrugStats` no longer has a per-drug
+  average, so nobody can reach for the wrong denominator.
+- The averages show once the case has a span: an infusion of any drug, or two
+  doses between them. One bolus alone in the whole case spans only its own
+  delivery time. A drug given once still averages over the case.
 
-**What reading 4 removed.** Reading 2's review had found that a TCI plan's own
+**What readings 4–5 removed.** Reading 2's review had found that a TCI plan's own
 zero step read as the pump stopping, so a `stopped | delivering | hold` state
 machine was added (TCI hold = pause, Stop during a hold ends the window at the
-Stop). Under reading 4 the window ends at the last *delivery*. A hold is a gap
+Stop). Since reading 4 the window ends at the last *delivery*. A hold is a gap
 like any other, and a Stop no longer matters, so the state machine is gone. The
 walk only records first and last delivery, and whether anything is being given
 at `now`.
 
-**Labels.** The card reads "Avg rate" over "Case time", the user's own term.
+**Labels.** One "Case time" line (the user's own term) above the cards, and
+"Avg rate" on each card.
 The rate companion is mL/h only for a drug on a pump. A push-only drug gets an
 absolute mass rate where it has one (fentanyl mcg/h); mL/h means nothing
 without a pump.
