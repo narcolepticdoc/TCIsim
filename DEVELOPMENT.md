@@ -4,7 +4,7 @@
 
 ## Session History
 
-### Totals tab — per-drug totals and average pump rate (v0.6.5) — Interim
+### Totals tab — per-drug totals and average infusion rate (v0.6.5) — Interim
 
 Asked for as "an easy way to report some stats": the totals were spread over
 three places (the Log's "Total delivered" strip, one drug at a time), and there
@@ -14,9 +14,16 @@ was no average infusion rate at all.
 - **Pump window**: from the first moment the pump delivered anything (a pump
   bolus or a non-zero rate) to the last time it was *stopped*, or *now* while
   it runs. Pauses inside the window are **not** subtracted.
-- **Average pump rate**: (infusion + pump boluses) ÷ window. The other option
-  was infusion only. The user chose all pump delivery, so a TCI case's
-  induction and step-up boluses count. IV pushes never count.
+- **Average infusion rate**: the drug's whole-case total, by every route, ÷
+  window. That includes IV pushes, even an induction push given before the
+  pump started. It went through three readings. Infusion only was offered
+  first. The user picked all pump delivery, which still left pushes out. Then
+  they clarified: "the rate over the entire case, from first pump start to
+  last pump stop. While this isn't the actual average rate while the pump is
+  infusing, it is a better overall measure of how much total drug the patient
+  is requiring per unit time." Asked about pushes, they chose all of them. The
+  card labels it "Avg infusion rate" over "Infusion time", the user's own
+  terms.
 - The average shows only once a drug has infused. A drug given only pump
   boluses would otherwise "average" at the pump's bolus rate.
 

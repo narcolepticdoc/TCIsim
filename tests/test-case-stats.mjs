@@ -1,13 +1,15 @@
 /**
- * test-case-stats.mjs — the Totals view: per-drug totals and average pump rate.
+ * test-case-stats.mjs — the Totals view: per-drug totals and average infusion rate.
  *
  * Definitions under test (sim/case-stats.js, ui/case-totals.js):
  *   - Total = everything delivered by `now`; it must equal getCumulativeDose,
  *     which the Log's "Total delivered" strip and the reconcile baseline use.
  *   - Pump window = first pump delivery (pump bolus or non-zero rate) → last
  *     stop, or `now` while the pump runs. Pauses inside it are not subtracted.
- *   - Average pump rate = (infusion + pump boluses) ÷ window. IV pushes never
- *     count. Shown only once the drug has infused.
+ *   - Average infusion rate = the drug's whole-case total (every route, IV
+ *     pushes included, even outside the window) ÷ window. An overall
+ *     requirement per unit time, as the user defined it. Shown only once the
+ *     drug has infused.
  *
  * Cases are built through the real model, so delivery durations and the
  * system rate-restore events after manual boluses are the production ones.
@@ -92,7 +94,7 @@ console.log('\n  manual propofol case, pump stopped at ET 60, now ET 90');
   near(s.pumpEnd, 60, 'pump window ends at the last stop (ET 60)');
   eq(s.pumpRunning, false, 'pump not running');
   near(s.pumpWindowMin, 60, 'pauses (0.8–1, 20–30) are not subtracted from the window');
-  near(s.avgPumpRateMgMin, (100 + infusion) / 60, 'avg = (infusion + pump bolus) ÷ window; the push is excluded');
+  near(s.avgRateMgMin, (100 + 20 + infusion) / 60, 'avg = whole-case total (pump bolus, infusion and the push) ÷ window');
 }
 
 console.log('\n  the same case while it is still running');
@@ -102,7 +104,7 @@ console.log('\n  the same case while it is still running');
   eq(s.pumpRunning, true, 'at ET 55 the pump is running');
   near(s.pumpEnd, 55, 'window runs to now');
   near(s.totalMg, cumulative(m, P, 55), 'total equals getCumulativeDose');
-  near(s.avgPumpRateMgMin, (s.infusionMg + s.pumpBolusMg) / 55, 'avg over the window so far');
+  near(s.avgRateMgMin, s.totalMg / 55, 'avg = total so far ÷ the window so far');
 
   const pushEvt = m.getEvents(P).find(e => e.type === 'bolus' && e.deliveryMode === 'push');
   const mid = 50 + dur(m)(pushEvt) / 2;
@@ -124,8 +126,29 @@ console.log('\n  paused at now (pause at 20, now 25)');
   const s = stats(m, P, 25);
   eq(s.pumpRunning, false, 'paused → not running');
   near(s.pumpEnd, 20, 'window ends at the pause (the last stop so far)');
-  near(s.avgPumpRateMgMin, (100 + 190) / 20, 'avg over ET 0 → 20');
+  near(s.avgRateMgMin, (100 + 190) / 20, 'avg over ET 0 → 20');
   near(s.totalMg, cumulative(m, P, 25), 'total equals getCumulativeDose');
+}
+
+console.log('\n  IV pushes outside the window still count toward the average');
+{
+  // The user's definition: the whole-case requirement per unit of infusion
+  // time. Pump on ET 10 → stop ET 90 with a pause 40–60; an induction push at
+  // ET 0 (before the pump) and a push at ET 70.
+  const m = freshModel();
+  m.addBolus(P, 0, 50, 'IV push 50 mg', { deliveryMode: 'push', source: 'manual' });
+  m.addRate(P, 10, 10, 'Rate 10');
+  m.addPause(P, 40, 'Pause');
+  m.addRate(P, 60, 10, 'Rate 10');
+  m.addBolus(P, 70, 20, 'IV push 20 mg', { deliveryMode: 'push', source: 'manual' });
+  m.addPause(P, 90, 'Stop');
+  const s = stats(m, P, 120);
+  near(s.pumpStart, 10, 'the window starts at the pump, not at the induction push');
+  near(s.pumpWindowMin, 80, 'window 80 min, the 20 min pause included');
+  near(s.pushMg, 70, 'both pushes counted as pushes');
+  near(s.avgRateMgMin, s.totalMg / 80, 'avg = whole-case total (pushes included) ÷ 80 min');
+  near(s.avgRateMgMin, (s.infusionMg + 70) / 80, '…which is infusion + both pushes over the window');
+  near(s.totalMg, cumulative(m, P, 120), 'total equals getCumulativeDose');
 }
 
 console.log('\n  future events are ignored');
@@ -135,7 +158,7 @@ console.log('\n  future events are ignored');
   m.addRate(P, 30, 50, 'Rate 50 (future)');
   const s = stats(m, P, 10);
   near(s.totalMg, 50, '10 min at 5 mg/min; the ET 30 step has not happened');
-  near(s.avgPumpRateMgMin, 5, 'avg 5 mg/min');
+  near(s.avgRateMgMin, 5, 'avg 5 mg/min');
   near(s.totalMg, cumulative(m, P, 10), 'total equals getCumulativeDose');
 }
 
@@ -163,7 +186,7 @@ console.log('\n  stops vs holds');
   const st = stats(m, P, stopAt + 15);
   eq(st.pumpRunning, false, 'after Stop the pump is stopped');
   near(st.pumpEnd, stopAt, 'the window ends at the Stop, not at the start of the hold');
-  near(st.avgPumpRateMgMin, st.pumpMg / stopAt, 'avg over ET 0 → Stop');
+  near(st.avgRateMgMin, st.totalMg / stopAt, 'avg over ET 0 → Stop');
   near(st.totalMg, cumulative(m, P, stopAt + 15), 'total equals getCumulativeDose after Stop');
 }
 {
@@ -210,7 +233,7 @@ console.log('\n  IV push only (fentanyl, pump off)');
   near(s.totalMg, 0.15, 'total 150 mcg');
   eq(s.pushCount, 2, 'two pushes');
   eq(s.pumpStart, null, 'no pump window');
-  eq(s.avgPumpRateMgMin, null, 'no average rate');
+  eq(s.avgRateMgMin, null, 'no average rate');
   near(s.totalMg, cumulative(m, 'fentanyl', 60), 'total equals getCumulativeDose');
 }
 
@@ -223,7 +246,7 @@ console.log('\n  a TCI plan');
   ok(s.pumpBolusCount >= 1, `the plan's induction bolus counts as a pump bolus (${s.pumpBolusCount})`);
   near(s.pumpStart, 0, 'pump window starts at ET 0');
   eq(s.pumpRunning, true, 'pump running at ET 30');
-  near(s.avgPumpRateMgMin, s.totalMg / 30, 'avg = everything the pump gave ÷ 30 min (no pushes)');
+  near(s.avgRateMgMin, s.totalMg / 30, 'avg = everything given ÷ 30 min');
 }
 
 // ---- The view ----
@@ -250,17 +273,17 @@ console.log('\n  Totals view');
     .replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
 
   const s = stats(m, P, 90);
-  const mlh = formatValue(s.avgPumpRateMgMin * 60 / 10, 'mL/h');
-  const kg = formatValue(s.avgPumpRateMgMin * 1000 / 70, 'mcg/kg/min');
+  const mlh = formatValue(s.avgRateMgMin * 60 / 10, 'mL/h');
+  const kg = formatValue(s.avgRateMgMin * 1000 / 70, 'mcg/kg/min');
   ok(text().includes('Propofol'), 'propofol card');
-  ok(text().includes(`Avg pump rate|${mlh} mL/h · ${kg} mcg/kg/min`),
+  ok(text().includes(`Avg infusion rate|${mlh} mL/h · ${kg} mcg/kg/min`),
      `avg rate in the working unit (mL/h) and per-kg: ${mlh} mL/h · ${kg} mcg/kg/min`);
-  ok(text().includes('Pump time|1 h 00 min · ET 0:00 → ET 1:00'), 'pump time 1 h, ET 0:00 → ET 1:00');
+  ok(text().includes('Infusion time|1 h 00 min · ET 0:00 → ET 1:00'), 'pump time 1 h, ET 0:00 → ET 1:00');
   ok(text().includes('Pump bolus|1 · 100.0 mg'), 'pump bolus line');
   ok(text().includes('IV push|1 · 20.0 mg'), 'IV push line');
   ok(/Fentanyl\|100 mcg\| · 2\.00 mL/.test(text()), 'fentanyl card: 100 mcg · 2.00 mL');
   const fent = text().split('Fentanyl')[1];
-  ok(!fent.includes('Avg pump rate'), 'a push-only drug shows no average rate');
+  ok(!fent.includes('Avg infusion rate'), 'a push-only drug shows no average rate');
   ok(text().indexOf('Propofol') < text().indexOf('Fentanyl'), 'cards follow DRUG_IDS order');
 
   now = 55;
@@ -276,7 +299,7 @@ console.log('\n  Totals view');
   now = 90;
   caseTotals.render();
   const s20 = stats(m, P, 90);
-  ok(text().includes(`${formatValue(s20.avgPumpRateMgMin * 60 / 20, 'mL/h')} mL/h`),
+  ok(text().includes(`${formatValue(s20.avgRateMgMin * 60 / 20, 'mL/h')} mL/h`),
      'mL/h follows the case concentration (2%)');
   resetPumpSettings();
 
@@ -315,9 +338,9 @@ console.log('\n  view details');
   const t = document.getElementById('tot-list').innerHTML
     .replace(/<span class="tot-nb">([^<]*)<\/span>/g, '$1').replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
   const prop = t.split('Fentanyl')[0];
-  ok(!prop.includes('Avg pump rate'), 'pump boluses alone give no average rate');
+  ok(!prop.includes('Avg infusion rate'), 'pump boluses alone give no average rate');
   ok(prop.includes('Pump bolus|1 · 100.0 mg'), '…but the bolus is listed');
-  ok(t.includes('Avg pump rate|0.02 mcg/kg/min'), 'a fentanyl average reads 0.02 mcg/kg/min, not 0');
+  ok(t.includes('Avg infusion rate|0.02 mcg/kg/min'), 'a fentanyl average reads 0.02 mcg/kg/min, not 0');
   setPumpSettings(P, { concentration: 20 });
   caseTotals.render();
   ok(document.getElementById('tot-list').innerHTML.includes('· 5.00 mL'), 'total mL follows the case concentration (100 mg at 2% = 5 mL)');

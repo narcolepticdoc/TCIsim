@@ -6,12 +6,13 @@
  *   - Total: everything delivered so far, in the drug's mass unit and mL — the
  *     same number as the Log's "Total delivered" strip (both come from the
  *     getCumulativeDose walk; see sim/case-stats.js).
- *   - Avg pump rate: everything the pump delivered — infusion and pump boluses —
- *     over the pump window, first start to last stop (or now). Pauses inside
- *     the window are not subtracted. IV pushes never count. Shown in the drug's
+ *   - Avg infusion rate: the drug's whole-case total, IV pushes included, over
+ *     the infusion time — first pump start to last pump stop (or now). Pauses
+ *     inside it are not subtracted. An overall requirement per unit time, not
+ *     the rate while the pump ran (the user's definition). Shown in the drug's
  *     working rate unit plus one companion unit, and only once the drug has
  *     infused at all.
- *   - Pump time, and the split: infusion, pump boluses, IV pushes.
+ *   - Infusion time, and the split: infusion, pump boluses, IV pushes.
  *
  * Amounts grow while a pump runs, so the view re-renders about once a second
  * while it is the active tab (onFrame), and at once after any mutation
@@ -119,9 +120,9 @@ function buildCard(r, weightKg) {
 
   // Only a drug that has infused has an average rate. Pump boluses alone
   // would average out at the pump's bolus rate, which says nothing.
-  if (r.infusionMg > 0 && r.avgPumpRateMgMin != null) {
-    lines.push(line('Avg pump rate', fmtAvgRate(r.avgPumpRateMgMin, r.drugId, weightKg)));
-    lines.push(line('Pump time', fmtPumpTime(r)));
+  if (r.infusionMg > 0 && r.avgRateMgMin != null) {
+    lines.push(line('Avg infusion rate', fmtAvgRate(r.avgRateMgMin, r.drugId, weightKg)));
+    lines.push(line('Infusion time', fmtPumpTime(r)));
   }
   if (r.infusionMg > 0) lines.push(line('Infusion', fmtTotalMass(r.infusionMg, r.drugId)));
   if (r.pumpBolusCount > 0) {

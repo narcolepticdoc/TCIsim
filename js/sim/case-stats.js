@@ -15,9 +15,11 @@
  *     TCI plan's own zero steps, which the Log shows as "Paused": the plan is
  *     still running through them, and a Stop pressed during one ends the
  *     window at the Stop, not at the start of the hold.
- *   - Average pump rate: everything the pump delivered — infusion plus pump
- *     boluses, so a TCI case's induction and step-up boluses count — divided by
- *     that window. IV pushes are given by hand and never count.
+ *   - Average infusion rate: the drug's whole-case total — every route,
+ *     including IV pushes before the pump started or after it stopped —
+ *     divided by that window. Not the rate while the pump was running: an
+ *     overall measure of how much drug the patient needed per unit time, as
+ *     the user defined it.
  *
  * A bolus is a pump bolus unless `deliveryMode === 'push'`, the same test
  * getCumulativeDose uses to pick its delivery time.
@@ -33,7 +35,7 @@
  *   pushMg: number, pushCount: number,
  *   pumpMg: number,
  *   pumpStart: number|null, pumpEnd: number|null, pumpRunning: boolean,
- *   pumpWindowMin: number, avgPumpRateMgMin: number|null,
+ *   pumpWindowMin: number, avgRateMgMin: number|null,
  * }}
  */
 export function computeDrugStats(events, now, getDeliveryMinutes) {
@@ -135,6 +137,8 @@ export function computeDrugStats(events, now, getDeliveryMinutes) {
     pumpMg,
     pumpStart, pumpEnd, pumpRunning,
     pumpWindowMin,
-    avgPumpRateMgMin: pumpWindowMin > 0 ? pumpMg / pumpWindowMin : null,
+    // Whole-case total over the pump window — pushes included, pauses not
+    // subtracted (see the header).
+    avgRateMgMin: pumpWindowMin > 0 ? (pumpMg + pushMg) / pumpWindowMin : null,
   };
 }
