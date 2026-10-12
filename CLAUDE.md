@@ -41,6 +41,7 @@ The engine (`js/pk/engine.js`) stores compartment amounts as a `Float64Array[5]`
 - **`nextUp.render(t)` must never default `t` to 0.** A rebuild against a zero clock makes every event look pending, poisons `_seenFuture`, and brings already-performed actions back as `missed`. It defaults to the live clock via `_now()`.
 - **Next Up's rebuild throttle is not the thing that picks up an edit.** `next-up.js` reads its forecasts out of the drug-panel approach caches, and `chart-bridge.refresh()` invalidates those *then* calls `nextUp.render()` in the same pass — so that render always collects pre-mutation milestones. `render()` therefore sets `_dirty`, which `onFrame` honours ahead of `REBUILD_INTERVAL_MIN`; the throttle counts sim minutes and never elapses on a paused clock. Likewise `_renderList`'s signature must describe the row's *content* (`_verbFor`/`_valueFor`), not just `key:elapsed` — a redose key is deliberately stable across threshold edits and an event key is its id, so an identity-only signature freezes the visible text.
 - **Only genuinely-pending items can be reported as `missed`.** `collectUpcoming` gates elapsed rows on the caller's `seenFuture` set — an event the user creates at the clock (manual bolus, Stop Pump) was never outstanding. This is not a `source` filter: a manually-added *future* event can genuinely be missed.
+- **The Totals tab's numbers are defined, not tuned.** `case-stats.js` follows `getCumulativeDose`'s walk step for step, so a drug's total always equals the Log's "Total delivered" (the tests assert it). The average pump rate is (infusion + pump boluses) ÷ the pump window, first pump delivery → last stop (or now while running), with pauses **not** subtracted and IV pushes never counted. These definitions were chosen by the user; don't switch to infusion-only or subtract pauses.
 - **The chart stack is vendored, never CDN-loaded.** Chart.js and its annotation/zoom/hammer plugins live in `js/vendor/` and are listed in `sw.js`'s *mandatory* same-origin precache. This is not a preference: a missing annotation plugin does not throw — Chart.js draws the curves and silently discards every annotation, so the threshold lines and nomogram bands vanish with an empty console. `createChart` asserts both plugins registered (`assertChartPlugins`). Never move these to a CDN, and never move them into the tolerant precache group.
 - **`pharmacology.js` is GPL-3.0.** Never import, bundle, or copy code from `/mnt/project/pharmacology.js`. Reference only.
 
@@ -55,13 +56,15 @@ js/sim/       events/  event list: replay, query, CRUD, actions (findActiveBolus
               tci/     planners (stepped, cet, cet-conservative, emulation) +
                        shared.js (DEFAULT_SCHEME_CONFIG, makeQuantizers)
               simulation.js (facade), simtiva-reference.js (clean-room eigenvalue math)
-              upcoming.js (pure: classifyFutureEvents + Next Up curation)
+              upcoming.js (pure: classifyFutureEvents + Next Up curation),
+              case-stats.js (pure: per-drug totals + average pump rate)
 js/util/      constants.js (DRUG_DEFS, DRUG_IDS, DRUG_TASK_UNITS, pump settings,
               PUMP_MANDATORY), units.js (conversion + quantize), math.js,
               event-label.js (formatEventAction — one formatter, 3 variants)
 js/ui/        chart/ (index, annotations, gestures, plugins/), drug-panel/,
               settings, keypad, event-editor, patient-modal, setup, history,
-              next-up (Next Up HUD), mode, timer, controls, persist, alert-sound
+              next-up (Next Up HUD), case-totals (Totals tab), mode, timer,
+              controls, persist, alert-sound
 js/sync/      cloud sync: patient pull, case/template push-pull, dose templates
 js/app.js     entry point + wiring; js/app/ has settings-ui, tci-modal, session,
               chart-bridge (per-frame updates), portrait-layout

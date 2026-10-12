@@ -43,12 +43,13 @@ const CHART_DRUG_CONFIG = {
  *   history: object,
  *   settings: object,
  *   nextUp: object,
+ *   caseTotals: object,
  *   save: Function,
  * }} deps
  */
 export function createChartBridge({
   getChart, getModel, timer, getSelectedDrug,
-  mode, drugPanel, history, settings, nextUp, save,
+  mode, drugPanel, history, settings, nextUp, caseTotals, save,
 }) {
   // Throttle state — replaces properties previously glued onto the chart object
   let lastCursorUpdate = 0;
@@ -264,10 +265,12 @@ export function createChartBridge({
     const exitCeVal = mode.getExitCe(selectedDrug);
     chart.setExitLine(exitCeVal > 0 ? exitCeVal * yScale : null);
 
-    // Update both Events-panel views. Next Up is cross-drug, so it repaints on
-    // any drug's mutation, not just the selected one.
+    // Update the Events-panel views. Next Up and Totals are cross-drug, so they
+    // repaint on any drug's mutation, not just the selected one (each is a no-op
+    // while its tab is hidden).
     history.render(selectedDrug);
     if (nextUp) nextUp.render(timer.getElapsedMinutes());
+    if (caseTotals) caseTotals.render(timer.getElapsedMinutes());
 
     // Control-bar state that depends on the event list — currently the Redose
     // button's dose and visibility. Every path that adds, edits, deletes,
@@ -508,6 +511,8 @@ export function createChartBridge({
     // Next Up panel: rebuilds its list on an internal 500 ms throttle and
     // re-renders the countdown every frame from its cache.
     if (nextUp && t > 0) nextUp.onFrame(t);
+    // Totals grow while a pump runs; it repaints ~1/s while its tab is shown.
+    if (caseTotals && t > 0) caseTotals.onFrame(t);
   }
 
   // The settings UI dispatches `tci:theme-change` after swapping

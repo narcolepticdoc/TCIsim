@@ -4,6 +4,54 @@
 
 ## Session History
 
+### Totals tab — per-drug totals and average pump rate (v0.6.5) — Interim
+
+Asked for as "an easy way to report some stats": the totals were spread over
+three places (the Log's "Total delivered" strip, one drug at a time), and there
+was no average infusion rate at all.
+
+**Definitions, as decided with the user:**
+- **Pump window**: from the first moment the pump delivered anything (a pump
+  bolus or a non-zero rate) to the last time it stopped, or *now* while it
+  runs. Pauses inside the window are **not** subtracted.
+- **Average pump rate**: (infusion + pump boluses) ÷ window. The other option
+  was infusion only. The user chose all pump delivery, so a TCI case's
+  induction and step-up boluses count. IV pushes never count.
+- The average shows only once a drug has infused. A drug given only pump
+  boluses would otherwise "average" at the pump's bolus rate.
+
+**Where:** a third tab in the History panel, `Log | Next Up | Totals`. Next Up
+is already cross-drug and lives there. `setEventsView` in `app.js` now loops
+over `EVENTS_VIEWS`, so each view's tab and pane follow the `hv-tab-<v>` /
+`hv-view-<v>` naming.
+
+**Code:**
+- `js/sim/case-stats.js` `computeDrugStats(events, now, getDeliveryMinutes)` is
+  pure. It follows `getCumulativeDose`'s walk step for step: a bolus suspends
+  the infusion for its delivery time, and a bolus in progress counts its
+  delivered fraction and ends the walk. It adds the push/pump split and the
+  window. The total must equal `getCumulativeDose`, which the Log strip and the
+  reconcile baseline use, and the tests assert that for every scenario.
+- **A pump that is running closes the window at `now`.** That includes an IV
+  push in progress over a running infusion. The accounting suspends the
+  infusion during the push, but the pump has not stopped, and without this the
+  window briefly ended at the push's start.
+- `js/ui/case-totals.js` renders it. While its tab is active it repaints
+  immediately on `render()` (from `chart-bridge.refresh()`) and about once a
+  second from `onFrame`, and only touches the DOM when the markup changed.
+  Rates are shown in the drug's working unit plus one companion; mL use the
+  live (case) concentration, per the units.js invariant. Value parts are
+  `white-space:nowrap`, so the narrow column beside the chart wraps between
+  "55.1 mL/h" and "131.1 mcg/kg/min", not inside either.
+
+**Checked in a real browser** (Playwright/Chromium, scratch only): phone, iPad
+portrait and tablet landscape, dark and light themes, and the large text sizes
+(those only apply from 601 px wide, as for the rest of the app). There were no
+console errors. Tests: `tests/test-case-stats.mjs`. It covers the manual case
+(pump bolus, paused infusion, IV push over an infusion), running versus
+stopped, mid-push, mid-bolus, future events, push-only drugs, a TCI plan, and
+the rendered view (units, ET/RT, 2% concentration, hidden-tab no-op).
+
 ### Concentration fallback, pull carry-over, limiter lockout, 24 h menus (v0.6.4.17) — Interim
 
 Found while scoping the case log (see `CASE-LOG-PLAN.md`). None of these were

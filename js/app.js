@@ -18,6 +18,7 @@ import * as mode from './ui/mode.js';
 import * as drugPanel from './ui/drug-panel.js';
 import * as history from './ui/history.js';
 import * as nextUp from './ui/next-up.js';
+import * as caseTotals from './ui/case-totals.js';
 import * as eventEditor from './ui/event-editor.js';
 import * as reconcileModal from './ui/reconcile-modal.js';
 import { createChart } from './ui/chart.js';
@@ -533,7 +534,7 @@ function boot() {
     getModel: () => model,
     timer,
     getSelectedDrug: () => selectedDrug,
-    mode, drugPanel, history, settings, nextUp,
+    mode, drugPanel, history, settings, nextUp, caseTotals,
     save: () => session.save(),
   });
 
@@ -1068,11 +1069,21 @@ function boot() {
     getElapsedMinutes: () => timer.getElapsedMinutes(),
   });
 
-  // Events-panel sub-toggle: Log (retrospective) / Next Up (prospective).
-  const hvTabLog  = $('hv-tab-log');
-  const hvTabNext = $('hv-tab-next');
-  if (hvTabLog)  hvTabLog.addEventListener('click',  () => setEventsView('log'));
-  if (hvTabNext) hvTabNext.addEventListener('click', () => setEventsView('next'));
+  caseTotals.init({
+    model,
+    getPatient: () => model ? model.getPatient() : { weight: 70 },
+    getDrugIds: () => DRUG_IDS,
+    getElapsedMinutes: () => timer.getElapsedMinutes(),
+    // Pump-window times follow the Log's ET/RT setting.
+    getTimeMode: () => ((settings.getSettings().timeAxisMode ?? 'min') === 'rt' ? 'rt' : 'et'),
+    getWallClockStart: () => timer.getWallClockStart(),
+  });
+
+  // Events-panel sub-toggle: Log (retrospective) / Next Up (prospective) /
+  // Totals (what each drug has given).
+  for (const view of EVENTS_VIEWS) {
+    $(`hv-tab-${view}`)?.addEventListener('click', () => setEventsView(view));
+  }
 
   // Seed the history log's time format from the persisted x-axis mode so it
   // renders correctly before the first rAF frame (no ET→RT flash on load).
@@ -1303,20 +1314,25 @@ function closeModal(id) {
   $(id).classList.remove('open');
 }
 
+/** The Events panel's sub-views; each has #hv-tab-<v> and #hv-view-<v>. */
+const EVENTS_VIEWS = ['log', 'next', 'totals'];
+
 /**
- * Switch the Events panel between the chronological Log and the Next Up
- * heads-up display. Both live inside #panel-history, so this is independent of
- * setView's chart/history switching and of the tablet split layout.
+ * Switch the Events panel between the chronological Log, the Next Up
+ * heads-up display and the Totals view. All live inside #panel-history, so
+ * this is independent of setView's chart/history switching and of the tablet
+ * split layout.
  */
 function setEventsView(v) {
-  const isNext = v === 'next';
-  $('hv-tab-log')?.classList.toggle('active', !isNext);
-  $('hv-tab-next')?.classList.toggle('active', isNext);
-  $('hv-view-log')?.classList.toggle('active', !isNext);
-  $('hv-view-next')?.classList.toggle('active', isNext);
-  nextUp.setActive(isNext);
-  if (isNext) nextUp.render(timer.getElapsedMinutes());
-  else        history.scrollToNow();
+  const view = EVENTS_VIEWS.includes(v) ? v : 'log';
+  for (const k of EVENTS_VIEWS) {
+    $(`hv-tab-${k}`)?.classList.toggle('active', k === view);
+    $(`hv-view-${k}`)?.classList.toggle('active', k === view);
+  }
+  nextUp.setActive(view === 'next');
+  caseTotals.setActive(view === 'totals');   // renders on activation
+  if (view === 'next') nextUp.render(timer.getElapsedMinutes());
+  else if (view === 'log') history.scrollToNow();
 }
 
 function setView(v) {

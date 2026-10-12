@@ -11,6 +11,18 @@
 
 ---
 
+## [0.6.5] — 2026-10-12
+
+- **New: a Totals tab in the History panel (Log | Next Up | Totals).** One place to read what every drug has given, instead of the Log's per-drug "Total delivered" strip. There is one card per drug that has delivered anything:
+  - **Total**: mass and mL. This is the same number as the Log's strip, from the same calculation.
+  - **Avg pump rate**: everything the pump delivered, infusion *and* pump boluses (so a TCI case's induction and step-up boluses count), divided by the pump window. IV pushes never count. It is shown in the drug's working rate unit plus one companion (per-kg, or mL/h), and only once the drug has infused.
+  - **Pump time**: the window, from the first moment the pump delivered anything to the last time it stopped, or "now" while it runs. **Pauses inside the window are not subtracted.** Start and stop read in ET, or in RT when the Log is set to RT.
+  - **The split**: infusion, pump boluses and IV pushes, each with its count.
+
+  The tab updates about once a second while it is open, so a running infusion's totals climb live. It updates at once after any edit, and does no work while hidden. mL figures use the case's own concentration. Pinned by `tests/test-case-stats.mjs`, which builds cases through the real model and checks every total against the Log's.
+
+---
+
 ## [0.6.4.17] — 2026-10-12
 
 - **Fixed: mL and mL/h were wrong at any non-default concentration.** `units.js` converts mL with the concentration a caller passes, and when none was passed it fell back to the built-in default (propofol 10 mg/mL). Ten call sites passed none: the keypad, event editor, history and Next Up labels, warning popups, drug-card rate, chart rate labels, planning titration and the Redose button label. At 2% propofol:
