@@ -41,6 +41,7 @@ The engine (`js/pk/engine.js`) stores compartment amounts as a `Float64Array[5]`
 - **`nextUp.render(t)` must never default `t` to 0.** A rebuild against a zero clock makes every event look pending, poisons `_seenFuture`, and brings already-performed actions back as `missed`. It defaults to the live clock via `_now()`.
 - **Next Up's rebuild throttle is not the thing that picks up an edit.** `next-up.js` reads its forecasts out of the drug-panel approach caches, and `chart-bridge.refresh()` invalidates those *then* calls `nextUp.render()` in the same pass — so that render always collects pre-mutation milestones. `render()` therefore sets `_dirty`, which `onFrame` honours ahead of `REBUILD_INTERVAL_MIN`; the throttle counts sim minutes and never elapses on a paused clock. Likewise `_renderList`'s signature must describe the row's *content* (`_verbFor`/`_valueFor`), not just `key:elapsed` — a redose key is deliberately stable across threshold edits and an event key is its id, so an identity-only signature freezes the visible text.
 - **Only genuinely-pending items can be reported as `missed`.** `collectUpcoming` gates elapsed rows on the caller's `seenFuture` set — an event the user creates at the clock (manual bolus, Stop Pump) was never outstanding. This is not a `source` filter: a manually-added *future* event can genuinely be missed.
+- **The Totals tab's numbers are defined, not tuned.** `case-stats.js` follows `getCumulativeDose`'s walk step for step, so a drug's total always equals the Log's "Total delivered" (the tests assert it). Each drug's average rate is **its total ÷ the case time**, and the case time is **global**: one span for every drug, from the first time any drug was given, by any route, to the last time any drug was given (the end of the last delivery), or now while anything is still being given (`computeCaseStats`). Gaps (pauses, TCI holds, time between doses) are **not** subtracted. In the user's words: "the total amount of drug given over the case / the case time (simplified to first time drug was given to last time drug was given)" and "case time should be global for all drugs". It is deliberately not the rate while a pump ran. Averages show once the case has an infusion or a dose that starts after another has finished. Doses given together, such as an induction template, are a case time of 0. Negative amounts (dose reconciliations) stay in the total but are never a dose or a time drug was given (`correctionMg`). These definitions were chosen by the user; don't switch to per-drug or pump-only windows or infusion-only amounts, and don't subtract gaps.
 - **The chart stack is vendored, never CDN-loaded.** Chart.js and its annotation/zoom/hammer plugins live in `js/vendor/` and are listed in `sw.js`'s *mandatory* same-origin precache. This is not a preference: a missing annotation plugin does not throw — Chart.js draws the curves and silently discards every annotation, so the threshold lines and nomogram bands vanish with an empty console. `createChart` asserts both plugins registered (`assertChartPlugins`). Never move these to a CDN, and never move them into the tolerant precache group.
 - **`pharmacology.js` is GPL-3.0.** Never import, bundle, or copy code from `/mnt/project/pharmacology.js`. Reference only.
 
@@ -55,13 +56,15 @@ js/sim/       events/  event list: replay, query, CRUD, actions (findActiveBolus
               tci/     planners (stepped, cet, cet-conservative, emulation) +
                        shared.js (DEFAULT_SCHEME_CONFIG, makeQuantizers)
               simulation.js (facade), simtiva-reference.js (clean-room eigenvalue math)
-              upcoming.js (pure: classifyFutureEvents + Next Up curation)
+              upcoming.js (pure: classifyFutureEvents + Next Up curation),
+              case-stats.js (pure: per-drug totals; global case time + averages)
 js/util/      constants.js (DRUG_DEFS, DRUG_IDS, DRUG_TASK_UNITS, pump settings,
               PUMP_MANDATORY), units.js (conversion + quantize), math.js,
               event-label.js (formatEventAction — one formatter, 3 variants)
 js/ui/        chart/ (index, annotations, gestures, plugins/), drug-panel/,
               settings, keypad, event-editor, patient-modal, setup, history,
-              next-up (Next Up HUD), mode, timer, controls, persist, alert-sound
+              next-up (Next Up HUD), case-totals (Totals tab), mode, timer,
+              controls, persist, alert-sound
 js/sync/      cloud sync: patient pull, case/template push-pull, dose templates
 js/app.js     entry point + wiring; js/app/ has settings-ui, tci-modal, session,
               chart-bridge (per-frame updates), portrait-layout
@@ -107,6 +110,7 @@ Keys persisted outside the blob — note the working-vs-default unit split:
 - **Notations are not PK events**: editorial notes live in the `annotations[]` array (`addAnnotation`/`deleteAnnotation` in `app.js`), merged time-sorted into history with events ranked before same-timestamp notes — except notes with `pre: true` ("Case Started"-style announcements) which rank first. Drug-tagged notes show only in that drug's history.
 - **Chart gesture handling**: `gestures.js` binds inspect-handle drag listeners on `canvas.parentElement` in **capture phase** so they beat Chart.js's hammer listeners, and disables `plugins.zoom.pan` during an active handle drag (iPad pan hijacking). Keep `touch-action: none` on the canvas.
 - **Portrait layout measures with `getBoundingClientRect()`**, summing children — `scrollHeight` lies when content fits inside a larger container (`js/app/portrait-layout.js`).
+- **Check a CSS class prefix is free before using it.** Most of `index.html`'s rules are unscoped, so a new `.foo-label` restyles every existing `.foo-label`. `.ct-*` is the top-bar case-time clock; the Totals tab uses `.tot-*` after an unscoped `.ct-value` shrank the ET clock.
 - **Dim/bright buttons** (`mode.js`): controls are muted by default; full color + glow only with `active-mode`. Clinical look — no halos or transforms.
 - New chart overlays get a setter on `js/ui/chart.js` plus a propagation step in `chart-bridge.js onFrame`; user-dimmable overlays plumb through `_overlayAlpha`/`_nomogramOpacity` in chart scope so they survive annotation rebuilds.
 

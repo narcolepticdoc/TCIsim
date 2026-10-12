@@ -4,6 +4,97 @@
 
 ## Session History
 
+### Totals tab — per-drug totals and average rate (v0.6.5) — Interim
+
+Asked for as "an easy way to report some stats": the totals were spread over
+three places (the Log's "Total delivered" strip, one drug at a time), and there
+was no average infusion rate at all.
+
+**Definitions, as decided with the user.** The average went through five
+readings, and the last one is the rule:
+1. Infusion only (offered first).
+2. All pump delivery over first pump start → last stop (the user's first pick).
+3. Whole-case total over that pump window, after this clarification: "the
+   rate over the entire case, from first pump start to last pump stop. While
+   this isn't the actual average rate while the pump is infusing, it is a
+   better overall measure of how much total drug the patient is requiring per
+   unit time."
+4. "The calculation should be the total amount of drug given over the case /
+   the case time (in this case simplified to first time drug was given to
+   last time drug was given)."
+5. **Final:** "Case time should be global for all drugs."
+
+So:
+- **Case time** is one span for the whole case. It runs from the first
+  delivery of any drug, of any kind (push, pump bolus or non-zero rate), to
+  the end of the last delivery of any drug, or *now* while anything is still
+  being given. Gaps in between are not subtracted. It shows once, above the
+  cards.
+- **Each drug's average** = that drug's total ÷ the case time.
+  `computeCaseStats` takes the earliest first delivery and the latest last
+  delivery across `DRUG_IDS`; `computeDrugStats` no longer has a per-drug
+  average, so nobody can reach for the wrong denominator.
+- The averages show once the case has a span: an infusion of any drug, or a
+  dose that starts after another has *finished*. The first version counted any
+  two doses, and the verification pass caught where that goes wrong. An
+  induction template pushes several drugs at ET 0, which spans only their
+  delivery times. That read "Case time 0 min" with propofol "averaging" 750
+  mL/h, the pump's bolus rate. By the user's definition, doses at one instant
+  are a case time of 0. A drug given once still averages over the case.
+- **Dose reconciliations are not drug given.** `reconcile-modal.js` records a
+  downward single-bolus correction as a negative push, by default at ET 0, and
+  a downward spread as negative rate segments. Counted as deliveries, they
+  moved the case start to ET 0, made a lone dose into a "span", and showed as
+  "IV push −50 mg". Spread corrections also left the split not adding up to the
+  total. Negative amounts now go to `correctionMg`: they stay in the total (so
+  it still equals `getCumulativeDose`) and appear as a **Correction** line, but
+  they never move the case time or count as a dose. A drug corrected back to
+  nothing has no card and no say in the case time.
+
+**What readings 4–5 removed.** Reading 2's review had found that a TCI plan's own
+zero step read as the pump stopping, so a `stopped | delivering | hold` state
+machine was added (TCI hold = pause, Stop during a hold ends the window at the
+Stop). Since reading 4 the window ends at the last *delivery*. A hold is a gap
+like any other, and a Stop no longer matters, so the state machine is gone. The
+walk only records first and last delivery, and whether anything is being given
+at `now`.
+
+**Labels.** One "Case time" line (the user's own term) above the cards, and
+"Avg rate" on each card. A push-only drug never shows mL/h, not even as its
+lead unit. A working unit of mL/h can survive from a setup default chosen
+before the pump was switched off. Its card leads with per-kg instead.
+The rate companion is mL/h only for a drug on a pump. A push-only drug gets an
+absolute mass rate where it has one (fentanyl mcg/h); mL/h means nothing
+without a pump.
+
+**Where:** a third tab in the History panel, `Log | Next Up | Totals`. Next Up
+is already cross-drug and lives there. `setEventsView` in `app.js` now loops
+over `EVENTS_VIEWS`, so each view's tab and pane follow the `hv-tab-<v>` /
+`hv-view-<v>` naming. `initSimScreen` repaints it, so New Case never shows the
+previous patient's cards.
+
+**Code:**
+- `js/sim/case-stats.js` `computeDrugStats(events, now, getDeliveryMinutes)` is
+  pure. It follows `getCumulativeDose`'s walk step for step, so its total must
+  equal what the Log strip and the reconcile baseline show. The tests assert
+  that for every computation scenario.
+- `js/ui/case-totals.js` renders it. While its tab is active it repaints
+  immediately on `render()` (from `chart-bridge.refresh()` and
+  `initSimScreen`) and about once a second from `onFrame`, and only touches the
+  DOM when the markup changed.
+- Averages below 1 keep two significant figures. `formatValue` caps mcg/kg/min
+  at one decimal, which showed a fentanyl average as "0".
+- Classes use a `tot-` prefix. The first version used `ct-`, which already
+  belongs to the top-bar case-time clock (`.ct-label`/`.ct-value`), so an
+  unscoped `.ct-value{font-size:12px}` shrank the always-visible ET clock.
+- Card lines wrap, but no value is ever split from its unit, so the 1024 px
+  side column and the largest text sizes no longer clip.
+
+**Checked in a real browser** (Playwright/Chromium, scratch only): phone, iPad
+portrait, tablet landscape at 1024 and 1180 px, dark and light themes, and the
+larger text sizes. New Case was checked too: the tab reads "Nothing given yet."
+The top-bar clock's computed size matches main. There were no console errors.
+
 ### Concentration fallback, pull carry-over, limiter lockout, 24 h menus (v0.6.4.17) — Interim
 
 Found while scoping the case log (see `CASE-LOG-PLAN.md`). None of these were

@@ -11,6 +11,18 @@
 
 ---
 
+## [0.6.5] — 2026-10-12
+
+- **New: a Totals tab in the History panel (Log | Next Up | Totals).** One place to read what every drug has given, instead of the Log's per-drug "Total delivered" strip. A single **case time** line sits at the top, with one card per drug that has delivered anything below it:
+  - **Total**: mass and mL. This is the same number as the Log's strip, from the same calculation.
+  - **Case time** is one span for every drug: from the first time *any* drug was given, by any route, to the last time *any* drug was given, or "now" while something is still being given. Gaps in between are **not** subtracted: pauses, TCI holds, and the time between doses. Start and end read in ET, or in RT when the Log is set to RT.
+  - **Avg rate**, on each card: that drug's total amount given ÷ the case time. This is deliberately *not* the rate while its pump was running. It is an overall measure of how much of the drug the patient needed per unit time, and every drug is measured over the same span. It is shown in the drug's working rate unit plus one companion: per-kg, or mL/h for a drug on a pump, or mcg/h for push-only fentanyl. It appears once the case has a span to average over: an infusion of any drug, or a dose that starts after another has finished. Doses given together, such as an induction template at ET 0, are a case time of 0 and give no average. Averages below 1 keep two significant figures, so a fentanyl infusion reads 0.02 mcg/kg/min, not 0.
+  - **The split**: infusion, pump boluses and IV pushes, each with its count, plus a **Correction** line for a downward dose reconciliation, so the lines always add up to the total. A correction is part of the total but is never a dose and never a time drug was given. A drug corrected back to nothing has no card and does not stretch the case time.
+
+  The tab updates about once a second while it is open, so a running infusion's totals climb live. It updates at once after any edit and on New Case, and does nothing while another History tab is selected. mL figures use the case's own concentration. Pinned by `tests/test-case-stats.mjs`, which builds cases through the real model and checks every computed total against the Log's.
+
+---
+
 ## [0.6.4.17] — 2026-10-12
 
 - **Fixed: mL and mL/h were wrong at any non-default concentration.** `units.js` converts mL with the concentration a caller passes, and when none was passed it fell back to the built-in default (propofol 10 mg/mL). Ten call sites passed none: the keypad, event editor, history and Next Up labels, warning popups, drug-card rate, chart rate labels, planning titration and the Redose button label. At 2% propofol:
