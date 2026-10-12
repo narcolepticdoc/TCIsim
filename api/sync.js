@@ -150,6 +150,13 @@ function clientIp(req) {
  * Fixed-window per-IP limiter. Returns null when allowed, or the number of
  * seconds until the window resets when over the limit. Fails open on any
  * Redis error.
+ *
+ * INCR and EXPIRE are separate calls, so an EXPIRE that fails (or never runs)
+ * leaves the counter with no TTL. Every later request only INCRs it, so once
+ * it passed the limit that IP — possibly a whole hospital NAT — was locked out
+ * for good. The over-limit branch already reads the TTL, so it re-arms a
+ * missing one there: a stuck counter costs one window, not forever, and the
+ * normal path pays nothing extra.
  */
 async function checkRateLimit(req) {
   try {
@@ -159,7 +166,9 @@ async function checkRateLimit(req) {
     if (count === 1) await redis.expire(key, RATE_WINDOW_SEC);
     if (count > RATE_LIMIT) {
       const ttl = await redis.ttl(key);
-      return ttl > 0 ? ttl : RATE_WINDOW_SEC;
+      if (ttl > 0) return ttl;
+      if (ttl === -1) await redis.expire(key, RATE_WINDOW_SEC);   // -1: no TTL
+      return RATE_WINDOW_SEC;
     }
     return null;
   } catch (err) {

@@ -285,10 +285,13 @@ function close() {
  * @param {number|null} opts.value   - existing display value to prefill (null = empty)
  * @param {string|null} opts.unit    - existing entry's unit (falls back to drug/task default)
  * @param {Function} [opts.getWeightKg] - live weight for per-kg conversion previews (default 70)
+ * @param {Function} [opts.getConcentration] - mg/mL for mL conversions. The setup
+ *   screen passes its own <select>: the live pump setting still holds the
+ *   previous case's, which units.js would otherwise fall back to.
  * @param {Function} opts.onDone     - ({value, unit} | null) => void; null = entry cleared
  */
-export function showCustom({ drugId, task, title, value, unit, getWeightKg, onDone }) {
-  customSession = { onDone, getWeightKg: getWeightKg || (() => 70) };
+export function showCustom({ drugId, task, title, value, unit, getWeightKg, getConcentration, onDone }) {
+  customSession = { onDone, getWeightKg: getWeightKg || (() => 70), getConcentration };
   currentDrug = drugId;
   currentType = task;
   currentRoundOverride = null;
@@ -336,7 +339,12 @@ function handleKey(k) {
 // Weight context for unit conversions: the confirmed patient in normal
 // sessions, the caller-supplied getter in custom (setup-screen) sessions.
 function weightCtx() {
-  if (customSession) return { weightKg: customSession.getWeightKg() || 70 };
+  if (customSession) {
+    const ctx = { weightKg: customSession.getWeightKg() || 70 };
+    const conc = customSession.getConcentration?.();
+    if (conc > 0) ctx.concentration = conc;
+    return ctx;
+  }
   const patient = getPatient();
   return { weightKg: patient?.weight || 70 };
 }

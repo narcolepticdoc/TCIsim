@@ -243,6 +243,13 @@ function initTemplateControls() {
   refreshTemplateInputs();
 }
 
+/** The setup <select> holding each drug's concentration (mg/mL). */
+const SETUP_CONC_INPUT = {
+  propofol: 'input-concentration',
+  fentanyl: 'input-fentanyl-concentration',
+  ketamine: 'input-ketamine-concentration',
+};
+
 /**
  * Open the shared keypad in a one-shot custom session for a starting-dose
  * entry — same entry surface as everywhere else in the app (no iOS keyboard,
@@ -258,8 +265,11 @@ function openTemplateKeypad(drugId, task) {
     title: `${drugName} starting ${task === 'bolus' ? 'bolus' : 'infusion'}`,
     value: entry ? entry.value : null,
     unit: entry ? entry.unit : getSetupDefaultUnit(drugId, task),
-    // Per-kg previews use the live (unconfirmed) setup weight when present.
+    // Per-kg previews use the live (unconfirmed) setup weight when present,
+    // and mL conversions the concentration selected here — not the live pump
+    // setting, which still holds the previous case's until Confirm.
     getWeightKg: () => parseFloat($('input-weight')?.value) || 70,
+    getConcentration: () => parseFloat($(SETUP_CONC_INPUT[drugId])?.value) || undefined,
     onDone: (d) => saveTemplateEntry(drugId, task, d),
   });
 }

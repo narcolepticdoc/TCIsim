@@ -4,6 +4,68 @@
 
 ## Session History
 
+### Concentration fallback, pull carry-over, limiter lockout, 24 h menus (v0.6.4.17) — Interim
+
+Found while scoping the case log (see `CASE-LOG-PLAN.md`). None of these were
+reported. All four were silent.
+
+**mL at the wrong concentration.** `toCanonical`/`fromCanonical` take
+`ctx.concentration` and used `DRUG_DEFS[drugId].concentration` when it was
+missing. Only the planners (`cfg.bolusConcentration`), the dose template, the
+TCI modal and the drug card's bolus-phase readout ever passed one. The keypad
+(`weightCtx()`), event editor, `history.js` `fmtRate`/`fmtBolusDose`,
+`formatEventAction` (Next Up, warning popups, step bar), the drug
+card's normal rate readout, `chart/rate-format.js`, `planning.js` titration and
+the Redose button label in `app.js` (`getRedoseDose`; the dose it gives was
+always the right mg) all passed weight only. So every mL figure in a
+2% case was computed at 1%. A typed 50 mL/h became 8.33 mg/min, half what the
+pump gives. A correctly planned 16.67 mg/min step read "100 mL/h". Entry and
+readout were wrong by the same factor and round-tripped, which hid it. The
+bolus-phase readout used the live concentration, so during a bolus the drug
+card would briefly have shown the right figure next to a wrong one.
+
+The fix is in `units.js` itself: the fallback is `getPumpSettings(drugId)`,
+which is the case's own concentration. Setup installs it before `onConfirm`
+(`applyPumpSettings` in `confirmPatient`), and `restore()` installs it from
+`pumpConcentrations` before `initSimScreen`. Concentration has no mid-case
+control, so the live value is the case's for the case's whole life. Fixing each
+call site would have meant ten edits, and the eleventh caller would bring the bug
+back. The module is no longer state-free, and its header says so. A CLAUDE.md
+invariant records the rule. `initSimScreen`'s model labels made the same mistake
+in another way: they read the setup `<select>`, which holds this device's
+default and not the restored case's.
+
+The review of this change caught the one place where the live value is *not*
+the right one. The setup screen's starting-dose editor runs the keypad in a
+custom session before Confirm, when the live setting still holds the previous
+case's concentration and the setup `<select>` may differ (8.33 is never
+persisted, so after an 8.33 case the select comes back at 1%). A 10 mL entry
+toggled to mg was stored as 83.3 mg, or as 200 mg after a 2% case. The
+`DRUG_DEFS` fallback happened to get those two right and others wrong.
+`keypad.showCustom` now takes `getConcentration`, and `setup.js` passes its
+own `<select>` (`SETUP_CONC_INPUT`). Pinned by
+`tests/test-template-keypad-concentration.mjs`, which drives the real keypad.
+
+**Pull carry-over.** The cloud-pull handler wrote the slot and called
+`restore()`, which deliberately keeps last-dose memory because it resumes the
+same case. A pulled case is a different one as far as this device is concerned,
+so it now calls `resetCaseCarryOver()` first. It sits in `boot()`, which no test
+imports, so it is not covered.
+
+**Limiter lockout.** `INCR`, then `EXPIRE` only when `count === 1`. If the EXPIRE
+throws, `catch` fails open and the key is left with no TTL. Every later request
+only INCRs it, so 61 requests later that IP gets 429s for good. The over-limit
+branch already calls `TTL`, so it re-arms on `-1`. That is zero extra commands on
+the normal path, and a stuck counter costs one window. (`-2`, no key, cannot
+happen right after an INCR.)
+
+**24 h menus.** Both hour `<select>`s were built 0–23. A value of 24 h or more
+matched no option, and a browser `<select>` then falls back to its first option,
+so the timer's Elapsed tab rewound a restored 30 h case to 0 h, and the event
+picker opened (and saved) an ET 25:00 event at 00:00. Both now build
+`max(24, h + 1)` options. This also removes the 1439.5-min → 24:00 → 00:00 edge
+the #302 review noted.
+
 ### Clock times in a case that crosses midnight (v0.6.4.16) — Interim
 
 Prompted by a question rather than a report: what happens to a case that starts

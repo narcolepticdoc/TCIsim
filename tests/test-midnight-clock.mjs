@@ -203,6 +203,19 @@ picker.setUnit('real');
 els.get('ee-hours').value = 13; els.get('ee-minutes').value = 0;
 eq(picker.getCaseMinutes(), 840, '10 h into a 23:00 case, RT 13:00 → ET 14:00 (uses getNowMinutes)');
 
+console.log('\n  time-picker.js — cases past 24 h');
+ws = at(10, 3, 8, 0);
+nowMin = 3000;                                  // a restored case, 50 h in
+picker.setCaseMinutes(1500);
+eq(sel(), '25:00', 'an event at ET 25:00 opens at 25:00 (was 00:00 — no option for hour 25)');
+eq(picker.getCaseMinutes(), 1500, '…and saves back at ET 25:00, not ET 0:00');
+picker.setCaseMinutes(nowMin);
+eq(sel(), '50:00', 'Add Event 50 h in opens at 50:00');
+picker.setCaseMinutes(1439.6);
+eq(sel(), '24:00', '1439.6 min rounds to 24:00 (was 00:00)');
+picker.setCaseMinutes(90);
+eq(els.get('ee-hours').options.length, 24, 'a short case still offers hours 0–23');
+
 console.log('\n  time-picker.js — same-day case unchanged');
 ws = at(10, 6, 8, 0);
 nowMin = 120;
@@ -240,6 +253,19 @@ eq(hm(timer.getWallClockStart()), '10/5 23:15', '…and Apply leaves the start a
 fakeNowMs = at(10, 6, 14, 0).getTime();
 eq(setStart('09:30'), 'Elapsed: 4:30:00', 'same-day start: no "(yesterday)"');
 eq(timer.getElapsedMinutes(), 270, 'same-day start: 4:30 elapsed, as before');
+els.get('elapsed-timer').fire('click');
+eq(els.get('tp-elapsed-h').options.length, 24, 'at 4:30 the Elapsed tab still offers hours 0–23');
+els.get('tp-btn-cancel').fire('click');
+
+console.log('\n  timer.js — Elapsed tab past 24 h');
+fakeNowMs = at(10, 6, 14, 0).getTime();
+timer.setWallClockStart(new Date(fakeNowMs - (30 * 60 + 15) * 60000));   // a restored case, 30:15 in
+els.get('elapsed-timer').fire('click');
+els.get('tp-mode-elapsed').fire('click');
+eq(`${els.get('tp-elapsed-h').value}:${els.get('tp-elapsed-m').value}`, '30:15',
+   'the Elapsed tab opens at 30:15 (was 0:15 — no option for hour 30)');
+els.get('tp-btn-apply').fire('click');
+eq(timer.getElapsedMinutes(), 30 * 60 + 15, 'Apply without changes keeps 30:15 (was rewound to 0:15)');
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);
