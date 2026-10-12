@@ -210,7 +210,7 @@ const VALID_TEMPLATE = { v: 1, updatedAt: 1, drugs: { propofol: { bolus: { value
   // ---- rate limiter ----
   // Note: every test above already exercises the FAIL-OPEN path — with KV
   // unconfigured, checkRateLimit's getRedis() throws and the request proceeds.
-  const { RATE_LIMIT, clientIp, setRedisForTest } = handler.__test;
+  const { RATE_LIMIT, RATE_WINDOW_SEC, clientIp, setRedisForTest } = handler.__test;
   {
     ok(clientIp(makeReq({ headers: { 'x-forwarded-for': '1.2.3.4, 10.0.0.1' } })) === '1.2.3.4',
       'clientIp takes first x-forwarded-for entry');
@@ -240,6 +240,33 @@ const VALID_TEMPLATE = { v: 1, updatedAt: 1, drugs: { propofol: { bolus: { value
 
     const otherIp = await call({ method: 'GET', query: { code: 'ABC234' }, headers: { 'x-forwarded-for': '8.8.8.8' } });
     ok(otherIp.statusCode !== 429, 'a different IP has its own counter');
+
+    // EXPIRE fails on the first request of a window → the counter has no TTL.
+    // The over-limit branch must re-arm it, or the IP is locked out for good.
+    {
+      const c2 = new Map(), ttls = new Map();
+      let expireFails = true;
+      setRedisForTest({
+        incr: async (k) => { const v = (c2.get(k) || 0) + 1; c2.set(k, v); return v; },
+        expire: async (k, sec) => {
+          if (expireFails) { expireFails = false; throw new Error('expire timed out'); }
+          ttls.set(k, sec); return 1;
+        },
+        ttl: async (k) => (ttls.has(k) ? ttls.get(k) : -1),
+        get: async () => null,
+        set: async () => 'OK',
+      });
+      const h = { 'x-forwarded-for': '7.7.7.7' };
+      const first = await call({ method: 'GET', query: { code: 'ABC234' }, headers: h });
+      ok(first.statusCode !== 429, 'a failed EXPIRE on the first request still fails open');
+      ok(!ttls.has('tcisync:rl:7.7.7.7'), 'precondition: the counter was left with no TTL');
+      for (let i = 1; i < RATE_LIMIT; i++) await call({ method: 'GET', query: { code: 'ABC234' }, headers: h });
+      const stuck = await call({ method: 'GET', query: { code: 'ABC234' }, headers: h });
+      ok(stuck.statusCode === 429, `request #${RATE_LIMIT + 1} on a TTL-less counter is limited`);
+      ok(ttls.get('tcisync:rl:7.7.7.7') === RATE_WINDOW_SEC,
+        'over the limit with no TTL → the TTL is re-armed (lockout ends after one window)');
+      ok(stuck.headers['Retry-After'] === String(RATE_WINDOW_SEC), 'and Retry-After is one window');
+    }
 
     // Limiter Redis blowing up mid-flight → fail open
     setRedisForTest({

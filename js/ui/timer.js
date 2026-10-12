@@ -217,8 +217,11 @@ function populateElapsedSelects() {
   const h = Math.floor(currentMin / 60);
   const m = currentMin % 60;
 
+  // Never fewer hours than the case has run: a restored case past 24 h had no
+  // option for its hour, the select fell back to 00, and Apply rewound the
+  // clock by a day.
   elH.innerHTML = '';
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < Math.max(24, h + 1); i++) {
     const opt = document.createElement('option');
     opt.value = i;
     opt.textContent = String(i).padStart(2, '0');

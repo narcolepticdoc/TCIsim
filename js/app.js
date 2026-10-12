@@ -281,9 +281,12 @@ function initSimScreen(patient) {
 
   // Update drug model labels. Model names come from model.getModelName()
   // so swapping in a different PK model later is a one-place change.
+  // Concentrations come from the live pump settings — the case's own. The
+  // setup inputs hold this device's default, which a restored or pulled case
+  // need not share (a 2% case read "10 mg/mL" here).
   const modelLabel = $('propofol-model-label');
   if (modelLabel) {
-    const conc = $('input-concentration')?.value || '10';
+    const conc = getPumpSettings('propofol').concentration;
     const opioid = p.opioid ? ' · +opioid' : '';
     const tciMode = setup.getTciMode ? setup.getTciMode() : 'cet-emulation';
     const modeLabel = tciMode === 'cet' ? ' · CET' :
@@ -293,13 +296,12 @@ function initSimScreen(patient) {
   }
   const fentLabel = $('fentanyl-model-label');
   if (fentLabel) {
-    const fConc = $('input-fentanyl-concentration')?.value || '0.05';
-    const fConcMcg = (parseFloat(fConc) * 1000).toFixed(0);
+    const fConcMcg = (getPumpSettings('fentanyl').concentration * 1000).toFixed(0);
     fentLabel.textContent = `${model.getModelName('fentanyl')} · ${fConcMcg} mcg/mL`;
   }
   const ketLabel = $('ketamine-model-label');
   if (ketLabel) {
-    const kConc = $('input-ketamine-concentration')?.value || '10';
+    const kConc = getPumpSettings('ketamine').concentration;
     ketLabel.textContent = `${model.getModelName('ketamine')} · ${kConc} mg/mL`;
   }
 
@@ -767,6 +769,10 @@ function boot() {
       // The pulled blob becomes the local saved case, then the normal restore
       // path replays it (its own v/savedAt survive saveCase's spread).
       persist.saveCase(valid);
+      // A pulled case is not the case this device's last-dose memory belongs
+      // to, so it starts clean, as New Case and setup confirm do. restore()
+      // itself keeps the memory, which is right only for resuming the same case.
+      resetCaseCarryOver();
       const rel = patientSync.formatRelativeTime(res.updatedAt);
       setCaseStatus(rel ? `Case pulled — pushed ${rel}` : 'Case pulled', 'is-ok');
       session.restore();

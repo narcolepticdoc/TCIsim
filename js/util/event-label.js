@@ -16,7 +16,8 @@
  * The three variants existed as two near-duplicate private functions before
  * the HUD needed a third copy. Output strings are unchanged.
  *
- * Pure — no DOM, no module state.
+ * No DOM. The working unit and the concentration behind an mL figure are the
+ * live ones (getWorkingUnit; units.js falls back to the drug's pump setting).
  */
 
 import { fromCanonical, formatValue, getWorkingUnit } from './units.js';

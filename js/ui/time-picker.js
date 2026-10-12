@@ -50,6 +50,15 @@ function splitHM(minutes) {
 }
 
 /**
+ * Hour options for a case-time select: 0–23, and never too few for the hour
+ * shown. Past ET 24:00 the hour had no option, the select fell back to 00, and
+ * saving the event moved it back a day.
+ */
+function caseHourCount(h) {
+  return Math.max(24, h + 1);
+}
+
+/**
  * @param {Object} cfg
  * @param {string} cfg.hoursId        - <select> id for hours
  * @param {string} cfg.minutesId      - <select> id for minutes
@@ -121,7 +130,7 @@ export function makeTimePicker({
   function setCaseMinutes(minutes) {
     timeUnit = 'case';
     const [h, m] = splitHM(minutes);
-    buildTimeSelect($(hoursId), 24, 2, h, handleSelectChange);
+    buildTimeSelect($(hoursId), caseHourCount(h), 2, h, handleSelectChange);
     buildTimeSelect($(minutesId), 60, 2, m, handleSelectChange);
     syncUnitButtons();
     updateConversion();
@@ -135,7 +144,7 @@ export function makeTimePicker({
     syncUnitButtons();
     if (unit === 'case') {
       const [h, m] = splitHM(caseMin);
-      buildTimeSelect($(hoursId), 24, 2, h, handleSelectChange);
+      buildTimeSelect($(hoursId), caseHourCount(h), 2, h, handleSelectChange);
       buildTimeSelect($(minutesId), 60, 2, m, handleSelectChange);
     } else {
       const ws = wallStart();

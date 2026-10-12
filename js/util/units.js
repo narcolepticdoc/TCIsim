@@ -2,8 +2,16 @@
  * units.js — Unit Conversion Layer
  * 
  * Pure functions for converting between display units and canonical
- * (engine) units. No DOM, no state. Used by keypad, drug panel,
- * history panel, chart labels — anywhere units are displayed or entered.
+ * (engine) units. No DOM. Used by keypad, drug panel, history panel,
+ * chart labels — anywhere units are displayed or entered.
+ *
+ * mL and mL/h need a concentration. A caller converting for some other
+ * context (a planner config, a dose template) passes `ctx.concentration`;
+ * everyone else gets the drug's live pump concentration — the one the case
+ * is running at, which session.restore() installs from the saved case. The
+ * fallback used to be the DRUG_DEFS default, and ten call sites passed no
+ * concentration, so a 2% propofol case read and wrote every mL figure at 1%:
+ * 50 mL/h typed into the keypad was simulated as half the drug.
  * 
  * Canonical units (what the engine uses):
  *   bolus:    mg
@@ -18,7 +26,7 @@
  *   etc. (configured in constants.js DRUG_TASK_UNITS)
  */
 
-import { DRUG_TASK_UNITS, DRUG_DEFS } from './constants.js';
+import { DRUG_TASK_UNITS, getPumpSettings } from './constants.js';
 
 // ---- Public API ----
 
@@ -40,7 +48,7 @@ export function toCanonical(value, displayUnit, drugId, task, ctx = {}) {
     return { value, unit: config.canonical };
   }
 
-  const conc = ctx.concentration || DRUG_DEFS[drugId]?.concentration;
+  const conc = ctx.concentration || getPumpSettings(drugId).concentration;
   const wt = ctx.weightKg;
 
   const result = convert(value, displayUnit, config.canonical, task, wt, conc);
@@ -63,7 +71,7 @@ export function fromCanonical(value, displayUnit, drugId, task, ctx = {}) {
 
   if (displayUnit === config.canonical) return value;
 
-  const conc = ctx.concentration || DRUG_DEFS[drugId]?.concentration;
+  const conc = ctx.concentration || getPumpSettings(drugId).concentration;
   const wt = ctx.weightKg;
 
   return convert(value, config.canonical, displayUnit, task, wt, conc);
