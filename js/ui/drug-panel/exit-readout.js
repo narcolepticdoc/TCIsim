@@ -58,6 +58,22 @@ function _getCache(drugId) {
   return _exitReadoutCache[drugId];
 }
 
+/**
+ * Drop the forecast. getEmergenceArrival reads this cache from outside the
+ * frame loop (Next Up), so a branch that has nothing to forecast must say so
+ * here, not only blank the card: an early return that left the last forecast
+ * in place handed Next Up the previous case's emergence — its target and its
+ * arrival minute, read against the new case's clock — for every drug with no
+ * target set, and kept a cleared target's row alive mid-case.
+ */
+function _clearForecast(cache) {
+  cache.exitCe = 0;
+  cache.computedVersion = -1;
+  cache.displayedDecayMin = null;
+  cache.idleStartDecayMin = null;
+  cache.lastIsIdle = null;
+}
+
 function _buildPrefix(ctx, drugId) {
   const lbl = ctx.getExitCeLabelForDrug ? ctx.getExitCeLabelForDrug(drugId) : '';
   const numPart = lbl ? smartDecimal(parseFloat(lbl.split(' ')[0])) : '';
@@ -78,11 +94,14 @@ export function updateExitReadout(ctx, drugId, t, Ce, caseStarted) {
 
   const exitCe = ctx.getExitCeForDrug ? ctx.getExitCeForDrug(drugId) : 0;
   if (!exitCe || exitCe <= 0 || !caseStarted || t <= 0) {
+    _clearForecast(cache);
     if (el.innerHTML !== '') el.innerHTML = '';
     return;
   }
 
   if (Ce <= exitCe) {
+    // Reached: nothing left to arrive at.
+    _clearForecast(cache);
     const html = '<span style="color:var(--green)">Emergence Reached</span>';
     if (el.innerHTML !== html) el.innerHTML = html;
     return;
@@ -212,6 +231,15 @@ export function getEmergenceArrival(drugId) {
     arrivalMin = null;
   }
   return { arrivalMin, exitCe: c.exitCe || 0, isIdle };
+}
+
+/**
+ * Forget every drug's cache — a new case (drug-panel reset(), from
+ * initSimScreen). Invalidation alone keeps the values; this drops them, along
+ * with the previous frame's Ce that the direction test compares against.
+ */
+export function resetAll() {
+  for (const k of Object.keys(_exitReadoutCache)) delete _exitReadoutCache[k];
 }
 
 /** Force-invalidate all exit readout caches (called after model mutation). */

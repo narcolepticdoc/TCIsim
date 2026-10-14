@@ -327,6 +327,9 @@ function initSimScreen(patient) {
   // Totals keeps its sub-tab across cases: repaint against this case so it
   // never shows the previous patient's cards until Start or the first dose.
   caseTotals.render();
+  // The drug panel's forecast caches outlive a case (Next Up reads them), so
+  // every case starts them empty — New Case, restore, and a pulled case alike.
+  drugPanel.reset();
 
   // Reset chart placeholder
   const placeholder = $('chart-placeholder');

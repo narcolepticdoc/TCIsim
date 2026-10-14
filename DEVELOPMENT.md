@@ -4,6 +4,44 @@
 
 ## Session History
 
+### Next Up showed yesterday's emergence forecasts (v0.6.5.1) — Interim
+
+Reported with a screenshot. On an iPad, after a case the day before and New
+Case in the morning, Next Up listed "Ketamine Emergence 25.0 · 12:11:54" and
+"Fentanyl Emergence 0.25 · 13:35:35". No emergence target was set on this case.
+
+**Cause.** Next Up does not compute forecasts. It reads `getEmergenceArrival`
+(`drug-panel/exit-readout.js`) and `getMilestones` (`drug-panel/approach.js`).
+Both read module-level per-drug caches that the drug-panel frame fills, and
+nothing cleared them between cases:
+- `updateExitReadout` returns early when the drug has no target, the case is
+  not started, or emergence is reached. Each of those branches blanked the card
+  and left the cache alone. `getEmergenceArrival` then returned the last
+  forecast: `lastIsIdle` still true, `idleStartT + idleStartDecayMin` from
+  yesterday's case (about ET 256 min, which today's 07:55 start turns into
+  12:11), and yesterday's `exitCe`. `invalidateAll()` only sets
+  `computedVersion = -1` and keeps the values. A page reload would have cleared
+  it; an iPad PWA left open does not reload.
+- `updateApproachLine` only runs once the case is started, but Next Up renders
+  from confirm. So pre-Start, `getMilestones` served the previous case's
+  redose and target forecasts.
+
+**Fix.** `_clearForecast()` runs in every early-return branch of the exit
+readout, so a reader outside the frame loop never sees a forecast the card
+isn't showing. That also covers a target cleared mid-case and "Emergence
+Reached". Both modules gain `resetAll()`, the drug panel gains `reset()`
+(re-exported by the shim), and `initSimScreen` calls it. That is the one
+place every case entry passes through: New Case → confirm, restore, and
+cloud pull. `resetAll` deletes the entries outright, including the exit
+readout's previous-frame Ce, so the first frame's direction test can't compare
+against yesterday either.
+
+`tests/test-stale-forecasts.mjs` drives the real exit-readout, approach and
+Next Up modules through the reported scenario, the pre-Start window, a cleared
+target and a reached target. Its two "case B" checks fail on the old code with
+the reported row. A read-only audit for other cross-case state ran alongside
+this fix.
+
 ### Totals tab — per-drug totals and average rate (v0.6.5) — Interim
 
 Asked for as "an easy way to report some stats": the totals were spread over

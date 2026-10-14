@@ -430,6 +430,17 @@ export function getSteadyStateCe(drugId) {
   return c ? c.ssLine : null;
 }
 
+/**
+ * Forget every drug's cache — a new case (drug-panel reset(), from
+ * initSimScreen). getMilestones is read by Next Up, which renders before the
+ * case is started, while updateApproachLine only runs once it is: without
+ * this, the previous case's redose and target forecasts sat in the cache
+ * until Start.
+ */
+export function resetAll() {
+  for (const k of Object.keys(_approachCache)) delete _approachCache[k];
+}
+
 /** Force-invalidate all approach caches (called after model mutation). */
 export function invalidateAll() {
   for (const cache of Object.values(_approachCache)) {

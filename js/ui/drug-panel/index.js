@@ -20,10 +20,11 @@ import { fmtCe, fmtCeHTML, fmtCeSmart, fmtRateInline, fmtRateInlineHTML, bisColo
          TCI_FRACTION_DEFAULT, SS_SLOPE_DEFAULT, EXIT_BAND_DEFAULT } from './formatters.js';
 import { setCurveData, updateApproachLine, _getApproachCache,
          getPlateauRegion, getSteadyStateCe, getMilestones, invalidateAll,
-         _estimateTimeToTarget } from './approach.js';
+         _estimateTimeToTarget, resetAll as resetApproach } from './approach.js';
 import { updateStepBar, _intermittentBarPct } from './step-bar.js';
 import { updateExitReadout, getEmergenceArrival,
-         invalidateAll as invalidateExitReadout } from './exit-readout.js';
+         invalidateAll as invalidateExitReadout,
+         resetAll as resetExitReadout } from './exit-readout.js';
 
 // ── Shared context — populated by init(), read by all sub-modules ──
 
@@ -276,6 +277,17 @@ export { setCurveData, _estimateTimeToTarget, getPlateauRegion, getSteadyStateCe
          getMilestones, getEmergenceArrival };
 
 /** Force an immediate update (after a model mutation). */
+/**
+ * Start a case with no forecasts. The approach and emergence caches are
+ * module-level and per drug, and Next Up reads them (getMilestones,
+ * getEmergenceArrival) whether or not this frame recomputed them — so a case
+ * must not inherit them from the last one, however long the app stayed open.
+ */
+export function reset() {
+  resetApproach();
+  resetExitReadout();
+}
+
 export function forceUpdate() {
   invalidateAll();
   invalidateExitReadout();

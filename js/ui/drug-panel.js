@@ -19,4 +19,5 @@ export {
   getMilestones,
   getEmergenceArrival,
   forceUpdate,
+  reset,
 } from './drug-panel/index.js';

@@ -11,6 +11,18 @@
 
 ---
 
+## [0.6.5.1] — 2026-10-14
+
+- **Fixed: Next Up showed the previous case's Emergence forecasts.** Reported from use. The app was left open overnight, and after New Case the next morning, Next Up listed "Emergence" rows for ketamine and fentanyl. Neither drug had an emergence target on the new case. The rows carried the previous day's targets (25.0, 0.25) and arrival times, read against the new case's clock.
+
+  Next Up reads its forecasts from two per-drug caches that the drug cards fill, and both survived New Case:
+  - **Emergence** (`exit-readout.js`): for a drug with no target, the card blanked its readout and returned early, leaving the last forecast in the cache for Next Up to find. The same early return kept a target that was **cleared mid-case** on the list.
+  - **Redose and target forecasts** (`approach.js`): these are only recomputed once the case is started, while Next Up renders from the moment a patient is confirmed. So before Start the list could show the previous case's redose rows.
+
+  The emergence readout now drops its forecast whenever there is nothing to forecast (no target, not started, or emergence reached), and every case entry (New Case, restore, cloud pull) starts both caches empty. Restarting the app would also have cleared them, which is why the bug needed the app left open. Pinned by `tests/test-stale-forecasts.mjs`, which drives the real modules through the reported scenario.
+
+---
+
 ## [0.6.5] — 2026-10-12
 
 - **New: a Totals tab in the History panel (Log | Next Up | Totals).** One place to read what every drug has given, instead of the Log's per-drug "Total delivered" strip. A single **case time** line sits at the top, with one card per drug that has delivered anything below it:
