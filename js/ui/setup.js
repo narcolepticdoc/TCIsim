@@ -250,6 +250,18 @@ const SETUP_CONC_INPUT = {
   ketamine: 'input-ketamine-concentration',
 };
 
+/** The setup <select> holding each optional pump's on/off ('true'/'false'). */
+const SETUP_PUMP_INPUT = {
+  fentanyl: 'input-fentanyl-pump',
+  ketamine: 'input-ketamine-pump',
+};
+
+/** Pump on for this drug as set on this screen (propofol always is). */
+function setupPumpEnabled(drugId) {
+  const el = $(SETUP_PUMP_INPUT[drugId]);
+  return el ? el.value === 'true' : isPumpEnabled(drugId);
+}
+
 /**
  * Open the shared keypad in a one-shot custom session for a starting-dose
  * entry — same entry surface as everywhere else in the app (no iOS keyboard,
@@ -270,6 +282,10 @@ function openTemplateKeypad(drugId, task) {
     // setting, which still holds the previous case's until Confirm.
     getWeightKg: () => parseFloat($('input-weight')?.value) || 70,
     getConcentration: () => parseFloat($(SETUP_CONC_INPUT[drugId])?.value) || undefined,
+    // Likewise push-or-pump and delivery time: this screen's pump toggle and
+    // Max Pump Rate, not the previous case's live settings.
+    isPumpEnabled: () => setupPumpEnabled(drugId),
+    getBolusRateMlH: getGlobalPumpRateMlH,
     onDone: (d) => saveTemplateEntry(drugId, task, d),
   });
 }

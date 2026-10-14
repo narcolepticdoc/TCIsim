@@ -140,15 +140,30 @@ export function resetPumpSettings(drugId) {
 }
 
 /**
+ * The live pump settings, or `pump`'s positive fields over them: a context
+ * that is not the live case (the setup screen's starting-dose keypad, whose
+ * selects do not reach the live settings until Confirm).
+ */
+function _deliveryPump(drugId, pump) {
+  const ps = getPumpSettings(drugId);
+  if (!pump) return ps;
+  return {
+    concentration: pump.concentration > 0 ? pump.concentration : ps.concentration,
+    bolusRateMlH: pump.bolusRateMlH > 0 ? pump.bolusRateMlH : ps.bolusRateMlH,
+  };
+}
+
+/**
  * Compute bolus delivery duration in minutes.
  * Uses effective pump settings (user overrides or DRUG_DEFS defaults).
  * 
  * @param {number} doseMg - bolus dose in mg
  * @param {string} drugId - drug identifier
+ * @param {{concentration?: number, bolusRateMlH?: number}} [pump] - see _deliveryPump
  * @returns {number} delivery time in minutes
  */
-export function bolusDeliveryMinutes(doseMg, drugId) {
-  const ps = getPumpSettings(drugId);
+export function bolusDeliveryMinutes(doseMg, drugId, pump) {
+  const ps = _deliveryPump(drugId, pump);
   const volumeMl = doseMg / ps.concentration;
   const durationMin = volumeMl / ps.bolusRateMlH * 60;
   return Math.max(0.05, durationMin); // minimum 3 seconds
@@ -157,8 +172,8 @@ export function bolusDeliveryMinutes(doseMg, drugId) {
 // Rapid IV push: 3600 mL/h (1 mL/s), minimum 1 second.
 // Mirrors PUSH_RATE_MLH in events.js — must stay in sync.
 const _PUSH_RATE_MLH = 3600;
-export function pushDeliveryMinutes(doseMg, drugId) {
-  const ps = getPumpSettings(drugId);
+export function pushDeliveryMinutes(doseMg, drugId, pump) {
+  const ps = _deliveryPump(drugId, pump);
   const volumeMl = doseMg / ps.concentration;
   return Math.max(1 / 60, volumeMl / _PUSH_RATE_MLH * 60);
 }

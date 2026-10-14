@@ -270,6 +270,18 @@ function exitAnalysisScreen() {
 
 // ---- Sim Screen Initialization ----
 
+/**
+ * The Log shows boluses only for a drug with no pump, or one with a redose
+ * threshold that is not running a manual infusion (pure intermittent dosing).
+ * One rule for every caller: drug selection, a mode change, a threshold edit,
+ * and every case entry. Clearing a threshold used to apply a different rule
+ * that kept a TCI drug's rate steps hidden until its card was tapped again.
+ */
+function syncHistoryFilter(drugId) {
+  const hasThreshold = mode.getIntermittentThreshold(drugId) > 0;
+  history.setBolusOnly(!isPumpEnabled(drugId) || (hasThreshold && mode.get(drugId) !== 'manual'));
+}
+
 function initSimScreen(patient) {
   const p = patient;
   const bmi = (p.weight / Math.pow(p.height / 100, 2)).toFixed(1);
@@ -320,6 +332,10 @@ function initSimScreen(patient) {
   keypad.setDrug('propofol');
   eventEditor.setDrug('propofol');
   history.setDrug('propofol');
+  // The Log's bolus-only filter is module state in history.js: re-derive it
+  // for this case, or a fentanyl push-only view from the last case hides the
+  // new propofol infusion until a drug card is tapped.
+  syncHistoryFilter('propofol');
 
   // Reset sim screen state
   $('history-list').innerHTML = '';
@@ -642,6 +658,9 @@ function boot() {
   const setPullStatus     = makeStatusSetter($('pull-patient-status'));
   const setCaseStatus     = makeStatusSetter($('case-sync-status'));
   const setTemplateStatus = makeStatusSetter($('template-sync-status'));
+  // These lines report an action on the setup screen ("Pulled — updated
+  // 3 min ago"). New Case clears the form they describe, so clear them too.
+  const clearSetupSyncStatus = () => { setPullStatus(''); setCaseStatus(''); setTemplateStatus(''); };
   // Map a sync transport failure to a user-facing diagnostic line. Shared by
   // every cloud pull/push button so misconfiguration reads the same everywhere.
   // Returns null for "not found" results so callers supply their own message.
@@ -891,10 +910,7 @@ function boot() {
       if (detail) addAnnotation(detail, drugId);
       // Keep history filter in sync — show bolus-only when threshold is set
       // and no infusion is running (pure intermittent mode)
-      if (drugId === selectedDrug) {
-        const hasThreshold = mode.getIntermittentThreshold(drugId) > 0;
-        history.setBolusOnly(!isPumpEnabled(drugId) || (hasThreshold && newMode !== 'manual'));
-      }
+      if (drugId === selectedDrug) syncHistoryFilter(drugId);
     },
     getRedoseDose,
   });
@@ -980,8 +996,7 @@ function boot() {
         }
         mode.refreshUI(selectedDrug);
         // Update history filter for the new threshold state
-        const isInfusing = mode.get(selectedDrug) === 'manual';
-        history.setBolusOnly(!isPumpEnabled(selectedDrug) || !isInfusing);
+        syncHistoryFilter(selectedDrug);
         refreshChart();
         return; // refreshChart already called
       } else if (type === 'exitCe') {
@@ -1013,8 +1028,7 @@ function boot() {
       keypad.setDrug(drugId);
       eventEditor.setDrug(drugId);
       mode.refreshUI(drugId);
-      const hasThreshold = mode.getIntermittentThreshold(drugId) > 0;
-      history.setBolusOnly(!isPumpEnabled(drugId) || (hasThreshold && mode.get(drugId) !== 'manual'));
+      syncHistoryFilter(drugId);
       history.setDrug(drugId);
       history.render();
       // Switch chart to new drug's y-axis config (label, scale, persisted range)
@@ -1281,6 +1295,7 @@ function boot() {
   if (btnNewCaseConfirm) btnNewCaseConfirm.addEventListener('click', () => {
     closeModal('modal-new-case');
     session.newCase();
+    clearSetupSyncStatus();
   });
   const btnNewCaseCancel = $('btn-new-case-cancel');
   if (btnNewCaseCancel) btnNewCaseCancel.addEventListener('click', () => {

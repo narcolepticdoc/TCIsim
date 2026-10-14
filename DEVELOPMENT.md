@@ -42,6 +42,40 @@ target and a reached target. Its two "case B" checks fail on the old code with
 the reported row. A read-only audit for other cross-case state ran alongside
 this fix.
 
+**Audit follow-up (same version).** The audit used three lenses: module
+state, DOM state, and setup-screen state. Each candidate went to a skeptic
+who had to reproduce it. The confirmed leaks are fixed here:
+- `history.js _bolusOnly` was re-derived only on a card tap, a mode change or
+  a threshold edit. `initSimScreen` now calls `syncHistoryFilter('propofol')`
+  after `mode.reset()`. All four sites share that helper. The threshold-edit
+  path had used `!pump || mode !== 'manual'`, which left a TCI plan's rate
+  steps hidden after the threshold was *cleared* (20 hidden rows in the repro).
+- `chart-bridge.js` cached `lastSsCe` / `lastPlateauRegion` across chart
+  instances, so New Case → Restore never pushed the unchanged values to the
+  new chart. The caches are gone. `setSteadyStateLine` and `setPlateauRegion`
+  now early-return on unchanged values, like the other setters in the
+  idempotent-setter invariant. `lastEventMarkersKey` stays: a new chart
+  starts with markers off, and the first frame clears the key.
+- The setup template keypad (`showCustom`) passed only `getConcentration`.
+  The bolus-time line and the push-only decision read the live pump settings,
+  which are the previous case's until Confirm. It now also takes
+  `isPumpEnabled` and `getBolusRateMlH` from the setup controls, and
+  `bolusDeliveryMinutes` / `pushDeliveryMinutes` / `bolusTimeText` accept an
+  optional `pump` override (`_deliveryPump`). Even the concentration was
+  ignored there: mL conversions used the setup select, but delivery time used
+  the live setting.
+- `next-up.js reset()` set only the clock text. It now shares
+  `_showIdleClock` with the empty-list branch: no `nu-clock-due`, `data-len`
+  for `--:--`, "Nothing scheduled". The New Case handler clears the three
+  setup cloud status lines (`clearSetupSyncStatus`).
+
+`tests/test-module-state-reset.mjs` covers the first, second and fourth items
+(the bridge is driven with a recording chart). New checks in
+`test-template-keypad-concentration.mjs` cover the keypad. Every behavioural
+check fails on the previous code. The Log, steady-state line, keypad and
+status-line fixes were also checked in Chromium with the skeptics' Playwright
+repros, run against both builds. So was the threshold-clear rule.
+
 ### Totals tab — per-drug totals and average rate (v0.6.5) — Interim
 
 Asked for as "an easy way to report some stats": the totals were spread over

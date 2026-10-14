@@ -21,6 +21,14 @@
 
   The emergence readout now drops its forecast whenever there is nothing to forecast (no target, not started, or emergence reached), and every case entry (New Case, restore, cloud pull) starts both caches empty. Restarting the app would also have cleared them, which is why the bug needed the app left open. Pinned by `tests/test-stale-forecasts.mjs`, which drives the real modules through the reported scenario.
 
+- **Fixed: four more things carried over from the previous case.** An audit for the same cause, state that New Case didn't reset, found these. Each was confirmed against the previous build before fixing:
+  - **The Log could hide the new case's infusion.** If the previous case ended with a push-only drug selected (fentanyl or ketamine with the pump off), the Log stayed in its boluses-only view. A propofol infusion on the next case didn't appear until a drug card was tapped. The filter is now set again on every case entry. Separately, clearing a redose threshold on a TCI drug used a different rule from everywhere else and kept the plan's rate steps hidden; all paths now share one rule.
+  - **The steady-state line went missing after New Case → Restore.** The chart is rebuilt for the restored case, but the line is only redrawn when its value changes, and the restored case has the same value. The steady-state line and plateau box now redraw on a new chart like every other chart overlay.
+  - **The setup screen's starting-dose keypad timed doses with the previous case's pump.** The "Given over ~…" line under a starting bolus used the last case's concentration and Max Pump Rate. It also used that case's pump on/off, so it offered a pump time for a drug that is push-only on this setup screen, or the reverse. A 200 mg propofol entry at 2% read 96 s (1%) instead of 48 s. It now uses the setup screen's own settings, as mL conversions there already did.
+  - **Smaller:** the setup screen's cloud status lines ("Pulled — updated 2 min ago") stayed on the next case's empty form, and the Next Up clock kept an overdue item's red styling and sizing into the next case.
+
+  Pinned by `tests/test-module-state-reset.mjs` and new checks in `tests/test-template-keypad-concentration.mjs`. Both fail on the previous code.
+
 ---
 
 ## [0.6.5] — 2026-10-12

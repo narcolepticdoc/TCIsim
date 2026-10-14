@@ -592,8 +592,19 @@ export function createChart(canvas, config = {}) {
     chart.update('none');
   }
 
+  /**
+   * Plateau bounding box `{ startMin, endMin, ceMin, ceMax }` (y already
+   * scaled), or null. Idempotent — the bridge calls it every frame
+   * (CLAUDE.md invariant), so a recreated chart picks the box up on its first
+   * frame instead of waiting for the value to change.
+   */
   function setPlateauRegion(region) {
-    s.plateauRegion = region;
+    const next = region || null;
+    const prev = s.plateauRegion;
+    if (prev === next) return;
+    if (prev && next && prev.startMin === next.startMin && prev.endMin === next.endMin &&
+        Math.abs(prev.ceMin - next.ceMin) <= 1e-9 && Math.abs(prev.ceMax - next.ceMax) <= 1e-9) return;
+    s.plateauRegion = next;
     chart.options.plugins.annotation.annotations = buildAnnotations(s);
     chart.update('none');
   }
@@ -915,8 +926,11 @@ export function createChart(canvas, config = {}) {
     chart.update('none');
   }
 
+  /** Steady-state Ce line (y already scaled), or null. Idempotent, as above. */
   function setSteadyStateLine(ce) {
-    s.steadyStateCe = ce;
+    const next = ce > 0 ? ce : null;
+    if (s.steadyStateCe === next) return;
+    s.steadyStateCe = next;
     chart.options.plugins.annotation.annotations = buildAnnotations(s);
     chart.update('none');
   }

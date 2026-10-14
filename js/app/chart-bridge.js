@@ -55,8 +55,6 @@ export function createChartBridge({
   let lastCursorUpdate = 0;
   let lastHistoryDimUpdate = 0;
   let lastGhostCrossUpdate = 0;
-  let lastSsCe = null;
-  let lastPlateauRegion = null;
   let lastEventMarkersKey = '';
   // Last non-'rt' time-axis mode, tracked every frame in onFrame. The history
   // RT toggle restores this so turning real-time off never destroys the chart's
@@ -327,18 +325,12 @@ export function createChartBridge({
       const m = mode.get(selectedDrug);
       const { yScale: ys } = getConfig(selectedDrug);
 
-      // Steady-state horizontal line (manual mode only)
+      // Steady-state horizontal line (manual mode only). Both setters are
+      // idempotent and called every frame — a bridge-side cache of the last
+      // value outlived the chart, so after New Case → Restore the same steady
+      // state was never pushed to the new chart and its line went missing.
       const ssCe = drugPanel.getSteadyStateCe(selectedDrug);
-      if (ssCe && m === 'manual') {
-        const scaled = ssCe * ys;
-        if (lastSsCe !== scaled) {
-          lastSsCe = scaled;
-          chart.setSteadyStateLine(scaled);
-        }
-      } else if (lastSsCe) {
-        lastSsCe = null;
-        chart.setSteadyStateLine(null);
-      }
+      chart.setSteadyStateLine(ssCe && m === 'manual' ? ssCe * ys : null);
 
       // Plateau region bounding box (manual mode only)
       const plat = drugPanel.getPlateauRegion(selectedDrug);
@@ -353,15 +345,8 @@ export function createChartBridge({
           ceMin:    plat.ceMin * ys,
           ceMax:    plat.ceMax * ys,
         };
-        // Only update chart when region actually changed
-        const prev = lastPlateauRegion;
-        if (!prev || prev.startMin !== region.startMin || prev.endMin !== region.endMin ||
-            Math.abs(prev.ceMin - region.ceMin) > 1e-9 || Math.abs(prev.ceMax - region.ceMax) > 1e-9) {
-          lastPlateauRegion = region;
-          chart.setPlateauRegion(region);
-        }
-      } else if (lastPlateauRegion) {
-        lastPlateauRegion = null;
+        chart.setPlateauRegion(region);
+      } else {
         chart.setPlateauRegion(null);
       }
 

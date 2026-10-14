@@ -90,13 +90,14 @@ export function fmtDeliveryTime(minutes) {
  *
  * @param {number} doseMg - canonical mg
  * @param {string} drugId
- * @param {{pushOnly: boolean}} opts
+ * @param {{pushOnly: boolean, pump?: {concentration?: number, bolusRateMlH?: number}}} opts
+ *   `pump` overrides the live pump settings (constants.js _deliveryPump)
  * @returns {string} '' when doseMg is not positive
  */
-export function bolusTimeText(doseMg, drugId, { pushOnly }) {
+export function bolusTimeText(doseMg, drugId, { pushOnly, pump }) {
   if (!(doseMg > 0)) return '';
-  const pushT = fmtDeliveryTime(pushDeliveryMinutes(doseMg, drugId));
+  const pushT = fmtDeliveryTime(pushDeliveryMinutes(doseMg, drugId, pump));
   if (pushOnly) return `Given over ~${pushT}`;
-  const pumpT = fmtDeliveryTime(bolusDeliveryMinutes(doseMg, drugId));
+  const pumpT = fmtDeliveryTime(bolusDeliveryMinutes(doseMg, drugId, pump));
   return `Given over ~${pumpT} pump · ~${pushT} push`;
 }
