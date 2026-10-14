@@ -23,7 +23,7 @@
 function makeEl() {
   const cls = new Set();
   return {
-    textContent: '', className: '', style: {},
+    textContent: '', className: '', style: {}, querySelector: () => null,
     classList: {
       add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)),
       contains: c => cls.has(c),
@@ -90,6 +90,19 @@ console.log('\n  runs TCI or a rate?');
   z.addRate(F, 5, 0, 'Rate 0');
   ok(block(z, F, 'manual', 10) === null, "a rate of 0: 'manual' with nothing running is not an infusion");
   ok(block(z, F, 'manual', 1) === null, 'nor is a 0 rate scheduled for later');
+
+  // A spread reconciliation confirmed while an IV push is still going in: its
+  // restore is deferred past the push, so a 'reconcile' rate is in force for
+  // a few seconds after now. Nobody started an infusion.
+  const r = freshModel();
+  r.addBolus(K, 0, 50, 'IV push 50 mg', { deliveryMode: 'push', source: 'manual' });
+  r.addBolus(K, 30, 50, 'IV push 50 mg', { deliveryMode: 'push', source: 'manual' });
+  const now = 30 + 2 / 60;                                    // mid-push
+  r.applyRateAugmentation(K, 0, now, 20 / now);
+  const rateNow = r.getRateAtTime(K, now + 0.1 / 60);
+  ok(rateNow > 0, `precondition: a reconcile rate is in force just after now (${rateNow.toFixed(3)} mg/min)`);
+  ok(block(r, K, 'none', now + 0.1 / 60) === null,
+     'a dose reconciliation is not an infusion: the threshold stays');
 }
 
 // ── 2. What app.js applies after every change ─────────────────────────────────
@@ -99,7 +112,8 @@ function fixesFor(m, state, t) {
     getMode: d => state[d].mode,
     getThreshold: d => state[d].thr,
     getEvents: d => m.getEvents(d),
-  }, t);
+    getTime: d => (typeof t === 'object' ? t[d] : t),
+  });
 }
 {
   // Intermittent fentanyl, then Set Rate (mode → manual, rate running).
@@ -135,6 +149,16 @@ function fixesFor(m, state, t) {
   const fz = fixesFor(z, { [F]: { mode: 'manual', thr: THR } }, 10);
   ok(fz.length === 1 && fz[0].action === 'leaveManual',
      "a threshold on 'manual' at rate 0 is kept, and the drug goes back to 'none'");
+
+  // Before Start each drug has its own clock: a pre-case rate set and then set
+  // back to 0 has ended by fentanyl's clock, though it reads running at 0.
+  const pre = freshModel();
+  pre.addRate(F, 0, RATE, 'Rate');
+  pre.addRate(F, 0.01, 0, 'Rate 0');
+  ok(fixesFor(pre, { [F]: { mode: 'none', thr: THR } }, { [F]: 0.02 }).length === 0,
+     "pre-case: judged at the drug's own clock, a cancelled rate keeps the threshold");
+  ok(fixesFor(pre, { [F]: { mode: 'none', thr: THR } }, { [F]: 0 })[0]?.reason === 'running',
+     '(at case time 0 it would read as running)');
 
   // Per drug: propofol's TCI says nothing about fentanyl's threshold.
   const both = freshModel();
@@ -189,6 +213,49 @@ console.log('\n  the control bar');
   resetPumpSettings();
 }
 
+// ── 3b. The clock passing a scheduled stop repaints the bar ──────────────────
+console.log('\n  a scheduled stop taking effect');
+{
+  const { createChartBridge } = await import('../js/app/chart-bridge.js');
+  globalThis.document.addEventListener = () => {};
+  let fakeMs = 1_000_000;
+  const realNow = Date.now;
+  Date.now = () => fakeMs;
+  let blocked = 'running';
+  const repaints = [];
+  const chart = new Proxy({ eventAnnotationsEnabled: false, ghostTracesEnabled: false }, {
+    get: (o, p) => (p in o ? o[p] : () => {}),
+  });
+  const bridge = createChartBridge({
+    getChart: () => chart,
+    getModel: () => ({
+      getEvents: () => [], getActiveReconciliationWindow: () => null,
+      getActiveReconciliationGhost: () => null, getConcentrationsAt: () => ({ Ce: 0 }),
+      getRateAtTime: () => 0,
+    }),
+    timer: { getWallClockStart: () => null, getElapsedMinutes: () => 0 },
+    getSelectedDrug: () => F,
+    mode: { get: () => 'manual', getExitCe: () => 0, getIntermittentThreshold: () => 0,
+            refreshUI: d => repaints.push(d) },
+    drugPanel: { getSteadyStateCe: () => null, getPlateauRegion: () => null },
+    history: { updateDimming() {}, setTimeFormat() {} },
+    settings: { getSettings: () => ({}), check() {} },
+    nextUp: null, caseTotals: null, save() {},
+    getRedoseBlock: () => blocked,
+  });
+  bridge.onFrame(10);
+  const first = repaints.length;
+  for (let i = 0; i < 5; i++) { fakeMs += 2500; bridge.onFrame(10 + i); }
+  ok(repaints.length === first, `while the block holds, the slow lane does not repaint (${repaints.length - first} extra)`);
+  blocked = null;                        // the scheduled pause has taken effect
+  fakeMs += 2500; bridge.onFrame(61);
+  ok(repaints.length === first + 1 && repaints[repaints.length - 1] === F,
+     'once it lifts, the bar is repainted (Set Threshold back) with no edit');
+  fakeMs += 2500; bridge.onFrame(62);
+  ok(repaints.length === first + 1, 'and only once');
+  Date.now = realNow;
+}
+
 // ── 4. Wiring ─────────────────────────────────────────────────────────────────
 console.log('\n  wiring');
 const read = rel => fs.readFileSync(new URL(rel, import.meta.url), 'utf8');
@@ -219,6 +286,16 @@ ok(!/!\(m === 'manual' && rate > 0\)/.test(approachSrc) && !/Combined \(infusion
 ok(!/Combined state \(infusion \+ threshold\)/.test(panelSrc), 'drug panel step bar: no combined branch');
 ok(/clearsThreshold = thr > 0 && entry\.type === 'rate' && entry\.canonical > 0/.test(planningSrc),
    'planning a rate previews the threshold clear');
+ok(/if \(thr > 0 && line !== planThresholdLine\)/.test(planningSrc),
+   '… pushing the line only when the preview changes it, not every drag frame');
+ok(/return redoseThresholdBlock\(mode\.get\(drugId\), model\.getEvents\(drugId\), entryTime\(drugId\)\)/.test(app) &&
+   /getTime: d => entryTime\(d\)/.test(app),
+   "the block is judged at the drug's entry time (its own pre-start clock)");
+const timerSrc = read('../js/ui/timer.js');
+ok((timerSrc.match(/if \(onAdjust\) onAdjust\(\);/g) || []).length === 2 && /onAdjust: \(\) => refreshChart\(\)/.test(app),
+   'moving the clock (popover Apply / Now) refreshes, so the rule holds at the new time');
+ok(/getRedoseBlock: redoseBlock,\s*\}\);/.test(app.slice(app.indexOf('createChartBridge({'))),
+   'the bridge re-checks the block on its slow lane');
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

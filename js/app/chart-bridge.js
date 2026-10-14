@@ -46,19 +46,25 @@ const CHART_DRUG_CONFIG = {
  *   caseTotals: object,
  *   save: Function,
  *   beforeRefresh?: Function,
+ *   getRedoseBlock?: Function,
  * }} deps - `beforeRefresh` runs at the head of every refresh(), before
  *   anything renders: the one pass every model mutation ends in, so a rule
  *   about the case's state (app.js enforceRedoseThresholdRule) holds however
- *   the mutation arrived.
+ *   the mutation arrived. `getRedoseBlock(drugId)` — why the drug cannot hold
+ *   a redose threshold now, or null — is re-checked on the slow lane, since
+ *   the clock passing a scheduled stop changes it with no mutation.
  */
 export function createChartBridge({
   getChart, getModel, timer, getSelectedDrug,
-  mode, drugPanel, history, settings, nextUp, caseTotals, save, beforeRefresh,
+  mode, drugPanel, history, settings, nextUp, caseTotals, save, beforeRefresh, getRedoseBlock,
 }) {
   // Throttle state — replaces properties previously glued onto the chart object
   let lastCursorUpdate = 0;
   let lastHistoryDimUpdate = 0;
   let lastGhostCrossUpdate = 0;
+  // Selected drug + whether it could hold a redose threshold, as last seen by
+  // the slow lane. Only a change repaints the control bar.
+  let lastRedoseBlockKey = null;
   let lastEventMarkersKey = '';
   // Last non-'rt' time-axis mode, tracked every frame in onFrame. The history
   // RT toggle restores this so turning real-time off never destroys the chart's
@@ -320,6 +326,17 @@ export function createChartBridge({
       if (!lastGhostCrossUpdate || now - lastGhostCrossUpdate > 2000) {
         lastGhostCrossUpdate = now;
         updateGhostCrossings(t);
+        // Set Threshold shows only while the drug runs no rate. A scheduled
+        // stop taking effect changes that with no mutation, so nothing else
+        // would repaint the bar (refresh() does on every edit). Same 2 s
+        // cadence; repaint on a change only.
+        if (getRedoseBlock) {
+          const key = `${selectedDrug}:${getRedoseBlock(selectedDrug) ? 1 : 0}`;
+          if (key !== lastRedoseBlockKey) {
+            lastRedoseBlockKey = key;
+            mode.refreshUI(selectedDrug);
+          }
+        }
       }
     }
     // Chart annotations — updated per-frame so they reflect the

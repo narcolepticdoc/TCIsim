@@ -66,15 +66,45 @@ The settings.js redose latch and the Next Up row clear on the next frame
   push-only rule, `resolveBolusDeliveryMode` (no more `willBeManual`) and
   `syncHistoryFilter`. A threshold alone now means intermittent dosing.
 
-**Tests.** `tests/test-redose-threshold.mjs` (40 checks) covers:
-- the block function against a real model;
-- the fixes, including a legacy INF + REDOSE restore and per-drug independence;
+**Tests.** `tests/test-redose-threshold.mjs` (51 checks) covers:
+- the block function against a real model, including a reconcile spread
+  mid-push;
+- the fixes, including a legacy INF + REDOSE restore, per-drug independence
+  and per-drug pre-start clocks;
 - the control bar on a stub DOM;
+- the slow-lane repaint, driven through a real chart-bridge;
 - the wiring.
 
 The bar checks fail on the old code with "got INF + REDOSE". The pinned
 `syncHistoryFilter` regex in `test-module-state-reset.mjs` now matches the
 threshold-only rule.
+
+**Review follow-up.** An adversarial review (four lenses, with a skeptic per
+finding) confirmed five problems, all fixed here:
+- **The clock can unblock a drug.** A scheduled pause taking effect left Set
+  Threshold hidden. Stop Pump early-returns at rate 0, so it didn't help
+  either. chart-bridge's 2 s slow lane now re-checks the selected drug's block
+  (`getRedoseBlock` dep) and calls `mode.refreshUI` on a change only.
+- **The clock can also move.** The time popover rewrote "now" with no refresh,
+  so rewinding into a past infusion left a threshold live on a running drug
+  until the next edit. `timer.init` takes `onAdjust`, which app.js wires to
+  `refreshChart()`.
+- **Pre-case, the block was judged at timer 0**, not the drug's own pre-start
+  clock. A pre-case rate then rate 0 kept the button hidden. `redoseBlock` and
+  `redoseThresholdFixes` (now `getTime` per drug) use `entryTime`.
+- **A spread reconciliation confirmed mid-push cleared the threshold.**
+  `applyRateAugmentation`'s restore goes through `addRate`, which defers it past
+  an active bolus, so a 'reconcile' rate was in force at now.
+  `redoseThresholdBlock` ignores `source: 'reconcile'` rates: a correction of
+  past delivery, not an infusion.
+- **Planning pushed `setThresholdLine` on every drag frame.** It now pushes only
+  when the previewed value changes. The chart setter stays non-idempotent:
+  `switchDrug` nulls `s.thresholdCe` without rebuilding annotations, so an
+  early return there would leave the previous drug's line drawn.
+
+The review also refuted three candidates. One was clearing on a past rate
+entered before its stop, which is by design; the other two were test-only
+gaps.
 
 Checked in Chromium against the real UI:
 - Set Threshold, then Set Rate: cleared with a note, button hidden, rate rows
@@ -87,6 +117,9 @@ Checked in Chromium against the real UI:
   re-saved as 0.
 - Planning a rate: the line hides at 50 and returns when the buffer is
   emptied or the rate is 0.
+- A scheduled pause taking effect: Set Threshold back with no interaction.
+- The clock rewound into a past infusion: cleared at the new time at once.
+- A spread reconciliation mid-push: threshold kept.
 
 ### Next Up showed yesterday's emergence forecasts (v0.6.5.1) — Interim
 

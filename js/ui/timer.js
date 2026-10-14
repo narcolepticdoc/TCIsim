@@ -18,14 +18,18 @@ let intervalId = null;
 let running = false;
 
 let onTick = null; // callback: (elapsedMs) => void, called every 500ms
+let onAdjust = null; // callback: () => void, after the popover moves the clock
 
 /**
  * Initialize the timer module.
  * @param {Object} opts
  * @param {Function} [opts.onTick] - called every 500ms with elapsed ms
+ * @param {Function} [opts.onAdjust] - called after the popover's Apply or Now
+ *   moves the clock (a jump, not the clock running)
  */
 export function init(opts = {}) {
   onTick = opts.onTick || null;
+  onAdjust = opts.onAdjust || null;
 
   // Wire timer click → popover toggle
   const timerEl = $('elapsed-timer');
@@ -304,6 +308,7 @@ function applyStartTime() {
   renderDisplay();
   updateWallHint();
   closePopover();
+  if (onAdjust) onAdjust();
 }
 
 function applyNow() {
@@ -314,4 +319,5 @@ function applyNow() {
   renderDisplay();
   updateWallHint();
   closePopover();
+  if (onAdjust) onAdjust();
 }

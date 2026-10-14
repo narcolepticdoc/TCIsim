@@ -101,6 +101,10 @@ export function createPlanning(deps) {
   let dragRaf = null;
   let dragPendingCe = null;
   let lastSolvedDose = null;
+  // The threshold line value this session last pushed (undefined: none yet).
+  // setThresholdLine rebuilds every annotation, so a drag pushes it only when
+  // the preview flips, not on every frame.
+  let planThresholdLine;
 
   function isActive() { return active; }
 
@@ -194,7 +198,11 @@ export function createPlanning(deps) {
     if (chartBridge.setPlanThresholds) {
       chartBridge.setPlanThresholds(clearsThreshold ? { thresholdCe: 0 } : null);
     }
-    if (thr > 0) chart.setThresholdLine(clearsThreshold ? null : thr * yScale);
+    const line = thr > 0 && !clearsThreshold ? thr * yScale : null;
+    if (thr > 0 && line !== planThresholdLine) {
+      chart.setThresholdLine(line);
+      planThresholdLine = line;
+    }
 
     // A zero still projects — it is the baseline, and it keeps the handle on
     // screen when the user drags a dose all the way down. Only an empty or
@@ -480,6 +488,7 @@ export function createPlanning(deps) {
 
     entry = keypad.getEntry();
     active = true;
+    planThresholdLine = undefined;
 
     const def = DRUG_DEFS[entry.drugId] || {};
     const titleEl = $('planning-title');

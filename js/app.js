@@ -90,10 +90,12 @@ function resolveBolusDeliveryMode(drugId, requested) {
 /**
  * Why `drugId` cannot hold a redose threshold right now — it runs TCI, or a
  * rate is running or scheduled — or null if it can. See sim/redose-threshold.js.
+ * Judged where a new entry for the drug would land (its own pre-start clock
+ * before Start), the same time the keypad commits at.
  */
 function redoseBlock(drugId) {
   if (!model) return null;
-  return redoseThresholdBlock(mode.get(drugId), model.getEvents(drugId), timer.getElapsedMinutes());
+  return redoseThresholdBlock(mode.get(drugId), model.getEvents(drugId), entryTime(drugId));
 }
 
 /**
@@ -115,7 +117,8 @@ function enforceRedoseThresholdRule() {
     getMode: d => mode.get(d),
     getThreshold: d => mode.getIntermittentThreshold(d),
     getEvents: d => model.getEvents(d),
-  }, timer.getElapsedMinutes());
+    getTime: d => entryTime(d),
+  });
   for (const { drugId, action, reason } of fixes) {
     if (action === 'clear') {
       mode.clearIntermittentThreshold(drugId);
@@ -592,6 +595,7 @@ function boot() {
     mode, drugPanel, history, settings, nextUp, caseTotals,
     save: () => session.save(),
     beforeRefresh: enforceRedoseThresholdRule,
+    getRedoseBlock: redoseBlock,
   });
 
   // Convenience alias — many call sites in boot() use refreshChart()
@@ -888,6 +892,10 @@ function boot() {
     onTick(elapsedMs) {
       // Will drive live readout in Step 4
     },
+    // The clock popover moves "now" without touching the event list. Refresh
+    // as for an edit: what is running at the new time decides the redose
+    // threshold rule, the Set Threshold button, Next Up and the Log's dimming.
+    onAdjust: () => refreshChart(),
   });
 
   // Initialize controls (start case / pause pump)
@@ -1090,7 +1098,7 @@ function boot() {
     timer,
     getMode: () => mode.get(selectedDrug),
     getCeTarget: () => {
-      // Non-TCI drugs: ceTarget is the redose threshold (independent of mode)
+      // Non-TCI drugs: ceTarget is the redose threshold (intermittent dosing only)
       if (NO_TCI_DRUGS.has(selectedDrug)) return mode.getIntermittentThreshold(selectedDrug);
       return mode.getCeTarget(selectedDrug);
     },

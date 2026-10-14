@@ -25,7 +25,10 @@
  *
  * "In force" follows the event list's getRateAtTime: the last rate or pause at
  * or before `t` decides it. Boluses never count; they are what intermittent
- * dosing is.
+ * dosing is. Nor do a dose reconciliation's spread rates (source 'reconcile'):
+ * they correct what was delivered in the past, nobody started an infusion,
+ * and their restore can land seconds after `now` (deferred past an IV push
+ * still being given), which would otherwise read as a rate running now.
  *
  * @param {string} mode - 'none' | 'tci' | 'manual'
  * @param {Array<Object>} events - the drug's events, in time order
@@ -37,7 +40,7 @@ export function redoseThresholdBlock(mode, events, t) {
   let rate = 0;
   let later = false;
   for (const e of events || []) {
-    if (!e) continue;
+    if (!e || (e.type === 'rate' && e.source === 'reconcile')) continue;
     if (e.time <= t) {
       if (e.type === 'rate') rate = e.value;
       else if (e.type === 'pause') rate = 0;
@@ -59,21 +62,23 @@ export function redoseThresholdBlock(mode, events, t) {
  *       'none', since a threshold means intermittent dosing and the label,
  *       Stop Pump and bolus route should all say so.
  *
- * Every drug is judged on its own events: propofol in TCI says nothing about
- * fentanyl's threshold.
+ * Every drug is judged on its own events, at its own time: propofol in TCI
+ * says nothing about fentanyl's threshold, and before Start each drug has its
+ * own pre-start clock (a pre-case rate set and then set back to 0 has ended
+ * by fentanyl's clock, though it still reads as running at case time 0).
  *
  * @param {string[]} drugIds
- * @param {{ getMode: Function, getThreshold: Function, getEvents: Function }} state
- *        per-drug readers: (drugId) => mode / canonical threshold / events
- * @param {number} t - case time (min)
+ * @param {{ getMode: Function, getThreshold: Function, getEvents: Function, getTime: Function }} state
+ *        per-drug readers: (drugId) => mode / canonical threshold / events /
+ *        the time (min) a new entry for that drug lands at
  * @returns {Array<{drugId: string, action: 'clear'|'leaveManual', reason?: string}>}
  */
-export function redoseThresholdFixes(drugIds, { getMode, getThreshold, getEvents }, t) {
+export function redoseThresholdFixes(drugIds, { getMode, getThreshold, getEvents, getTime }) {
   const fixes = [];
   for (const drugId of drugIds) {
     if (!(getThreshold(drugId) > 0)) continue;
     const m = getMode(drugId);
-    const reason = redoseThresholdBlock(m, getEvents(drugId), t);
+    const reason = redoseThresholdBlock(m, getEvents(drugId), getTime(drugId));
     if (reason) fixes.push({ drugId, action: 'clear', reason });
     else if (m === 'manual') fixes.push({ drugId, action: 'leaveManual' });
   }
