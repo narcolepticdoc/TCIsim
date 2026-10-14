@@ -92,10 +92,10 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
     platKind: null, platCe: null,
     newLockedPlateauCe: null, newLockedExitMin: null, plateauRegion: null };
 
-  // Redose threshold — compute countdown whenever threshold is set.
-  // For threshold-only (no infusion): return single-line redose data.
-  // For combined (infusion + threshold): store redose in prefix/arrivalMin
-  // and fall through to the manual SS/plateau analysis.
+  // Redose threshold — compute countdown whenever threshold is set, and return
+  // it as the single-line result. A threshold means intermittent dosing: a
+  // drug running TCI or a rate cannot hold one (sim/redose-threshold.js), so
+  // there is no infusion here to analyse for steady state or plateau.
   const threshold = ctx.getIntermittentThresholdForDrug ? ctx.getIntermittentThresholdForDrug(drugId) : 0;
   if (threshold > 0 && ceTarget > 0) {
     let redose = null;
@@ -117,20 +117,7 @@ function computeApproachData(ctx, drugId, t, m, Ce, ceTarget, rate, lockedSsCeSS
         }
       } catch (e) {}
     }
-    // Threshold-only (no infusion running): return redose as the sole result
-    if (!(m === 'manual' && rate > 0)) {
-      return { ...noData, ...(redose || {}) };
-    }
-    // Combined (infusion + threshold): attach redose data, then fall through
-    // to SS/plateau analysis which populates ss*/plat* fields
-    if (redose) {
-      noData.prefix = redose.prefix || '';
-      noData.arrivalMin = redose.arrivalMin || null;
-      noData.staticText = redose.staticText || '';
-      noData.kind = redose.kind || null;
-      noData.milestoneCe = redose.milestoneCe ?? null;
-      noData.belowThreshold = redose.belowThreshold === true;
-    }
+    return { ...noData, ...(redose || {}) };
   }
 
   // Pump stopped — emergence countdown.
@@ -377,9 +364,8 @@ export function updateApproachLine(ctx, drugId, t, m, Ce, ceTarget, rate) {
   }
 
   // Redose countdown is shown in the step-bar row instead (suppress from approach area)
-  // Exception: combined state (infusion + threshold) shows SS/plateau in approach area
   const _threshold = ctx.getIntermittentThresholdForDrug ? ctx.getIntermittentThresholdForDrug(drugId) : 0;
-  if (_threshold > 0 && cache.arrivalMin !== null && !(m === 'manual' && rate > 0)) html = '';
+  if (_threshold > 0 && cache.arrivalMin !== null) html = '';
 
   const el = ctx.$(drugId + '-approach');
   if (el && el.innerHTML !== html) el.innerHTML = html;

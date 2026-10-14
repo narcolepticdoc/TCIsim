@@ -4,6 +4,90 @@
 
 ## Session History
 
+### A redose threshold is intermittent dosing only (v0.6.5.2) — Interim
+
+The user's rule: "Redose threshold should not be set on a drug running TCI or
+rate based infusions since it is a setting for intermittent bolus mode." This
+reverses v0.5.17's orthogonal mode model (below, "Orthogonal Infusion + Redose
+Threshold"), which made the two independent and added the INF + REDOSE state.
+It avoids the two problems v0.5.17 fixed: the old code cleared the threshold
+without a trace, and setting one hid the rate display. Now the clear always
+leaves a notation, and setting a threshold during an infusion is blocked; the
+rate display is never hidden.
+
+**"Runs TCI or a rate" comes from the event list.** `js/sim/redose-threshold.js`
+(pure) has `redoseThresholdBlock(mode, events, t)`, which returns:
+- `'tci'` in TCI mode;
+- `'running'` when a rate above 0 is in force at `t` (getRateAtTime semantics);
+- `'scheduled'` when a rate above 0 starts later;
+- `null` otherwise.
+
+Mode can't decide it, for two reasons:
+- The event editor adds rates without `mode.set`.
+- A keypad rate of 0 is 'manual' with nothing running. Stop Pump also
+  early-returns at rate 0, so a mode test would have kept Set Threshold hidden
+  for good.
+
+Scheduled rates count so the clock can't start an infusion under a threshold.
+Boluses never count.
+
+**One choke point.** `chartBridge.refresh()` now runs a `beforeRefresh` dep
+first. app.js passes `enforceRedoseThresholdRule`, which applies
+`redoseThresholdFixes`:
+- A blocked drug's threshold is cleared, with "Redose Threshold Cleared ·
+  Infusion Running / Infusion Scheduled / TCI Running", and the Log filter is
+  re-synced.
+- A drug holding one in 'manual' with nothing running goes back to 'none'.
+
+Every mutation path ends in refresh: keypad, TCI modal, event editor,
+reconcile, template and restore. So the rule holds whichever way the change
+arrived. Because restore's refresh runs after `setAnnotations`, an older save
+holding INF + REDOSE is migrated on restore and its note survives. The fix is
+then re-saved, so no `CASE_SCHEMA_VERSION` bump is needed.
+
+The settings.js redose latch and the Next Up row clear on the next frame
+(`checkBelowThreshold(false)`), as for a user clear.
+
+**Blocking.**
+- mode.js gets a `getRedoseBlock` dep. The pump-on non-TCI branch hides
+  `btn-target` while the drug is blocked. Every other branch shows it again,
+  because the button is shared and propofol's Set Target must not stay hidden.
+- The keypad 'intermittent' commit refuses a positive value when blocked; this
+  also covers planning mode, which commits through the same button.
+- A clear typed with no threshold set no longer adds a "Cleared" note.
+- Planning a rate above 0 on a drug with a threshold previews the clear: no
+  amber line, and `setPlanThresholds({ thresholdCe: 0 })` for the trajectory.
+
+**Dead code removed.**
+- The INF + REDOSE label.
+- The approach.js combined fall-through, and its approach-area exception.
+- The drug-panel combined step-bar branch.
+- The threshold-plus-'manual' clauses in the status label, the keypad
+  push-only rule, `resolveBolusDeliveryMode` (no more `willBeManual`) and
+  `syncHistoryFilter`. A threshold alone now means intermittent dosing.
+
+**Tests.** `tests/test-redose-threshold.mjs` (40 checks) covers:
+- the block function against a real model;
+- the fixes, including a legacy INF + REDOSE restore and per-drug independence;
+- the control bar on a stub DOM;
+- the wiring.
+
+The bar checks fail on the old code with "got INF + REDOSE". The pinned
+`syncHistoryFilter` regex in `test-module-state-reset.mjs` now matches the
+threshold-only rule.
+
+Checked in Chromium against the real UI:
+- Set Threshold, then Set Rate: cleared with a note, button hidden, rate rows
+  shown.
+- Stop Pump: the button is back.
+- An event-editor rate still in force now: cleared. One added before an
+  existing Stop Pump: kept, because it is a past infusion.
+- A rate of 0: threshold kept, mode 'none'.
+- A legacy save injected with manual + threshold: migrated on restore and
+  re-saved as 0.
+- Planning a rate: the line hides at 50 and returns when the buffer is
+  emptied or the rate is 0.
+
 ### Next Up showed yesterday's emergence forecasts (v0.6.5.1) — Interim
 
 Reported with a screenshot. On an iPad, after a case the day before and New
@@ -48,8 +132,11 @@ who had to reproduce it. The confirmed leaks are fixed here:
 - `history.js _bolusOnly` was re-derived only on a card tap, a mode change or
   a threshold edit. `initSimScreen` now calls `syncHistoryFilter('propofol')`
   after `mode.reset()`. All four sites share that helper. The threshold-edit
-  path had used `!pump || mode !== 'manual'`, which left a TCI plan's rate
-  steps hidden after the threshold was *cleared* (20 hidden rows in the repro).
+  path had used `!pump || mode !== 'manual'`. Its repro (20 TCI rate rows
+  hidden after a clear) gave propofol a threshold through a direct keypad
+  call. The UI can't do that: a TCI drug's target button opens the Ce keypad.
+  So the only reachable difference was a pump-on fentanyl in 'none'. v0.6.5.2
+  then made the threshold intermittent-only, which settles it.
 - `chart-bridge.js` cached `lastSsCe` / `lastPlateauRegion` across chart
   instances, so New Case → Restore never pushed the unchanged values to the
   new chart. The caches are gone. `setSteadyStateLine` and `setPlateauRegion`
@@ -74,7 +161,7 @@ who had to reproduce it. The confirmed leaks are fixed here:
 `test-template-keypad-concentration.mjs` cover the keypad. Every behavioural
 check fails on the previous code. The Log, steady-state line, keypad and
 status-line fixes were also checked in Chromium with the skeptics' Playwright
-repros, run against both builds. So was the threshold-clear rule.
+repros, run against both builds.
 
 ### Totals tab — per-drug totals and average rate (v0.6.5) — Interim
 

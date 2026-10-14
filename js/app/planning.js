@@ -184,6 +184,18 @@ export function createPlanning(deps) {
       return;
     }
 
+    // Not a line task. A rate above 0 on a drug holding a redose threshold
+    // clears it on commit (a threshold is intermittent dosing only — see
+    // sim/redose-threshold.js), so preview the chart without it: no amber line,
+    // no decay trajectory or crossover dot aimed at it. Otherwise the committed
+    // threshold stays in play. leave() → refreshChart restores the line.
+    const thr = mode.getIntermittentThreshold(drugId);
+    const clearsThreshold = thr > 0 && entry.type === 'rate' && entry.canonical > 0;
+    if (chartBridge.setPlanThresholds) {
+      chartBridge.setPlanThresholds(clearsThreshold ? { thresholdCe: 0 } : null);
+    }
+    if (thr > 0) chart.setThresholdLine(clearsThreshold ? null : thr * yScale);
+
     // A zero still projects — it is the baseline, and it keeps the handle on
     // screen when the user drags a dose all the way down. Only an empty or
     // negative buffer has nothing to show.
@@ -195,9 +207,6 @@ export function createPlanning(deps) {
       renderReadout();
       return;
     }
-
-    // Not a line task — no threshold override in play.
-    if (chartBridge.setPlanThresholds) chartBridge.setPlanThresholds(null);
 
     const t = getEntryTime();
     const action = buildAction(entry);

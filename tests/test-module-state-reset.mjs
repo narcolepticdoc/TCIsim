@@ -150,8 +150,10 @@ const app = read('../js/app.js');
 const calls = app.match(/history\.setBolusOnly\(/g) || [];
 ok(calls.length === 1, `one call site sets it (found ${calls.length})`);
 const helper = app.slice(app.indexOf('function syncHistoryFilter('), app.indexOf('function syncHistoryFilter(') + 400);
-ok(/history\.setBolusOnly\(!isPumpEnabled\(drugId\) \|\| \(hasThreshold && mode\.get\(drugId\) !== 'manual'\)\)/.test(helper),
-   'and it is syncHistoryFilter: no pump, or a threshold outside a manual infusion');
+// v0.6.5.2: a redose threshold is intermittent dosing only (a drug running TCI
+// or a rate cannot hold one), so the threshold alone decides it.
+ok(/history\.setBolusOnly\(!isPumpEnabled\(drugId\) \|\| mode\.getIntermittentThreshold\(drugId\) > 0\)/.test(helper),
+   'and it is syncHistoryFilter: no pump, or a redose threshold');
 const initSim = app.slice(app.indexOf('function initSimScreen'), app.indexOf('function initSimScreen') + 4000);
 ok(/mode\.reset\(\);[\s\S]*syncHistoryFilter\('propofol'\)/.test(initSim),
    'initSimScreen re-derives it after mode.reset() (every case entry)');

@@ -135,8 +135,9 @@ function update() {
       const pumpOn = isPumpEnabled(dId);
       if (!caseStarted) {
         label = 'Stopped'; cls = 'stopped';
-      } else if (!pumpOn || (m === 'none' && threshold > 0) || (threshold > 0 && m !== 'manual')) {
-        // No pump, or threshold-only (no infusion): show bolus status during delivery, blank otherwise
+      } else if (!pumpOn || threshold > 0) {
+        // No pump, or a redose threshold (intermittent dosing — never set while
+        // a rate runs): show bolus status during delivery, blank otherwise
         if (isInBolusPhase(ctx, dId, t) || rate > 50) { label = 'Bolus'; cls = 'bolus'; }
         else { label = ''; cls = ''; }
       } else if (m === 'none') {
@@ -206,13 +207,8 @@ function update() {
               ? `Redose Threshold <span class="appr-val">${ceStr}</span> in <span class="appr-time">${fmtCountdown(rem)}</span>` : '';
             if (cntEl.innerHTML !== newHtml) cntEl.innerHTML = newHtml;
           }
-        } else if (m === 'manual') {
-          // Combined state (infusion + threshold) with no redose needed —
-          // the infusion keeps Ce above threshold. Show normal step bar.
-          updateStepBar(ctx, dId, t);
-          if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
         } else {
-          // Threshold-only, Ce below threshold — red "below" indicator
+          // Ce below threshold — red "below" indicator
           belowThresh = true;
           if (barEl) barEl.style.width = '0%';
           if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';

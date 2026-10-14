@@ -45,11 +45,15 @@ const CHART_DRUG_CONFIG = {
  *   nextUp: object,
  *   caseTotals: object,
  *   save: Function,
- * }} deps
+ *   beforeRefresh?: Function,
+ * }} deps - `beforeRefresh` runs at the head of every refresh(), before
+ *   anything renders: the one pass every model mutation ends in, so a rule
+ *   about the case's state (app.js enforceRedoseThresholdRule) holds however
+ *   the mutation arrived.
  */
 export function createChartBridge({
   getChart, getModel, timer, getSelectedDrug,
-  mode, drugPanel, history, settings, nextUp, caseTotals, save,
+  mode, drugPanel, history, settings, nextUp, caseTotals, save, beforeRefresh,
 }) {
   // Throttle state — replaces properties previously glued onto the chart object
   let lastCursorUpdate = 0;
@@ -185,6 +189,7 @@ export function createChartBridge({
    * Called after every model mutation.
    */
   function refresh() {
+    if (beforeRefresh) beforeRefresh();
     const chart = getChart();
     const model = getModel();
     const selectedDrug = getSelectedDrug();

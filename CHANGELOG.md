@@ -11,6 +11,19 @@
 
 ---
 
+## [0.6.5.2] — 2026-10-14
+
+- **Changed: a redose threshold is for intermittent bolus dosing only.** In the user's words: it "should not be set on a drug running TCI or rate based infusions since it is a setting for intermittent bolus mode." Since v0.5.17 a pump-enabled fentanyl or ketamine could run a rate with a threshold set, shown as **INF + REDOSE**. That combination is gone:
+  - **While a drug runs a rate, there is no Set Threshold button.** It hides as soon as a rate above 0 is running or scheduled, and comes back after Stop Pump. TCI drugs never had one; their target button sets the Ce target.
+  - **Starting a rate clears a threshold that is set,** with a Log note: "Redose Threshold Cleared · Infusion Running" (or "Infusion Scheduled", or "TCI Running"). The redose countdown, the "Below Redose Threshold" alert and its Next Up row go with it, and the Log shows the drug's rate rows again. The clear is never silent, and nothing hides the rate display: those were the two problems v0.5.17 fixed.
+  - **What counts is what the pump is doing,** not the mode label. A rate added through the event editor clears the threshold too. A rate of 0 is not an infusion, so it keeps the threshold and the drug stays in intermittent mode.
+  - **Planning a rate previews it:** the threshold line disappears from the planning chart while a rate above 0 is entered.
+  - **Older saved and cloud-pulled cases** that hold an infusion and a threshold together are fixed on restore, with the same note.
+
+  With the combination gone, a threshold simply means intermittent dosing. Boluses are IV pushes, the Log shows boluses only, and the mode label reads INTERMITTENT. Pinned by `tests/test-redose-threshold.mjs`.
+
+---
+
 ## [0.6.5.1] — 2026-10-14
 
 - **Fixed: Next Up showed the previous case's Emergence forecasts.** Reported from use. The app was left open overnight, and after New Case the next morning, Next Up listed "Emergence" rows for ketamine and fentanyl. Neither drug had an emergence target on the new case. The rows carried the previous day's targets (25.0, 0.25) and arrival times, read against the new case's clock.
@@ -22,7 +35,7 @@
   The emergence readout now drops its forecast whenever there is nothing to forecast (no target, not started, or emergence reached), and every case entry (New Case, restore, cloud pull) starts both caches empty. Restarting the app would also have cleared them, which is why the bug needed the app left open. Pinned by `tests/test-stale-forecasts.mjs`, which drives the real modules through the reported scenario.
 
 - **Fixed: four more things carried over from the previous case.** An audit for the same cause, state that New Case didn't reset, found these. Each was confirmed against the previous build before fixing:
-  - **The Log could hide the new case's infusion.** If the previous case ended with a push-only drug selected (fentanyl or ketamine with the pump off), the Log stayed in its boluses-only view. A propofol infusion on the next case didn't appear until a drug card was tapped. The filter is now set again on every case entry. Separately, clearing a redose threshold on a TCI drug used a different rule from everywhere else and kept the plan's rate steps hidden; all paths now share one rule.
+  - **The Log could hide the new case's infusion.** If the previous case ended with a push-only drug selected (fentanyl or ketamine with the pump off), the Log stayed in its boluses-only view. A propofol infusion on the next case didn't appear until a drug card was tapped. The filter is now set again on every case entry. Separately, the threshold-edit path used its own version of the rule; all paths now share one. (An earlier note here said this hid a TCI plan's rate steps. That state can't be reached through the UI: a TCI drug has no threshold control. The 0.6.5.2 rule below makes it impossible.)
   - **The steady-state line went missing after New Case → Restore.** The chart is rebuilt for the restored case, but the line is only redrawn when its value changes, and the restored case has the same value. The steady-state line and plateau box now redraw on a new chart like every other chart overlay.
   - **The setup screen's starting-dose keypad timed doses with the previous case's pump.** The "Given over ~…" line under a starting bolus used the last case's concentration and Max Pump Rate. It also used that case's pump on/off, so it offered a pump time for a drug that is push-only on this setup screen, or the reverse. A 200 mg propofol entry at 2% read 96 s (1%) instead of 48 s. It now uses the setup screen's own settings, as mL conversions there already did.
   - **Smaller:** the setup screen's cloud status lines ("Pulled — updated 2 min ago") stayed on the next case's empty form, and the Next Up clock kept an overdue item's red styling and sizing into the next case.

@@ -194,9 +194,10 @@ export function show(type) {
     renderUnitToggle(allowed);
   }
 
-  // No pump, or threshold set + no infusion → bolus is always IV Push ("Administer" button)
+  // No pump, or a redose threshold (intermittent dosing — a drug running TCI or
+  // a rate cannot hold one) → bolus is always IV Push ("Administer" button)
   const isIntermittentBolus = (type === 'bolus') && (
-    !isPumpEnabled() || (getIntermittentThreshold() > 0 && getMode() !== 'manual')
+    !isPumpEnabled() || getIntermittentThreshold() > 0
   );
 
   // Confirm button style
@@ -437,7 +438,7 @@ function isPushOnlyBolus() {
   if (customSession) {
     return customSession.isPumpEnabled ? !customSession.isPumpEnabled() : !pumpEnabledFor(currentDrug);
   }
-  return !isPumpEnabled() || (getIntermittentThreshold() > 0 && getMode() !== 'manual');
+  return !isPumpEnabled() || getIntermittentThreshold() > 0;
 }
 
 /**
@@ -581,7 +582,7 @@ function renderDisplay() {
 /**
  * Populate the bolus-time line with the estimated delivery duration(s).
  * Same push-only condition as show(): no pump, or a redose threshold is set
- * while not in manual mode → the bolus is always an IV push.
+ * → the bolus is always an IV push.
  * @param {number} doseMg - bolus dose in canonical mg
  */
 function updateBolusTime(doseMg) {
