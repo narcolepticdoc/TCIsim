@@ -154,10 +154,9 @@ export function reset() {
   _syncTimeButton();
   const list = $('nu-list');
   if (list) list.innerHTML = '';
-  const clock = $('nu-clock');
-  if (clock) clock.textContent = '--:--';
-  const label = $('nu-clock-label');
-  if (label) label.textContent = '';
+  // The whole idle face, not just its text: an overdue item's red styling and
+  // glyph-count sizing would otherwise carry into the next case's "--:--".
+  _showIdleClock($('nu-clock'), $('nu-clock-label'));
 }
 
 /** Tell the module whether its view is the visible one (skips DOM work if not). */
@@ -458,12 +457,7 @@ function _renderClock(t) {
             || null;
 
   if (!head) {
-    if (clockEl.textContent !== '--:--') clockEl.textContent = '--:--';
-    clockEl.classList.remove('nu-clock-due');
-    _setClockLen(clockEl, '--:--');
-    if (labelEl && labelEl.textContent !== 'Nothing scheduled') {
-      labelEl.textContent = 'Nothing scheduled';
-    }
+    _showIdleClock(clockEl, labelEl);
     return;
   }
 
@@ -571,6 +565,18 @@ function fmtHudCountdown(minutes) {
   const h = Math.floor(totalMin / 60);
   const m = String(totalMin % 60).padStart(2, '0');
   return `${h}h ${m}m`;
+}
+
+/** The clock with nothing to count: shared by an empty list and reset(). */
+function _showIdleClock(clockEl, labelEl) {
+  if (clockEl) {
+    if (clockEl.textContent !== '--:--') clockEl.textContent = '--:--';
+    clockEl.classList.remove('nu-clock-due');
+    _setClockLen(clockEl, '--:--');
+  }
+  if (labelEl && labelEl.textContent !== 'Nothing scheduled') {
+    labelEl.textContent = 'Nothing scheduled';
+  }
 }
 
 /**

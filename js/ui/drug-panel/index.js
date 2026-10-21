@@ -20,10 +20,11 @@ import { fmtCe, fmtCeHTML, fmtCeSmart, fmtRateInline, fmtRateInlineHTML, bisColo
          TCI_FRACTION_DEFAULT, SS_SLOPE_DEFAULT, EXIT_BAND_DEFAULT } from './formatters.js';
 import { setCurveData, updateApproachLine, _getApproachCache,
          getPlateauRegion, getSteadyStateCe, getMilestones, invalidateAll,
-         _estimateTimeToTarget } from './approach.js';
+         _estimateTimeToTarget, resetAll as resetApproach } from './approach.js';
 import { updateStepBar, _intermittentBarPct } from './step-bar.js';
 import { updateExitReadout, getEmergenceArrival,
-         invalidateAll as invalidateExitReadout } from './exit-readout.js';
+         invalidateAll as invalidateExitReadout,
+         resetAll as resetExitReadout } from './exit-readout.js';
 
 // ── Shared context — populated by init(), read by all sub-modules ──
 
@@ -134,8 +135,9 @@ function update() {
       const pumpOn = isPumpEnabled(dId);
       if (!caseStarted) {
         label = 'Stopped'; cls = 'stopped';
-      } else if (!pumpOn || (m === 'none' && threshold > 0) || (threshold > 0 && m !== 'manual')) {
-        // No pump, or threshold-only (no infusion): show bolus status during delivery, blank otherwise
+      } else if (!pumpOn || threshold > 0) {
+        // No pump, or a redose threshold (intermittent dosing — never set while
+        // a rate runs): show bolus status during delivery, blank otherwise
         if (isInBolusPhase(ctx, dId, t) || rate > 50) { label = 'Bolus'; cls = 'bolus'; }
         else { label = ''; cls = ''; }
       } else if (m === 'none') {
@@ -205,13 +207,8 @@ function update() {
               ? `Redose Threshold <span class="appr-val">${ceStr}</span> in <span class="appr-time">${fmtCountdown(rem)}</span>` : '';
             if (cntEl.innerHTML !== newHtml) cntEl.innerHTML = newHtml;
           }
-        } else if (m === 'manual') {
-          // Combined state (infusion + threshold) with no redose needed —
-          // the infusion keeps Ce above threshold. Show normal step bar.
-          updateStepBar(ctx, dId, t);
-          if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
         } else {
-          // Threshold-only, Ce below threshold — red "below" indicator
+          // Ce below threshold — red "below" indicator
           belowThresh = true;
           if (barEl) barEl.style.width = '0%';
           if (cntEl && cntEl.innerHTML !== '') cntEl.innerHTML = '';
@@ -276,6 +273,17 @@ export { setCurveData, _estimateTimeToTarget, getPlateauRegion, getSteadyStateCe
          getMilestones, getEmergenceArrival };
 
 /** Force an immediate update (after a model mutation). */
+/**
+ * Start a case with no forecasts. The approach and emergence caches are
+ * module-level and per drug, and Next Up reads them (getMilestones,
+ * getEmergenceArrival) whether or not this frame recomputed them — so a case
+ * must not inherit them from the last one, however long the app stayed open.
+ */
+export function reset() {
+  resetApproach();
+  resetExitReadout();
+}
+
 export function forceUpdate() {
   invalidateAll();
   invalidateExitReadout();

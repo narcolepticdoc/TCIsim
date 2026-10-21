@@ -236,7 +236,10 @@ export function createSession({
           if (thr > 0) mode.setIntermittentThreshold(drugId, thr);
         }
       }
-      // Refresh UI after thresholds are restored so combined states display correctly
+      // Refresh UI after thresholds are restored. An older save can hold a
+      // threshold on a drug running a rate (INF + REDOSE, v0.5.17–0.6.5.1):
+      // the refreshChart() below migrates it, with a notation — it must stay
+      // after setAnnotations, or the note is wiped.
       mode.refreshUI(getSelectedDrug());
       if (saved.reconciliationWindows && model.setReconciliationWindow) {
         for (const [drugId, w] of Object.entries(saved.reconciliationWindows)) {

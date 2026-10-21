@@ -26,6 +26,7 @@ import { bolusDeliveryMinutes, APP_VERSION, DRUG_IDS, DRUG_DEFS, isPumpEnabled, 
 import { hexToRgba } from './util/color.js';
 import { getQuantizeConfig, getWorkingUnit, fromCanonical, formatValue } from './util/units.js';
 import { findRedoseBolus } from './sim/redose.js';
+import { redoseThresholdBlock, redoseThresholdFixes, REDOSE_BLOCK_NOTE } from './sim/redose-threshold.js';
 import * as persist from './ui/persist.js';
 import * as settings from './ui/settings.js';
 import { initSettingsUI } from './app/settings-ui.js';
@@ -73,23 +74,60 @@ function entryTime(drugId) {
 /**
  * Decide how a bolus is actually delivered.
  *
- * No pump means IV push. A redose threshold means push too — but only when
- * no infusion is running, and "running" has to account for the mode change
- * the bolus itself triggers: a bolus out of TCI, or out of 'none' on a
- * TCI-capable drug with a pump, drops the drug into manual first.
+ * No pump means IV push. So does a redose threshold: it is an intermittent-
+ * bolus setting, which a drug running TCI or a rate cannot hold
+ * (sim/redose-threshold.js), so a threshold always means intermittent dosing.
  *
  * onConfirm and planning mode both call this, so the projected curve and the
  * committed one can never disagree about the delivery duration.
  */
 function resolveBolusDeliveryMode(drugId, requested) {
-  const pumpOn = isPumpEnabled(drugId);
-  if (!pumpOn) return 'push';
-  const m = mode.get(drugId);
-  const willBeManual = m === 'tci' || m === 'manual' ||
-    (m === 'none' && !NO_TCI_DRUGS.has(drugId));
-  const hasThreshold = mode.getIntermittentThreshold(drugId) > 0;
-  if (hasThreshold && !willBeManual) return 'push';
+  if (!isPumpEnabled(drugId)) return 'push';
+  if (mode.getIntermittentThreshold(drugId) > 0) return 'push';
   return requested || 'pump';
+}
+
+/**
+ * Why `drugId` cannot hold a redose threshold right now — it runs TCI, or a
+ * rate is running or scheduled — or null if it can. See sim/redose-threshold.js.
+ * Judged where a new entry for the drug would land (its own pre-start clock
+ * before Start), the same time the keypad commits at.
+ */
+function redoseBlock(drugId) {
+  if (!model) return null;
+  return redoseThresholdBlock(mode.get(drugId), model.getEvents(drugId), entryTime(drugId));
+}
+
+/**
+ * Hold the redose-threshold rule after any change (sim/redose-threshold.js
+ * redoseThresholdFixes): a drug that runs TCI or a rate loses its threshold,
+ * with a notation saying why, and one holding a threshold in 'manual' with
+ * nothing running goes back to 'none'.
+ *
+ * Runs at the head of every chart refresh — the one pass every mutation ends
+ * in, whether it came from the keypad, the TCI modal, the event editor, a
+ * reconciliation, the starting-dose template or a restored case (an older save
+ * can hold both) — and before that refresh renders the Log, so its filter is
+ * already right. The clear is never silent: v0.5.17 made the threshold
+ * independent of the infusion because a rate used to wipe it without a trace.
+ */
+function enforceRedoseThresholdRule() {
+  if (!model) return;
+  const fixes = redoseThresholdFixes(DRUG_IDS, {
+    getMode: d => mode.get(d),
+    getThreshold: d => mode.getIntermittentThreshold(d),
+    getEvents: d => model.getEvents(d),
+    getTime: d => entryTime(d),
+  });
+  for (const { drugId, action, reason } of fixes) {
+    if (action === 'clear') {
+      mode.clearIntermittentThreshold(drugId);
+      addAnnotation({ heading: 'Redose Threshold Cleared', sub: REDOSE_BLOCK_NOTE[reason] }, drugId);
+      if (drugId === selectedDrug) syncHistoryFilter(drugId);
+    } else {
+      mode.set(drugId, 'none');
+    }
+  }
 }
 
 /**
@@ -270,6 +308,16 @@ function exitAnalysisScreen() {
 
 // ---- Sim Screen Initialization ----
 
+/**
+ * The Log shows boluses only for a drug with no pump, or one with a redose
+ * threshold (intermittent dosing: a drug running TCI or a rate cannot hold
+ * one). One rule for every caller: drug selection, a mode change, a threshold
+ * edit, and every case entry.
+ */
+function syncHistoryFilter(drugId) {
+  history.setBolusOnly(!isPumpEnabled(drugId) || mode.getIntermittentThreshold(drugId) > 0);
+}
+
 function initSimScreen(patient) {
   const p = patient;
   const bmi = (p.weight / Math.pow(p.height / 100, 2)).toFixed(1);
@@ -320,6 +368,10 @@ function initSimScreen(patient) {
   keypad.setDrug('propofol');
   eventEditor.setDrug('propofol');
   history.setDrug('propofol');
+  // The Log's bolus-only filter is module state in history.js: re-derive it
+  // for this case, or a fentanyl push-only view from the last case hides the
+  // new propofol infusion until a drug card is tapped.
+  syncHistoryFilter('propofol');
 
   // Reset sim screen state
   $('history-list').innerHTML = '';
@@ -327,6 +379,9 @@ function initSimScreen(patient) {
   // Totals keeps its sub-tab across cases: repaint against this case so it
   // never shows the previous patient's cards until Start or the first dose.
   caseTotals.render();
+  // The drug panel's forecast caches outlive a case (Next Up reads them), so
+  // every case starts them empty — New Case, restore, and a pulled case alike.
+  drugPanel.reset();
 
   // Reset chart placeholder
   const placeholder = $('chart-placeholder');
@@ -539,6 +594,8 @@ function boot() {
     getSelectedDrug: () => selectedDrug,
     mode, drugPanel, history, settings, nextUp, caseTotals,
     save: () => session.save(),
+    beforeRefresh: enforceRedoseThresholdRule,
+    getRedoseBlock: redoseBlock,
   });
 
   // Convenience alias — many call sites in boot() use refreshChart()
@@ -639,6 +696,9 @@ function boot() {
   const setPullStatus     = makeStatusSetter($('pull-patient-status'));
   const setCaseStatus     = makeStatusSetter($('case-sync-status'));
   const setTemplateStatus = makeStatusSetter($('template-sync-status'));
+  // These lines report an action on the setup screen ("Pulled — updated
+  // 3 min ago"). New Case clears the form they describe, so clear them too.
+  const clearSetupSyncStatus = () => { setPullStatus(''); setCaseStatus(''); setTemplateStatus(''); };
   // Map a sync transport failure to a user-facing diagnostic line. Shared by
   // every cloud pull/push button so misconfiguration reads the same everywhere.
   // Returns null for "not found" results so callers supply their own message.
@@ -832,6 +892,10 @@ function boot() {
     onTick(elapsedMs) {
       // Will drive live readout in Step 4
     },
+    // The clock popover moves "now" without touching the event list. Refresh
+    // as for an edit: what is running at the new time decides the redose
+    // threshold rule, the Set Threshold button, Next Up and the Log's dimming.
+    onAdjust: () => refreshChart(),
   });
 
   // Initialize controls (start case / pause pump)
@@ -886,14 +950,11 @@ function boot() {
   mode.init({
     onModeChange(drugId, newMode, oldMode, detail) {
       if (detail) addAnnotation(detail, drugId);
-      // Keep history filter in sync — show bolus-only when threshold is set
-      // and no infusion is running (pure intermittent mode)
-      if (drugId === selectedDrug) {
-        const hasThreshold = mode.getIntermittentThreshold(drugId) > 0;
-        history.setBolusOnly(!isPumpEnabled(drugId) || (hasThreshold && newMode !== 'manual'));
-      }
+      // Keep history filter in sync — bolus-only in intermittent dosing
+      if (drugId === selectedDrug) syncHistoryFilter(drugId);
     },
     getRedoseDose,
+    getRedoseBlock: redoseBlock,
   });
 
   // One-touch redose. No keypad and no planning mode even when
@@ -967,18 +1028,22 @@ function boot() {
         // Rate change is near-instantaneous
         if (!controls.isCaseStarted()) advancePreStartClock(selectedDrug, 0.01);
       } else if (type === 'intermittent') {
-        // Redose threshold — independent overlay, does not change mode
+        // Redose threshold — intermittent dosing only. The control is hidden
+        // while the drug runs TCI or a rate (mode.js); refuse here as well, so
+        // nothing that reaches this commit (planning mode) can set one then.
         if (canonicalValue <= 0) {
-          mode.clearIntermittentThreshold(selectedDrug);
-          addAnnotation({ heading: 'Redose Threshold Cleared' }, selectedDrug);
+          if (mode.getIntermittentThreshold(selectedDrug) > 0) {
+            mode.clearIntermittentThreshold(selectedDrug);
+            addAnnotation({ heading: 'Redose Threshold Cleared' }, selectedDrug);
+          }
         } else {
+          if (redoseBlock(selectedDrug)) return;
           mode.setIntermittentThreshold(selectedDrug, canonicalValue);
           addAnnotation({ heading: 'Redose Threshold Set', sub: displayText }, selectedDrug);
         }
         mode.refreshUI(selectedDrug);
         // Update history filter for the new threshold state
-        const isInfusing = mode.get(selectedDrug) === 'manual';
-        history.setBolusOnly(!isPumpEnabled(selectedDrug) || !isInfusing);
+        syncHistoryFilter(selectedDrug);
         refreshChart();
         return; // refreshChart already called
       } else if (type === 'exitCe') {
@@ -1010,8 +1075,7 @@ function boot() {
       keypad.setDrug(drugId);
       eventEditor.setDrug(drugId);
       mode.refreshUI(drugId);
-      const hasThreshold = mode.getIntermittentThreshold(drugId) > 0;
-      history.setBolusOnly(!isPumpEnabled(drugId) || (hasThreshold && mode.get(drugId) !== 'manual'));
+      syncHistoryFilter(drugId);
       history.setDrug(drugId);
       history.render();
       // Switch chart to new drug's y-axis config (label, scale, persisted range)
@@ -1034,7 +1098,7 @@ function boot() {
     timer,
     getMode: () => mode.get(selectedDrug),
     getCeTarget: () => {
-      // Non-TCI drugs: ceTarget is the redose threshold (independent of mode)
+      // Non-TCI drugs: ceTarget is the redose threshold (intermittent dosing only)
       if (NO_TCI_DRUGS.has(selectedDrug)) return mode.getIntermittentThreshold(selectedDrug);
       return mode.getCeTarget(selectedDrug);
     },
@@ -1278,6 +1342,7 @@ function boot() {
   if (btnNewCaseConfirm) btnNewCaseConfirm.addEventListener('click', () => {
     closeModal('modal-new-case');
     session.newCase();
+    clearSetupSyncStatus();
   });
   const btnNewCaseCancel = $('btn-new-case-cancel');
   if (btnNewCaseCancel) btnNewCaseCancel.addEventListener('click', () => {

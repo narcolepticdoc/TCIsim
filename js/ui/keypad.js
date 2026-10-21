@@ -39,7 +39,7 @@ let currentRoundOverride = null; // bool when ceTarget modal exposes the round-i
 //   - weight context comes from customSession.getWeightKg (no confirmed patient)
 //   - confirm/Clear route to customSession.onDone instead of the global onConfirm
 // Cleared by close(), and defensively by show().
-let customSession = null;      // { onDone, getWeightKg }
+let customSession = null;      // { onDone, getWeightKg, getConcentration?, isPumpEnabled?, getBolusRateMlH? }
 // Planning-mode hooks (js/app/planning.js). onChange fires on every buffer
 // edit so the planning screen can redraw its preview; onPlan opens planning
 // mode; autoPlan decides whether show() should skip the modal and go there
@@ -194,9 +194,10 @@ export function show(type) {
     renderUnitToggle(allowed);
   }
 
-  // No pump, or threshold set + no infusion → bolus is always IV Push ("Administer" button)
+  // No pump, or a redose threshold (intermittent dosing — a drug running TCI or
+  // a rate cannot hold one) → bolus is always IV Push ("Administer" button)
   const isIntermittentBolus = (type === 'bolus') && (
-    !isPumpEnabled() || (getIntermittentThreshold() > 0 && getMode() !== 'manual')
+    !isPumpEnabled() || getIntermittentThreshold() > 0
   );
 
   // Confirm button style
@@ -288,10 +289,16 @@ function close() {
  * @param {Function} [opts.getConcentration] - mg/mL for mL conversions. The setup
  *   screen passes its own <select>: the live pump setting still holds the
  *   previous case's, which units.js would otherwise fall back to.
+ * @param {Function} [opts.isPumpEnabled] - () => bool, and
+ * @param {Function} [opts.getBolusRateMlH] - () => mL/h: the same, for whether
+ *   a bolus is a push and how long it takes to give. Both default to the live
+ *   pump settings.
  * @param {Function} opts.onDone     - ({value, unit} | null) => void; null = entry cleared
  */
-export function showCustom({ drugId, task, title, value, unit, getWeightKg, getConcentration, onDone }) {
-  customSession = { onDone, getWeightKg: getWeightKg || (() => 70), getConcentration };
+export function showCustom({ drugId, task, title, value, unit, getWeightKg, getConcentration,
+                             isPumpEnabled: customPumpEnabled, getBolusRateMlH, onDone }) {
+  customSession = { onDone, getWeightKg: getWeightKg || (() => 70), getConcentration,
+                    isPumpEnabled: customPumpEnabled, getBolusRateMlH };
   currentDrug = drugId;
   currentType = task;
   currentRoundOverride = null;
@@ -428,8 +435,10 @@ function convTaskFor(type) {
 
 /** Would this bolus be forced to an IV push regardless of the pump? */
 function isPushOnlyBolus() {
-  if (customSession) return !pumpEnabledFor(currentDrug);
-  return !isPumpEnabled() || (getIntermittentThreshold() > 0 && getMode() !== 'manual');
+  if (customSession) {
+    return customSession.isPumpEnabled ? !customSession.isPumpEnabled() : !pumpEnabledFor(currentDrug);
+  }
+  return !isPumpEnabled() || getIntermittentThreshold() > 0;
 }
 
 /**
@@ -573,13 +582,17 @@ function renderDisplay() {
 /**
  * Populate the bolus-time line with the estimated delivery duration(s).
  * Same push-only condition as show(): no pump, or a redose threshold is set
- * while not in manual mode → the bolus is always an IV push.
+ * → the bolus is always an IV push.
  * @param {number} doseMg - bolus dose in canonical mg
  */
 function updateBolusTime(doseMg) {
   const bt = $('keypad-bolus-time');
   if (!bt) return;
-  bt.textContent = bolusTimeText(doseMg, currentDrug, { pushOnly: isPushOnlyBolus() });
+  // A custom (setup-screen) session times the dose at the pump it describes.
+  const pump = customSession
+    ? { concentration: customSession.getConcentration?.(), bolusRateMlH: customSession.getBolusRateMlH?.() }
+    : undefined;
+  bt.textContent = bolusTimeText(doseMg, currentDrug, { pushOnly: isPushOnlyBolus(), pump });
 }
 
 function confirm(deliveryMode) {

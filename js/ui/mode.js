@@ -5,13 +5,15 @@
  * or 'manual'. This is a UI concern — the model layer just sees
  * pump commands.
  *
- * For non-TCI drugs (fentanyl, ketamine), the redose threshold is
- * an independent overlay that persists across mode changes. The
- * display state is derived from both mode AND threshold:
+ * For non-TCI drugs (fentanyl, ketamine), the redose threshold is an
+ * intermittent-bolus setting: a drug running TCI or a rate cannot hold one
+ * (sim/redose-threshold.js). The control to set it is hidden while the drug
+ * delivers, and app.js clears a threshold, with a notation, the moment TCI or
+ * a rate starts. So the display state is one of:
  *   none + no threshold  → NO MODE
  *   none + threshold     → INTERMITTENT
- *   manual + no threshold → INFUSION
- *   manual + threshold   → INF + REDOSE
+ *   manual               → INFUSION
+ * (v0.5.17–0.6.5.1 also allowed manual + threshold → INF + REDOSE.)
  *
  * Mode transitions are reported via a callback so app.js can
  * annotate and update the UI.
@@ -24,13 +26,16 @@ const $ = id => document.getElementById(id);
 
 const modes = {};  // { drugId: 'none' | 'tci' | 'manual' }
 let ceTargets = {}; // { drugId: number } — current Ce target per drug
-let intermittentThresholds = {}; // { drugId: number } — Ce redose threshold (persists across mode changes)
+let intermittentThresholds = {}; // { drugId: number } — Ce redose threshold (intermittent dosing only)
 let exitCeTargets = {}; // { drugId: number } — Ce threshold for emergence / exit (persists across modes)
 let exitCeLabels = {};  // { drugId: string } — display label for the button (e.g. "0.2 ng/mL")
 let onModeChange = null;
 // () => ({ label } | null) — the dose the Redose button offers for a drug, or
 // null to hide it. Supplied by app.js because mode.js has no model access.
 let getRedoseDose = null;
+// (drugId) => reason | null — why the drug cannot hold a redose threshold now
+// (it runs TCI or a rate), which hides Set Threshold. Also app.js's.
+let getRedoseBlock = null;
 
 /** Drugs that support TCI (Ce targeting). All others use intermittent/manual only. */
 const TCI_CAPABLE_DRUGS = new Set(['propofol', 'remifentanil']);
@@ -43,6 +48,7 @@ const TCI_CAPABLE_DRUGS = new Set(['propofol', 'remifentanil']);
 export function init(opts = {}) {
   onModeChange = opts.onModeChange || null;
   getRedoseDose = opts.getRedoseDose || null;
+  getRedoseBlock = opts.getRedoseBlock || null;
 }
 
 /**
@@ -54,7 +60,8 @@ export function get(drugId) {
 
 /**
  * Set mode for a drug. Fires onModeChange callback.
- * Threshold is NOT cleared — it persists across mode changes.
+ * The redose threshold is not touched here: app.js clears it when the drug
+ * starts TCI or a rate, judged from the event list (enforceRedoseThresholdRule).
  * @param {string} drugId
  * @param {string} newMode - 'none' | 'tci' | 'manual'
  * @param {string} [detail] - reason for the change
@@ -89,7 +96,8 @@ export function getIntermittentThreshold(drugId) {
 }
 
 /**
- * Set the Ce redose threshold (independent of mode).
+ * Set the Ce redose threshold. Callers check the drug can hold one
+ * (app.js redoseBlock): not while it runs TCI or a rate.
  */
 export function setIntermittentThreshold(drugId, ce) {
   intermittentThresholds[drugId] = ce;
@@ -193,6 +201,10 @@ function updateModeUI(drugId) {
   const isTci = TCI_CAPABLE_DRUGS.has(resolvedDrug);
   const pumpOn = isPumpEnabled(resolvedDrug);
 
+  // btn-target is shared by every drug; only an infusing non-TCI drug hides it
+  // (below), so every other branch shows it again.
+  bt.style.display = '';
+
   if (isTci) {
     // TCI-capable drug (propofol, remifentanil) — pump always on
     br.style.display = '';
@@ -249,14 +261,12 @@ function updateModeUI(drugId) {
     const hasThreshold = (intermittentThresholds[resolvedDrug] || 0) > 0;
     bt.textContent = hasThreshold ? 'Change Threshold' : 'Set Threshold';
     br.textContent = m === 'manual' ? 'Change Rate' : 'Set Rate';
+    // A redose threshold is for intermittent dosing: no Set Threshold while
+    // this drug runs a rate, now or scheduled. Set Rate stays, and starting a
+    // rate clears a threshold that is set (app.js, with a notation).
+    if (getRedoseBlock && getRedoseBlock(resolvedDrug)) bt.style.display = 'none';
 
-    if (m === 'manual' && hasThreshold) {
-      ml.textContent = 'INF + REDOSE';
-      ml.className = 'mode-label manual-mode';
-      bt.classList.add('active-mode');
-      br.classList.add('active-mode');
-      bb.classList.add('active-mode');
-    } else if (m === 'manual') {
+    if (m === 'manual') {
       ml.textContent = 'INFUSION';
       ml.className = 'mode-label manual-mode';
       br.classList.add('active-mode');
