@@ -293,6 +293,18 @@ export function formatValue(value, unit) {
 }
 
 /**
+ * Format at the unit's display precision and KEEP trailing zeros: 131.0 stays
+ * "131.0" where formatValue gives "131". For a readout that repaints in place
+ * as its number moves (the Totals tab's average rates). formatValue's string
+ * loses two characters every time the value crosses a whole number, and the
+ * line around it re-flows. The drug cards' live Ce readouts keep fixed
+ * decimals for the same reason.
+ */
+export function formatValueFixed(value, unit) {
+  return value.toFixed(UNIT_DECIMALS[unit] ?? 2);
+}
+
+/**
  * Decimal places needed to write `step` exactly (0.05 → 2, 0.1 → 1, 10 → 0).
  * Capped at 4; falls back to 2 for a non-positive or non-finite step.
  */

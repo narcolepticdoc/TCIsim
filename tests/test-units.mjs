@@ -8,7 +8,7 @@
 // Inline the config so tests run standalone in Node
 
 import { toCanonical, fromCanonical, getQuantStep, quantizeInDisplay,
-         formatValue, formatValueEntry } from '../js/util/units.js';
+         formatValue, formatValueEntry, formatValueFixed } from '../js/util/units.js';
 import { DRUG_TASK_UNITS } from '../js/util/constants.js';
 // Real DRUG_DEFS / DRUG_TASK_UNITS come in via units.js → constants.js; the
 // inline config tables and toBase/fromBase internals were removed.
@@ -475,6 +475,22 @@ console.log('\n===== Entry-buffer formatting (formatValueEntry) =====\n');
   }
   ok(coarsened.length === 0,
      `every drug/task/unit echoes exact grid multiples unchanged${coarsened.length ? ' — lost: ' + coarsened.join(', ') : ''}`);
+}
+
+console.log('\n===== Live-readout formatting (formatValueFixed) =====\n');
+
+{
+  // A readout that repaints in place as its number moves (the Totals tab's
+  // average rates) keeps its trailing zeros, so its width changes only when
+  // the value gains a digit. formatValue's 131.0 → "131" re-flowed the line.
+  ok(formatValueFixed(131, 'mcg/kg/min') === '131.0', '131 mcg/kg/min reads 131.0, not 131');
+  ok(formatValue(131, 'mcg/kg/min') === '131', 'formatValue still drops it (set values unchanged)');
+  ok(formatValueFixed(55.04, 'mL/h') === '55.0', '55.04 mL/h reads 55.0');
+  ok(formatValueFixed(7, 'mg/min') === '7.00', 'mg/min keeps its two decimals');
+  ok(formatValueFixed(84, 'mcg/h') === '84.0', 'mcg/h keeps its one');
+  const widths = new Set();
+  for (let i = 0; i < 200; i++) widths.add(formatValueFixed(50 + i * 0.05, 'mL/h').length);
+  ok(widths.size === 1, 'from 50.00 to 59.95 mL/h the string never changes length');
 }
 
 // ===== SUMMARY =====

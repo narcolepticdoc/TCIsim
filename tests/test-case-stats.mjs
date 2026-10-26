@@ -31,7 +31,7 @@ const { createModel } = await import('../js/sim/simulation.js');
 const { getCumulativeDose } = await import('../js/sim/events/query.js');
 const { computeDrugStats, computeCaseStats } = await import('../js/sim/case-stats.js');
 const { setPumpSettings, resetPumpSettings, DRUG_IDS } = await import('../js/util/constants.js');
-const { formatValue } = await import('../js/util/units.js');
+const { formatValueFixed } = await import('../js/util/units.js');
 const caseTotals = await import('../js/ui/case-totals.js');
 
 let passed = 0, failed = 0;
@@ -296,11 +296,11 @@ console.log('\n  Totals view');
     .replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
 
   const avgP = avgOf(caseOf(m, 90), P);
-  const mlh = formatValue(avgP * 60 / 10, 'mL/h');
-  const kg = formatValue(avgP * 1000 / 70, 'mcg/kg/min');
+  const mlh = formatValueFixed(avgP * 60 / 10, 'mL/h');
+  const kg = formatValueFixed(avgP * 1000 / 70, 'mcg/kg/min');
   ok(text().includes('Propofol'), 'propofol card');
-  ok(text().includes(`Avg rate|${mlh} mL/h · ${kg} mcg/kg/min`),
-     `avg rate in the working unit (mL/h) and per-kg: ${mlh} mL/h · ${kg} mcg/kg/min`);
+  ok(text().includes(`Avg rate|${mlh} mL/h|${kg} mcg/kg/min`),
+     `avg rate in the working unit (mL/h) over per-kg: ${mlh} mL/h | ${kg} mcg/kg/min`);
   ok(text().startsWith('|Case time|1 h 00 min · ET 0:00 → ET 1:00|'), 'one case-time line, above the cards: 1 h, ET 0:00 → ET 1:00');
   eq(text().split('Case time').length - 1, 1, 'the case time appears once, not per card');
   ok(text().includes('Pump bolus|1 · 100.0 mg'), 'pump bolus line');
@@ -322,7 +322,7 @@ console.log('\n  Totals view');
   timeMode = 'et';
   now = 90;
   caseTotals.render();
-  ok(text().includes(`${formatValue(avgOf(caseOf(m, 90), P) * 60 / 20, 'mL/h')} mL/h`),
+  ok(text().includes(`${formatValueFixed(avgOf(caseOf(m, 90), P) * 60 / 20, 'mL/h')} mL/h`),
      'mL/h follows the case concentration (2%)');
   resetPumpSettings();
 
@@ -363,16 +363,57 @@ console.log('\n  view details');
   const prop = t.split('Fentanyl')[0];
   ok(prop.includes('Avg rate'), 'with fentanyl infusing, propofol (one pump bolus) has an average over the case time');
   ok(prop.includes('Pump bolus|1 · 100.0 mg'), '…and the bolus is listed');
-  ok(t.includes('Avg rate|0.02 mcg/kg/min · 84 mcg/h'), 'a fentanyl average reads 0.02 mcg/kg/min, not 0; pump off → mcg/h companion, not mL/h');
+  ok(t.includes('Avg rate|0.020 mcg/kg/min|84.0 mcg/h'), 'a fentanyl average reads 0.020 mcg/kg/min, not 0; pump off → mcg/h companion, not mL/h');
   setPumpSettings('fentanyl', { pumpEnabled: true });
   caseTotals.render();
-  ok(document.getElementById('tot-list').innerHTML.includes('0.02 mcg/kg/min</span> · <span class="tot-nb">1.7 mL/h'),
+  ok(document.getElementById('tot-list').innerHTML.includes('<span class="tot-part">0.020 mcg/kg/min</span><span class="tot-part">1.7 mL/h</span>'),
      'pump on → the companion is mL/h (84 mcg/h at 50 mcg/mL)');
   m.addBolus(P, 20, 50, 'IV push 50 mg', { deliveryMode: 'push', source: 'manual' });
   setPumpSettings(P, { concentration: 20 });
   caseTotals.render();
   ok(document.getElementById('tot-list').innerHTML.includes('>7.50 mL<'), 'total mL follows the case concentration (150 mg at 2% = 7.5 mL)');
   resetPumpSettings();
+  caseTotals.setActive(false);
+}
+
+console.log('\n  the average holds its width as it ticks');
+{
+  // Reported on an iPad mini: the Avg rate line wrapped and unwrapped as the
+  // numbers updated. formatValue dropped trailing zeros (52.0 → "52"), so the
+  // line lost two characters whenever an average crossed a whole number, and
+  // the inline " · " join let that width decide whether the second unit fit.
+  // Propofol 10 mg/min from ET 0, then 8 mg/min from ET 10: the average is
+  // 48 + 120/t mL/h, which lands on 58.0, 56.0, 54.0, 52.0 … 50.0 below.
+  const m = freshModel();
+  m.addRate(P, 0, 10, 'Rate 10');
+  m.addRate(P, 10, 8, 'Rate 8');
+  caseTotals.init({ model: m, getPatient: () => PATIENT, getDrugIds: () => DRUG_IDS, getElapsedMinutes: () => 30 });
+  caseTotals.setActive(true);
+  const avgLine = () => {
+    const block = document.getElementById('tot-list').innerHTML
+      .match(/Avg rate<\/span><span class="tot-value">(.*?)<\/span><\/div>/)?.[1] ?? '';
+    return { block, parts: [...block.matchAll(/<span class="tot-part">([^<]*)<\/span>/g)].map(x => x[1]) };
+  };
+  eq(avgLine().parts.join(' | '), '52.0 mL/h | 123.8 mcg/kg/min',
+     'a whole-number average keeps its decimal (52.0 mL/h, not 52), one unit per row');
+
+  const widths = new Set();
+  let stacked = true;
+  for (let t = 11; t <= 60; t++) {
+    caseTotals.render(t);
+    const { block, parts } = avgLine();
+    if (parts.length !== 2 || block.includes('·')) stacked = false;
+    widths.add(parts.map(p => p.length).join(','));
+  }
+  eq([...widths].join(' / '), '9,16',
+     'ET 11 → 60: each unit keeps its length (58.9 … 50.0 mL/h, 140.3 … 119.0 mcg/kg/min)');
+  ok(stacked, '…and every render stacks the two units, never joins them inline');
+
+  // The reporter's setup: propofol in mcg/kg/min leads, mL/h under it.
+  localStorage.setItem('tci-pref-rateUnit-propofol', 'mcg/kg/min');
+  caseTotals.render(30);
+  eq(avgLine().parts.join(' | '), '123.8 mcg/kg/min | 52.0 mL/h', 'working unit mcg/kg/min: per-kg over mL/h');
+  localStorage.removeItem('tci-pref-rateUnit-propofol');
   caseTotals.setActive(false);
 }
 
