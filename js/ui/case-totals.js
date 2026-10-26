@@ -12,8 +12,8 @@
  *     getCumulativeDose walk).
  *   - Avg rate: the drug's total ÷ the case time — an overall requirement per
  *     unit time, not the rate while its pump ran (the user's definition).
- *     Shown in the drug's working rate unit plus one companion unit, once the
- *     case has a span to average over: an infusion, or two doses.
+ *     Shown in the drug's working rate unit with one companion unit under it,
+ *     once the case has a span to average over: an infusion, or two doses.
  *   - The split: infusion, pump boluses, IV pushes, and any dose
  *     reconciliation correction, so the lines always add up to the total.
  *
@@ -25,7 +25,7 @@
 
 import { DRUG_DEFS, isPumpEnabled } from '../util/constants.js';
 import { inkOnWhite } from '../util/color.js';
-import { fromCanonical, formatValue, getWorkingUnit, getAllowedUnits } from '../util/units.js';
+import { fromCanonical, formatValue, formatValueFixed, getWorkingUnit, getAllowedUnits } from '../util/units.js';
 import { computeCaseStats } from '../sim/case-stats.js';
 import { fmtTotalMass } from './history.js';
 
@@ -174,7 +174,7 @@ function fmtMl(mg, drugId) {
 
 /**
  * The average in the drug's working rate unit — what the drug card and Log
- * show — plus one companion: per-kg when the working unit is not, otherwise mL/h.
+ * show — over one companion: per-kg when the working unit is not, otherwise mL/h.
  */
 function fmtAvgRate(mgMin, drugId, weightKg) {
   const allowed = getAllowedUnits(drugId, 'rate');
@@ -199,18 +199,21 @@ function fmtAvgRate(mgMin, drugId, weightKg) {
       parts.push(`${fmtAverage(v, unit)} ${unit}`);
     } catch (e) { /* unit not convertible here — skip it */ }
   }
-  return joinParts(parts);
+  return stackParts(parts);
 }
 
 /**
- * A computed average, not a set value: the unit's readout precision from 1 up
- * (propofol 131.1 mcg/kg/min), two significant figures below it. formatValue
- * alone caps mcg/kg/min at one decimal, which put a fentanyl infusion's
- * average (≈0.02 mcg/kg/min) on the card as "0".
+ * A computed average, not a set value, and a live one, so its width must hold
+ * still: the unit's readout precision with trailing zeros kept from 1 up
+ * (propofol 131.0 mcg/kg/min, not 131), two significant figures below it
+ * (fentanyl 0.020 mcg/kg/min). formatValue drops trailing zeros, so the line
+ * grew and shrank by two characters as the average moved; and it caps
+ * mcg/kg/min at one decimal, which put a fentanyl infusion's average
+ * (≈0.02 mcg/kg/min) on the card as "0".
  */
 function fmtAverage(v, unit) {
-  if (!(v > 0) || v >= 1) return formatValue(v, unit);
-  return parseFloat(v.toPrecision(2)).toString();
+  if (!(v > 0)) return formatValue(v, unit);
+  return v >= 1 ? formatValueFixed(v, unit) : v.toPrecision(2);
 }
 
 function fmtCaseTime(c) {
@@ -220,11 +223,23 @@ function fmtCaseTime(c) {
 
 /**
  * Join value parts with ' · ', each part unbreakable: in the narrow column
- * beside the chart a line may wrap between "55.1 mL/h" and "131.1 mcg/kg/min",
- * never between a number and its unit.
+ * beside the chart a line may wrap between "1 h 05 min" and "ET 0:00 → now",
+ * never inside a part.
  */
 function joinParts(parts) {
   return parts.map(p => `<span class="tot-nb">${p}</span>`).join(' · ');
+}
+
+/**
+ * One part per row, right-aligned, as the Log's "Total delivered" strip
+ * stacks mass over mL. For a value that repaints as it moves (the average
+ * rates): joined inline, its width decided whether the second part fit, and
+ * in the iPad mini's side column "55.1 mL/h" dropped onto a row of its own
+ * and came back as the digits changed. Stacked, the layout no longer depends
+ * on the numbers.
+ */
+function stackParts(parts) {
+  return `<span class="tot-stack">${parts.map(p => `<span class="tot-part">${p}</span>`).join('')}</span>`;
 }
 
 /**

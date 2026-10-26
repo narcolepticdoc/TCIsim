@@ -11,6 +11,16 @@
 
 ---
 
+## [0.6.5.3] — 2026-10-26
+
+- **Fixed: the Totals tab's Avg rate wrapped and unwrapped as it updated.** Reported on an iPad mini. The propofol line (`131.1 mcg/kg/min · 55.1 mL/h`) kept dropping its mL/h onto a row of its own and pulling it back as the numbers changed. Two things combined:
+  - **The numbers changed length.** The averages dropped trailing zeros, so `52.1 mL/h` became `52 mL/h` whenever an average landed on a whole number. That made the line two characters shorter.
+  - **The line wrapped by width.** Both units sat on one line, joined by ` · `. In the narrow column beside the chart, that line was right at the width where it must wrap, so each two-character change flipped it. In a browser at the iPad mini's landscape size, one case swept through 50 minutes of its average flipped 17 times at XL text, and at Normal and XXL text too. The older iPad mini flipped at Large.
+
+  Now the working unit sits on its own row with the companion right-aligned under it (`123.8 mcg/kg/min` over `52.0 mL/h`), the way the Log's "Total delivered" strip stacks mg over mL. The averages keep their trailing zero (`52.0`, `0.020 mcg/kg/min`). The layout now depends only on the screen and the text size, never on the digits. The Case time line is unchanged. Pinned by `tests/test-case-stats.mjs` and `tests/test-units.mjs`.
+
+---
+
 ## [0.6.5.2] — 2026-10-14
 
 - **Changed: a redose threshold is for intermittent bolus dosing only.** In the user's words: it "should not be set on a drug running TCI or rate based infusions since it is a setting for intermittent bolus mode." Since v0.5.17 a pump-enabled fentanyl or ketamine could run a rate with a threshold set, shown as **INF + REDOSE**. That combination is gone:

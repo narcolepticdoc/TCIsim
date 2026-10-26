@@ -4,6 +4,64 @@
 
 ## Session History
 
+### Totals Avg rate wrapped and unwrapped as it ticked (v0.6.5.3) — Interim
+
+Reported on an iPad mini. In the Totals tab, propofol's Avg rate
+(`xxx.x mcg/kg/min · xx.x mL/h`) partly wrapped onto a second row and came back
+as the numbers updated.
+
+**Cause.** Two things in `js/ui/case-totals.js` together:
+- `fmtAverage` used `formatValue`, which drops trailing zeros (`52.1 → 52`,
+  `131.0 → 131`). The string lost two characters whenever either average
+  crossed a whole number.
+- `joinParts` put both units on one line with ` · ` as a break point, and
+  `.tot-line` wraps. So the string's width decided whether the second unit fit.
+  The side column beside the chart is a 241 px line at 1133 px landscape and
+  205 px at 1024. At several text sizes the value sits near that limit, so the
+  layout flipped with the digits.
+
+v0.5.39.3 had already kept the drug cards' live Ce readouts on fixed decimals
+"where stripping would cause width jitter". The Totals average is the same kind
+of readout: it repaints about once a second.
+
+**Fix. The user chose the layout.**
+- `units.js formatValueFixed(value, unit)` uses the unit's `UNIT_DECIMALS`
+  precision and keeps trailing zeros. `fmtAverage` uses it from 1 up. Below 1
+  it keeps two significant figures through `toPrecision(2)` (`0.020`, not
+  `0.02`), so v0.6.5's "never 0" fix still holds.
+- `fmtAvgRate` stacks its units with `stackParts` (`.tot-stack` / `.tot-part`):
+  the working unit on top and the companion right-aligned under it. The Log's
+  "Total delivered" strip already stacks this way. The user picked stacking on
+  every screen over keeping one line with steady digits, which would have stayed
+  partly wrapped in the iPad mini column.
+- The Case time line stays inline (`joinParts`). It changes only when delivery
+  stops or restarts, never as it ticks, so the user chose to leave it.
+
+At XXL text in the narrowest columns, the stack sits under the label instead of
+beside it. Width decides that, not the digits. It can only change when an
+average gains a digit (99.9 → 100.0).
+
+**Tests.**
+- `tests/test-case-stats.mjs` has a new block, "the average holds its width as it
+  ticks". It sweeps `render(t)` over ET 11 → 60 of a 10 → 8 mg/min case, whose
+  average passes through 58.0, 56.0 … 50.0 mL/h. It checks that every unit keeps
+  its length, that every render has two `tot-part` rows and no ` · `, and that
+  the reporter's setup (working unit mcg/kg/min) reads
+  `123.8 mcg/kg/min | 52.0 mL/h`. With only the formatting reverted, the length
+  check fails with `9,16 / 7,16 / 9,14 / 7,14`.
+- The pinned avg strings now read stacked and fixed.
+- `tests/test-units.mjs` checks `formatValueFixed` directly.
+
+**Checked in Chromium** (Playwright, scratch only), old build against new. One
+case was swept through 50 minutes of its average at four sizes: iPad mini
+landscape 1133×744, iPad mini portrait 744×1133, iPad mini 5 landscape 1024×768,
+and a 390 px phone. Each ran at all four text sizes.
+- Old build: the Avg rate line changed height 17 times at XL in iPad mini
+  landscape, and once each at Normal and XXL. On iPad mini 5 it changed once at
+  Large.
+- New build: no height change anywhere.
+- Dark and light themes: no console errors.
+
 ### A redose threshold is intermittent dosing only (v0.6.5.2) — Interim
 
 The user's rule: "Redose threshold should not be set on a drug running TCI or
