@@ -1382,12 +1382,26 @@
        row visible would give two competing sets of the same buttons — and the
        box's set would fire onConfirm while the screen was still detached. */
     .modal-keypad.keypad-inline .modal-actions{display:none}
+    /* Tall landscape (tablets, laptops): the 352px column is narrow but tall,
+       so the keypad stacks. Display, units and conversion go across the full
+       column, with the numpad full width under them. Side by side, as in the
+       modal, it overflowed. The unit toggle cannot shrink below its labels
+       (three rate units: ~150-170px), and the numpad is a fixed 212px. With
+       the 14px gap that is ~396px against 335px of column, which cut the last
+       key column off on every iPad. The portrait and short-landscape blocks
+       below put the row back. Where their column is narrower than the three
+       units (phones, rate keypads), the toggle wraps instead of pushing the
+       numpad out. */
+    .modal-keypad.keypad-inline .keypad-layout{flex-direction:column}
+    .modal-keypad.keypad-inline .keypad-right{width:100%}
+    .modal-keypad.keypad-inline .keypad-unit-toggle{flex-wrap:wrap}
 
     /* The split switches on ORIENTATION, never on width. A phone in landscape
        is wide but only ~390px tall: stacking it there leaves the chart ~75px
        and effectively no chart at all. Height is the scarce axis in landscape,
        width the scarce one in portrait, so each gets the split that spends the
-       axis it has. */
+       axis it has. Check any change here with a RATE keypad: its three-unit
+       toggle is the widest thing in the column. */
 
     /* Portrait: chart on top, and it keeps the majority — the entry column
        shrinks and scrolls rather than pushing the chart down. Without the

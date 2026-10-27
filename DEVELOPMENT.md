@@ -4,6 +4,65 @@
 
 ## Session History
 
+### Planning mode cut off the keypad's last column (v0.6.5.4) — Interim
+
+Reported with a screenshot from an iPad mini, landscape, Propofol → Set Rate →
+Plan. The numpad's right-hand column (9 / 6 / 3 / .) ran off the screen edge.
+
+**Cause.** In landscape taller than 560 px, `.planning-entry` is a fixed 352 px
+column (335 px of content). `keypad.attachTo` moves the dose modal's box in
+unchanged, so the box keeps its side-by-side `.keypad-layout`:
+- `.keypad-left` is `flex:1`, but it cannot shrink below its unit toggle's
+  min-content width;
+- then a 14 px gap;
+- then `.keypad-right`, a fixed 212 px with `flex-shrink:0`.
+
+A three-unit rate toggle is 150–170 px wide (propofol `mL/h|mcg/kg/min|mg/min`
+170, fentanyl 163, ketamine 150). The row then needs up to 396 px, and the numpad
+overflowed by 33–53 px. Bolus, target and Emergence toggles are narrower and fit.
+That is why only rate keypads showed it, and why the v0.6/v0.6.1 viewport checks
+missed it.
+
+The phone blocks had the same problem at smaller numbers. In short landscape the
+column is `min(320px,44vw)` and the numpad `min(168px,22vw)`. In narrow portrait
+the numpad is `min(200px,52vw)` beside the same toggle.
+
+**Fix (CSS only; the user chose stacking over widening the column).** Three base
+rules, all scoped to `.keypad-inline`:
+- `.keypad-layout{flex-direction:column}` and `.keypad-right{width:100%}`.
+  In the tall-landscape column the keypad stacks: display, units and conversion
+  across the full width, the numpad full width beneath. The portrait and
+  short-landscape blocks already re-declare the row and their own numpad widths
+  (same specificity, later in the sheet), so they are unchanged. No `gap` was
+  declared, so portrait keeps 14 px and short landscape its 8 px.
+- `.keypad-unit-toggle{flex-wrap:wrap}`. Where the column is narrower than the
+  three units (phones, rate keypads), the toggle wraps to `mL/h | mcg/kg/min` over
+  `mg/min` instead of pushing the numpad out. The labels never change while typing,
+  so it doesn't flicker.
+
+Widening the column instead would have cost the chart about 58 px. Shrinking the
+numpad to fit would have made the iPad keys 34 px wide.
+
+**Measured** in Chromium (Playwright, scratch only) on the edited `index.html`,
+old build against new. Viewports: iPad mini landscape (PWA 1133×744, Safari
+1133×670), iPad 10, iPad Pro 13, 1280×600, iPad mini portrait, iPhone 14 landscape
+(PWA and Safari) and portrait, SE landscape and portrait, 360 and 320 portrait.
+Keypads: propofol rate, bolus, target and Emergence; fentanyl and ketamine rate
+(pump on).
+
+| | before | after |
+|---|---|---|
+| runs with clipped keys | 32 of 78 | 0 of 78 |
+| iPad key size | 50×46 | 81×46 |
+| iPad display width | 109–170 px | 335 px |
+| chart width | — | unchanged in every run |
+
+- Stacked content is 387–495 px tall against 545–969 px of column, so nothing
+  scrolls. That holds even on 1280×600 with the TCI target's rounding row.
+- Vertical overflow is identical before and after. The small-phone portrait column
+  already scrolls by design.
+- No console errors.
+
 ### Totals Avg rate wrapped and unwrapped as it ticked (v0.6.5.3) — Interim
 
 Reported on an iPad mini. In the Totals tab, propofol's Avg rate

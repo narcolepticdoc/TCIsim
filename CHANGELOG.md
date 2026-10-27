@@ -11,6 +11,17 @@
 
 ---
 
+## [0.6.5.4] — 2026-10-27
+
+- **Fixed: planning mode cut off part of the keypad beside the chart.** Reported on an iPad mini, for propofol's Set Rate: the numpad's right-hand column (9, 6, 3 and the decimal point) ran off the screen edge. The keypad keeps the dose modal's side-by-side layout, and for a rate that doesn't fit the planning column. The three unit buttons (`mL/h | mcg/kg/min | mg/min`) can't shrink below their labels, and next to them the numpad needs about 60 px more than the column has.
+  - **It wasn't only the iPad mini.** In landscape every iPad was affected, and so was a laptop browser window. Rate keypads for all three drugs were cut off; bolus, target and Emergence keypads fit. Phones clipped rate keypads too, in landscape and in portrait at 390 px wide or narrower.
+  - **On tablets the keypad now stacks.** The display, unit buttons and conversion run across the full column, and the numpad sits full width beneath them. The column is narrow but tall, so it fits with room to spare. The keys grow from 50 to 81 px wide, and the chart keeps all of its width.
+  - **On phones only the unit buttons change.** Where they don't fit beside the numpad, they wrap onto a second row (`mL/h | mcg/kg/min` over `mg/min`). The numpad and the chart are the same size as before.
+
+  Checked in a browser on 13 screen sizes and 6 keypads each. Keys were cut off in 32 of the 78 combinations before the fix and in none after. The chart's width didn't change in any of them.
+
+---
+
 ## [0.6.5.3] — 2026-10-26
 
 - **Fixed: the Totals tab's Avg rate wrapped and unwrapped as it updated.** Reported on an iPad mini. The propofol line (`131.1 mcg/kg/min · 55.1 mL/h`) kept dropping its mL/h onto a row of its own and pulling it back as the numbers changed. Two things combined:
