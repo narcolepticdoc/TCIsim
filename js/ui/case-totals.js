@@ -12,8 +12,10 @@
  *     getCumulativeDose walk).
  *   - Avg rate: the drug's total ÷ the case time — an overall requirement per
  *     unit time, not the rate while its pump ran (the user's definition).
- *     Shown in the drug's working rate unit with one companion unit under it,
- *     once the case has a span to average over: an infusion, or two doses.
+ *     Fentanyl and ketamine read in fixed hourly units (mcg/kg/h over mcg/h,
+ *     mg/kg/h over mg/h). Other drugs read in their working rate unit with
+ *     one companion under it. Shown once the case has a span to average
+ *     over: an infusion, or two doses.
  *   - The split: infusion, pump boluses, IV pushes, and any dose
  *     reconciliation correction, so the lines always add up to the total.
  *
@@ -25,7 +27,8 @@
 
 import { DRUG_DEFS, isPumpEnabled } from '../util/constants.js';
 import { inkOnWhite } from '../util/color.js';
-import { fromCanonical, formatValue, formatValueFixed, getWorkingUnit, getAllowedUnits } from '../util/units.js';
+import { fromCanonical, formatValue, formatValueFixed, getWorkingUnit, getAllowedUnits, getReportUnits }
+  from '../util/units.js';
 import { computeCaseStats } from '../sim/case-stats.js';
 import { fmtTotalMass } from './history.js';
 
@@ -173,26 +176,13 @@ function fmtMl(mg, drugId) {
 }
 
 /**
- * The average in the drug's working rate unit — what the drug card and Log
- * show — over one companion: per-kg when the working unit is not, otherwise mL/h.
+ * The average in the drug's report units where it has them (fentanyl mcg/kg/h
+ * over mcg/h, ketamine mg/kg/h over mg/h, the user's choice), whatever the
+ * keypad or pump shows. Otherwise the working rate unit over one companion.
  */
 function fmtAvgRate(mgMin, drugId, weightKg) {
-  const allowed = getAllowedUnits(drugId, 'rate');
-  const pumpOn = isPumpEnabled(drugId);
-  const perKg = allowed.find(u => u.includes('/kg/'));
-  // mL/h only means something for a drug on a pump — as the companion, and as
-  // the lead unit too: a working unit of mL/h can survive from a setup default
-  // chosen before the pump was switched off.
-  let primary = getWorkingUnit(drugId, 'rate');
-  if (!pumpOn && primary === 'mL/h') primary = perKg || primary;
-  // A push-only drug's companion is an absolute mass rate where it has one
-  // (fentanyl mcg/h, ketamine mg/min).
-  const absolute = pumpOn && allowed.includes('mL/h')
-    ? 'mL/h'
-    : allowed.find(u => !u.includes('/kg/') && u !== 'mL/h') || null;
-  const companion = primary.includes('/kg/') ? absolute : perKg || null;
   const parts = [];
-  for (const unit of [primary, companion]) {
+  for (const unit of getReportUnits(drugId, 'rate') || workingUnitPair(drugId)) {
     if (!unit) continue;
     try {
       const v = fromCanonical(mgMin, unit, drugId, 'rate', { weightKg });
@@ -203,13 +193,34 @@ function fmtAvgRate(mgMin, drugId, weightKg) {
 }
 
 /**
+ * The working rate unit — what the drug card and Log show — and one
+ * companion: per-kg when the working unit is not, otherwise mL/h.
+ */
+function workingUnitPair(drugId) {
+  const allowed = getAllowedUnits(drugId, 'rate');
+  const pumpOn = isPumpEnabled(drugId);
+  const perKg = allowed.find(u => u.includes('/kg/'));
+  // mL/h only means something for a drug on a pump — as the companion, and as
+  // the lead unit too: a working unit of mL/h can survive from a setup default
+  // chosen before the pump was switched off.
+  let primary = getWorkingUnit(drugId, 'rate');
+  if (!pumpOn && primary === 'mL/h') primary = perKg || primary;
+  // A push-only drug's companion is an absolute mass rate where it has one.
+  const absolute = pumpOn && allowed.includes('mL/h')
+    ? 'mL/h'
+    : allowed.find(u => !u.includes('/kg/') && u !== 'mL/h') || null;
+  const companion = primary.includes('/kg/') ? absolute : perKg || null;
+  return [primary, companion];
+}
+
+/**
  * A computed average, not a set value, and a live one, so its width must hold
  * still: the unit's readout precision with trailing zeros kept from 1 up
  * (propofol 131.0 mcg/kg/min, not 131), two significant figures below it
- * (fentanyl 0.020 mcg/kg/min). formatValue drops trailing zeros, so the line
- * grew and shrank by two characters as the average moved; and it caps
- * mcg/kg/min at one decimal, which put a fentanyl infusion's average
- * (≈0.02 mcg/kg/min) on the card as "0".
+ * (ketamine 0.50 mg/kg/h). formatValue drops trailing zeros, so the line
+ * grew and shrank by two characters as the average moved; and its one-decimal
+ * cap put a fentanyl infusion's average on the card as "0" back when it read
+ * in mcg/kg/min (≈0.02).
  */
 function fmtAverage(v, unit) {
   if (!(v > 0)) return formatValue(v, unit);

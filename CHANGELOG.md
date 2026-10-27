@@ -11,6 +11,16 @@
 
 ---
 
+## [0.6.5.5] — 2026-10-27
+
+- **Changed: the Totals tab states fentanyl and ketamine averages per hour.** As requested:
+  - **Fentanyl** reads mcg/kg/h over mcg/h. A 0.02 mcg/kg/min infusion at 70 kg reads `1.2 mcg/kg/h` over `84.0 mcg/h`.
+  - **Ketamine** reads mg/kg/h over mg/h, for example `0.50 mg/kg/h` over `35.0 mg/h`.
+
+  These units are fixed. The rate unit chosen on the keypad no longer changes them, and with the pump on there's no mL/h line. Propofol is unchanged: it still reads in its working rate unit with a companion under it. The keypad's own unit choices are also unchanged: mcg/kg/h and mg/h appear only in the Totals. Pinned by `tests/test-case-stats.mjs` and `tests/test-units.mjs`.
+
+---
+
 ## [0.6.5.4] — 2026-10-27
 
 - **Fixed: planning mode cut off part of the keypad beside the chart.** Reported on an iPad mini, for propofol's Set Rate: the numpad's right-hand column (9, 6, 3 and the decimal point) ran off the screen edge. The keypad keeps the dose modal's side-by-side layout, and for a rate that doesn't fit the planning column. The three unit buttons (`mL/h | mcg/kg/min | mg/min`) can't shrink below their labels, and next to them the numpad needs about 60 px more than the column has.

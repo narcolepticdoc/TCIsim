@@ -24,6 +24,11 @@
  *   Fentanyl bolus:  mcg, mcg/kg, mL
  *   Fentanyl rate:   mcg/kg/min, mcg/h, mL/h
  *   etc. (configured in constants.js DRUG_TASK_UNITS)
+ *
+ * Report units (the Totals tab's averages) may go beyond the keypad's list:
+ *   Fentanyl rate:   mcg/kg/h, mcg/h
+ *   Ketamine rate:   mg/kg/h, mg/h
+ * The conversions accept them; the keypad (getAllowedUnits) never offers them.
  */
 
 import { DRUG_TASK_UNITS, getPumpSettings } from './constants.js';
@@ -89,6 +94,14 @@ export function getCanonicalUnit(drugId, task) {
  */
 export function getAllowedUnits(drugId, task) {
   return DRUG_TASK_UNITS[drugId]?.[task]?.allowed || [];
+}
+
+/**
+ * Get the fixed units a summary states a drug/task in (the Totals average),
+ * or null when the drug has none and the summary follows the working unit.
+ */
+export function getReportUnits(drugId, task) {
+  return DRUG_TASK_UNITS[drugId]?.[task]?.reportUnits || null;
 }
 
 /**
@@ -283,6 +296,7 @@ export function getRoundingNoteText(drugId, enabled, opts = {}) {
 const UNIT_DECIMALS = {
   'mL/h': 1, 'mcg/kg/min': 1, 'mcg/kg': 1, 'mg/min': 2, 'mg': 1, 'mcg': 1,
   'mL': 1, 'mcg/mL': 2, 'ng/mL': 1, 'mcg/h': 1, 'mg/kg': 2, 'mg/kg/h': 1,
+  'mcg/kg/h': 1, 'mg/h': 1,
 };
 
 export function formatValue(value, unit) {
@@ -396,7 +410,7 @@ function getConfig(drugId, task) {
 }
 
 function checkAllowed(unit, config, drugId, task) {
-  if (!config.allowed.includes(unit)) {
+  if (!config.allowed.includes(unit) && !config.reportUnits?.includes(unit)) {
     throw new Error(`Unit '${unit}' not allowed for ${drugId}/${task}. Allowed: ${config.allowed.join(', ')}`);
   }
 }
@@ -453,6 +467,13 @@ function toBase(value, unit, task, wt, conc) {
       if (!wt) throw new Error('weightKg required for mg/kg/h conversion');
       return value * wt / 60; // mg/kg/h → mg/h → mg/min
     }
+    if (unit === 'mcg/kg/h') {
+      if (!wt) throw new Error('weightKg required for mcg/kg/h conversion');
+      return value * wt / 1000 / 60; // mcg/kg/h → mcg/h → mg/h → mg/min
+    }
+    if (unit === 'mg/h') {
+      return value / 60; // mg/h → mg/min
+    }
   }
 
   // ---- Ce target: canonical = mcg/mL ----
@@ -503,6 +524,13 @@ function fromBase(value, unit, task, wt, conc) {
     if (unit === 'mg/kg/h') {
       if (!wt) throw new Error('weightKg required for mg/kg/h conversion');
       return value * 60 / wt; // mg/min → mg/h → mg/kg/h
+    }
+    if (unit === 'mcg/kg/h') {
+      if (!wt) throw new Error('weightKg required for mcg/kg/h conversion');
+      return value * 1000 * 60 / wt; // mg/min → mcg/h → mcg/kg/h
+    }
+    if (unit === 'mg/h') {
+      return value * 60; // mg/min → mg/h
     }
   }
 

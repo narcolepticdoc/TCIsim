@@ -8,7 +8,8 @@
 // Inline the config so tests run standalone in Node
 
 import { toCanonical, fromCanonical, getQuantStep, quantizeInDisplay,
-         formatValue, formatValueEntry, formatValueFixed } from '../js/util/units.js';
+         formatValue, formatValueEntry, formatValueFixed,
+         getAllowedUnits, getReportUnits } from '../js/util/units.js';
 import { DRUG_TASK_UNITS } from '../js/util/constants.js';
 // Real DRUG_DEFS / DRUG_TASK_UNITS come in via units.js → constants.js; the
 // inline config tables and toBase/fromBase internals were removed.
@@ -491,6 +492,29 @@ console.log('\n===== Live-readout formatting (formatValueFixed) =====\n');
   const widths = new Set();
   for (let i = 0; i < 200; i++) widths.add(formatValueFixed(50 + i * 0.05, 'mL/h').length);
   ok(widths.size === 1, 'from 50.00 to 59.95 mL/h the string never changes length');
+}
+
+console.log('\n===== Report units (Totals averages) =====\n');
+
+{
+  // Fentanyl and ketamine averages read per hour in the Totals tab, in units
+  // the keypad does not offer. The conversions accept them; the keypad lists
+  // stay as they were.
+  const ctx = { weightKg: 70 };
+  near(fromCanonical(0.0014, 'mcg/kg/h', 'fentanyl', 'rate', ctx), 1.2, 1e-9, 'fentanyl 0.0014 mg/min = 1.2 mcg/kg/h at 70 kg');
+  near(fromCanonical(0.0014, 'mcg/h', 'fentanyl', 'rate', ctx), 84, 1e-9, '…= 84 mcg/h');
+  near(fromCanonical(35 / 60, 'mg/h', 'ketamine', 'rate', ctx), 35, 1e-9, 'ketamine 35/60 mg/min = 35 mg/h');
+  near(fromCanonical(35 / 60, 'mg/kg/h', 'ketamine', 'rate', ctx), 0.5, 1e-9, '…= 0.5 mg/kg/h at 70 kg');
+  near(toCanonical(1.2, 'mcg/kg/h', 'fentanyl', 'rate', ctx).value, 0.0014, 1e-12, 'mcg/kg/h round-trips');
+  near(toCanonical(35, 'mg/h', 'ketamine', 'rate', ctx).value, 35 / 60, 1e-12, 'mg/h round-trips');
+  throws(() => fromCanonical(0.0014, 'mcg/kg/h', 'fentanyl', 'rate', {}), 'mcg/kg/h needs a weight');
+  ok(getReportUnits('fentanyl', 'rate').join() === 'mcg/kg/h,mcg/h', 'fentanyl reports mcg/kg/h, mcg/h');
+  ok(getReportUnits('ketamine', 'rate').join() === 'mg/kg/h,mg/h', 'ketamine reports mg/kg/h, mg/h');
+  ok(getReportUnits('propofol', 'rate') === null, 'propofol has none (Totals follow its working unit)');
+  ok(!getAllowedUnits('fentanyl', 'rate').includes('mcg/kg/h') && !getAllowedUnits('ketamine', 'rate').includes('mg/h'),
+     'the keypad does not offer them');
+  throws(() => fromCanonical(1, 'mg/h', 'propofol', 'rate', ctx), 'propofol still refuses mg/h');
+  ok(formatValueFixed(1.2, 'mcg/kg/h') === '1.2' && formatValueFixed(35, 'mg/h') === '35.0', 'one fixed decimal: 1.2, 35.0');
 }
 
 // ===== SUMMARY =====
