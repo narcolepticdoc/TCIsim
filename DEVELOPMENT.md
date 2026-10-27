@@ -4,6 +4,56 @@
 
 ## Session History
 
+### Totals: fentanyl and ketamine averages per hour (v0.6.5.5) — Interim
+
+The user asked: "For fentanyl change the average rate units to mcg/kg/hr and
+mcg/hr. For ketamine change them to mg/kg/h and mg/hr." Propofol was not
+mentioned and is unchanged. The labels use the app's `/h` spelling (`mcg/h`,
+`mg/kg/h`, `mL/h`); the request wrote "hr" and "h" interchangeably.
+
+**Before.** `fmtAvgRate` showed the working rate unit over a companion. For
+fentanyl that was mcg/kg/min over mL/h, or mcg/h with the pump off. For ketamine
+it was mg/kg/h over mL/h, or mg/min with the pump off. Two things blocked the
+new units:
+- `units.js` converts only the units in its `toBase`/`fromBase` table, which had
+  no `mcg/kg/h` or `mg/h`.
+- `fromCanonical` refuses any unit outside the drug's `allowed` list, and that
+  list is the keypad's unit toggle. Adding the new units there would have put
+  them on the keypad.
+
+**Change.**
+- `DRUG_TASK_UNITS` gains an optional `reportUnits` per drug and task:
+  - `fentanyl.rate: ['mcg/kg/h', 'mcg/h']`
+  - `ketamine.rate: ['mg/kg/h', 'mg/h']`
+- `units.js`:
+  - `checkAllowed` accepts `allowed` or `reportUnits`;
+  - `toBase`/`fromBase` convert `mcg/kg/h` (needs a weight) and `mg/h`;
+  - `UNIT_DECIMALS` gives both one decimal, so `formatValueFixed` keeps their
+    width still;
+  - a new getter, `getReportUnits`.
+
+  The keypad, `getAllowedUnits` and `getWorkingUnit` read `allowed` only, so the
+  keypad never offers or adopts a report unit.
+- `case-totals.js fmtAvgRate` uses the report units when the drug has them.
+  Otherwise it calls `workingUnitPair`, which is the previous logic moved
+  unchanged. That fallback now serves only propofol, which is pump-mandatory, so
+  its pump-off branches are unreachable today. They are kept for a future drug
+  with no report units.
+
+**Tests.**
+- `test-case-stats.mjs`:
+  - Fentanyl and ketamine infusions read `1.2 mcg/kg/h | 84.0 mcg/h` and
+    `0.50 mg/kg/h | 35.0 mg/h`. They read the same after the working units change
+    (fentanyl mL/h, ketamine mg/min) and both pumps go on, with no mL/h anywhere.
+  - Push-only fentanyl with a leftover mL/h working unit still reads mcg/kg/h
+    over mcg/h.
+- `test-units.mjs`:
+  - the new units convert and round-trip, and mcg/kg/h needs a weight;
+  - the keypad lists don't offer them;
+  - propofol still refuses `mg/h`.
+- The old build fails seven of the Totals checks, and can't load the units test
+  because `getReportUnits` doesn't exist.
+
 ### Planning mode cut off the keypad's last column (v0.6.5.4) — Interim
 
 Reported with a screenshot from an iPad mini, landscape, Propofol → Set Rate →

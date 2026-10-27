@@ -184,6 +184,10 @@ export function pushDeliveryMinutes(doseMg, drugId, pump) {
 // quantSteps = rounding increment for the TCI planner when "round in display
 //   units" is enabled. The step is in the display unit itself. Missing entries
 //   fall back to no quantization for that unit.
+// reportUnits = optional fixed units a summary states this task in (the Totals
+//   tab's average rate), whatever the keypad shows. They may be units the
+//   keypad does not offer: fentanyl and ketamine averages read per hour, as the
+//   user chose. Without them the Totals use the working unit.
 
 export const DRUG_TASK_UNITS = {
   propofol: {
@@ -221,6 +225,7 @@ export const DRUG_TASK_UNITS = {
       defaultDisplay: 'mcg/kg/min',
       prefKey: 'tci-pref-rateUnit-fentanyl',
       quantSteps: { 'mcg/kg/min': 0.01, 'mcg/h': 5, 'mL/h': 1 },
+      reportUnits: ['mcg/kg/h', 'mcg/h'],
     },
     ceTarget: {
       canonical: 'mcg/mL',
@@ -263,6 +268,7 @@ export const DRUG_TASK_UNITS = {
       defaultDisplay: 'mg/kg/h',
       prefKey: 'tci-pref-rateUnit-ketamine',
       quantSteps: { 'mg/kg/h': 0.1, 'mL/h': 1, 'mg/min': 0.1 },
+      reportUnits: ['mg/kg/h', 'mg/h'],
     },
     ceTarget: {
       canonical: 'mcg/mL',

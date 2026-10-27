@@ -363,11 +363,11 @@ console.log('\n  view details');
   const prop = t.split('Fentanyl')[0];
   ok(prop.includes('Avg rate'), 'with fentanyl infusing, propofol (one pump bolus) has an average over the case time');
   ok(prop.includes('Pump bolus|1 · 100.0 mg'), '…and the bolus is listed');
-  ok(t.includes('Avg rate|0.020 mcg/kg/min|84.0 mcg/h'), 'a fentanyl average reads 0.020 mcg/kg/min, not 0; pump off → mcg/h companion, not mL/h');
+  ok(t.includes('Avg rate|1.2 mcg/kg/h|84.0 mcg/h'), 'a fentanyl average reads per hour: 1.2 mcg/kg/h over 84.0 mcg/h');
   setPumpSettings('fentanyl', { pumpEnabled: true });
   caseTotals.render();
-  ok(document.getElementById('tot-list').innerHTML.includes('<span class="tot-part">0.020 mcg/kg/min</span><span class="tot-part">1.7 mL/h</span>'),
-     'pump on → the companion is mL/h (84 mcg/h at 50 mcg/mL)');
+  ok(document.getElementById('tot-list').innerHTML.includes('<span class="tot-part">1.2 mcg/kg/h</span><span class="tot-part">84.0 mcg/h</span>'),
+     'pump on: still mcg/kg/h over mcg/h, not mL/h');
   m.addBolus(P, 20, 50, 'IV push 50 mg', { deliveryMode: 'push', source: 'manual' });
   setPumpSettings(P, { concentration: 20 });
   caseTotals.render();
@@ -490,10 +490,38 @@ console.log('\n  dose reconciliations');
   caseTotals.setActive(false);
 }
 
-console.log('\n  a push-only drug never leads with mL/h');
+console.log('\n  fentanyl and ketamine average in their report units');
 {
-  // A working rate unit of mL/h can survive from a setup default chosen while
-  // the pump was on.
+  // The user's units for the Totals: fentanyl mcg/kg/h over mcg/h, ketamine
+  // mg/kg/h over mg/h, whatever the keypad's working unit or the pump.
+  // Fentanyl 0.0014 mg/min = 84 mcg/h = 1.2 mcg/kg/h at 70 kg; ketamine
+  // 35/60 mg/min = 35 mg/h = 0.5 mg/kg/h.
+  const m = freshModel();
+  m.addRate('fentanyl', 0, 0.0014, 'Rate 84 mcg/h');
+  m.addRate('ketamine', 0, 35 / 60, 'Rate 35 mg/h');
+  caseTotals.init({ model: m, getPatient: () => PATIENT, getDrugIds: () => DRUG_IDS, getElapsedMinutes: () => 60 });
+  caseTotals.setActive(true);
+  const t = () => document.getElementById('tot-list').innerHTML
+    .replace(/<span class="tot-nb">([^<]*)<\/span>/g, '$1').replace(/<[^>]+>/g, '|').replace(/\|+/g, '|');
+  ok(t().includes('Avg rate|1.2 mcg/kg/h|84.0 mcg/h'), 'fentanyl: 1.2 mcg/kg/h over 84.0 mcg/h');
+  ok(t().includes('Avg rate|0.50 mg/kg/h|35.0 mg/h'), 'ketamine: 0.50 mg/kg/h over 35.0 mg/h');
+
+  localStorage.setItem('tci-pref-rateUnit-fentanyl', 'mL/h');
+  localStorage.setItem('tci-pref-rateUnit-ketamine', 'mg/min');
+  setPumpSettings('fentanyl', { pumpEnabled: true });
+  setPumpSettings('ketamine', { pumpEnabled: true });
+  caseTotals.render();
+  ok(t().includes('Avg rate|1.2 mcg/kg/h|84.0 mcg/h') && t().includes('Avg rate|0.50 mg/kg/h|35.0 mg/h'),
+     '…the same whatever the working unit (mL/h, mg/min) or the pump');
+  ok(!t().includes('mL/h') && !t().includes('mg/min'), '…and neither the working unit nor mL/h appears');
+  resetPumpSettings();
+  localStorage.removeItem('tci-pref-rateUnit-fentanyl');
+  localStorage.removeItem('tci-pref-rateUnit-ketamine');
+  caseTotals.setActive(false);
+}
+{
+  // Push-only fentanyl with a working unit of mL/h left over from a setup
+  // default chosen while the pump was on: still mcg/kg/h, and never mL/h.
   const m = freshModel();
   m.addBolus('fentanyl', 1, 0.1, 'IV push 100 mcg', { deliveryMode: 'push', source: 'manual' });
   m.addBolus('fentanyl', 30, 0.05, 'IV push 50 mcg', { deliveryMode: 'push', source: 'manual' });
@@ -501,7 +529,8 @@ console.log('\n  a push-only drug never leads with mL/h');
   caseTotals.init({ model: m, getPatient: () => PATIENT, getDrugIds: () => DRUG_IDS, getElapsedMinutes: () => 40 });
   caseTotals.setActive(true);
   const h = document.getElementById('tot-list').innerHTML;
-  ok(!h.includes('mL/h') && h.includes('mcg/kg/min'), 'pump off: per-kg leads and no mL/h appears');
+  ok(!h.includes('mL/h') && h.includes('mcg/kg/h</span><span class="tot-part">') && h.includes(' mcg/h</span>'),
+     'push-only fentanyl: mcg/kg/h over mcg/h, no mL/h');
   caseTotals.setActive(false);
   localStorage.removeItem('tci-pref-rateUnit-fentanyl');
 }
