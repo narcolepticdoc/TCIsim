@@ -4,6 +4,74 @@
 
 ## Session History
 
+### Pause Pump vs Stop Pump: a Stop ends the Totals case time (v0.6.6) — Interim
+
+The user asked: "have a pause infusion that does the same as stop infusion, but
+when the stop infusion button is hit, the totals are updated as if the infusion
+was running at 0 rate until that time." The aim is a fair average-rate metric
+for a case where propofol is paused early so Ce can coast to emergence. With a
+case time that ended at the pause, the denominator was short and every average
+read high.
+
+The user decided:
+- **One button.** It reads Pause Pump while the drug is being given and becomes
+  Stop Pump once paused, so the phone control bar keeps its width.
+- **Scope.** The effect is confined to the Totals tab: its case time, and through
+  it every drug's Avg rate. Units are unchanged, and the Log's "Total delivered"
+  strip is unchanged.
+
+**Change.**
+- **The event.** A Stop is a `pause` event with `endsInfusion: true`. It is
+  written with the rate already 0, so replay, curves, the emergence countdown and
+  Next Up see an ordinary pause.
+  - `events/actions.js addPause` takes `opts` and sets the flag only when it is
+    true, so other events keep their shape.
+  - `simulation.js addPause` passes `opts` through.
+- **Case time.** `case-stats.js computeDrugStats`: a Stop after anything was
+  given moves `lastGiven` to the Stop. Everything downstream is unchanged:
+  `computeCaseStats`'s global span, every drug's average, and the "ET … → ET …"
+  span in `case-totals.js`. A plain pause still ends the drug's giving where it is.
+- **When Stop is offered.** `case-stats.js awaitingStop(events, now,
+  getDeliveryMinutes)` is true when all three hold:
+  - the drug has infused since its last Stop;
+  - it is giving nothing now;
+  - nothing is queued after now. A TCI hold waiting on its resume is a running
+    plan, not a pause.
+- **The button.**
+  - `app.js pumpButtonAction(drugId)` returns `'pause'` under the guard Stop Pump
+    always had: rate above 0, TCI mode, or anything queued. It returns `'stop'`
+    when `awaitingStop` is true, and null otherwise.
+  - `onPumpPause` and the label both read it, so the button does what it says.
+    `mode.js updateModeUI` gets it as a `getPumpAction` dep.
+  - `chart-bridge.js` re-checks it on the 2 s slow lane, as it does
+    `getRedoseBlock`. That catches a pause deferred to a bolus end, which turns
+    Pause Pump into Stop Pump with no mutation.
+  - A Stop within 1 s of the button's own Pause is ignored, so a double-tap
+    can't stop the infusion.
+  - Pause's notes now read "Pump Paused" and "TCI Ended / Pump Paused". A Stop
+    writes no note.
+- **The Log.** A pause row reads "Paused" and a Stop row reads "Stopped" (they
+  were both "Stopped"). The Stop row is kept visible so a mistaken Stop can be
+  found and deleted in the event editor. `upcoming.js _walkDrugEvents` skips a
+  Stop when the rate is already 0, so neither the chart nor Next Up shows it.
+- **Persistence.**
+  - `session.js save()` writes `endsInfusion` on the Stop only.
+  - `preview.js rehydrateEvents` passes the flag back to `addPause`, which
+    covers restore and planning-preview clones.
+  - The event editor keeps the flag when it re-creates an edited Stop.
+
+**Tests.**
+- `test-case-stats.mjs`:
+  - the case time runs to a Stop, and the totals don't change;
+  - a Stop lengthens another drug's average;
+  - a restart after a Stop;
+  - a Stop with nothing given;
+  - each `awaitingStop` state;
+  - the Totals view reads 1 h 15 min for a Stop at ET 75.
+- `test-upcoming.mjs`: no marker and no Next Up item for a Stop after a pause.
+  This was checked against an unflagged second pause, which does appear.
+- `test-session-roundtrip.js`: the flag survives save and restore.
+
 ### Totals: fentanyl and ketamine averages per hour (v0.6.5.5) — Interim
 
 The user asked: "For fentanyl change the average rate units to mcg/kg/hr and

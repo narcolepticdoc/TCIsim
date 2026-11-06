@@ -592,5 +592,27 @@ console.log('\n===== classifyFutureEvents (moved from chart-bridge.js) =====\n')
   eqArr(markers.map(m => m.time), [1, 2, 4, 6, 7, 9], 'marker times are preserved');
 }
 
+// ── A Stop pressed while paused changes no delivery ──────────────────────────
+// Stop Pump writes a pause flagged endsInfusion; it only ends the Totals case
+// time (sim/case-stats.js), so the chart and Next Up must not see a second stop.
+{
+  const evts = [
+    ev('propofol', 1, 'rate', 10, 'manual'),
+    ev('propofol', 30, 'pause', 0, 'manual'),
+    ev('propofol', 45, 'pause', 0, 'manual', { endsInfusion: true }),
+  ];
+  eqArr(classifyFutureEvents(evts, 50).map(m => m.time), [1, 30],
+    'a Stop after the pause draws no marker');
+  const items = collectUpcoming({ events: evts, now: 25 });
+  eqArr(keys(items), [evts[1].id], 'Next Up lists the pause ahead, never the Stop');
+
+  const running = [
+    ev('propofol', 1, 'rate', 10, 'manual'),
+    ev('propofol', 30, 'pause', 0, 'manual', { endsInfusion: true }),
+  ];
+  eqArr(classifyFutureEvents(running, 50).map(m => m.kind), ['resume', 'stop'],
+    'a flagged pause that does stop a running pump still marks the stop');
+}
+
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

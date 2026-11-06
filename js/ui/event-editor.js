@@ -362,8 +362,15 @@ function doConfirm(deliveryMode) {
       // Capture the active rate BEFORE inserting the pause
       const priorRate = _model.getRateAtTime(drug, time);
       
-      if (_isEditMode && _editEvtId) _model.deleteEvent(_editEvtId);
-      _model.addPause(drug, time, 'Pause');
+      // Editing a Stop keeps it a Stop — the flag is what extends the Totals
+      // case time, so re-adding a plain pause would silently drop it.
+      let endsInfusion = false;
+      if (_isEditMode && _editEvtId) {
+        const old = _model.getEvents(drug).find(e => e.id === _editEvtId);
+        endsInfusion = !!old?.endsInfusion;
+        _model.deleteEvent(_editEvtId);
+      }
+      _model.addPause(drug, time, endsInfusion ? 'Infusion stopped' : 'Pause', { endsInfusion });
       if (_pauseMode === 'timed') {
         const dur = getSelectInt('ee-pause-hours') * 60 + getSelectInt('ee-pause-minutes');
         if (dur > 0) {

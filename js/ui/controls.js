@@ -7,6 +7,10 @@
  * - "Pause Pump" sets the infusion rate to zero for the selected drug.
  *   The timer keeps running. This is equivalent to the clinician
  *   pressing pause on the physical pump.
+ * - Once paused, the same button reads "Stop Pump". Stop changes no
+ *   delivery; it marks where the infusion ended, and the Totals case time
+ *   runs to it (sim/case-stats.js). mode.js owns the label after the case
+ *   starts; app.js decides what a press does (pumpButtonAction).
  * - "Resume Pump" is not automatic — the clinician must set a new
  *   rate or target via the keypad.
  */
@@ -23,7 +27,7 @@ let onPumpPause = null;   // callback: (drugId) => void
  * @param {Object} opts
  * @param {Object} opts.timer - timer module
  * @param {Function} [opts.onCaseStart] - called when case begins
- * @param {Function} [opts.onPumpPause] - called when pump is paused
+ * @param {Function} [opts.onPumpPause] - called on a press of the pump button (Pause or Stop)
  */
 export function init(opts = {}) {
   timer = opts.timer;
@@ -42,7 +46,7 @@ function handleButton() {
     updateButton();
     if (onCaseStart) onCaseStart();
   } else {
-    // Pause the pump — timer keeps running
+    // Pause or stop the pump — timer keeps running
     if (onPumpPause) onPumpPause();
   }
 }
@@ -79,7 +83,8 @@ function updateButton() {
     btn.textContent = 'Start';
     btn.className = 'btn-ctrl btn-ctrl-pause is-stopped';
   } else {
-    btn.textContent = 'Stop Pump';
+    // mode.js relabels it (Pause Pump / Stop Pump) as soon as the case starts.
+    btn.textContent = 'Pause Pump';
     btn.className = 'btn-ctrl btn-ctrl-pause is-running';
   }
 }

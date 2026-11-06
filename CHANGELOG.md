@@ -11,6 +11,16 @@
 
 ---
 
+## [0.6.6] — 2026-11-06
+
+- **Added: Pause Pump and Stop Pump.** The pump button now reads **Pause Pump** while the drug is being given. Pausing works exactly as Stop Pump did: the rate goes to 0, queued steps are cleared, and TCI ends. Once the pump is paused, the same button reads **Stop Pump**.
+  - **What Stop does.** It gives no drug and changes no curve. It marks where the infusion ended, and the Totals tab's case time now runs to that moment, as if the pump had run at 0 from the pause. Every drug's Avg rate is its total over that case time, so all of them use the longer time.
+  - **Why.** Pausing near the end lets Ce coast to emergence. The case time used to end at the pause, which shortened it and made every average read high. If you never press Stop, the case time ends at the pause as before.
+  - **In the Log**, a pause now reads "Paused" and a Stop adds a "Stopped" row. The row is there so a mistaken Stop can be found and deleted. The chart and Next Up don't show the Stop, because nothing about delivery changes. A second tap within 1 s of Pause is ignored, so a double-tap can't stop the infusion by accident.
+  - The Stop is saved with the case and survives a restore. Pinned by `tests/test-case-stats.mjs`, `tests/test-upcoming.mjs` and `tests/test-session-roundtrip.js`.
+
+---
+
 ## [0.6.5.5] — 2026-10-27
 
 - **Changed: the Totals tab states fentanyl and ketamine averages per hour.** As requested:

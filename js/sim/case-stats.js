@@ -15,6 +15,11 @@
  *     end of the last delivery, or `now` while something is still being given.
  *     Gaps in between (pauses, TCI holds, time between doses) are not
  *     subtracted.
+ *   - A Stop (a pause event with `endsInfusion`, from the Stop Pump button once
+ *     the pump is paused) counts as giving the drug at 0 rate until the Stop,
+ *     so the case time runs to it. Pausing lets Ce coast to emergence; without
+ *     this the case time ended at the pause and every average read high. A
+ *     plain pause still ends the drug's giving where it is.
  *   - Each drug's average rate: its total ÷ the case time. Not the rate while
  *     its pump ran: an overall measure of how much of it the patient needed
  *     per unit time, as the user defined it ("the total amount of drug given
@@ -101,6 +106,10 @@ export function computeDrugStats(events, now, getDeliveryMinutes) {
         currentRate = evt.value;
       } else if (evt.type === 'pause') {
         currentRate = 0;
+        // A Stop: the paused time up to here was case time at 0 rate.
+        if (evt.endsInfusion && firstGiven !== null && evt.time > lastGiven) {
+          lastGiven = evt.time;
+        }
       }
     }
     if (currentTime < now) infuse(currentTime, now);
@@ -170,4 +179,39 @@ export function computeCaseStats(drugEvents, now, getDeliveryMinutes) {
     .filter(d => d.totalMg > 0)
     .map(d => ({ ...d, avgRateMgMin: hasSpan ? d.totalMg / caseTimeMin : null }));
   return { drugs, firstGiven, lastGiven, givingNow, caseTimeMin, hasSpan };
+}
+
+/**
+ * Whether the drug's pump sits paused with its infusion still open: the state
+ * in which the pump button offers Stop. True when the drug has infused since
+ * its last Stop, is giving nothing at `now`, and has no delivery queued after
+ * `now` (a TCI hold waiting on its resume is a running plan, not a pause).
+ *
+ * @param {Array} events - one drug's event list, time-sorted
+ * @param {number} now - case time (min)
+ * @param {Function} getDeliveryMinutes - (bolusEvt) => delivery time in minutes
+ * @returns {boolean}
+ */
+export function awaitingStop(events, now, getDeliveryMinutes) {
+  if (!events || !events.length || !(now > 0)) return false;
+  let infusedSinceStop = false;
+  let rate = 0;
+  let bolusEnd = -Infinity;
+  for (const evt of events) {
+    if (evt.time > now) {
+      if ((evt.type === 'rate' || evt.type === 'bolus') && evt.value > 0) return false;
+      continue;
+    }
+    if (evt.type === 'bolus') {
+      if (evt.value > 0) bolusEnd = Math.max(bolusEnd, evt.time + getDeliveryMinutes(evt));
+    } else if (evt.type === 'rate') {
+      rate = evt.value;
+      if (rate > 0) infusedSinceStop = true;
+    } else if (evt.type === 'pause') {
+      rate = 0;
+      if (evt.endsInfusion) infusedSinceStop = false;
+    }
+  }
+  if (rate > 0 || now < bolusEnd) return false;
+  return infusedSinceStop;
 }

@@ -36,6 +36,9 @@ let getRedoseDose = null;
 // (drugId) => reason | null — why the drug cannot hold a redose threshold now
 // (it runs TCI or a rate), which hides Set Threshold. Also app.js's.
 let getRedoseBlock = null;
+// (drugId) => 'pause' | 'stop' | null — what the pump button does now. Also
+// app.js's (pumpButtonAction), which the click handler reads too.
+let getPumpAction = null;
 
 /** Drugs that support TCI (Ce targeting). All others use intermittent/manual only. */
 const TCI_CAPABLE_DRUGS = new Set(['propofol', 'remifentanil']);
@@ -49,6 +52,7 @@ export function init(opts = {}) {
   onModeChange = opts.onModeChange || null;
   getRedoseDose = opts.getRedoseDose || null;
   getRedoseBlock = opts.getRedoseBlock || null;
+  getPumpAction = opts.getPumpAction || null;
 }
 
 /**
@@ -236,7 +240,7 @@ function updateModeUI(drugId) {
     // highlighted; setting a redose threshold is additive (promotes the mode
     // label from BOLUS to INTERMITTENT but doesn't change the bolus highlight).
     br.style.display = 'none';
-    // Hide Stop Pump after case starts; keep Start visible before case starts
+    // Hide the pump button after case starts; keep Start visible before case starts
     if (bp) bp.style.display = isCaseStarted() ? 'none' : '';
     if (cd) cd.style.display = 'none';
 
@@ -297,10 +301,14 @@ function updateModeUI(drugId) {
     }
   }
 
-  // Dim Stop Pump when case is running but no pump is active
+  // The pump button, once the case runs: Pause Pump while the drug is being
+  // given, Stop Pump once it sits paused with its infusion open (the Stop runs
+  // the Totals case time to that moment), and a dimmed Stop Pump when there is
+  // nothing to do.
   if (bp && isCaseStarted()) {
-    const pumpActive = m === 'tci' || m === 'manual';
+    const action = getPumpAction ? getPumpAction(resolvedDrug) : null;
+    bp.textContent = action === 'pause' ? 'Pause Pump' : 'Stop Pump';
     bp.classList.remove('is-running', 'is-idle');
-    bp.classList.add(pumpActive ? 'is-running' : 'is-idle');
+    bp.classList.add(action ? 'is-running' : 'is-idle');
   }
 }

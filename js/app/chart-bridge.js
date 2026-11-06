@@ -47,16 +47,21 @@ const CHART_DRUG_CONFIG = {
  *   save: Function,
  *   beforeRefresh?: Function,
  *   getRedoseBlock?: Function,
+ *   getPumpAction?: Function,
  * }} deps - `beforeRefresh` runs at the head of every refresh(), before
  *   anything renders: the one pass every model mutation ends in, so a rule
  *   about the case's state (app.js enforceRedoseThresholdRule) holds however
  *   the mutation arrived. `getRedoseBlock(drugId)` — why the drug cannot hold
  *   a redose threshold now, or null — is re-checked on the slow lane, since
  *   the clock passing a scheduled stop changes it with no mutation.
+ *   `getPumpAction(drugId)` — 'pause' | 'stop' | null, what the pump button
+ *   does — is re-checked there too: a bolus ending under a deferred pause
+ *   turns Pause Pump into Stop Pump with no mutation.
  */
 export function createChartBridge({
   getChart, getModel, timer, getSelectedDrug,
   mode, drugPanel, history, settings, nextUp, caseTotals, save, beforeRefresh, getRedoseBlock,
+  getPumpAction,
 }) {
   // Throttle state — replaces properties previously glued onto the chart object
   let lastCursorUpdate = 0;
@@ -65,6 +70,8 @@ export function createChartBridge({
   // Selected drug + whether it could hold a redose threshold, as last seen by
   // the slow lane. Only a change repaints the control bar.
   let lastRedoseBlockKey = null;
+  // Selected drug + what its pump button does, as last seen by the slow lane.
+  let lastPumpActionKey = null;
   let lastEventMarkersKey = '';
   // Last non-'rt' time-axis mode, tracked every frame in onFrame. The history
   // RT toggle restores this so turning real-time off never destroys the chart's
@@ -334,6 +341,14 @@ export function createChartBridge({
           const key = `${selectedDrug}:${getRedoseBlock(selectedDrug) ? 1 : 0}`;
           if (key !== lastRedoseBlockKey) {
             lastRedoseBlockKey = key;
+            mode.refreshUI(selectedDrug);
+          }
+        }
+        // Pause Pump / Stop Pump, likewise repainted on a change only.
+        if (getPumpAction) {
+          const key = `${selectedDrug}:${getPumpAction(selectedDrug)}`;
+          if (key !== lastPumpActionKey) {
+            lastPumpActionKey = key;
             mode.refreshUI(selectedDrug);
           }
         }

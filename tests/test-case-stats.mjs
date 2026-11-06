@@ -29,7 +29,7 @@ globalThis.document = {
 
 const { createModel } = await import('../js/sim/simulation.js');
 const { getCumulativeDose } = await import('../js/sim/events/query.js');
-const { computeDrugStats, computeCaseStats } = await import('../js/sim/case-stats.js');
+const { computeDrugStats, computeCaseStats, awaitingStop } = await import('../js/sim/case-stats.js');
 const { setPumpSettings, resetPumpSettings, DRUG_IDS } = await import('../js/util/constants.js');
 const { formatValueFixed } = await import('../js/util/units.js');
 const caseTotals = await import('../js/ui/case-totals.js');
@@ -61,6 +61,8 @@ const caseOf = (m, now, drugs = DRUG_IDS) =>
   computeCaseStats(drugs.map(d => [d, m.getEvents(d)]), now, dur(m));
 const avgOf = (c, drug) => c.drugs.find(d => d.drugId === drug)?.avgRateMgMin ?? null;
 const pushOf = (m, drug, time) => m.getEvents(drug).find(e => e.type === 'bolus' && e.time === time);
+const waiting = (m, drug, now) => awaitingStop(m.getEvents(drug), now, dur(m));
+const stopAt = (m, drug, time) => m.addPause(drug, time, 'Infusion stopped', { endsInfusion: true });
 
 // ---- A manual propofol case ----
 //   0    pump bolus 100 mg (then a system rate-restore to 0 at its end)
@@ -544,6 +546,96 @@ console.log('\n  a single dose in the whole case');
   const h = document.getElementById('tot-list').innerHTML;
   ok(h.includes('100.0 mg'), 'the dose is listed');
   ok(!h.includes('Case time') && !h.includes('Avg rate'), 'no case time and no average from one dose');
+  caseTotals.setActive(false);
+}
+
+// ---- Pause vs Stop ----
+// Stop Pump, pressed once the pump is paused, writes a pause flagged
+// endsInfusion. It gives no drug; the case time runs to it, as if the pump had
+// run at 0 from the pause, so every drug's average is over the longer time.
+
+console.log('\n  a Stop runs the case time to it (last pause ET 60, Stop ET 75)');
+{
+  const m = manualCase();
+  stopAt(m, P, 75);
+  const plain = manualCase();
+  const s = stats(m, P, 90);
+  near(s.lastGiven, 75, 'last given runs to the Stop');
+  near(stats(plain, P, 90).lastGiven, 60, 'without a Stop it stays at the pause');
+  near(s.totalMg, stats(plain, P, 90).totalMg, 'the Stop gives no drug');
+  near(s.totalMg, cumulative(m, P, 90), 'total equals getCumulativeDose');
+  eq(s.givingNow, false, 'nothing is being given after the Stop');
+  const c = caseOf(m, 90);
+  near(c.caseTimeMin, 75, 'case time ET 0 → 75');
+  near(avgOf(c, P), s.totalMg / 75, 'avg = total ÷ the case time up to the Stop');
+  near(stats(m, P, 70).lastGiven, 60, 'until the Stop is pressed, the case time ends at the pause');
+  eq(m.getEvents(P).find(e => e.time === 75)?.endsInfusion, true, 'the event carries the flag');
+  eq(m.getEvents(P).find(e => e.time === 60)?.endsInfusion, undefined, 'a plain pause carries none');
+}
+
+console.log("\n  a Stop lengthens every drug's average");
+{
+  const m = manualCase();
+  m.addBolus('fentanyl', 5, 0.1, 'IV push 100 mcg', { deliveryMode: 'push', source: 'manual' });
+  m.addBolus('fentanyl', 40, 0.05, 'IV push 50 mcg', { deliveryMode: 'push', source: 'manual' });
+  const without = caseOf(m, 90);
+  stopAt(m, P, 80);
+  const withStop = caseOf(m, 90);
+  near(without.caseTimeMin, 60, 'case time ends at the last delivery without a Stop');
+  near(withStop.caseTimeMin, 80, "the propofol Stop ends everyone's case time");
+  near(avgOf(withStop, 'fentanyl'), 0.15 / 80, 'fentanyl averages over it too');
+  near(avgOf(without, 'fentanyl'), 0.15 / 60, '…where it averaged over 60 min before');
+}
+
+console.log('\n  a restart after a Stop, and a Stop with nothing given');
+{
+  const m = manualCase();
+  stopAt(m, P, 75);
+  m.addRate(P, 100, 5, 'Rate 5');
+  m.addPause(P, 110, 'Pause');
+  near(stats(m, P, 130).lastGiven, 110, 'the restarted infusion is the last given');
+  near(caseOf(m, 130).caseTimeMin, 110, 'case time to its pause; the stopped gap is not subtracted');
+
+  const e = freshModel();
+  stopAt(e, P, 10);
+  eq(stats(e, P, 20).lastGiven, null, 'a Stop before any drug starts no case time');
+  eq(caseOf(e, 20).drugs.length, 0, 'and lists no drug');
+}
+
+console.log('\n  awaitingStop: when the pump button offers Stop');
+{
+  const m = manualCase();          // pause ET 20, resume queued at ET 30, pause ET 60
+  eq(waiting(m, P, 0.4), false, 'a pump bolus delivering → no');
+  eq(waiting(m, P, 10), false, 'infusion running → Pause, not Stop');
+  eq(waiting(m, P, 25), false, 'paused with a resume queued ahead → no');
+  eq(waiting(m, P, 90), true, 'paused after an infusion, nothing ahead → Stop');
+  stopAt(m, P, 95);
+  eq(waiting(m, P, 96), false, 'after the Stop → nothing to do');
+  m.addRate(P, 100, 5, 'Rate 5');
+  m.addPause(P, 110, 'Pause');
+  eq(waiting(m, P, 115), true, 'a restarted infusion, paused again → Stop again');
+
+  const b = freshModel();
+  b.addBolus(P, 0, 100, 'IV push 100 mg', { deliveryMode: 'push', source: 'manual' });
+  eq(waiting(b, P, 10), false, 'boluses only → no infusion to stop');
+
+  const t = freshModel();
+  t.addRate(P, 0, 10, 'Rate 10');
+  t.addRate(P, 10, 0, 'TCI hold', { source: 'tci' });
+  t.addRate(P, 20, 6, 'TCI resume', { source: 'tci' });
+  eq(waiting(t, P, 15), false, 'a TCI hold with its resume queued is a running plan');
+  eq(waiting(t, P, 25), false, 'and running again after it');
+}
+
+console.log('\n  the Totals view shows the case time up to the Stop');
+{
+  const m = manualCase();
+  stopAt(m, P, 75);
+  caseTotals.init({ model: m, getPatient: () => PATIENT, getDrugIds: () => DRUG_IDS, getElapsedMinutes: () => 90 });
+  caseTotals.setActive(true);
+  const h = document.getElementById('tot-list').innerHTML;
+  ok(h.includes('1 h 15 min'), 'case time reads 1 h 15 min');
+  ok(h.includes('ET 0:00') && h.includes('ET 1:15'), 'span ET 0:00 → ET 1:15');
   caseTotals.setActive(false);
 }
 

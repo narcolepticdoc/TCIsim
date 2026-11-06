@@ -72,7 +72,8 @@ export function rehydrateEvents(model, eventsByDrug) {
           source: evt.source || 'manual',
         });
       } else if (evt.type === 'pause') {
-        model.addPause(drugId, evt.time, evt.annotation || '');
+        model.addPause(drugId, evt.time, evt.annotation || '',
+          { endsInfusion: !!evt.endsInfusion });
       }
     }
   }
