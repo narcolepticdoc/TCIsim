@@ -394,7 +394,9 @@ function buildEventRow(evt, now) {
              `<span class="h-value"><strong>${rate}</strong></span>`;
     }
   } else if (evt.type === 'pause') {
-    desc = `<span class="h-type">${badge}Stopped</span>`;
+    // Pause Pump writes a plain pause; Stop Pump (pressed once paused) writes
+    // one flagged endsInfusion, where the Totals case time ends.
+    desc = `<span class="h-type">${badge}${evt.endsInfusion ? 'Stopped' : 'Paused'}</span>`;
   }
 
   return `<div class="history-row ${tc}${dimClass}${sysClass}" data-evt-id="${evt.id}" data-evt-time="${evt.time}">` +

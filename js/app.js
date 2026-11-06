@@ -27,6 +27,7 @@ import { hexToRgba } from './util/color.js';
 import { getQuantizeConfig, getWorkingUnit, fromCanonical, formatValue } from './util/units.js';
 import { findRedoseBolus } from './sim/redose.js';
 import { redoseThresholdBlock, redoseThresholdFixes, REDOSE_BLOCK_NOTE } from './sim/redose-threshold.js';
+import { awaitingStop } from './sim/case-stats.js';
 import * as persist from './ui/persist.js';
 import * as settings from './ui/settings.js';
 import { initSettingsUI } from './app/settings-ui.js';
@@ -97,6 +98,38 @@ function redoseBlock(drugId) {
   if (!model) return null;
   return redoseThresholdBlock(mode.get(drugId), model.getEvents(drugId), entryTime(drugId));
 }
+
+/**
+ * What the pump button does now: 'pause' while the drug is being given or has
+ * delivery queued (the guard Stop Pump always had), 'stop' once the pump sits
+ * paused with its infusion still open (sim/case-stats.js awaitingStop), else
+ * null. The click (onPumpPause) and the label (mode.js) both read this, so the
+ * button always does what it says.
+ */
+function pumpButtonAction(drugId) {
+  if (!model || !isPumpEnabled(drugId)) return null;
+  const t = timer.getElapsedMinutes();
+  // Probe current rate and any events queued in the future. During a case
+  // replay (current time set into the past) the user may sit on a momentary
+  // rate=0 gap with rate-resume / bolus events scheduled ahead — Pause must
+  // still fire there to cancel them.
+  let conc = null;
+  let hasFuture = false;
+  try {
+    conc = model.getConcentrationsAt(drugId, t);
+    hasFuture = model.getEvents(drugId).some(e => e.time > t + 0.0001);
+  } catch (e) {}
+  // Idle only when the rate is 0, TCI is off and nothing is queued ahead.
+  if (!(conc && conc.rate === 0 && mode.get(drugId) !== 'tci' && !hasFuture)) return 'pause';
+  const list = model.getEventList();
+  return awaitingStop(model.getEvents(drugId), t, evt => list.getBolusDelivery(evt).duration)
+    ? 'stop' : null;
+}
+
+// The last Pause the button made. A double-tap's second tap arrives with the
+// button already reading Stop Pump; inside this window it is ignored.
+let lastPauseTap = { drugId: null, ms: 0 };
+const STOP_AFTER_PAUSE_GUARD_MS = 1000;
 
 /**
  * Hold the redose-threshold rule after any change (sim/redose-threshold.js
@@ -595,6 +628,7 @@ function boot() {
     mode, drugPanel, history, settings, nextUp, caseTotals,
     save: () => session.save(),
     beforeRefresh: enforceRedoseThresholdRule,
+    getPumpAction: pumpButtonAction,
     getRedoseBlock: redoseBlock,
   });
 
@@ -898,7 +932,7 @@ function boot() {
     onAdjust: () => refreshChart(),
   });
 
-  // Initialize controls (start case / pause pump)
+  // Initialize controls (start case / pause and stop pump)
   controls.init({
     timer,
     onCaseStart(opts = {}) {
@@ -910,33 +944,35 @@ function boot() {
       // pre:true — announcement note, ranks above the t=0 delivery rows.
       if (!opts.restored) addAnnotation({ heading: 'Case Started', pre: true });
       // Re-evaluate button visibility now that case has started —
-      // hides Stop Pump for drugs without a pump.
+      // hides the pump button for drugs without a pump.
       mode.refreshUI(selectedDrug);
     },
     onPumpPause() {
-      if (!isPumpEnabled(selectedDrug)) return; // no pump to pause
+      const action = pumpButtonAction(selectedDrug);
+      if (!action) return; // no pump, or nothing to pause or stop
       const t = timer.getElapsedMinutes();
-      // Probe current rate and any events queued in the future. During a
-      // case replay (current time set into the past) the user may sit on a
-      // momentary rate=0 gap with rate-resume / bolus events scheduled
-      // ahead — Stop Pump must still fire there to cancel them.
-      let conc = null;
-      let hasFuture = false;
-      try {
-        conc = model.getConcentrationsAt(selectedDrug, t);
-        hasFuture = model.getEvents(selectedDrug).some(e => e.time > t + 0.0001);
-      } catch (e) {}
       const m = mode.get(selectedDrug);
-      // No-op only when pump is genuinely idle: rate=0, not TCI, and nothing queued ahead.
-      if (conc && conc.rate === 0 && m !== 'tci' && !hasFuture) return;
 
-      model.addPause(selectedDrug, t, 'Pump stopped');
-      if (m === 'tci') {
-        addAnnotation({ heading: 'TCI Ended', sub: 'Pump Stopped' }, selectedDrug);
-      } else {
-        addAnnotation({ heading: 'Pump Stopped' }, selectedDrug);
+      if (action === 'stop') {
+        if (lastPauseTap.drugId === selectedDrug &&
+            Date.now() - lastPauseTap.ms < STOP_AFTER_PAUSE_GUARD_MS) return;
+        // The pump is already paused, so delivery doesn't change: the Stop
+        // marks where the infusion ended, and the Totals case time runs to it
+        // (sim/case-stats.js). The Log's "Stopped" row is the record.
+        model.addPause(selectedDrug, t, 'Infusion stopped', { endsInfusion: true });
+        if (m !== 'none') mode.set(selectedDrug, 'none');
+        refreshChart();
+        return;
       }
-      // Stop drops out of current mode and clears all future events,
+
+      model.addPause(selectedDrug, t, 'Pump paused');
+      lastPauseTap = { drugId: selectedDrug, ms: Date.now() };
+      if (m === 'tci') {
+        addAnnotation({ heading: 'TCI Ended', sub: 'Pump Paused' }, selectedDrug);
+      } else {
+        addAnnotation({ heading: 'Pump Paused' }, selectedDrug);
+      }
+      // Pause drops out of current mode and clears all future events,
       // regardless of mode — the user is asking to halt forward delivery.
       model.clearAfter(selectedDrug, t);
       if (m !== 'none') {
@@ -955,6 +991,7 @@ function boot() {
     },
     getRedoseDose,
     getRedoseBlock: redoseBlock,
+    getPumpAction: pumpButtonAction,
   });
 
   // One-touch redose. No keypad and no planning mode even when

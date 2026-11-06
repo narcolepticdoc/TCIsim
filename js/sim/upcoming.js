@@ -104,6 +104,9 @@ function _walkDrugEvents(events, now) {
   for (const e of events) {
     if (e.source === 'system') continue;
     const past = e.time <= now;
+    // A Stop pressed with the pump already paused changes no delivery — it
+    // only ends the Totals case time — so it gets neither a marker nor a row.
+    if (e.type === 'pause' && e.endsInfusion && currentRate === 0) continue;
     if (e.type === 'pause' || (e.type === 'rate' && e.value === 0)) {
       out.push({ evt: e, time: e.time, past, chartKind: 'stop', kind: 'stop' });
       currentRate = 0;

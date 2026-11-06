@@ -180,6 +180,35 @@ const PATIENT = { age: 35, weight: 70, height: 170, male: true, opioid: false };
     ok(_clicked.includes('drug-propofol'), 'saved primaryDrug card re-selected on restore');
   }
 
+  // ---- Scenario 1b: a Stop (pause flagged endsInfusion) keeps its flag ----
+  // The flag is what runs the Totals case time to the Stop; a restore that
+  // dropped it would silently shorten every average.
+  {
+    _store.clear(); resetPumpSettings();
+    const model = createModel();
+    const { deps } = makeDeps(model, makeFakeMode(), makeFakeTimer());
+    const session = createSession(deps);
+    deps.setConfirmedPatient(PATIENT);
+    model.setPatient(PATIENT);
+    model.addRate('propofol', 0, 10, 'Rate 10');
+    model.addPause('propofol', 30, 'Pump paused');
+    model.addPause('propofol', 45, 'Infusion stopped', { endsInfusion: true });
+    session.save();
+    const saved = persist.loadCase();
+    const savedPauses = saved.events.propofol.filter(e => e.type === 'pause');
+    ok(savedPauses.length === 2 && savedPauses[1].endsInfusion === true && !('endsInfusion' in savedPauses[0]),
+      'save writes endsInfusion on the Stop only');
+
+    const model2 = createModel();
+    const d2 = makeDeps(model2, makeFakeMode(), makeFakeTimer());
+    createSession(d2.deps).restore();
+    const pauses = model2.getEvents('propofol').filter(e => e.type === 'pause');
+    ok(pauses.length === 2 && pauses[0].time === 30 && !pauses[0].endsInfusion,
+      'the Pause restores as a plain pause');
+    ok(pauses[1] && pauses[1].time === 45 && pauses[1].endsInfusion === true,
+      'the Stop restores as a Stop');
+  }
+
   // ---- Scenario 2: re-anchor under a changed global pump rate ----
   {
     _store.clear(); resetPumpSettings();

@@ -213,10 +213,11 @@ export function createModel(config = {}) {
   }
 
   /**
-   * Add a pause event.
+   * Add a pause event. `opts.endsInfusion` marks it as a Stop (see
+   * events/actions.js addPause).
    */
-  function addPause(drugId, time, annotation) {
-    return eventList.addPause(drugId, time, annotation);
+  function addPause(drugId, time, annotation, opts) {
+    return eventList.addPause(drugId, time, annotation, opts);
   }
 
   /**

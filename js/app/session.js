@@ -99,6 +99,8 @@ export function createSession({
         source: evt.source,
         deliveryMode: evt.deliveryMode,
         annotation: evt.annotation,
+        // A Stop — the Totals case time runs to it (sim/case-stats.js)
+        ...(evt.endsInfusion ? { endsInfusion: true } : {}),
       }));
     }
 

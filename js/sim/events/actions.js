@@ -205,8 +205,10 @@ export function createActions(
    * Add a pause event.
    * If the time falls during an active bolus delivery, the pause
    * is deferred to the bolus end time — the bolus completes first.
+   * `opts.endsInfusion` marks a Stop: delivery is identical to a pause, and
+   * only the Totals case time reads the flag (sim/case-stats.js).
    */
-  function addPause(drugId, time, annotation) {
+  function addPause(drugId, time, annotation, opts = {}) {
     const active = findActiveBolus(drugId, time);
     let eventTime = time;
     if (active) {
@@ -229,6 +231,7 @@ export function createActions(
       source: 'manual',
       annotation: annotation || 'Pump paused',
     });
+    if (opts.endsInfusion) evt.endsInfusion = true;
     insert(evt);
     replayDrugFrom(drugId, active ? active.bolusEvt.id : evt.id);
     return evt;
