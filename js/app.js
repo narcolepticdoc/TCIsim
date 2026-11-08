@@ -21,6 +21,7 @@ import * as nextUp from './ui/next-up.js';
 import * as caseTotals from './ui/case-totals.js';
 import * as eventEditor from './ui/event-editor.js';
 import * as reconcileModal from './ui/reconcile-modal.js';
+import * as pumpSync from './ui/pump-sync.js';
 import { createChart } from './ui/chart.js';
 import { bolusDeliveryMinutes, APP_VERSION, DRUG_IDS, DRUG_DEFS, isPumpEnabled, getPumpSettings } from './util/constants.js';
 import { hexToRgba } from './util/color.js';
@@ -465,6 +466,15 @@ function initSimScreen(patient) {
 
 // ---- Annotations ----
 
+/** Case minutes as the ET clock shows them, h:mm:ss (seconds floored). */
+function fmtCaseClock(min) {
+  const t = Math.floor(Math.max(0, min) * 60 + 1e-6);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
 /**
  * Record a notation in the editorial log.
  *
@@ -483,11 +493,7 @@ function addAnnotation(text, drugId = null) {
   if (!heading) return;
 
   const timeMin = timer.getElapsedMs() / 60000;
-  const t = Math.floor(timer.getElapsedMs() / 1000);
-  const h = Math.floor(t / 3600);
-  const m = Math.floor((t % 3600) / 60);
-  const s = t % 60;
-  const ts = h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  const ts = fmtCaseClock(timeMin);
 
   annotations.push({
     id: 'note_' + (_annotSeq++),
@@ -921,6 +927,13 @@ function boot() {
     });
   }
 
+  // Pump Total: the clock popover's sync to the pump's delivered total.
+  pumpSync.init({
+    model,
+    getSelectedDrug: () => selectedDrug,
+    getNowMinutes: () => timer.getElapsedMinutes(),
+  });
+
   // Initialize timer
   timer.init({
     onTick(elapsedMs) {
@@ -930,6 +943,21 @@ function boot() {
     // as for an edit: what is running at the new time decides the redose
     // threshold rule, the Set Threshold button, Next Up and the Log's dimming.
     onAdjust: () => refreshChart(),
+    sync: pumpSync,
+    syncHooks: {
+      // The clinician forgot to press Start: Sync presses it for them first,
+      // so "Case Started" lands at ET 0:00 as in Start-then-adjust.
+      beforeJump: () => { controls.ensureStarted(); },
+      afterJump({ label, fromMin, toMin }) {
+        // The pump ran everything up to the new time; nothing it skipped over
+        // is a missed step.
+        nextUp.forgetPassed(toMin);
+        addAnnotation({
+          heading: 'Case Start Synced',
+          sub: `${label} · ET ${fmtCaseClock(fromMin)} → ${fmtCaseClock(toMin)}`,
+        });
+      },
+    },
   });
 
   // Initialize controls (start case / pause and stop pump)

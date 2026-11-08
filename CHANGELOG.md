@@ -11,6 +11,22 @@
 
 ---
 
+## [0.6.7] — 2026-11-08
+
+- **Added: sync the case clock to the pump's total.** For the case where the infusion is running but nobody pressed Start, so nobody knows when the pump began. Before, the only fix was to press Start and then nudge the case start time until the Log's "Total delivered" matched the pump.
+  - **Where.** Tap the case clock. The popover has a third mode, **Pump Total**, next to Start Time and Elapsed Time.
+  - **How.** Type the total the pump says it has delivered and tap **Sync**, or press Enter. The clock jumps to the moment the sim had delivered exactly that much, which moves the case start. The Log's Total delivered and the Totals tab then read the number you typed.
+  - **Before you tap Sync**, the popover shows what the sim has delivered so far and where Sync would land, for example `Start → 09:41:12 · ET 0:24:31`.
+  - **It assumes** the rates or TCI plan in the sim are what the pump has been running.
+  - **Units.** Enter mL (the pump's volume infused, the default) or the drug's mass unit (mg, or mcg for fentanyl). mL uses the case's own pump concentration, so 12 mL of 2% propofol is 240 mg. Switching unit converts the number you typed rather than clearing it, and your unit choice holds for the rest of the session. When more than one drug has been given, pick the drug at the top; it starts on the drug card in focus.
+  - **If the case hasn't been started**, Sync starts it first. The "Case Started" note stays at ET 0:00, just as if you had pressed Start and then adjusted.
+  - **Pump steps the jump skips over aren't flagged MISSED.** Next Up treats them as already delivered, since the premise is that the pump ran them. Apply and Now still report skipped steps as before.
+  - **The Log** gets a global "Case Start Synced" note, for example "Propofol pump total 23.5 mL · ET 0:00:00 → 0:23:30".
+  - **When Sync can't find a time**, the clock is left alone and the popover says why. That happens when the total is more than a case that ends paused ever delivers. If a pause, or a negative dose reconciliation, means more than one time fits, Sync picks the one nearest the current clock.
+  - Pinned by `tests/test-dose-sync.mjs`, `tests/test-pump-sync.mjs` and `tests/test-sync-skipped-steps.mjs`.
+
+---
+
 ## [0.6.6] — 2026-11-06
 
 - **Added: Pause Pump and Stop Pump.** The pump button now reads **Pause Pump** while the drug is being given. Pausing works exactly as Stop Pump did: the rate goes to 0, queued steps are cleared, and TCI ends. Once the pump is paused, the same button reads **Stop Pump**.

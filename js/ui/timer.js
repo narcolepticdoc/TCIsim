@@ -19,17 +19,27 @@ let running = false;
 
 let onTick = null; // callback: (elapsedMs) => void, called every 500ms
 let onAdjust = null; // callback: () => void, after the popover moves the clock
+let sync = null;      // Pump Total adapter (ui/pump-sync.js), or null
+let syncHooks = null; // { beforeJump(), afterJump(result) } — app.js side effects
 
 /**
  * Initialize the timer module.
  * @param {Object} opts
  * @param {Function} [opts.onTick] - called every 500ms with elapsed ms
- * @param {Function} [opts.onAdjust] - called after the popover's Apply or Now
- *   moves the clock (a jump, not the clock running)
+ * @param {Function} [opts.onAdjust] - called after the popover's Apply, Now
+ *   or Sync moves the clock (a jump, not the clock running)
+ * @param {Object} [opts.sync] - the Pump Total pane (ui/pump-sync.js). The
+ *   timer stays free of the model: the pane does the solving, and this module
+ *   only moves the clock to where it says. Without it the mode is hidden.
+ * @param {Object} [opts.syncHooks] - { beforeJump(), afterJump(result) }, run
+ *   around a successful Sync (start the case; note it, forget skipped steps)
  */
 export function init(opts = {}) {
   onTick = opts.onTick || null;
   onAdjust = opts.onAdjust || null;
+  sync = opts.sync || null;
+  syncHooks = opts.syncHooks || null;
+  if (sync && sync.bind) sync.bind({ onChange: updatePopoverInfo, onSubmit: applyStartTime });
 
   // Wire timer click → popover toggle
   const timerEl = $('elapsed-timer');
@@ -52,6 +62,11 @@ export function init(opts = {}) {
   // Wire mode toggle
   $('tp-mode-start')?.addEventListener('click', () => setPopoverMode('start'));
   $('tp-mode-elapsed')?.addEventListener('click', () => setPopoverMode('elapsed'));
+  const syncBtn = $('tp-mode-sync');
+  if (syncBtn) {
+    syncBtn.style.display = sync ? '' : 'none';
+    syncBtn.addEventListener('click', () => setPopoverMode('sync'));
+  }
 
   // Close popover on outside click
   document.addEventListener('click', e => {
@@ -145,6 +160,8 @@ function tick() {
   if (realStartTime == null) return;
   elapsedMs = Date.now() - realStartTime;
   renderDisplay();
+  // Pump Total's "sim now" figure moves with the clock.
+  if (_popoverMode === 'sync' && $('timer-popover')?.classList.contains('open')) updatePopoverInfo();
   if (onTick) onTick(elapsedMs);
 }
 
@@ -177,12 +194,6 @@ function togglePopover() {
   if (!pop) return;
   if (pop.classList.contains('open')) { closePopover(); return; }
 
-  _popoverMode = 'start';
-  $('tp-mode-start')?.classList.add('active');
-  $('tp-mode-elapsed')?.classList.remove('active');
-  $('input-start-time').parentElement.style.display = '';
-  $('tp-elapsed-row').style.display = 'none';
-
   // Pre-fill start time
   const input = $('input-start-time');
   if (wallClockStart) {
@@ -197,18 +208,28 @@ function togglePopover() {
   // Pre-fill elapsed selects
   populateElapsedSelects();
 
-  updatePopoverInfo();
+  setPopoverMode('start');
   pop.classList.add('open');
 }
 
-let _popoverMode = 'start'; // 'start' | 'elapsed'
+let _popoverMode = 'start'; // 'start' | 'elapsed' | 'sync'
 
 function setPopoverMode(mode) {
+  if (mode === 'sync' && !sync) mode = 'start';
   _popoverMode = mode;
   $('tp-mode-start')?.classList.toggle('active', mode === 'start');
   $('tp-mode-elapsed')?.classList.toggle('active', mode === 'elapsed');
+  $('tp-mode-sync')?.classList.toggle('active', mode === 'sync');
   $('input-start-time').parentElement.style.display = mode === 'start' ? '' : 'none';
   $('tp-elapsed-row').style.display = mode === 'elapsed' ? '' : 'none';
+  const pane = $('tp-sync-pane');
+  if (pane) pane.style.display = mode === 'sync' ? '' : 'none';
+  // Sync replaces Apply; Now (restart the clock at 0:00) has no meaning there.
+  const apply = $('tp-btn-apply');
+  if (apply) apply.textContent = mode === 'sync' ? 'Sync' : 'Apply';
+  const now = $('tp-btn-now');
+  if (now) now.style.display = mode === 'sync' ? 'none' : '';
+  if (mode === 'sync') sync.onShow();
   updatePopoverInfo();
 }
 
@@ -255,7 +276,9 @@ function updatePopoverInfo() {
   const info = $('tp-info');
   if (!info) return;
 
-  if (_popoverMode === 'start') {
+  if (_popoverMode === 'sync') {
+    info.textContent = sync ? sync.info() : '';
+  } else if (_popoverMode === 'start') {
     const val = $('input-start-time').value;
     if (!val) { info.textContent = ''; return; }
     const [h, m] = val.split(':').map(Number);
@@ -282,7 +305,30 @@ function updatePopoverInfo() {
   }
 }
 
+/**
+ * Move the clock: the one path for Apply, Now and Sync.
+ *
+ * @param {number} newElapsedMs
+ * @param {Object} [o]
+ * @param {Date} [o.start] - the start this puts the case at; defaults to
+ *   now − newElapsedMs
+ * @param {Function} [o.beforeRefresh] - runs after the clock has moved and
+ *   before onAdjust's refresh, so the refresh sees what it changed
+ */
+function _jump(newElapsedMs, { start, beforeRefresh } = {}) {
+  wallClockStart = start || new Date(Date.now() - newElapsedMs);
+  elapsedMs = newElapsedMs;
+  if (realStartTime != null) realStartTime = Date.now() - elapsedMs;
+
+  renderDisplay();
+  updateWallHint();
+  closePopover();
+  if (beforeRefresh) beforeRefresh();
+  if (onAdjust) onAdjust();
+}
+
 function applyStartTime() {
+  if (_popoverMode === 'sync') { applySync(); return; }
   if (_popoverMode === 'start') {
     const val = $('input-start-time').value;
     if (!val) return;
@@ -290,34 +336,35 @@ function applyStartTime() {
     const now = new Date();
     const newStart = resolveStartTime(h, m, now);
     if (!newStart) { closePopover(); return; }
-    const newElapsedMs = now.getTime() - newStart.getTime();
-
-    wallClockStart = newStart;
-    elapsedMs = newElapsedMs;
-    if (realStartTime != null) realStartTime = Date.now() - elapsedMs;
+    _jump(now.getTime() - newStart.getTime(), { start: newStart });
   } else {
     // Elapsed mode
     const h = parseInt($('tp-elapsed-h')?.value) || 0;
     const m = parseInt($('tp-elapsed-m')?.value) || 0;
-    const newElapsedMs = (h * 60 + m) * 60000;
-    wallClockStart = new Date(Date.now() - newElapsedMs);
-    elapsedMs = newElapsedMs;
-    if (realStartTime != null) realStartTime = Date.now() - elapsedMs;
+    _jump((h * 60 + m) * 60000);
   }
-
-  renderDisplay();
-  updateWallHint();
-  closePopover();
-  if (onAdjust) onAdjust();
 }
 
 function applyNow() {
-  wallClockStart = new Date();
-  elapsedMs = 0;
-  if (realStartTime != null) realStartTime = Date.now();
+  _jump(0, { start: new Date() });
+}
 
-  renderDisplay();
-  updateWallHint();
-  closePopover();
-  if (onAdjust) onAdjust();
+/**
+ * Pump Total: move the clock to where the sim had delivered the typed total.
+ * With no answer the popover stays open, its preview saying why. The case is
+ * started first if it hasn't been — the Sync stands in for "press Start, then
+ * adjust", so the Case Started note stays at ET 0:00.
+ */
+function applySync() {
+  if (!sync) return;
+  const res = sync.resolve(getElapsedMinutes());
+  if (!res) { updatePopoverInfo(); return; }
+  if (syncHooks && syncHooks.beforeJump) syncHooks.beforeJump();
+  const fromMin = getElapsedMinutes();
+  const toMin = res.elapsedMs / 60000;
+  _jump(res.elapsedMs, {
+    beforeRefresh: () => {
+      if (syncHooks && syncHooks.afterJump) syncHooks.afterJump({ ...res, fromMin, toMin });
+    },
+  });
 }
