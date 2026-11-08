@@ -168,6 +168,27 @@ export function setActive(active) {
 
 export function isActive() { return _active; }
 
+/**
+ * The clock was synced to the pump's total (timer popover → Pump Total):
+ * everything up to `t` counts as delivered, not as pending steps the user let
+ * slip by. Drops those events from `_seenFuture`, so the rebuild after the
+ * jump does not report the plan steps it skipped over as MISSED.
+ *
+ * Sync only. Its premise is that the pump ran them; a plain Apply or Now
+ * makes no such claim, so it keeps the usual missed-step reporting.
+ *
+ * @param {number} t - the clock after the sync, minutes
+ */
+export function forgetPassed(t) {
+  if (!_model) return;
+  let events = [];
+  try { events = _model.getEvents() || []; } catch (e) { events = []; }
+  for (const e of events) {
+    if (e.id && e.time <= t) _seenFuture.delete(e.id);
+  }
+  _dirty = true;
+}
+
 /** Mark an item key acknowledged — also called when a warning popup is dismissed. */
 export function markCleared(key) {
   if (!key) return;

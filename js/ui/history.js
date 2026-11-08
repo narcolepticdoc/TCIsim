@@ -298,6 +298,17 @@ export function fmtTotalMass(mg, drugId) {
 }
 
 /**
+ * Format a total mg as the volume the pump has infused, at the drug's live
+ * pump concentration. Shared with the clock popover's Pump Total readout so
+ * both state the same mL figure.
+ */
+export function fmtTotalVolume(mg, drugId) {
+  const ps = getPumpSettings(drugId);
+  const ml = mg / (ps.concentration || 10);
+  return `${ml >= 10 ? ml.toFixed(1) : ml.toFixed(2)} mL`;
+}
+
+/**
  * Render the totals strip for the selected drug. Hidden when no events
  * or total is zero. Shows native mass unit + mL (concentration is known
  * per-drug even when no infusion pump is configured).
@@ -314,15 +325,12 @@ export function renderTotals(drugId) {
     return;
   }
   const massStr = fmtTotalMass(totalMg, drug);
-  const ps = getPumpSettings(drug);
-  const ml = totalMg / (ps.concentration || 10);
-  const mlStr = ml >= 10 ? ml.toFixed(1) : ml.toFixed(2);
   el.hidden = false;
   el.innerHTML =
     `<span class="ht-label">Total delivered</span>` +
     `<span class="ht-values">` +
       `<span class="ht-value">${massStr}</span>` +
-      `<span class="ht-value">${mlStr} mL</span>` +
+      `<span class="ht-value">${fmtTotalVolume(totalMg, drug)}</span>` +
     `</span>`;
 }
 

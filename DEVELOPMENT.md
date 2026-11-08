@@ -4,6 +4,85 @@
 
 ## Session History
 
+### Pump Total: sync the case clock to the pump's delivered total (v0.6.7) — Interim
+
+The user's scenario: the case has started, but the clinician didn't press
+Start and doesn't know when the infusion began. They know only the pump's
+"total delivered". The workaround was to press Start, then adjust the case
+start time again and again until the sim's total matched the pump. The user
+asked for a sync in the adjust-start dialog: "it asks for a total dose
+delivered and when the button is pressed it updates the case start time so
+that the calculated dose delivered matches".
+
+The user decided:
+- **Sync before Start starts the case**, so the "Case Started" note stays at
+  ET 0:00, as in Start-then-adjust.
+- **Skipped steps are not missed, after a Sync only.** Apply and Now keep the
+  usual reporting.
+- **A Sync leaves a global Log note.**
+- **The entry defaults to mL**, remembered for the session.
+
+**Change.**
+- **The solve: `js/sim/dose-sync.js solveElapsedForTotal`** (pure).
+  - It brackets with breakpoints (0, each event, each bolus end), then bisects
+    `getCumulativeDose` itself, so the Log reads the typed total after a Sync.
+  - Past the last event it solves on the terminal rate.
+  - When several times fit, it picks the one nearest the current clock.
+    Several can fit on a pause plateau, a TCI hold, or after a negative
+    reconciliation. A plateau the clock is already on therefore means no move.
+  - It returns `invalid`, `nothing`, or `unreachable` with `maxMg`.
+- **The pane: `js/ui/pump-sync.js`.** timer.js stays model-free.
+  - The drug picker lists drugs that have events. It starts on the selected
+    drug card.
+  - Units are the bolus task's mass unit plus mL. mL is offered only when the
+    drug runs on a pump with a concentration. Per-kg units are dropped.
+  - `toCanonical` is called with no concentration, so mL is read at the live
+    case concentration.
+  - Unit toggles convert the entry through `formatValueEntry`.
+  - `info()` previews the sim's total now and where Sync lands. `resolve()`
+    returns `{ drugId, elapsedMs, label }`.
+  - Its buttons toggle classes instead of re-rendering. The popover closes on
+    a click whose target is outside `#timer-wrap`, and a detached,
+    re-rendered button reads as outside. The browser check caught exactly
+    that on the unit toggle.
+- **The popover: `js/ui/timer.js`.**
+  - The third mode, "Pump Total", is hidden without an adapter. In it, Apply
+    reads Sync, Now is hidden, Enter syncs, and the preview re-ticks.
+  - Apply, Now and Sync now share one `_jump(ms, { start, beforeRefresh })`,
+    the only `onAdjust` call. `tests/test-redose-threshold.mjs` now pins that
+    shape instead of counting two calls.
+  - Sync resolves first, and only on success runs `syncHooks.beforeJump`
+    (`controls.ensureStarted()`), then `_jump`, then `afterJump` before the
+    refresh.
+- **Next Up: `next-up.js forgetPassed(t)`.** It drops events at or before `t`
+  from `_seenFuture`, so the rebuild after a Sync doesn't report the skipped
+  plan steps as MISSED. Only Sync's `afterJump` calls it.
+- **`app.js` wiring.**
+  - `pumpSync.init` takes `{ model, getSelectedDrug, getNowMinutes }`.
+  - `afterJump` calls `forgetPassed`, then adds the "Case Start Synced" note.
+  - A small `fmtCaseClock` helper is now shared with `addAnnotation`.
+- **`history.js fmtTotalVolume`** is factored out of `renderTotals`, so the
+  popover's mL figure matches the Log's.
+- **Markup.** The popover is 256 px wide (capped at the viewport less 32 px).
+  The pane uses the free `.tp-sync-*` prefix, and the unit toggle reuses
+  `.tp-unit-toggle`.
+
+**Tests.**
+- `test-dose-sync.mjs`: manual rate; bolus + rate; a TCI plan, including its
+  hold and its tail; pause plateaus with the ceiling; a negative
+  reconciliation; bad input.
+- `test-pump-sync.mjs`: the pane against the real model, including 2%
+  propofol mL, converting toggles and the drug picker. It also covers the
+  popover's Sync path with its hook order, the single refresh, a failed solve
+  that changes nothing, and Enter.
+- `test-sync-skipped-steps.mjs`: a plain jump still reports missed steps; a
+  Sync doesn't.
+- Browser check (Chromium):
+  - Never started: 23.5 mL at 1% gives ET 0:23:30, the case running, the Log
+    at 23.5 mL, and both notes.
+  - TCI plan synced forward: no MISSED rows.
+  - At 375 px the popover fits with no horizontal scroll.
+
 ### Stop Pump kept logging pauses: a mixed cache, and three Pause bugs (v0.6.6.1) — Interim
 
 The user reported: "Stop pump isn't working. It just does pause again", then "It

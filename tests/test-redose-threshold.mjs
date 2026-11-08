@@ -292,8 +292,19 @@ ok(/return redoseThresholdBlock\(mode\.get\(drugId\), model\.getEvents\(drugId\)
    /getTime: d => entryTime\(d\)/.test(app),
    "the block is judged at the drug's entry time (its own pre-start clock)");
 const timerSrc = read('../js/ui/timer.js');
-ok((timerSrc.match(/if \(onAdjust\) onAdjust\(\);/g) || []).length === 2 && /onAdjust: \(\) => refreshChart\(\)/.test(app),
-   'moving the clock (popover Apply / Now) refreshes, so the rule holds at the new time');
+// Every popover move (Apply, Now, Pump Total's Sync) goes through one _jump,
+// which is the one place that calls onAdjust.
+const jumpBody = timerSrc.slice(timerSrc.indexOf('function _jump('), timerSrc.indexOf('function applyStartTime('));
+ok((timerSrc.match(/if \(onAdjust\) onAdjust\(\);/g) || []).length === 1 &&
+   /if \(onAdjust\) onAdjust\(\);/.test(jumpBody) &&
+   /onAdjust: \(\) => refreshChart\(\)/.test(app),
+   'moving the clock refreshes from one place (_jump), so the rule holds at the new time');
+for (const fn of ['applyStartTime', 'applyNow', 'applySync']) {
+  const start = timerSrc.indexOf(`function ${fn}(`);
+  const body = timerSrc.slice(start, timerSrc.indexOf('\n}\n', start));
+  ok(start >= 0 && (/_jump\(/.test(body) || /applySync\(\)/.test(body)),
+     `${fn} moves the clock through _jump`);
+}
 ok(/getRedoseBlock: redoseBlock,\s*\}\);/.test(app.slice(app.indexOf('createChartBridge({'))),
    'the bridge re-checks the block on its slow lane');
 

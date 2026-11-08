@@ -244,7 +244,7 @@
     .elapsed-timer .ct-value-et{color:var(--green)}
     .elapsed-timer .ct-sep{color:var(--border);margin:0 2px}
     .elapsed-timer .ct-start-group{display:inline-flex;align-items:baseline;gap:6px}
-    .timer-popover{display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:12px 14px;z-index:100;width:220px;box-shadow:0 8px 24px rgba(0,0,0,.4);flex-direction:column;gap:8px}
+    .timer-popover{display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:12px 14px;z-index:100;width:256px;max-width:calc(100vw - 32px);box-sizing:border-box;box-shadow:0 8px 24px rgba(0,0,0,.4);flex-direction:column;gap:8px}
     .timer-popover.open{display:flex}
 
     .sim-main{flex:1;display:flex;overflow:hidden;min-height:0}
@@ -1098,7 +1098,16 @@
     .tp-row{display:flex;gap:8px;align-items:center}
     .tp-time-input{background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-primary);font-family:var(--font-mono);font-size:16px;padding:6px 10px;outline:none;width:100%;color-scheme:dark}
     .tp-time-input:focus{border-color:var(--border-focus)}
-    .tp-info{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);min-height:14px}
+    .tp-info{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);min-height:14px;white-space:pre-line}
+    /* Pump Total pane (js/ui/pump-sync.js). .tp-sync-* is the pane's own prefix. */
+    .tp-sync-pane{display:flex;flex-direction:column;gap:6px}
+    .tp-sync-drugs{display:flex;gap:4px}
+    .tp-sync-drugs:empty{display:none}
+    .tp-sync-drug{flex:1;background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-muted);font-family:var(--font-display);font-size:10px;font-weight:600;padding:4px 0;cursor:pointer;text-align:center}
+    .tp-sync-drug.active{background:var(--blue-dim);color:var(--text-primary);border-color:var(--cyan)}
+    .tp-sync-input{flex:1;min-width:0}
+    .tp-sync-units{flex-shrink:0}
+    .tp-sync-units .tp-unit{padding:5px 8px}
     .tp-actions{display:flex;gap:6px;justify-content:flex-end}
     .tp-btn{background:var(--blue);border:none;border-radius:var(--radius-sm);color:#fff;font-family:var(--font-display);font-size:12px;font-weight:600;padding:5px 14px;cursor:pointer;transition:all .15s}
     .tp-btn:hover{background:#2563eb}
@@ -1709,6 +1718,7 @@
           <div class="tp-mode-toggle">
             <button class="tp-mode active" id="tp-mode-start">Start Time</button>
             <button class="tp-mode" id="tp-mode-elapsed">Elapsed Time</button>
+            <button class="tp-mode" id="tp-mode-sync" style="display:none" title="Set the clock from the pump's total delivered">Pump Total</button>
           </div>
           <div class="tp-row">
             <input type="time" id="input-start-time" class="tp-time-input" step="60">
@@ -1717,6 +1727,13 @@
             <select class="ee-select" id="tp-elapsed-h"></select>
             <span class="ee-time-sep">:</span>
             <select class="ee-select" id="tp-elapsed-m"></select>
+          </div>
+          <div class="tp-sync-pane" id="tp-sync-pane" style="display:none">
+            <div class="tp-sync-drugs" id="tp-sync-drugs"></div>
+            <div class="tp-row">
+              <input type="text" inputmode="decimal" enterkeyhint="done" autocomplete="off" id="tp-sync-input" class="tp-time-input tp-sync-input" placeholder="Pump total" aria-label="Total delivered, as the pump shows it">
+              <div class="tp-unit-toggle tp-sync-units" id="tp-sync-units"></div>
+            </div>
           </div>
           <div class="tp-info" id="tp-info"></div>
           <div class="tp-actions">
