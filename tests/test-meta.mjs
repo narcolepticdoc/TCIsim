@@ -67,6 +67,20 @@ for (const asset of ['index.html', 'manifest.json', 'sw.js']) {
   ok(precache.has(asset), `${asset} is precached`);
 }
 
+// ---- 3. One version per cache ----
+// A cache that mixed an old model module into a new UI logged every Stop Pump
+// as one more pause (v0.6.6.1). The install must fetch each same-origin file
+// under a version query, check that version.js — cached and on the server —
+// is this sw.js's VERSION, and the fetch handler must read only its own cache.
+const swCode = swSrc.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+ok(/fetch\(sameOrigin \? versioned\(url\) : url, \{ cache: 'reload' \}\)/.test(swCode) &&
+   /await cache\.put\(url, res\)/.test(swCode),
+   'precache fetches url?v=VERSION and stores it under the plain URL');
+ok(/cachedVersion !== VERSION \|\| serverVersion !== VERSION/.test(swCode),
+   'install aborts unless cached and server version.js both match VERSION');
+ok(!/caches\.match\(/.test(swCode),
+   'no caches.match(): lookups go through this version\'s cache only');
+
 console.log(`\n${'='.repeat(50)}`);
 console.log(`  TOTAL: ${passed} passed, ${failed} failed`);
 console.log(`${'='.repeat(50)}\n`);

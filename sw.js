@@ -136,6 +136,18 @@ const PRECACHE_URLS = [
   'https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap',
 ];
 
+// `url?v=VERSION` (or `&v=`), for the precache fetches.
+function versioned(url) {
+  return `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(VERSION)}`;
+}
+
+// The VERSION a js/version.js response declares, or null.
+async function versionOf(res) {
+  if (!res || !res.ok) return null;
+  const m = (await res.clone().text()).match(/VERSION\s*=\s*['"]([^'"]+)['"]/);
+  return m ? m[1] : null;
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
@@ -148,11 +160,17 @@ self.addEventListener('install', (event) => {
     // chart stack too (js/vendor/*), which used to be tolerant CDN URLs; the
     // only remaining tolerant entry is the Google Fonts CSS, where a miss
     // degrades typography rather than breaking rendering.
+    //
+    // Each same-origin file is fetched as `url?v=VERSION` and stored under its
+    // plain URL. The query is a key no cache layer has seen, so a stale copy
+    // held anywhere between here and the deployment can't be cached as this
+    // version's. A cache that mixed an old model module into a new UI logged
+    // every Stop Pump as one more pause (v0.6.6.1).
     const failures = [];
     await Promise.all(PRECACHE_URLS.map(async (url) => {
       const sameOrigin = !/^https?:/i.test(url);
       try {
-        const res = await fetch(url, { cache: 'reload' });
+        const res = await fetch(sameOrigin ? versioned(url) : url, { cache: 'reload' });
         if (res.ok || res.type === 'opaque') {
           await cache.put(url, res);
         } else if (sameOrigin) {
@@ -162,6 +180,18 @@ self.addEventListener('install', (event) => {
         if (sameOrigin) failures.push(`${url}: ${err.message}`);
       }
     }));
+    // One deployment only: the cached version.js must be this sw.js's version,
+    // and the server must still be on it once every file is in. A deploy that
+    // landed before or during the fetches fails one of the two, and the next
+    // update check installs the newer sw.js instead.
+    if (failures.length === 0) {
+      const cachedVersion = await versionOf(await cache.match('js/version.js'));
+      const serverVersion = await versionOf(
+        await fetch(`js/version.js?v=${Date.now()}`, { cache: 'no-store' }).catch(() => null));
+      if (cachedVersion !== VERSION || serverVersion !== VERSION) {
+        failures.push(`version mismatch: sw ${VERSION}, cached ${cachedVersion}, server ${serverVersion}`);
+      }
+    }
     if (failures.length > 0) {
       await caches.delete(CACHE_NAME);
       throw new Error('[TCI Sim SW] Precache incomplete, aborting install: ' + failures.join('; '));
@@ -201,7 +231,8 @@ self.addEventListener('fetch', (event) => {
         cache.put(req, fresh.clone());
         return fresh;
       } catch (err) {
-        const cached = await caches.match(req, { ignoreSearch: true });
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match(req, { ignoreSearch: true });
         if (cached) return cached;
         throw err;
       }
@@ -211,8 +242,12 @@ self.addEventListener('fetch', (event) => {
 
   // Cache-first for everything else. On miss, fetch + opportunistically cache
   // (covers Google Fonts woff2 files pulled in at runtime by the cached CSS).
+  // Only this version's cache: caches.match() searches every cache, so while
+  // another version's cache exists (a newer one installing beside it), a file
+  // missing here would be served from that version, a mixed module graph.
   event.respondWith((async () => {
-    const cached = await caches.match(req);
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(req);
     if (cached) return cached;
     try {
       // Same-origin misses revalidate with the server ('no-cache') so a stale
@@ -221,13 +256,12 @@ self.addEventListener('fetch', (event) => {
       const sameOrigin = url.origin === self.location.origin;
       const fresh = await fetch(req, sameOrigin ? { cache: 'no-cache' } : undefined);
       if (fresh && (fresh.ok || fresh.type === 'opaque')) {
-        const cache = await caches.open(CACHE_NAME);
         cache.put(req, fresh.clone());
       }
       return fresh;
     } catch (err) {
       if (req.mode === 'navigate') {
-        const fallback = await caches.match('index.html');
+        const fallback = await cache.match('index.html');
         if (fallback) return fallback;
       }
       throw err;

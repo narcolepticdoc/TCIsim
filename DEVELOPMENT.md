@@ -83,6 +83,73 @@ The user decided:
   - TCI plan synced forward: no MISSED rows.
   - At 375 px the popover fits with no horizontal scroll.
 
+### Stop Pump kept logging pauses: a mixed cache, and three Pause bugs (v0.6.6.1) — Interim
+
+The user reported: "Stop pump isn't working. It just does pause again", then "It
+just keeps logging new pauses". The case was propofol on a manual rate,
+mid-case, running steadily. Every press added another PAUSED row and the button
+stayed bright.
+
+**Diagnosis.**
+- The deployed 0.6.6 matched main byte for byte, and in every flow I could drive
+  it gave Pause, then one Stop, then nothing:
+  - TCI and Set Rate;
+  - mouse and touch;
+  - clock jumps and real time.
+- 0.6.5.5 alone ignores presses after the first, and labels the row "Stopped".
+- The symptom appears only with the new UI over the **pre-0.6.6
+  `events/actions.js`**, whose `addPause` has no `opts`. Every Stop is then saved
+  as a plain pause, and `awaitingStop` keeps offering Stop. Reproduced exactly
+  with a Playwright route serving the old file: four presses gave four "Paused"
+  rows.
+- So the device had a mixed module cache. The exact route in is unknown, but the
+  service worker had gaps that allow one:
+  - precache fetches by plain URL;
+  - `caches.match()` searching every version's cache;
+  - `js/version.js` network-first, so the setup screen's version tag shows the
+    server version even over older cached code.
+
+**Changes.**
+- **Stop path** (`app.js`). It sets `endsInfusion` on the event `addPause`
+  returns, as well as passing it in opts. A Stop is recorded even behind a stale
+  model module.
+- **`sw.js`.**
+  - It precaches same-origin files from `url?v=VERSION` (`cache: 'reload'`),
+    stored under the plain URL.
+  - After the fetches it checks that the cached `js/version.js` and a fresh
+    server read both equal `VERSION`; otherwise it deletes the cache and aborts.
+  - Lookups (cache-first, the `version.js` offline fallback, the navigate
+    fallback) open `CACHE_NAME` instead of `caches.match()`.
+  - Verified in Chromium: one `tcisim-v0.6.6.1` cache of 100 plain-URL entries,
+    and an offline reload boots. Against a scratch copy serving version.js as
+    9.9.9 the install aborted, leaving no cache and no registration.
+- **Pause during a bolus.** `onPumpPause` used to call `addPause` then
+  `clearAfter(t)`. `addPause` defers a mid-bolus pause to the bolus end, so
+  `clearAfter` deleted it and the pump ran on at the old rate (8.84 mg/min in the
+  reproduction).
+  - It now clears first.
+  - `case-stats.js pauseAwaitingBolusEnd()` makes `pumpButtonAction` return null
+    while the deferred pause waits, so the button dims and can't pause again.
+    The slow lane repaints it to Stop when the bolus ends.
+- **`awaitingStop`** now also accepts a plain pause after anything given since the
+  last Stop. Before, a Pause during the TCI loading bolus or the hold after it
+  (until ~3 min, when maintenance starts) never offered Stop. A pump bolus that
+  was never paused still gets none.
+- **Smaller fixes.**
+  - Pause calls `settings.dismissForDrug`: open TCI step popups announce
+    cleared steps, and their "Missed it — Recalculate" would restart TCI.
+  - The double-tap guard drops from 1000 to 400 ms.
+
+**Tests.**
+- `test-case-stats.mjs`:
+  - `awaitingStop` after the induction hold, after bolus then pause, and for a
+    pump bolus never paused;
+  - `pauseAwaitingBolusEnd`;
+  - the mid-bolus Pause, against the old order as a control;
+  - `onPumpPause` source checks.
+- `test-meta.mjs`: the versioned precache, the version check, and no
+  `caches.match(`.
+
 ### Pause Pump vs Stop Pump: a Stop ends the Totals case time (v0.6.6) — Interim
 
 The user asked: "have a pause infusion that does the same as stop infusion, but

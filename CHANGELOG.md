@@ -27,6 +27,20 @@
 
 ---
 
+## [0.6.6.1] — 2026-11-08
+
+- **Fixed: Stop Pump logged another pause instead of stopping.** Reported with propofol on a manual rate: every press of Stop Pump added another "Paused" row, and the button kept offering Stop.
+  - **The cause** was a mixed app on the device after the 0.6.6 update. The new screen code was running beside an older copy of the pump-event code, which ignores the Stop marker, so every Stop was saved as a plain pause.
+  - **The fix.** The Stop button now marks its own event, so a Stop is recorded even in that state.
+  - **A clean cache.** The offline cache now fetches every file under a version-specific address. It refuses to install unless the server and the cache agree on the version, and it never serves a file from another version's cache. Updating to 0.6.6.1 re-downloads every file.
+- **Fixed: Pause pressed while a bolus was going in didn't pause.** The pause was moved to the end of the bolus and then deleted in the same step, so the pump carried on at its previous rate. Now the pause takes effect when the bolus finishes. Until then the button is dimmed, so a second press can't pause again, and afterwards it offers Stop.
+- **Fixed: no Stop after pausing during a TCI induction.** A Pause during the loading bolus, or the hold after it, came before any maintenance rate, so Stop was never offered. Stop now follows any Pause made after a dose.
+- **Pausing closes the drug's TCI step popups.** Those steps were just cleared, and the popup's "Missed it — Recalculate" button would have restarted TCI.
+- **The double-tap guard is shorter (1 s to 0.4 s).** A deliberate Stop pressed straight after Pause is no longer ignored.
+- Pinned by `tests/test-case-stats.mjs` and `tests/test-meta.mjs`.
+
+---
+
 ## [0.6.6] — 2026-11-06
 
 - **Added: Pause Pump and Stop Pump.** The pump button now reads **Pause Pump** while the drug is being given. Pausing works exactly as Stop Pump did: the rate goes to 0, queued steps are cleared, and TCI ends. Once the pump is paused, the same button reads **Stop Pump**.

@@ -29,7 +29,7 @@ globalThis.document = {
 
 const { createModel } = await import('../js/sim/simulation.js');
 const { getCumulativeDose } = await import('../js/sim/events/query.js');
-const { computeDrugStats, computeCaseStats, awaitingStop } = await import('../js/sim/case-stats.js');
+const { computeDrugStats, computeCaseStats, awaitingStop, pauseAwaitingBolusEnd } = await import('../js/sim/case-stats.js');
 const { setPumpSettings, resetPumpSettings, DRUG_IDS } = await import('../js/util/constants.js');
 const { formatValueFixed } = await import('../js/util/units.js');
 const caseTotals = await import('../js/ui/case-totals.js');
@@ -625,6 +625,82 @@ console.log('\n  awaitingStop: when the pump button offers Stop');
   t.addRate(P, 20, 6, 'TCI resume', { source: 'tci' });
   eq(waiting(t, P, 15), false, 'a TCI hold with its resume queued is a running plan');
   eq(waiting(t, P, 25), false, 'and running again after it');
+}
+
+console.log('\n  awaitingStop: a Pause before any infusion rate still offers Stop');
+{
+  // A TCI induction: loading bolus, then a hold at rate 0 until maintenance
+  // starts (~3 min). A Pause in that window follows no rate above 0.
+  const m = freshModel();
+  m.planTCI(P, 0.19, 3, { tciMode: 'cet-emulation' });
+  const hold = m.getEvents(P).find(e => e.type === 'rate' && e.value === 0);
+  ok(hold && hold.time < 3, 'the plan holds at rate 0 after the loading bolus');
+  m.clearAfter(P, 1.63); m.addPause(P, 1.63, 'Pump paused');
+  eq(waiting(m, P, 2), true, 'paused in the induction hold → Stop');
+
+  const b = freshModel();
+  b.addBolus(P, 0, 100, 'Pump bolus 100 mg', { deliveryMode: 'pump', source: 'manual' });
+  b.clearAfter(P, 2); b.addPause(P, 2, 'Pump paused');
+  eq(waiting(b, P, 3), true, 'a pump bolus, then paused → Stop');
+
+  const n = freshModel();
+  n.addBolus(P, 0, 100, 'Pump bolus 100 mg', { deliveryMode: 'pump', source: 'manual' });
+  eq(waiting(n, P, 3), false, 'a pump bolus never paused → no Stop');
+
+  stopAt(b, P, 4);
+  eq(waiting(b, P, 5), false, 'after the Stop → nothing to do');
+}
+
+console.log('\n  a Pause pressed mid-bolus pauses at the bolus end');
+{
+  // A target raise gives a TCI bolus. onPumpPause clears forward, then pauses;
+  // addPause defers the pause to the bolus end.
+  const build = () => {
+    const m = freshModel();
+    m.planTCI(P, 0, 3, { tciMode: 'cet-emulation' });
+    m.planTCI(P, 20, 5, { tciMode: 'cet-emulation' });
+    const bolus = m.getEvents(P).find(e => e.type === 'bolus' && e.time >= 20);
+    return { m, bolus, end: 20 + dur(m)(bolus) };
+  };
+  const { m, end } = build();
+  const t = 20 + (end - 20) / 2;
+  m.clearAfter(P, t);
+  const p = m.addPause(P, t, 'Pump paused');
+  near(p.time, end, 'the pause lands at the bolus end');
+  eq(m.getConcentrationsAt(P, end + 5).rate, 0, 'and the pump is stopped after the bolus');
+  eq(pauseAwaitingBolusEnd(m.getEvents(P), t + 0.01, dur(m)), true,
+     'while the bolus finishes, the pause is waiting (button has nothing to offer)');
+  eq(waiting(m, P, t + 0.01), false, '…so no Stop yet');
+  eq(pauseAwaitingBolusEnd(m.getEvents(P), end + 1, dur(m)), false, 'once it lands, nothing is waiting');
+  eq(waiting(m, P, end + 1), true, '…and Stop is offered');
+
+  // The old order — pause, then clear — deleted the deferred pause.
+  const old = build();
+  old.m.addPause(P, t, 'Pump paused');
+  old.m.clearAfter(P, t);
+  ok(old.m.getConcentrationsAt(P, old.end + 5).rate > 0,
+     'pausing before clearing loses the pause (why onPumpPause clears first)');
+
+  const q = build();
+  eq(pauseAwaitingBolusEnd(q.m.getEvents(P), t, dur(q.m)), false,
+     'a bolus with its plan still queued is not a waiting pause');
+  const mc = manualCase();
+  eq(pauseAwaitingBolusEnd(mc.getEvents(P), 10, dur(mc)), false, 'no bolus delivering → false');
+}
+
+console.log('\n  onPumpPause: clear before pausing; a Stop always carries its flag');
+{
+  const { readFileSync } = await import('fs');
+  const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  const handler = app.slice(app.indexOf('onPumpPause() {'), app.indexOf('// Initialize mode tracking'));
+  const clearAt = handler.indexOf("model.clearAfter(selectedDrug, t);");
+  const pauseAt = handler.indexOf("model.addPause(selectedDrug, t, 'Pump paused');");
+  ok(clearAt > 0 && pauseAt > clearAt, 'the Pause path clears forward before adding the pause');
+  ok(/const stopEvt = model\.addPause\([^)]*endsInfusion: true \}\);\s*(\/\/[^\n]*\n\s*)*if \(stopEvt\) stopEvt\.endsInfusion = true;/.test(handler),
+     'the Stop path sets endsInfusion on the event it added (a stale model module drops the opts)');
+  ok(/settings\.dismissForDrug\(selectedDrug\)/.test(handler), 'Pause closes that drug\'s TCI step popups');
+  ok(/pauseAwaitingBolusEnd\(model\.getEvents\(drugId\), t, deliveryMinutes\)\) return null/.test(app),
+     'pumpButtonAction offers nothing while a Pause waits on a bolus');
 }
 
 console.log('\n  the Totals view shows the case time up to the Stop');
