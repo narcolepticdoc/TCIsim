@@ -183,9 +183,13 @@ export function computeCaseStats(drugEvents, now, getDeliveryMinutes) {
 
 /**
  * Whether the drug's pump sits paused with its infusion still open: the state
- * in which the pump button offers Stop. True when the drug has infused since
- * its last Stop, is giving nothing at `now`, and has no delivery queued after
- * `now` (a TCI hold waiting on its resume is a running plan, not a pause).
+ * in which the pump button offers Stop. True when the drug is giving nothing at
+ * `now`, has no delivery queued after `now` (a TCI hold waiting on its resume
+ * is a running plan, not a pause), and since its last Stop either infused (a
+ * rate above 0) or was paused after anything was given. The second covers a
+ * Pause pressed during a TCI induction — the loading bolus, or the hold after
+ * it — before any maintenance rate has run. A drug only ever given boluses,
+ * and never paused, gets no Stop.
  *
  * @param {Array} events - one drug's event list, time-sorted
  * @param {number} now - case time (min)
@@ -194,7 +198,9 @@ export function computeCaseStats(drugEvents, now, getDeliveryMinutes) {
  */
 export function awaitingStop(events, now, getDeliveryMinutes) {
   if (!events || !events.length || !(now > 0)) return false;
-  let infusedSinceStop = false;
+  let infused = false;            // a rate above 0 since the last Stop
+  let given = false;              // anything given since the last Stop
+  let pausedAfterGiving = false;  // a plain pause after it
   let rate = 0;
   let bolusEnd = -Infinity;
   for (const evt of events) {
@@ -203,15 +209,49 @@ export function awaitingStop(events, now, getDeliveryMinutes) {
       continue;
     }
     if (evt.type === 'bolus') {
-      if (evt.value > 0) bolusEnd = Math.max(bolusEnd, evt.time + getDeliveryMinutes(evt));
+      if (evt.value > 0) {
+        given = true;
+        bolusEnd = Math.max(bolusEnd, evt.time + getDeliveryMinutes(evt));
+      }
     } else if (evt.type === 'rate') {
       rate = evt.value;
-      if (rate > 0) infusedSinceStop = true;
+      if (rate > 0) infused = given = true;
     } else if (evt.type === 'pause') {
       rate = 0;
-      if (evt.endsInfusion) infusedSinceStop = false;
+      if (evt.endsInfusion) infused = given = pausedAfterGiving = false;
+      else if (given) pausedAfterGiving = true;
     }
   }
   if (rate > 0 || now < bolusEnd) return false;
-  return infusedSinceStop;
+  return infused || pausedAfterGiving;
+}
+
+/**
+ * Whether a Pause pressed during a bolus is still waiting for it to finish.
+ * addPause defers a pause that lands mid-bolus to the bolus end, so for the
+ * rest of the delivery the pump is giving and the pause sits in the future.
+ * The pump button has nothing to offer then: another press would only pause
+ * again. Once the pause lands, Stop is offered (awaitingStop).
+ *
+ * True when a bolus is delivering at `now` and everything queued after `now`
+ * is a pause at that bolus's end.
+ *
+ * @param {Array} events - one drug's event list, time-sorted
+ * @param {number} now - case time (min)
+ * @param {Function} getDeliveryMinutes - (bolusEvt) => delivery time in minutes
+ * @returns {boolean}
+ */
+export function pauseAwaitingBolusEnd(events, now, getDeliveryMinutes) {
+  if (!events || !events.length) return false;
+  let bolusEnd = null;
+  const ahead = [];
+  for (const evt of events) {
+    if (evt.time > now) { ahead.push(evt); continue; }
+    if (evt.type === 'bolus' && evt.value > 0) {
+      const end = evt.time + getDeliveryMinutes(evt);
+      if (end > now) bolusEnd = end;
+    }
+  }
+  if (bolusEnd === null || !ahead.length) return false;
+  return ahead.every(e => e.type === 'pause' && Math.abs(e.time - bolusEnd) < 1e-6);
 }
