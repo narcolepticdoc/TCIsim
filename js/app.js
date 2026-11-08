@@ -27,7 +27,7 @@ import { hexToRgba } from './util/color.js';
 import { getQuantizeConfig, getWorkingUnit, fromCanonical, formatValue } from './util/units.js';
 import { findRedoseBolus } from './sim/redose.js';
 import { redoseThresholdBlock, redoseThresholdFixes, REDOSE_BLOCK_NOTE } from './sim/redose-threshold.js';
-import { awaitingStop } from './sim/case-stats.js';
+import { awaitingStop, pauseAwaitingBolusEnd } from './sim/case-stats.js';
 import * as persist from './ui/persist.js';
 import * as settings from './ui/settings.js';
 import { initSettingsUI } from './app/settings-ui.js';
@@ -109,6 +109,11 @@ function redoseBlock(drugId) {
 function pumpButtonAction(drugId) {
   if (!model || !isPumpEnabled(drugId)) return null;
   const t = timer.getElapsedMinutes();
+  const list = model.getEventList();
+  const deliveryMinutes = evt => list.getBolusDelivery(evt).duration;
+  // A Pause pressed mid-bolus waits for the bolus to finish: nothing to press
+  // until it lands, and then Stop is offered.
+  if (pauseAwaitingBolusEnd(model.getEvents(drugId), t, deliveryMinutes)) return null;
   // Probe current rate and any events queued in the future. During a case
   // replay (current time set into the past) the user may sit on a momentary
   // rate=0 gap with rate-resume / bolus events scheduled ahead — Pause must
@@ -121,15 +126,14 @@ function pumpButtonAction(drugId) {
   } catch (e) {}
   // Idle only when the rate is 0, TCI is off and nothing is queued ahead.
   if (!(conc && conc.rate === 0 && mode.get(drugId) !== 'tci' && !hasFuture)) return 'pause';
-  const list = model.getEventList();
-  return awaitingStop(model.getEvents(drugId), t, evt => list.getBolusDelivery(evt).duration)
-    ? 'stop' : null;
+  return awaitingStop(model.getEvents(drugId), t, deliveryMinutes) ? 'stop' : null;
 }
 
-// The last Pause the button made. A double-tap's second tap arrives with the
-// button already reading Stop Pump; inside this window it is ignored.
+// The last Pause the button made. An accidental double-tap's second tap
+// arrives with the button already reading Stop Pump; inside this window it is
+// ignored. Short enough that a deliberate press, read off the new label, isn't.
 let lastPauseTap = { drugId: null, ms: 0 };
-const STOP_AFTER_PAUSE_GUARD_MS = 1000;
+const STOP_AFTER_PAUSE_GUARD_MS = 400;
 
 /**
  * Hold the redose-threshold rule after any change (sim/redose-threshold.js
@@ -959,22 +963,32 @@ function boot() {
         // The pump is already paused, so delivery doesn't change: the Stop
         // marks where the infusion ended, and the Totals case time runs to it
         // (sim/case-stats.js). The Log's "Stopped" row is the record.
-        model.addPause(selectedDrug, t, 'Infusion stopped', { endsInfusion: true });
+        const stopEvt = model.addPause(selectedDrug, t, 'Infusion stopped', { endsInfusion: true });
+        // Mark it here as well. A model module older than this file (a stale
+        // copy left in the cache by an update) ignores the opts, and every
+        // Stop was then logged as one more pause, with Stop still offered.
+        if (stopEvt) stopEvt.endsInfusion = true;
         if (m !== 'none') mode.set(selectedDrug, 'none');
         refreshChart();
         return;
       }
 
+      // Pause drops out of current mode and clears all future events,
+      // regardless of mode — the user is asking to halt forward delivery.
+      // Clear first: a Pause pressed mid-bolus lands at the bolus end (addPause
+      // defers it), and clearing after it deleted that pause, so the pump
+      // carried on at its old rate.
+      model.clearAfter(selectedDrug, t);
       model.addPause(selectedDrug, t, 'Pump paused');
       lastPauseTap = { drugId: selectedDrug, ms: Date.now() };
+      // The TCI step popups announce steps that were just cleared; left open,
+      // their "Missed it — Recalculate" would restart TCI.
+      settings.dismissForDrug(selectedDrug);
       if (m === 'tci') {
         addAnnotation({ heading: 'TCI Ended', sub: 'Pump Paused' }, selectedDrug);
       } else {
         addAnnotation({ heading: 'Pump Paused' }, selectedDrug);
       }
-      // Pause drops out of current mode and clears all future events,
-      // regardless of mode — the user is asking to halt forward delivery.
-      model.clearAfter(selectedDrug, t);
       if (m !== 'none') {
         mode.set(selectedDrug, 'none');  // no detail — notation emitted explicitly above
       }
