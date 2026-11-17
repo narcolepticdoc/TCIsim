@@ -111,35 +111,92 @@ ok(metaColors && staticMeta?.toLowerCase() === metaColors[1].toLowerCase() &&
 ok(/color-scheme:dark;/.test(darkRoot) && /color-scheme:light;/.test(lightRoot),
   ':root declares color-scheme per theme');
 
-// ---- 5. iPad top clearance ----
-// On iPad the gradient survived a clean reinstall with `default` (iPadOS 27,
-// v0.6.7.2): it darkens the top ~35 px of the page. The <head> script flags
-// the iPad Home Screen app, and only it, so the body starts below the band.
-const clearSrc = html.match(/<script id="ios-top-clear">([\s\S]*?)<\/script>/)?.[1];
-ok(!!clearSrc, '<head> has the ios-top-clear script');
-ok(html.indexOf('id="ios-top-clear"') < html.indexOf('<body'), 'ios-top-clear runs in <head>, before first paint');
+// ---- 5. iOS top edge bar ----
+// The gradient survived a clean reinstall with `default` on iPadOS 27, and a
+// 34 px band below it (v0.6.7.2) looked like an empty black strip. iOS drops
+// the gradient while a full-width fixed bar sits at the top, if the bar
+// *arrives* (painted at 5px, then moved to 4px), has paint, sits above the
+// page background and stays (v0.6.7.3). The <head> script flags the iOS/iPadOS
+// Home Screen app and slides the bar in on load, on return from the
+// background and on rotation.
+const edgeSrc = html.match(/<script id="ios-top-edge">([\s\S]*?)<\/script>/)?.[1];
+ok(!!edgeSrc, '<head> has the ios-top-edge script');
+ok(html.indexOf('id="ios-top-edge"') < html.search(/^<body>/m), 'ios-top-edge runs in <head>, before first paint');
+ok(/<body>\s*<div id="ios-top-edge-bar" aria-hidden="true"><\/div>/.test(html), 'the bar is the first element in <body>');
 const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15';
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1';
 const ANDROID = 'Mozilla/5.0 (Linux; Android 15; Pixel Tablet) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36';
-function flagged({ ua, touch, standalone, displayMode = false }) {
-  const classes = new Set();
+// Run the script in a fake page. Returns the flag, the bar's class list and
+// helpers to fire events and step animation frames.
+function runEdge({ ua, touch, standalone, displayMode = false }) {
+  const htmlClasses = new Set(), barClasses = new Set();
+  const docListeners = {}, winListeners = {};
+  let frames = [];
+  const bar = { classList: { add: (c) => barClasses.add(c), remove: (c) => barClasses.delete(c) } };
+  const document = {
+    visibilityState: 'visible',
+    documentElement: { classList: { add: (c) => htmlClasses.add(c) } },
+    getElementById: (id) => (id === 'ios-top-edge-bar' ? bar : null),
+    addEventListener: (t, f) => { (docListeners[t] ||= []).push(f); },
+  };
   const window = {
     navigator: { userAgent: ua, maxTouchPoints: touch, ...(standalone === undefined ? {} : { standalone }) },
     matchMedia: (q) => ({ matches: q === '(display-mode: standalone)' && displayMode }),
+    requestAnimationFrame: (f) => { frames.push(f); },
+    addEventListener: (t, f) => { (winListeners[t] ||= []).push(f); },
   };
-  const document = { documentElement: { classList: { add: (c) => classes.add(c) } } };
-  new Function('window', 'document', clearSrc)(window, document);
-  return classes.has('ios-top-clear');
+  new Function('window', 'document', edgeSrc)(window, document);
+  return {
+    flagged: htmlClasses.has('ios-top-edge'),
+    arrived: () => barClasses.has('arrived'),
+    fireDoc: (t) => (docListeners[t] || []).forEach(f => f()),
+    fireWin: (t, e = {}) => (winListeners[t] || []).forEach(f => f(e)),
+    frame: () => { const now = frames; frames = []; now.forEach(f => f()); },
+    listeners: { docListeners, winListeners },
+  };
 }
-if (clearSrc) {
-  ok(flagged({ ua: MAC, touch: 5, standalone: true }), 'flags the iPad Home Screen app');
-  ok(flagged({ ua: MAC, touch: 5, displayMode: true }), 'flags it from display-mode: standalone too');
-  ok(!flagged({ ua: MAC, touch: 5, standalone: false }), 'not iPad Safari (a tab, not the Home Screen app)');
-  ok(!flagged({ ua: MAC, touch: 0, displayMode: true }), 'not a Mac web app (no touch points)');
-  ok(!flagged({ ua: IPHONE, touch: 5, standalone: true }), 'not the iPhone Home Screen app');
-  ok(!flagged({ ua: ANDROID, touch: 10, displayMode: true }), 'not an installed Android tablet app');
+if (edgeSrc) {
+  ok(runEdge({ ua: MAC, touch: 5, standalone: true }).flagged, 'flags the iPad Home Screen app');
+  ok(runEdge({ ua: IPHONE, touch: 5, standalone: true }).flagged, 'flags the iPhone Home Screen app');
+  ok(runEdge({ ua: MAC, touch: 5, displayMode: true }).flagged, 'flags it from display-mode: standalone too');
+  ok(!runEdge({ ua: MAC, touch: 5, standalone: false }).flagged, 'not iPad Safari (a tab, not the Home Screen app)');
+  ok(!runEdge({ ua: IPHONE, touch: 5, standalone: false }).flagged, 'not iPhone Safari');
+  ok(!runEdge({ ua: MAC, touch: 0, displayMode: true }).flagged, 'not a Mac web app (no touch points)');
+  const android = runEdge({ ua: ANDROID, touch: 10, displayMode: true });
+  ok(!android.flagged && !android.listeners.docListeners.DOMContentLoaded, 'not an installed Android tablet app, and no listeners');
+
+  const pad = runEdge({ ua: MAC, touch: 5, standalone: true });
+  pad.fireDoc('DOMContentLoaded');
+  ok(!pad.arrived(), 'the bar has not moved before a frame is painted');
+  pad.frame();
+  ok(!pad.arrived(), 'nor after one frame: it must be painted at 5px first');
+  pad.frame();
+  ok(pad.arrived(), 'it moves up on the second frame');
+  pad.fireDoc('visibilitychange');
+  ok(!pad.arrived(), 'back from the background, it drops back to 5px');
+  pad.frame(); pad.frame();
+  ok(pad.arrived(), '...and arrives again');
+  pad.fireWin('orientationchange'); pad.frame(); pad.frame();
+  ok(pad.arrived(), 'and again after a rotation');
+  pad.fireWin('pageshow', { persisted: true });
+  ok(!pad.arrived(), 'and when restored from the back-forward cache');
 }
-ok(/html\.ios-top-clear body\{padding-top:\d+px\}/.test(html), 'html.ios-top-clear body gets a top padding');
+const css = (sel) => html.match(new RegExp(sel.replace(/[.#()]/g, '\\$&') + '\\{([^}]*)\\}'))?.[1] || '';
+const barCss = css('html.ios-top-edge #ios-top-edge-bar');
+ok(/display:none/.test(css('#ios-top-edge-bar')), 'the bar is hidden unless the app is flagged');
+ok(/position:fixed;top:5px;left:0;right:0;/.test(barCss) && /pointer-events:none/.test(barCss),
+  'flagged, it is fixed, full-width, at top:5px, and never takes a tap');
+const barH = +barCss.match(/height:(\d+)px/)?.[1];
+ok(barH > 10, `it is tall enough to count (${barH}px; 1 px didn't)`);
+ok(/transparent/.test(barCss) && /var\(--bg-deep\)/.test(barCss) && !/--bg-card/.test(barCss),
+  'it is transparent but for slivers in the page background colour, so it vanishes where a screen is transparent');
+ok(/top:4px/.test(css('html.ios-top-edge #ios-top-edge-bar.arrived')), '.arrived moves it to top:4px');
+const barZ = +barCss.match(/z-index:(-?\d+)/)?.[1];
+const screenZ = +css('html.ios-top-edge .screen').match(/z-index:(-?\d+)/)?.[1];
+ok(barZ >= 0 && screenZ > barZ && /position:relative/.test(css('html.ios-top-edge .screen')),
+  `the bar sits above the page background (z ${barZ}) and under the screens (z ${screenZ})`);
+ok(!/padding-top:\d+px\}/.test(css('html.ios-top-edge body')) && !/ios-top-clear/.test(html),
+  'the v0.6.7.2 34 px band is gone');
 
 console.log(`\n${'='.repeat(50)}`);
 console.log(`  TOTAL: ${passed} passed, ${failed} failed`);
