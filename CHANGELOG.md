@@ -11,6 +11,17 @@
 
 ---
 
+## [0.6.7.2] — 2026-11-17
+
+- **Fixed: the shadow over the top bar on iPad, for real this time.** The 0.6.7.1 change (a solid status bar) didn't remove it on iPad: after a clean reinstall on iPadOS 27 the gradient was still there. iPadOS draws it whatever the app asks for, and it darkens the top ~35 px of the screen below the status bar.
+  - **The fix.** In the Home Screen app on iPad, every screen now starts 34 px lower. A strip of the page's own background takes the darkening, which barely shows on the near-black, and the top bar sits below it, crisp. The chart is 34 px shorter as a result.
+  - **No reinstall needed.** This arrives with the normal update.
+  - **Only the iPad Home Screen app** gets the strip. Safari tabs, iPhone, Mac and Android are unchanged.
+  - **In Light mode** the darkening is visible as a soft grey fade in that strip, above the top bar rather than over it.
+- Pinned by `tests/test-meta.mjs`.
+
+---
+
 ## [0.6.7.1] — 2026-11-17
 
 - **Fixed: a dark shadow over the top bar in the Home Screen app on iPad.** Since iPadOS/iOS 26.1, and still in 27, the system draws a dark gradient below the status bar of Home Screen apps that use the see-through status bar style. It covered most of the top bar and dimmed the patient line, the case clock and the labels beside them.

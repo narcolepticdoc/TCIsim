@@ -4,6 +4,48 @@
 
 ## Session History
 
+### iPad top clearance below the status-bar gradient (v0.6.7.2) — Interim
+
+**v0.6.7.1 did not fix it on iPad.** The user deleted the app and re-added it
+from Safari on 0.6.7.1, and the gradient was still there. A screenshot taken
+before that reinstall was pixel-for-pixel the same as the first one. The status
+strip was not a solid bar either: per column it carried a blurred tint of
+whatever top-bar content sat below it, for example green over the ET clock.
+The reports that `default` fixes this were all iPhone or simulator, and the
+iPad report (opencode #56969) is unresolved. So on iPadOS 27 the darkening is
+drawn regardless of the status-bar style. `default`, `theme-color` and
+`color-scheme` stay: harmless on iPad, and reportedly the fix on iPhone.
+
+**Measured** on the 2x screenshot. The page starts ~31 px below the screen top
+and the 42 px top bar spans 31–73. Luminance as a fraction of `--bg-card`, by
+depth into the page: 0.65 at 1 px, 0.80 at 11, 0.91 at 23, 0.96 at 29,
+0.975 at 33, 0.998 at 35, then 1.0.
+
+**Change** (option 2 from the first round).
+- An inline `<script id="ios-top-clear">` in `<head>` runs before first paint.
+  It adds `html.ios-top-clear` when the page is standalone
+  (`navigator.standalone === true` or `display-mode: standalone`) and on an
+  iPad (`maxTouchPoints > 1` and a `iPad`/`Macintosh` user agent, since
+  iPadOS reports a Mac one).
+- iPhone is deliberately excluded. There, `default` is reported to remove the
+  gradient, and the height matters more.
+- `html.ios-top-clear body{padding-top:34px}`. Body padding rather than
+  top-bar padding, so every screen clears it: setup's brand panel and form
+  header sat in it too. The band is `--bg-deep`, where 35% darkening of
+  near-black hardly shows; on `--bg-card` it read as a shadow.
+- Nothing else is pinned near the top. The only fixed elements are full-screen
+  overlays and the bottom-anchored warnings.
+- Playwright emulation:
+  - iPad app, landscape 1158×756: top bar 34–76, bottom controls unmoved at
+    697–744, no document scroll. Portrait 756×1158 is likewise fine.
+  - iPad Safari, Mac app and iPhone app: unflagged, unchanged.
+- `tests/test-meta.mjs` section 5 runs the head script against fake iPad app,
+  iPad Safari, Mac app, iPhone app and Android tablet environments, and pins
+  the CSS rule.
+
+**If it needs tuning:** 34 px is the one number. At 2x on iPadOS 27 the
+darkening is under 2% there and gone by 36.
+
 ### iOS status bar: solid instead of black-translucent (v0.6.7.1) — Interim
 
 The user's report: an iPad screenshot from the installed Home Screen app on
