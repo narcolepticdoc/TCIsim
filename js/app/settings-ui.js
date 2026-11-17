@@ -65,7 +65,9 @@ function applyAlarmFlash(alpha) {
   document.documentElement.style.setProperty('--nu-flash-a', String(a));
 }
 
-const THEME_META_COLORS = { dark: '#0a0f1a', light: '#f4f6fa' };
+// Each theme's --bg-card (the top bar's background), so the solid iOS status
+// bar continues the top bar. tests/test-meta.mjs pins them to the CSS.
+const THEME_META_COLORS = { dark: '#111827', light: '#ffffff' };
 
 /**
  * Apply the app color theme by setting `data-theme` on `<html>`. CSS variable
