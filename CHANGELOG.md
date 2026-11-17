@@ -11,6 +11,16 @@
 
 ---
 
+## [0.6.7.1] — 2026-11-17
+
+- **Fixed: a dark shadow over the top bar in the Home Screen app on iPad.** Since iPadOS/iOS 26.1, and still in 27, the system draws a dark gradient below the status bar of Home Screen apps that use the see-through status bar style. It covered most of the top bar and dimmed the patient line, the case clock and the labels beside them.
+  - **The fix.** The status bar is now solid, in the top bar's colour (dark navy in Dark mode, white in Light mode), so it reads as part of the top bar and there is no gradient. The app already started below the status bar, so no screen space is lost.
+  - **To get it, remove TCI Sim from the Home Screen and add it again.** iOS only reads the status bar setting when the app is added, so updating isn't enough. Removing a Home Screen app can also remove its saved data, so push your preferences and case to cloud sync first, or note your pairing code.
+  - **Also:** in Dark mode, the checkboxes on the setup screen and in Settings, and the max pump rate menu in Settings, are now dark rather than bright white.
+- Pinned by `tests/test-meta.mjs`.
+
+---
+
 ## [0.6.7] — 2026-11-08
 
 - **Added: sync the case clock to the pump's total.** For the case where the infusion is running but nobody pressed Start, so nobody knows when the pump began. Before, the only fix was to press Start and then nudge the case start time until the Log's "Total delivered" matched the pump.

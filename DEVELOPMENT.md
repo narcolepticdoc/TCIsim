@@ -4,7 +4,56 @@
 
 ## Session History
 
-### Pump Total: sync the case clock to the pump's delivered total (v0.6.7) — Interim
+### iOS status bar: solid instead of black-translucent (v0.6.7.1) — Interim
+
+The user's report: an iPad screenshot from the installed Home Screen app on
+iPadOS 27, with what looked like a drop shadow under the status bar falling
+across the sim screen's top bar.
+
+**Cause.** Since iOS/iPadOS 26.1 the system draws a dark gradient (a scrim)
+over Home Screen web apps whose `apple-mobile-web-app-status-bar-style` is
+`black-translucent`, and a page can't turn it off. Other web apps report it
+still present in 27.0.1 and 27.2, and WebKit bug 301994 is open. Sampling the
+screenshot showed the page already began just below the status bar (~31 pt
+down), so `black-translucent` was no longer drawing anything behind the bar.
+It was only producing the scrim, which faded out ~33 pt into the 42 pt top
+bar.
+
+**Options weighed (the user chose 1).**
+1. Drop `black-translucent` for `default`, which gives a solid bar coloured
+   by `theme-color`. Needs a Home Screen reinstall.
+2. Keep it, and put a blank strip above the top bar for the scrim to fall
+   on. No reinstall, but ~34 px of chart height, and the strip height would
+   have to be hard-coded because the inset reads 0.
+3. Match colours and brighten the dimmed labels so it looks intentional.
+4. Wait for Apple.
+
+**Change.**
+- `index.html`: the status-bar style is `default`.
+- `theme-color` is now each theme's `--bg-card`, the top bar's background, so
+  the solid bar reads as part of it: `#111827` dark, `#ffffff` light. Before,
+  it was `#0a0f1a` / `#f4f6fa`, which matched no surface. This covers the
+  static meta, `settings-ui.js THEME_META_COLORS` and the manifest's
+  `theme_color`.
+- `:root` now declares `color-scheme` per theme (`dark`, and `light` under
+  `[data-theme="light"]`). An iPadOS 27.2.1 report had a solid bar come out
+  white over a dark page until the page declared a dark `color-scheme`.
+  Side effect: in Dark mode, native checkboxes and unstyled `<select>`s render
+  dark. A before/after Playwright diff at 1133×744, both themes, found the
+  case screen pixel-identical. The only changes were the Settings checkboxes
+  and the max-pump-rate select, and the setup screen's checkboxes.
+- `tests/test-meta.mjs` section 4 pins the style, the three `theme-color`
+  sources against each theme's `--bg-card`, and the `color-scheme` pair. It
+  fails 4/4 on the old markup.
+
+**Known caveats.**
+- iOS reads the status-bar tag at install time, so a device only picks this
+  up after the icon is removed and re-added. That removal can take the app's
+  local storage with it.
+- WebKit bug 316008: without `black-translucent`, `vh` can include the status
+  bar. The app sizes `html, body` at `height:100%` and uses `vh` only for
+  modal max-heights of ≤ 92vh, which still fit. Confirm on the device.
+- Not yet seen on hardware.
 
 The user's scenario: the case has started, but the clinician didn't press
 Start and doesn't know when the infusion began. They know only the pump's

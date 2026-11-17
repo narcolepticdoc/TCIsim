@@ -81,6 +81,36 @@ ok(/cachedVersion !== VERSION \|\| serverVersion !== VERSION/.test(swCode),
 ok(!/caches\.match\(/.test(swCode),
    'no caches.match(): lookups go through this version\'s cache only');
 
+// ---- 4. iOS status bar ----
+// Since iOS/iPadOS 26.1 (still in 27) the system draws a dark gradient over
+// Home Screen apps that use black-translucent; it fell across the top bar as
+// a drop shadow (v0.6.7.1). The bar is solid instead, coloured by theme-color,
+// which must equal each theme's --bg-card so it continues the top bar. iPadOS
+// 27 has painted a solid bar white over a page with no color-scheme.
+const html = read('index.html');
+const statusStyle = html.match(/<meta\s+name="apple-mobile-web-app-status-bar-style"\s+content="([^"]+)"/);
+ok(statusStyle && statusStyle[1] === 'default',
+  `status-bar-style is "default", not black-translucent (got ${statusStyle?.[1]})`);
+const block = (sel) => {
+  const i = html.indexOf(sel + '{');
+  return i < 0 ? '' : html.slice(i, html.indexOf('}', i));
+};
+const darkRoot = block('    :root');
+const lightRoot = block(':root[data-theme="light"]');
+const cardOf = (b) => b.match(/--bg-card:(#[0-9a-fA-F]{3,8})/)?.[1]?.toLowerCase();
+const settingsUi = read('js/app/settings-ui.js');
+const metaColors = settingsUi.match(/THEME_META_COLORS\s*=\s*\{\s*dark:\s*'([^']+)',\s*light:\s*'([^']+)'\s*\}/);
+const staticMeta = html.match(/<meta\s+name="theme-color"\s+content="([^"]+)"/)?.[1];
+const manifestColor = JSON.parse(read('manifest.json')).theme_color;
+ok(!!(cardOf(darkRoot) && cardOf(lightRoot) && metaColors), 'found both themes\' --bg-card and THEME_META_COLORS');
+ok(metaColors && metaColors[1].toLowerCase() === cardOf(darkRoot) && metaColors[2].toLowerCase() === cardOf(lightRoot),
+  `THEME_META_COLORS (${metaColors?.[1]}, ${metaColors?.[2]}) = each theme's --bg-card (${cardOf(darkRoot)}, ${cardOf(lightRoot)})`);
+ok(metaColors && staticMeta?.toLowerCase() === metaColors[1].toLowerCase() &&
+   manifestColor.toLowerCase() === metaColors[1].toLowerCase(),
+  `static theme-color (${staticMeta}) and manifest theme_color (${manifestColor}) = the dark theme's`);
+ok(/color-scheme:dark;/.test(darkRoot) && /color-scheme:light;/.test(lightRoot),
+  ':root declares color-scheme per theme');
+
 console.log(`\n${'='.repeat(50)}`);
 console.log(`  TOTAL: ${passed} passed, ${failed} failed`);
 console.log(`${'='.repeat(50)}\n`);

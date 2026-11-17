@@ -3,9 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#0a0f1a">
+  <!-- theme-color is the top bar's --bg-card, so a solid status bar reads as
+       part of the top bar. settings-ui.js THEME_META_COLORS keeps it in step
+       with the theme. -->
+  <meta name="theme-color" content="#111827">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- `default`, never `black-translucent`: since iOS/iPadOS 26.1 the system
+       draws a dark gradient over Home Screen apps that use black-translucent,
+       and it fell across the top bar like a drop shadow (still there in 27).
+       The page already started below the status bar, so nothing is lost.
+       iOS reads this tag when the app is added to the Home Screen: a change
+       here only reaches a device after the icon is removed and re-added. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>TCI Sim</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -20,6 +29,9 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root{
+      /* color-scheme follows the theme: iPadOS 27 has painted the solid status
+         bar white over a dark page that didn't declare one. */
+      color-scheme:dark;
       --bg-deep:#060a12;--bg-card:#111827;--bg-input:#1a2234;--bg-hover:#1f2b3f;
       --border-subtle:#1e293b;--border-focus:#3b82f6;
       --text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#475569;--text-accent:#60a5fa;
@@ -43,6 +55,7 @@
       --radius-sm:6px;--radius-md:10px;--radius-lg:16px;
     }
     :root[data-theme="light"]{
+      color-scheme:light;
       --bg-deep:#f4f6fa;--bg-card:#ffffff;--bg-input:#eef1f6;--bg-hover:#e3e8f0;
       --border-subtle:#d6dbe3;--border-focus:#2563eb;
       --text-primary:#0f172a;--text-secondary:#475569;--text-muted:#94a3b8;--text-accent:#2563eb;
