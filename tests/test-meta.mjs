@@ -111,6 +111,36 @@ ok(metaColors && staticMeta?.toLowerCase() === metaColors[1].toLowerCase() &&
 ok(/color-scheme:dark;/.test(darkRoot) && /color-scheme:light;/.test(lightRoot),
   ':root declares color-scheme per theme');
 
+// ---- 5. iPad top clearance ----
+// On iPad the gradient survived a clean reinstall with `default` (iPadOS 27,
+// v0.6.7.2): it darkens the top ~35 px of the page. The <head> script flags
+// the iPad Home Screen app, and only it, so the body starts below the band.
+const clearSrc = html.match(/<script id="ios-top-clear">([\s\S]*?)<\/script>/)?.[1];
+ok(!!clearSrc, '<head> has the ios-top-clear script');
+ok(html.indexOf('id="ios-top-clear"') < html.indexOf('<body'), 'ios-top-clear runs in <head>, before first paint');
+const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15';
+const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1';
+const ANDROID = 'Mozilla/5.0 (Linux; Android 15; Pixel Tablet) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36';
+function flagged({ ua, touch, standalone, displayMode = false }) {
+  const classes = new Set();
+  const window = {
+    navigator: { userAgent: ua, maxTouchPoints: touch, ...(standalone === undefined ? {} : { standalone }) },
+    matchMedia: (q) => ({ matches: q === '(display-mode: standalone)' && displayMode }),
+  };
+  const document = { documentElement: { classList: { add: (c) => classes.add(c) } } };
+  new Function('window', 'document', clearSrc)(window, document);
+  return classes.has('ios-top-clear');
+}
+if (clearSrc) {
+  ok(flagged({ ua: MAC, touch: 5, standalone: true }), 'flags the iPad Home Screen app');
+  ok(flagged({ ua: MAC, touch: 5, displayMode: true }), 'flags it from display-mode: standalone too');
+  ok(!flagged({ ua: MAC, touch: 5, standalone: false }), 'not iPad Safari (a tab, not the Home Screen app)');
+  ok(!flagged({ ua: MAC, touch: 0, displayMode: true }), 'not a Mac web app (no touch points)');
+  ok(!flagged({ ua: IPHONE, touch: 5, standalone: true }), 'not the iPhone Home Screen app');
+  ok(!flagged({ ua: ANDROID, touch: 10, displayMode: true }), 'not an installed Android tablet app');
+}
+ok(/html\.ios-top-clear body\{padding-top:\d+px\}/.test(html), 'html.ios-top-clear body gets a top padding');
+
 console.log(`\n${'='.repeat(50)}`);
 console.log(`  TOTAL: ${passed} passed, ${failed} failed`);
 console.log(`${'='.repeat(50)}\n`);

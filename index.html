@@ -13,8 +13,24 @@
        and it fell across the top bar like a drop shadow (still there in 27).
        The page already started below the status bar, so nothing is lost.
        iOS reads this tag when the app is added to the Home Screen: a change
-       here only reaches a device after the icon is removed and re-added. -->
+       here only reaches a device after the icon is removed and re-added.
+       On iPad this alone is not enough; see the ios-top-clear script below. -->
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <!-- On iPad the gradient is drawn whatever the status-bar style (iPadOS 27,
+       confirmed after a clean reinstall): it darkens the top ~35 px of the
+       page. Flag the iPad Home Screen app before first paint, so the CSS
+       (html.ios-top-clear body) can start the page below it. iPhone is left
+       alone: there, `default` is reported to remove the gradient. -->
+  <script id="ios-top-clear">
+    (function () {
+      var n = window.navigator;
+      var standalone = n.standalone === true ||
+        (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches);
+      // iPadOS reports a Mac user agent; touch points tell it from a Mac.
+      var iPad = n.maxTouchPoints > 1 && /iPad|Macintosh/.test(n.userAgent);
+      if (standalone && iPad) document.documentElement.classList.add('ios-top-clear');
+    })();
+  </script>
   <title>TCI Sim</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -76,6 +92,12 @@
        the browser waits to see if the user is double-tapping to zoom. */
     button,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
     html,body{height:100%;width:100%;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-display);-webkit-font-smoothing:antialiased;overflow:hidden;padding-bottom:6px;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    /* iPad Home Screen app (flagged in <head>): the system darkens the top
+       ~35 px of the page under the status bar, and a page can't turn it off.
+       A band of page background takes the darkening, which barely shows on
+       --bg-deep, and every screen starts below it. Measured at 2x on iPadOS
+       27: under 2% darkening by 34 px down, none by 36 px. */
+    html.ios-top-clear body{padding-top:34px}
     .screen{display:none;width:100%;height:100%}.screen.active{display:flex}
 
     /* Portrait overlay */
