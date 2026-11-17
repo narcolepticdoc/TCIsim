@@ -4,6 +4,76 @@
 
 ## Session History
 
+### iOS top edge bar replaces the 34 px band (v0.6.7.3) — Interim
+
+**v0.6.7.2 on the device.** The top bar came out sharp, but the band plus the
+status bar made ~65 pt of empty black above it. The user: "Looks horrible."
+They pointed to an r/PWA thread and pasted its workaround, since Reddit can't
+be fetched from the dev environment.
+
+**The workaround, as posted.** It was found by trial and error and is
+undocumented. iOS switches off the top-edge gradient while a full-width
+element sits at the top of the page, on four conditions:
+1. **It must arrive.** An element already in place at launch is ignored.
+   Paint it at `top:5px`, then move it to `4px` on a later frame.
+2. **It must have paint.** A transparent box doesn't count, and neither did
+   a 1 px strip. Theirs is 30 px with 8 px page-colour slivers at each side.
+3. **It may sit under the UI**, above the page background: a low z-index,
+   with the app root raised above it. `z-index:-1` doesn't work.
+4. **It must stay.** Removing it brings the gradient back.
+
+The poster had not tested long background/resume cycles.
+
+**Change.**
+- The `<head>` script is now `#ios-top-edge`, and the flag `html.ios-top-edge`.
+  It covers the iOS **and** iPadOS Home Screen app (iPhone/iPad/iPod user
+  agent, or a Mac user agent with touch points). The bar costs no space, so
+  the iPad-only restriction, which was about the band's height, no longer
+  applies.
+- `#ios-top-edge-bar` is the first element in `<body>`.
+  - It is `position:fixed; top:5px; left:0; right:0; height:30px; z-index:1;
+    pointer-events:none`, transparent but for 8 px `--bg-deep` slivers.
+  - `.arrived` sets `top:4px`. The script adds it two `requestAnimationFrame`s
+    after `DOMContentLoaded`, so the bar is painted at 5px at least once.
+  - On `visibilitychange` (visible), `pageshow` (persisted) and
+    `orientationchange`, the script drops `.arrived` and re-adds it two
+    frames later. This guards against resume and rotation, which the poster
+    hadn't tested.
+- `html.ios-top-edge .screen{position:relative;z-index:2}` raises the screens
+  above the bar.
+  - The screens and the modals are siblings under `<body>`, and the modals
+    are fixed at z 1000, so modals still cover everything.
+  - Nothing inside a screen needs to be above a modal: the warnings
+    container at z 200 and the timer popover at z 100 were already below.
+- The 34 px `body` padding is removed.
+- **Sliver colour.** The first cut used `--bg-card`, so that whatever iOS
+  might sample for the status bar would match the top bar. The setup
+  screen's margins are transparent, though, and in emulation the right
+  sliver showed there as a faint stripe. `--bg-deep` blends in everywhere,
+  as in the post.
+- Playwright emulation: iPad app (landscape and portrait) and iPhone app
+  against their Safari equivalents.
+  - The setup, case and Settings screens are identical apart from
+    antialiasing (max channel delta 2, none in the top 40 px). That noise is
+    from the new stacking context.
+  - The bar computes to `top:4px` after load, and re-arms on a
+    `visibilitychange`.
+  - `elementFromPoint` at the top-left corner hits the top bar, and with
+    Settings open hits the modal.
+- `tests/test-meta.mjs` section 5 was rewritten.
+  - It runs the head script in a fake page: iPad and iPhone apps are
+    flagged; iPad Safari, iPhone Safari, a Mac web app and an Android tablet
+    app are not.
+  - It steps frames to show the bar moves only on the second frame and
+    re-arms on visibility, rotation and `pageshow`.
+  - It pins the CSS: fixed, full-width, 5→4 px, ≥ 10 px tall, page-colour
+    slivers, z-index between the background and the screens. It also checks
+    the band is gone.
+
+**Not verified on hardware yet.** If iOS ignores the bar, check rule 1
+first: the arrival has to happen after a painted frame. The fallback is
+v0.6.7.2's band, measured and known to work.
+
 ### iPad top clearance below the status-bar gradient (v0.6.7.2) — Interim
 
 **v0.6.7.1 did not fix it on iPad.** The user deleted the app and re-added it

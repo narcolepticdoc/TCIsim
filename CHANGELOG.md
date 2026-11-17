@@ -11,6 +11,18 @@
 
 ---
 
+## [0.6.7.3] — 2026-11-17
+
+- **Changed: the iPad top bar is back at the top, and the empty black strip from 0.6.7.2 is gone.** The strip did keep the shadow off the top bar, but it wasted ~34 px and looked bad.
+  - **The new fix turns the shadow off rather than dodging it.** It uses a workaround found by trial and error on r/PWA: iOS stops drawing the gradient while an invisible full-width bar sits at the top of the page. The bar only counts if it *moves* into place after the app opens, so it starts 1 px low and slides up after the first frames. It slides in again whenever the app comes back from the background or the screen rotates.
+  - **You can't see or touch it.** It sits under the screens, never takes a tap, and dialogs cover it as before.
+  - **It applies to the iPhone and iPad Home Screen app.** Safari tabs, Mac and Android are unchanged.
+  - **No reinstall needed.**
+  - **This relies on undocumented iOS behaviour**, so a future iOS update could bring the shadow back. If it does, the 0.6.7.2 strip is the known fallback.
+- Pinned by `tests/test-meta.mjs`.
+
+---
+
 ## [0.6.7.2] — 2026-11-17
 
 - **Fixed: the shadow over the top bar on iPad, for real this time.** The 0.6.7.1 change (a solid status bar) didn't remove it on iPad: after a clean reinstall on iPadOS 27 the gradient was still there. iPadOS draws it whatever the app asks for, and it darkens the top ~35 px of the screen below the status bar.
