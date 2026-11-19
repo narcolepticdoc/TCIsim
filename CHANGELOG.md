@@ -11,6 +11,17 @@
 
 ---
 
+## [0.6.7.4] — 2026-11-19
+
+- **Fixed: on iPad, the shadow under the status bar sometimes came back mid-case and stayed until the app was relaunched.**
+  - **The likely cause.** iOS decides whether to draw the shadow by looking for a solid, full-width bar at one spot near the middle of the top edge. In 0.6.7.3 our invisible bar sat underneath the screens. Whenever a dialog opened (keypad, event editor, Settings and so on), the dialog's dimmed, blurred backdrop covered that spot instead, and iOS treats a blurred backdrop as "no solid colour". The shadow came back while the dialog was open. iOS doesn't always look again after a dialog closes, so now and then the shadow stayed.
+  - **The fix.** The bar now sits above everything, dialogs included, so iOS always finds it there. It still draws nothing and every tap goes straight through it: it keeps a colour for iOS to read but paints none of it, a technique another project has tested on iPad.
+  - **The status bar strip now takes the top bar's colour** (dark navy in Dark mode, white in Light mode), including while a dialog is open.
+  - **No reinstall needed.**
+- Pinned by `tests/test-meta.mjs`, which also checks that nothing in the app has a higher z-index than the bar.
+
+---
+
 ## [0.6.7.3] — 2026-11-17
 
 - **Changed: the iPad top bar is back at the top, and the empty black strip from 0.6.7.2 is gone.** The strip did keep the shadow off the top bar, but it wasted ~34 px and looked bad.
