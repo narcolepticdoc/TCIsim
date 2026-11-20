@@ -115,10 +115,13 @@ ok(/color-scheme:dark;/.test(darkRoot) && /color-scheme:light;/.test(lightRoot),
 // The gradient survived a clean reinstall with `default` on iPadOS 27, and a
 // 34 px band below it (v0.6.7.2) looked like an empty black strip. iOS drops
 // the gradient while a full-width fixed bar sits at the top, if the bar
-// *arrives* (painted at 5px, then moved to 4px), has paint, sits above the
+// *arrives* (painted at 5px, then moved to 4px), has a colour, sits above the
 // page background and stays (v0.6.7.3). The <head> script flags the iOS/iPadOS
 // Home Screen app and slides the bar in on load, on return from the
-// background and on rotation.
+// background and on rotation. Under the screens, an open dialog's backdrop
+// won the spot WebKit checks and the gradient sometimes stayed after the
+// dialog closed, so the bar now sits above every layer and paints nothing
+// (background-clip:text keeps the colour WebKit reads) (v0.6.7.4).
 const edgeSrc = html.match(/<script id="ios-top-edge">([\s\S]*?)<\/script>/)?.[1];
 ok(!!edgeSrc, '<head> has the ios-top-edge script');
 ok(html.indexOf('id="ios-top-edge"') < html.search(/^<body>/m), 'ios-top-edge runs in <head>, before first paint');
@@ -188,13 +191,21 @@ ok(/position:fixed;top:5px;left:0;right:0;/.test(barCss) && /pointer-events:none
   'flagged, it is fixed, full-width, at top:5px, and never takes a tap');
 const barH = +barCss.match(/height:(\d+)px/)?.[1];
 ok(barH > 10, `it is tall enough to count (${barH}px; 1 px didn't)`);
-ok(/transparent/.test(barCss) && /var\(--bg-deep\)/.test(barCss) && !/--bg-card/.test(barCss),
-  'it is transparent but for slivers in the page background colour, so it vanishes where a screen is transparent');
+ok(/background-color:var\(--bg-card\)/.test(barCss),
+  'it carries the top bar\'s colour, which WebKit reads for the status bar');
+ok(/-webkit-background-clip:text/.test(barCss) && /(^|;)\s*background-clip:text/.test(barCss) &&
+   !/gradient|background-image|background:/.test(barCss),
+  'background-clip:text with no text: it paints nothing, prefixed for older WebKit');
 ok(/top:4px/.test(css('html.ios-top-edge #ios-top-edge-bar.arrived')), '.arrived moves it to top:4px');
+// Every other z-index in the app, inline styles included: a dialog backdrop
+// (or anything else fixed) must never sit above the bar at the top edge.
 const barZ = +barCss.match(/z-index:(-?\d+)/)?.[1];
-const screenZ = +css('html.ios-top-edge .screen').match(/z-index:(-?\d+)/)?.[1];
-ok(barZ >= 0 && screenZ > barZ && /position:relative/.test(css('html.ios-top-edge .screen')),
-  `the bar sits above the page background (z ${barZ}) and under the screens (z ${screenZ})`);
+const otherZ = [...html.replace(barCss, '').matchAll(/z-index\s*:\s*(-?\d+)/g)].map(m => +m[1]);
+const jsZ = walkJs(path.join(root, 'js')).filter(f => !f.startsWith('js/vendor/'))
+  .flatMap(f => [...read(f).matchAll(/zIndex\s*=\s*['"]?(-?\d+)/g)].map(m => +m[1]));
+const topOther = Math.max(...otherZ, ...jsZ);
+ok(barZ > topOther, `the bar (z ${barZ}) sits above every other layer, dialogs included (highest other z ${topOther})`);
+ok(!/html\.ios-top-edge \.screen\{/.test(html), 'the screens are no longer raised (nothing needs hiding under them)');
 ok(!/padding-top:\d+px\}/.test(css('html.ios-top-edge body')) && !/ios-top-clear/.test(html),
   'the v0.6.7.2 34 px band is gone');
 

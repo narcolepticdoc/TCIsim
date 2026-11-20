@@ -4,6 +4,76 @@
 
 ## Session History
 
+### iOS top edge bar on top of every layer (v0.6.7.4) — Interim
+
+**Report.** v0.6.7.3 works on the user's iPad, but sometimes, mid-case, the
+gradient comes back and stays. Relaunching the app fixes it. The user hadn't
+pinned down what triggers it.
+
+**What WebKit does** (read from WebKit `main`, partly verbatim and partly
+summarised; not every function body was seen):
+- **The check.** `LocalFrameView::fixedContainerEdges` hit-tests the midpoint
+  of each edge, inset by `PageColorSampler::fixedContainerSampleRectMargin`.
+  Write-ups put that at ~4 px, which matches the 5→4 px "arrival".
+- **Which box counts.** It walks up from the hit element to the first fixed
+  or sticky container. The container must be over `thinBorderWidth = 10` px,
+  within `minimumRatio 0.9` / `maximumRatio 1.05` of the viewport width, not
+  nearly transparent, and not at a negative z-index. A container with a
+  `backdrop-filter` gives the colour type `Multiple`, i.e. no solid colour,
+  so the UI process falls back to the soft pocket, which is the gradient.
+- **The colour comes from the style.** It is the container's background
+  colour, not its painted pixels (coder/coder#31027 relies on this).
+- **Re-sampling** is triggered by adding or removing a viewport-constrained
+  object and by inset changes. Several paths keep the previous result
+  (`hasFixedEdge` skips, `lastFixedContainer` reuse), and the UI side only
+  applies a change.
+
+**Diagnosis (inferred, not reproduced).** In 0.6.7.3 the bar sat under the
+screens. Every `.modal-overlay` is `position:fixed; inset:0; z-index:1000`,
+with `rgba(0,0,0,.6)` and `backdrop-filter: blur(2px)`. So while any dialog
+(keypad, editor, Settings, TCI prompts) is open, the overlay wins the top
+sample and gives `Multiple`, and the gradient is drawn. Usually closing the
+dialog re-samples and finds the bar again. When it doesn't, the state sticks
+until a relaunch resets the web process. That fits "now and then, mid-case":
+dialogs open constantly, and the failure is intermittent.
+
+**Change** (coder/coder#31027's approach, tested on an iPad Home Screen
+install by its author):
+- `#ios-top-edge-bar` goes to `z-index:2147483647`, above every layer, so no
+  dialog ever takes the sample point. The sampled container then never
+  changes, and nothing can get stuck.
+- It paints nothing: `background-color:var(--bg-card)` with
+  `-webkit-background-clip:text; background-clip:text` and no text. The
+  8 px `--bg-deep` gradient slivers are gone; they would have shown on top.
+  WebKit reads the colour from the style, so the status-bar strip should now
+  be the top bar's colour, during dialogs as well.
+- `pointer-events:none` lets taps through. WebKit's sampling ignores
+  `pointer-events` on its first pass, so the bar still counts.
+- `html.ios-top-edge .screen{position:relative;z-index:2}` is removed.
+  Nothing needs hiding under the screens now, and its stacking contexts and
+  antialiasing changes go with it.
+- Kept: the 5→4 px arrival and the re-arm on visibility, `pageshow` and
+  rotation. They are harmless, and the arrival is part of what was proven on
+  this device.
+
+**Checks.**
+- Playwright emulation, comparing the iPad app (both orientations) and the
+  iPhone app with the same device in Safari:
+  - The case screen and the open Settings dialog are pixel-identical. The
+    only setup-screen difference is 1 level of antialiasing on the Metric
+    button's corner.
+  - The bar computes to `top:4px` and `z-index:2147483647`.
+  - Taps at the top-left reach the top bar, and the dialog when it's open.
+- `tests/test-meta.mjs`:
+  - It pins the colour and the `background-clip:text` pair.
+  - It checks the bar's z-index is above every other z-index in `index.html`
+    and in `js/` (`zIndex =`).
+  - It checks the screens aren't raised any more.
+
+**Not verified on hardware yet**, and the trigger is inferred. If the
+gradient still comes back, ask what was on screen just before: a dialog, a
+notification banner, the iPadOS menu bar, multitasking.
+
 ### iOS top edge bar replaces the 34 px band (v0.6.7.3) — Interim
 
 **v0.6.7.2 on the device.** The top bar came out sharp, but the band plus the
